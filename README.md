@@ -1,76 +1,63 @@
-# Custom Snapmaker U1 Firmware
+# 233固件
 
-[![Latest Release](https://img.shields.io/github/v/release/paxx12/SnapmakerU1)](https://github.com/paxx12/SnapmakerU1/releases/latest)
-[![Pre-release](https://img.shields.io/github/v/release/paxx12/SnapmakerU1?include_prereleases&label=pre-release)](https://github.com/paxx12/SnapmakerU1/releases)
+面向 **Snapmaker U1 + Anycubic ACE** 的集成固件工程，以 PAXX Extended Firmware 为底座，集成 multiACE 的 ACE 控制、耗材管理与 Web 界面。
 
-This project builds custom firmware for the Snapmaker U1 3D printer,
-enabling debug features like SSH access and adding additional capabilities.
+当前开发版本：`2.1.0-233-dev.1`。本次已完成源码拉取、依赖固定及项目命名，尚未编译固件、刷写打印机或发布 Release。
 
-This is an independent project and is not affiliated with Snapmaker.
+## 源码基线
 
-> **Warning**: While installing custom firmware does not automatically void the product warranty, any damage caused by or attributable to the installation or use of custom firmware is not covered under warranty. Use at your own risk. See [Snapmaker Terms of Use](https://www.snapmaker.com/terms-of-use) for details.
->
-> Custom firmware is intended for users with appropriate technical knowledge. Ensure you understand the implications before proceeding.
+| 组件 | 上游 | 当前固定版本 |
+| --- | --- | --- |
+| PAXX 扩展固件 | [SnapmakerU1-Extended-Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) | develop / `bb1fd3705ec9608d71122462b07556613dbbbb1f` |
+| multiACE | [decay71/multiACE](https://github.com/decay71/multiACE) | v1.27b / `a1a7b91b1fd297c1486a13ea22c61e01499a196d` |
+| screen-apps | [paxx12/screen-apps](https://github.com/paxx12/screen-apps) | PAXX 指定的 `4a81b50d9b6ef7a2c253b45dd00fe6f732c9d203` |
+| 原厂基础包 | Snapmaker U1 | `2.1.0.157`，校验和见 [233-firmware.json](233-firmware.json) |
 
-## Download
+主仓库和 multiACE 工作分支均为 `codex/233-firmware`。主仓库的 `upstream` 指向 PAXX，目前未设置 233 自己的发布远端。
 
-Get the latest pre-built firmware from [Releases](https://github.com/paxx12/SnapmakerU1/releases).
+multiACE 上游 main 在拉取时为 `1.50-pre`，其代码和历史已拉取并保留在 `providers/multiACE` 的 `origin/main`。初始集成锁定 PAXX 当前使用的 v1.27b；升级预发布版本需要单独评估接口、配置与 managed 包兼容性。
 
-## Documentation
+## 工程布局
 
-See [User Documentation](https://snapmakeru1-extended-firmware.pages.dev/) for features, installation instructions, and usage guides.
+```text
+233-firmware/
+├── 233-firmware.json        项目名称、开发版本、上游提交与包校验和
+├── build-233.sh             233 命名的构建入口
+├── overlays/               PAXX 基础功能及已有 multiACE 集成
+├── providers/multiACE/     固定版本的 multiACE 源码子模块
+├── deps/screen-apps/       PAXX 固定的屏幕应用子模块
+├── docs/233/               233 的集成计划与初始化记录
+└── README.upstream.md      保留的 PAXX 原始项目说明
+```
 
-## Building from Source
+后续恢复子模块：
 
-**Source repositories:**
-- GitHub: [https://github.com/paxx12](https://github.com/paxx12)
-- Codeberg: [https://codeberg.org/paxx12-snapmaker-u1](https://codeberg.org/paxx12-snapmaker-u1)
+```sh
+git submodule update --init --recursive
+```
 
-See [Building from Source](docs/development.md) for instructions on building custom firmware using Docker.
+## 构建入口与名称
 
-## Dependent projects
+查看构建计划，不启动 Docker：
 
-- [v4l2-mpp](https://github.com/paxx12/v4l2-mpp) - Hardware-accelerated camera stack with WebRTC streaming, V4L2 controls, and settings persistence
-- [screen-apps](https://github.com/paxx12/screen-apps) - U1 touchscreen applications and UI components
-- [prometheus-klipper-exporter](https://github.com/scross01/prometheus-klipper-exporter) - Prometheus metrics exporter for Klipper
-- [snapmaker-u1-timelapse-recovery](https://github.com/horzadome/snapmaker-u1-timelapse-recovery) - Tool to recover corrupted timelapse videos
-- [rockchip-linux/kernel](https://github.com/rockchip-linux/kernel) - Rockchip kernel source for building additional kernel modules
+```sh
+./build-233.sh --plan
+```
 
-## Community
+以后实际构建使用：
 
-Join the [Snapmaker Discord](https://discord.com/invite/snapmaker-official-1086575708903571536) and visit the **#u1-printer** channel to connect with other users using the custom firmware, share experiences, and get help.
+```sh
+./build-233.sh
+```
 
-## Issues
+该入口沿用 PAXX 的 Docker 构建环境和 `extended-multiace` 配置，将 `GIT_VERSION` 设置为 `2.1.0-233-dev.1`，约定输出文件为：
 
-For bug reports, please validate the issue against Stock Firmware first before creating a bug report. This helps determine if the issue is specific to the custom firmware or exists in the stock firmware as well.
+```text
+firmware/U1_233_2.1.0-233-dev.1_upgrade.bin
+```
 
-This repository does not accept feature requests or support issues in general. Pull Requests are the desired way to propose new changes and may be accepted after review.
+**目前这个文件尚未生成。** PAXX 原有流程仍按固定 URL 与 SHA-256 按需下载 managed multiACE 包，`providers/multiACE` 的本地改动尚未接入镜像打包。把本地 provider 构建、依赖与安装流程统一到 233 中，是下一步的重构任务，见 [集成计划](docs/233/INTEGRATION_PLAN.md)。
 
-## Contact
+## 来源与许可
 
-For inquiries about the firmware, contact: paxx12dev@gmail.com
-
-## Support
-
-If you find this project useful and would like to support its development:
-
-[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/paxx12)
-
-🖨️ **Buy a Snapmaker U1** — ordering via the link below supports this project. Optionally use code `PAXX12CUSTOM` for $20 off, or any other discount you find online:
-
-  * EU store: [https://snapmaker-eu.myshopify.com?ref=paxx12](https://snapmaker-eu.myshopify.com?ref=paxx12)
-  * US store: [https://snapmaker-us.myshopify.com?ref=paxx12](https://snapmaker-us.myshopify.com?ref=paxx12)
-  * Global store: [https://test-snapmaker.myshopify.com?ref=paxx12](https://test-snapmaker.myshopify.com?ref=paxx12)
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for information about contributing to this project.
-
-See [HEROES.md](HEROES.md) for contributors who made significant contributions to each release.
-
-## License
-
-The main project is licensed under the GNU General Public License v3.0
-(GPL-3.0). See [LICENSE](LICENSE) for details.
-
-For licensing information about individual tools and dependencies, see their respective directories.
+PAXX 和 multiACE 的版权、来源与 GPL-3.0 许可均保留。233 是这个派生集成工程的名称；各组件的许可证与作者说明继续适用。参阅 [LICENSE](LICENSE)、[multiACE LICENSE](providers/multiACE/LICENSE) 及 [PAXX 原始说明](README.upstream.md)。

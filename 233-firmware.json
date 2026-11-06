@@ -1,0 +1,49 @@
+{
+  "name": "233固件",
+  "slug": "233-firmware",
+  "version": "2.1.0-233-dev.1",
+  "target": "Snapmaker U1",
+  "status": "source-initialized",
+  "build_profile": "extended-multiace",
+  "output_template": "firmware/U1_233_{version}_upgrade.bin",
+  "base_firmware": {
+    "version": "2.1.0",
+    "file": "U1_2.1.0.157_20261028045538_upgrade.bin",
+    "sha256": "fbe8e4fd23d81cae51c09ae8787967d398071fa739ea475116e2f0de84f5a7a5"
+  },
+  "upstreams": {
+    "paxx": {
+      "url": "https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware.git",
+      "base_branch": "develop",
+      "commit": "bb1fd3705ec9608d71122462b07556613dbbbb1f",
+      "license": "GPL-3.0"
+    },
+    "multiace": {
+      "url": "https://github.com/decay71/multiACE.git",
+      "path": "providers/multiACE",
+      "tag": "v1.27b",
+      "commit": "a1a7b91b1fd297c1486a13ea22c61e01499a196d",
+      "license": "GPL-3.0",
+      "observed_main_commit": "17da8e70bafeddbfd7de42f4bc45da7fd80662e6",
+      "observed_main_version": "1.50-pre"
+    },
+    "screen_apps": {
+      "url": "https://github.com/paxx12/screen-apps.git",
+      "path": "deps/screen-apps",
+      "commit": "4a81b50d9b6ef7a2c253b45dd00fe6f732c9d203"
+    }
+  },
+  "managed_provider_pin": {
+    "version": "1.27b",
+    "url": "https://github.com/decay71/multiACE/releases/download/v1.27b/multiace-managed-1.27b.tar.gz",
+    "sha256": "aedc432f1ca56854ae3da98e28d6a947a9b4adc2bdb88e7feb760be472968556",
+    "source_of_pin": "overlays/mods/multiace/70-app-multiace/root/usr/local/share/extended-pkg/multiace",
+    "local_provider_changes_bundled": false
+  },
+  "initialized_at": "2026-11-06T14:58:45.401524+08:00",
+  "validation": {
+    "firmware_built": false,
+    "firmware_flashed": false,
+    "published": false
+  }
+}
