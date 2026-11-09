@@ -1,15 +1,15 @@
 {
   "name": "233固件",
   "slug": "233-firmware",
-  "version": "2.1.0-233-dev.1",
+  "version": "2.1.0-233-dev.2-perms.1",
   "target": "Snapmaker U1",
-  "status": "source-initialized",
-  "build_profile": "extended-multiace",
+  "status": "deployed-boot-verified",
+  "build_profile": "rsyncfix-overlay",
   "output_template": "firmware/U1_233_{version}_upgrade.bin",
   "base_firmware": {
-    "version": "2.1.0",
-    "file": "U1_2.1.0.157_20261028045538_upgrade.bin",
-    "sha256": "fbe8e4fd23d81cae51c09ae8787967d398071fa739ea475116e2f0de84f5a7a5"
+    "version": "2.1.0-233-dev.1-rsyncfix.1",
+    "file": "U1_233_2.1.0-233-dev.1-rsyncfix.1_upgrade.bin",
+    "sha256": "6000de25703921113fb8665a82234bdc7ab25bd3030bc70dd1a307a18d90c02f"
   },
   "upstreams": {
     "paxx": {
@@ -34,16 +34,24 @@
     }
   },
   "managed_provider_pin": {
-    "version": "1.27b",
-    "url": "https://github.com/decay71/multiACE/releases/download/v1.27b/multiace-managed-1.27b.tar.gz",
-    "sha256": "aedc432f1ca56854ae3da98e28d6a947a9b4adc2bdb88e7feb760be472968556",
-    "source_of_pin": "overlays/mods/multiace/70-app-multiace/root/usr/local/share/extended-pkg/multiace",
-    "local_provider_changes_bundled": false
+    "version": "1.27b-233.20261109",
+    "path": "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261109.tar.gz",
+    "sha256": "a18a762e4cb1061fe778bb919311a076bbfdfc445e2bb73bf72b5ae26544fc3f",
+    "source_of_pin": "bundles/233-dev.2/manifest.json",
+    "local_provider_changes_bundled": true
   },
   "initialized_at": "2026-11-06T14:58:45.401524+08:00",
   "validation": {
-    "firmware_built": false,
-    "firmware_flashed": false,
-    "published": false
+    "firmware_built": true,
+    "firmware_flashed": true,
+    "published": false,
+    "boot_verified": true,
+    "boot_version": "2.1.0-233-dev.2-perms.1",
+    "package_sha256": "cb954ba1a9079a3aaa9572283c0339ea99899b097d7d7096da61f5f85f23a4f0",
+    "evidence": [
+      "../verification/multiace-package-dryer-20261109/部署与烘干基线.md",
+      "../verification/multiace-package-dryer-20261109/soc-upgrade/fresh-final-b.json"
+    ],
+    "scope": "Startup, imports and data; no new motion or thermal test."
   }
 }
