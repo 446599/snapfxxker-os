@@ -80,6 +80,12 @@
       "sha256": "9c65481844b89cbf5a17b7fa5ab726df2bcf88e69d53b1df9c7b5cbdf99119f8",
       "component": "208px dual-ring motion layout and fixed Z increments",
       "verification": "XML parse and whitespace check passed. Native geometry and command checks pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0013-home-status-strip.patch",
+      "sha256": "1e96cad536d6c812411848f48b84965efdecb771db787e642b07eabb7e847b23",
+      "component": "Home layout and compact four-head status strip",
+      "verification": "Six XML files parse; native tool controls retained; whitespace check passed. Native render pending."
     }
   ],
   "validation": {
