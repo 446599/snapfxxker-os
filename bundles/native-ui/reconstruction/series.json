@@ -20,6 +20,12 @@
       "sha256": "60cc5861497d8e188c2d4e00b1d5e0c30b0d590102d7da14860631a7e4728ec8",
       "component": "Four-tab bottom navigation and full-width overlay geometry",
       "verification": "XML parse and whitespace check passed; native build pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0003-motion-lock.patch",
+      "sha256": "de86a1f89149aa684e4a8b26041ed14b67630c2968489a8b97da8c5742d03ca5",
+      "component": "Printing lock for ring, Z, home and coordinate keypad",
+      "verification": "XML parse and whitespace check passed; native build and runtime checks pending"
     }
   ],
   "validation": {

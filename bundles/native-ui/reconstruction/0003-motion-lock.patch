@@ -1,0 +1,157 @@
+diff --git a/include/ui_panel_motion.h b/include/ui_panel_motion.h
+index d1dc5b1271fda672efcf2202dd57d510ce93cbed..23c536d4bd5ffebf4ba4baa1ccd89ac1c5940b6c 100644
+--- a/include/ui_panel_motion.h
++++ b/include/ui_panel_motion.h
+@@ -473,6 +473,7 @@ class MotionPanel : public OverlayBase {
+     ObserverGuard bed_moves_observer_;
+     ObserverGuard homed_axes_observer_;
+     ObserverGuard jog_ready_observer_;
++    ObserverGuard jog_motion_blocked_observer_;
+     ObserverGuard layout_observer_;
+     ObserverGuard portrait_rewire_observer_;
+     /// Redraws the plate when the bed-occupancy verdict or outlines change.
+diff --git a/src/ui/controls/ui_panel_motion.cpp b/src/ui/controls/ui_panel_motion.cpp
+index 395617cf1b819109dbc1b6e8fc5507b7d4c23f03..1418d85520802082f3301b1d447c10dfb3b54a8a 100644
+--- a/src/ui/controls/ui_panel_motion.cpp
++++ b/src/ui/controls/ui_panel_motion.cpp
+@@ -1041,6 +1041,19 @@ void MotionPanel::register_position_observers() {
+         },
+         get_printer_state().get_subjects_lifetime());
+ 
++    jog_motion_blocked_observer_ = observe<int>(
++        get_printer_state().print_state().get_machine_motion_blocked_subject(), this,
++        [](MotionPanel* self, int blocked) {
++            if (!self->subjects_initialized_)
++                return;
++            if (blocked) {
++                self->stop_hold_repeat();
++                self->move_sender_.reset();
++            }
++            self->update_jog_pad_enabled();
++        },
++        get_printer_state().get_subjects_lifetime());
++
+     spdlog::debug("[{}] Position + kinematics + homing observers registered (observer factory)",
+                   get_name());
+ }
+@@ -1057,9 +1070,7 @@ void MotionPanel::update_jog_pad_homed() {
+ void MotionPanel::update_jog_pad_enabled() {
+     if (!jog_pad_)
+         return;
+-    bool ready = lv_subject_get_int(
+-                     get_printer_state().network_state().get_nav_buttons_enabled_subject()) != 0;
+-    ui_jog_pad_set_enabled(jog_pad_, ready);
++    ui_jog_pad_set_enabled(jog_pad_, moves_allowed());
+ }
+ 
+ void MotionPanel::update_z_button_blocked() {
+@@ -1327,10 +1338,14 @@ void MotionPanel::warn_axis_limit(helix::Axis axis, float clamp_bound, bool at_m
+ }
+ 
+ bool MotionPanel::dispatch_jog(const helix::AxisMove& delta) {
++    if (!moves_allowed())
++        return false;
+     return move_sender_.send_delta(get_moonraker_api(), delta);
+ }
+ 
+ bool MotionPanel::dispatch_target(const helix::AxisTarget& target) {
++    if (!moves_allowed())
++        return false;
+     return move_sender_.send_target(get_moonraker_api(), target,
+                                     helix::move_clamp_bounds(get_printer_state()), current_z_);
+ }
+@@ -1341,6 +1356,10 @@ void MotionPanel::home(char axis) {
+ }
+ 
+ void MotionPanel::home_axes(const std::string& axes) {
++    if (!moves_allowed()) {
++        spdlog::debug("[{}] Homing refused: manual motion is locked", get_name());
++        return;
++    }
+     spdlog::debug("[{}] Home command: '{}'", get_name(), axes.empty() ? "all" : axes);
+ 
+     IMoonrakerAPI* api = get_moonraker_api();
+@@ -1389,12 +1408,9 @@ helix::Axis axis_from_letter(char axis) {
+ } // namespace
+ 
+ void MotionPanel::open_axis_keypad(char axis) {
+-    // Same gate as the jog controls: while the printer is not connected or
+-    // klippy is not ready, a jog would be refused, so the keypad must not
+-    // open either.
+-    if (lv_subject_get_int(get_printer_state().network_state().get_nav_buttons_enabled_subject()) ==
+-        0) {
+-        spdlog::debug("[{}] Axis keypad refused: printer not ready", get_name());
++    // Recheck at open and at dispatch: a print can start while the keypad is open.
++    if (!moves_allowed()) {
++        spdlog::debug("[{}] Axis keypad refused: manual motion is locked", get_name());
+         return;
+     }
+ 
+diff --git a/ui_xml/motion_panel.xml b/ui_xml/motion_panel.xml
+index 0597fc3adb0e407f2ff7cd1556ef86d4a2fec68e..02c1d4660d9c344fcca1c7e537cd15cc8699b6ac 100644
+--- a/ui_xml/motion_panel.xml
++++ b/ui_xml/motion_panel.xml
+@@ -96,6 +96,7 @@
+       <lv_obj name="header_pos_x_group" width="0" height="100%" clickable="true" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_track_place="center" flex_grow="1" style_flex_main_place="center">
+         <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="x"/>
+         <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
++        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+         <bind_state_if_eq subject="motion_x_homed" state="disabled" ref_value="0"/>
+         <lv_label name="header_pos_x_letter" text="X" style_text_font="#font_body_bold">
+           <bind_style name="axis_letter_homed" subject="motion_x_homed" ref_value="1"/>
+@@ -109,6 +110,7 @@
+       <lv_obj name="header_pos_y_group" width="0" height="100%" clickable="true" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_track_place="center" flex_grow="1" style_flex_main_place="center">
+         <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="y"/>
+         <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
++        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+         <bind_state_if_eq subject="motion_y_homed" state="disabled" ref_value="0"/>
+         <lv_label name="header_pos_y_letter" text="Y" style_text_font="#font_body_bold">
+           <bind_style name="axis_letter_homed" subject="motion_y_homed" ref_value="1"/>
+@@ -122,6 +124,7 @@
+       <lv_obj name="header_pos_z_group" width="0" height="100%" clickable="true" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_track_place="center" flex_grow="1" style_flex_main_place="center">
+         <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="z"/>
+         <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
++        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+         <bind_state_if_eq subject="motion_z_homed" state="disabled" ref_value="0"/>
+         <lv_label name="header_pos_z_letter" text="Z" style_text_font="#font_body_bold">
+           <bind_style name="axis_letter_homed" subject="motion_z_homed" ref_value="1"/>
+@@ -160,6 +163,7 @@
+         <lv_obj name="row_pos_x_group" width="content" height="content" style_min_height="#icon_button_size" clickable="true" style_pad_all="#space_xs" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_track_place="center">
+           <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="x"/>
+           <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
++        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+           <bind_state_if_eq subject="motion_x_homed" state="disabled" ref_value="0"/>
+           <lv_label name="row_pos_x_letter" text="X" style_text_font="#font_body_bold">
+             <bind_style name="axis_letter_homed" subject="motion_x_homed" ref_value="1"/>
+@@ -173,6 +177,7 @@
+         <lv_obj name="row_pos_y_group" width="content" height="content" style_min_height="#icon_button_size" clickable="true" style_pad_all="#space_xs" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_track_place="center">
+           <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="y"/>
+           <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
++        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+           <bind_state_if_eq subject="motion_y_homed" state="disabled" ref_value="0"/>
+           <lv_label name="row_pos_y_letter" text="Y" style_text_font="#font_body_bold">
+             <bind_style name="axis_letter_homed" subject="motion_y_homed" ref_value="1"/>
+@@ -186,6 +191,7 @@
+         <lv_obj name="row_pos_z_group" width="content" height="content" style_min_height="#icon_button_size" clickable="true" style_pad_all="#space_xs" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_track_place="center">
+           <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="z"/>
+           <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
++        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+           <bind_state_if_eq subject="motion_z_homed" state="disabled" ref_value="0"/>
+           <lv_label name="row_pos_z_letter" text="Z" style_text_font="#font_body_bold">
+             <bind_style name="axis_letter_homed" subject="motion_z_homed" ref_value="1"/>
+@@ -215,6 +221,7 @@
+       <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" scrollable="false" style_border_opa="0" flex_flow="column" style_pad_gap="#u1_card_gap" style_pad_hor="#u1_page_pad">
+         <!-- Disable content when printer not connected or klippy not ready -->
+         <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
++        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+         <!-- Pad row: jog pad left, Z column right. The row is the only
+              flex-growing child, so the coordinate strip and tab strip above
+              and the bottom row below take their height first and the pad row
+@@ -315,6 +322,7 @@
+       <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" style_pad_hor="#u1_page_pad" scrollable="false" style_border_opa="0" flex_flow="row" style_pad_gap="#u1_card_gap">
+         <!-- Disable content when printer not connected or klippy not ready -->
+         <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
++        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+         <!-- Left Column: tab rail + tab content. The rail takes the width the
+              height-bound pad leaves free at every landscape size (the pad is
+              sized to its wrapper height in MotionPanel::setup_jog_pad, so
