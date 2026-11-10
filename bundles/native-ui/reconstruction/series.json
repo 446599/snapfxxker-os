@@ -140,6 +140,12 @@
       "sha256": "38890805a684ff683df39bed5f20eb1b0e5482b8382e3714a3636c819abe6151",
       "component": "Nozzle manual-control text line height",
       "verification": "Native overflow found6px label clipping;22px text row and4px gaps retain214px column. XML parse and whitespace pass; recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0023-overlay-root-gap.patch",
+      "sha256": "ab0ab33c689e2d62f49eb07d81a9860757cb222c7c839ddbbd5ea5a9f5da5e28",
+      "component": "Overlay content starts directly below header",
+      "verification": "Native geometry found8px inheritedgap and6px overflow; explicitzero rootgap. XML parses and whitespace passes; recapture pending."
     }
   ],
   "validation": {
