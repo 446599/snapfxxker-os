@@ -1,0 +1,14 @@
+diff --git a/ui_xml/components/panel_widget_bed_temperature.xml b/ui_xml/components/panel_widget_bed_temperature.xml
+index bdb59e501c9a52acb92684a2fd0bfbc40f47f790..18093991ffe2e725fdfd31f21865b76c4027f156 100644
+--- a/ui_xml/components/panel_widget_bed_temperature.xml
++++ b/ui_xml/components/panel_widget_bed_temperature.xml
+@@ -14,7 +14,8 @@
+   <view name="panel_widget_bed_temperature"
+         extends="lv_obj" height="100%" flex_grow="1" style_pad_all="0" scrollable="false">
+     <ui_button name="bed_temp_btn"
+-               width="100%" height="100%" variant="ghost" style_border_width="0" focusable="false">
++               width="100%" height="100%" variant="ghost" style_border_width="0" focusable="false"
++               style_flex_main_place="space_between">
+       <style name="styles.overview_tile"/>
+       <bind_state_if_not_eq subject="printer_connection_state" state="disabled" ref_value="2"/>
+       <event_cb trigger="clicked" callback="bed_temp_clicked_cb"/>

@@ -146,6 +146,12 @@
       "sha256": "ab0ab33c689e2d62f49eb07d81a9860757cb222c7c839ddbbd5ea5a9f5da5e28",
       "component": "Overlay content starts directly below header",
       "verification": "Native geometry found8px inheritedgap and6px overflow; explicitzero rootgap. XML parses and whitespace passes; recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0024-bed-status-baseline.patch",
+      "sha256": "1aeaf3702a2a304bc219a6beb4042dcf5bf7bd4d658d95651a14ab6ce521d219",
+      "component": "Aligned home bed reading baseline",
+      "verification": "Native geometry found11px bedreading mismatch; explicit space_between layout. XML parse and whitespace pass; recapture pending."
     }
   ],
   "validation": {
