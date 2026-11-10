@@ -92,6 +92,12 @@
       "sha256": "cbaf8e20829727a2e9fa02d8689239663737f72b21de8b667d7af8bf59b52c89",
       "component": "Material inventory external spool and ACE cards",
       "verification": "XML parse and whitespace check passed; explicit source and operation gates reviewed. Native runtime pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0015-bed-draft-tests.patch",
+      "sha256": "40dd15395333b790b025af2cda3f224ea8e93857c9fa03b79aa29aa62ff4bb0f",
+      "component": "Temperature subject lifecycle and apply-only command regression",
+      "verification": "Whitespace check passed; targeted native test execution pending."
     }
   ],
   "validation": {

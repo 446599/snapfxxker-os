@@ -1,0 +1,137 @@
+diff --git a/tests/unit/test_temp_graph_overlay.cpp b/tests/unit/test_temp_graph_overlay.cpp
+index a1a48c4f83f49eb1f764dfdff5b407e8d364261c..0717d7dee33633faac4106aebe30c66a6c4ee87c 100644
+--- a/tests/unit/test_temp_graph_overlay.cpp
++++ b/tests/unit/test_temp_graph_overlay.cpp
+@@ -111,19 +111,20 @@ TEST_CASE_METHOD(LVGLTestFixture,
+ 
+ TEST_CASE_METHOD(
+     LVGLTestFixture,
+-    "TempGraphOverlay: init_subjects publishes its six subjects, destructor withdraws them",
++    "TempGraphOverlay: init_subjects publishes its nine subjects, destructor withdraws them",
+     "[temp_graph_overlay]") {
+-    // init_subjects() publishes six subjects - temp_graph_mode (strip
++    // init_subjects() publishes nine subjects - temp_graph_mode (strip
+     // visibility and graph_outer width, see temp_graph_overlay.xml's <subjects>
+     // block), temp_graph_nozzle_badge (the tool number the nozzle digit
+     // shows), temp_graph_nozzle_temp/temp_graph_nozzle_target (the nozzle
+     // card's current/target, mirrored from whichever extruder it displays),
+     // and temp_graph_nozzle_status_state/temp_graph_nozzle_status (that same
+-    // card's status glyph + duty). The SubjectManager destructor (deinit_all,
++    // card's status glyph + duty), temp_graph_title, temp_bed_draft and
++    // temp_bed_advanced. The SubjectManager destructor (deinit_all,
+     // run from ~TempGraphOverlay via the subjects_ member) must withdraw all
+-    // six names so they do not outlive the overlay. This pins both halves:
++    // nine names so they do not outlive the overlay. This pins both halves:
+     // the publish count AND the destructor cleanup. If another subject is
+-    // ever added, bump the +6 and name the newcomer here so the withdrawal
++    // ever added, bump the +9 and name the newcomer here so the withdrawal
+     // stays covered too.
+     auto name_present = [](const std::string& needle) {
+         auto all = SubjectDebugRegistry::instance().list_all();
+@@ -138,17 +139,21 @@ TEST_CASE_METHOD(
+         TempGraphOverlay overlay;
+         overlay.init_subjects();
+ 
+-        // Exactly six subjects published: temp_graph_mode,
++        // Exactly nine subjects published: temp_graph_mode,
+         // temp_graph_nozzle_badge, temp_graph_nozzle_temp,
+         // temp_graph_nozzle_target, temp_graph_nozzle_status_state,
+-        // temp_graph_nozzle_status.
+-        REQUIRE(SubjectDebugRegistry::instance().list_all().size() == before + 6);
++        // temp_graph_nozzle_status, temp_graph_title, temp_bed_draft and
++        // temp_bed_advanced.
++        REQUIRE(SubjectDebugRegistry::instance().list_all().size() == before + 9);
+         REQUIRE(name_present("temp_graph_mode"));
+         REQUIRE(name_present("temp_graph_nozzle_badge"));
+         REQUIRE(name_present("temp_graph_nozzle_temp"));
+         REQUIRE(name_present("temp_graph_nozzle_target"));
+         REQUIRE(name_present("temp_graph_nozzle_status_state"));
+         REQUIRE(name_present("temp_graph_nozzle_status"));
++        REQUIRE(name_present("temp_graph_title"));
++        REQUIRE(name_present("temp_bed_draft"));
++        REQUIRE(name_present("temp_bed_advanced"));
+         // Destructor runs here.
+     }
+ 
+@@ -159,6 +164,9 @@ TEST_CASE_METHOD(
+     REQUIRE_FALSE(name_present("temp_graph_nozzle_target"));
+     REQUIRE_FALSE(name_present("temp_graph_nozzle_status_state"));
+     REQUIRE_FALSE(name_present("temp_graph_nozzle_status"));
++    REQUIRE_FALSE(name_present("temp_graph_title"));
++    REQUIRE_FALSE(name_present("temp_bed_draft"));
++    REQUIRE_FALSE(name_present("temp_bed_advanced"));
+ }
+ 
+ TEST_CASE_METHOD(LVGLTestFixture, "TempGraphOverlay: cleanup after init_subjects does not crash",
+@@ -233,6 +241,18 @@ class TempGraphOverlayTestAccess {
+     static void keypad_confirm(TempGraphOverlay& o, float value) {
+         TempGraphOverlay::keypad_value_cb(value, &o.keypad_ctx_);
+     }
++    static void stage_bed_target(TempGraphOverlay& o, int target_deci) {
++        o.stage_bed_target(target_deci);
++    }
++    static int bed_draft(TempGraphOverlay& o) {
++        return lv_subject_get_int(&o.bed_draft_subject_);
++    }
++    static void capture_bed_keypad(TempGraphOverlay& o) {
++        o.keypad_ctx_ = {&o, helix::HeaterType::Bed, {}};
++    }
++    static void apply_bed_target(TempGraphOverlay& o) {
++        o.apply_bed_target();
++    }
+     static void discover(TempGraphOverlay& o) {
+         o.discover_series();
+     }
+@@ -280,6 +300,52 @@ class TempGraphOverlayPickFixture : public LVGLTestFixture {
+     }
+ };
+ 
++TEST_CASE_METHOD(TempGraphOverlayPickFixture,
++                 "TempGraphOverlay: bed edits send nothing until a ready Apply",
++                 "[temp_graph_overlay][bed-draft]") {
++    TempGraphOverlay overlay;
++    overlay.init_subjects();
++    TempGraphOverlayTestAccess::set_deps(overlay, &state, &service);
++    TempGraphOverlayTestAccess::set_mode(overlay, TempGraphOverlay::Mode::Bed);
++    auto* ready = state.network_state().get_nav_buttons_enabled_subject();
++    auto* reported_target = state.temperature_state().get_bed_target_subject();
++    helix::ui::UpdateQueue::instance().drain();
++    lv_subject_set_int(ready, 1);
++    lv_subject_set_int(reported_target, 550);
++    client.clear_gcode_script_history();
++
++    // Steppers and material presets share this draft entry point. Neither
++    // edits the reported target or emits a heater command.
++    TempGraphOverlayTestAccess::stage_bed_target(overlay, 600);
++    TempGraphOverlayTestAccess::stage_bed_target(overlay, 650);
++    CHECK(TempGraphOverlayTestAccess::bed_draft(overlay) == 650);
++    CHECK(lv_subject_get_int(reported_target) == 550);
++    CHECK(client.gcode_script_history().empty());
++
++    // A keypad stacks above the overlay. Its confirmation must remain a
++    // draft update even after that deactivation, never a hidden heater send.
++    TempGraphOverlayTestAccess::capture_bed_keypad(overlay);
++    overlay.on_deactivate(DeactivateReason::NavigateAway);
++    TempGraphOverlayTestAccess::keypad_confirm(overlay, 72.0f);
++    CHECK(TempGraphOverlayTestAccess::bed_draft(overlay) == 720);
++    CHECK(lv_subject_get_int(reported_target) == 550);
++    CHECK(client.gcode_script_history().empty());
++
++    // Losing readiness between edit and Apply cannot bypass the send guard.
++    lv_subject_set_int(ready, 0);
++    TempGraphOverlayTestAccess::stage_bed_target(overlay, 800);
++    TempGraphOverlayTestAccess::apply_bed_target(overlay);
++    CHECK(TempGraphOverlayTestAccess::bed_draft(overlay) == 720);
++    CHECK(client.gcode_script_history().empty());
++
++    lv_subject_set_int(ready, 1);
++    TempGraphOverlayTestAccess::apply_bed_target(overlay);
++    const auto& history = client.gcode_script_history();
++    REQUIRE(history.size() == 1);
++    CHECK(history.front().find("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=72") !=
++          std::string::npos);
++}
++
+ TEST_CASE_METHOD(
+     TempGraphOverlayPickFixture,
+     "TempGraphOverlay: a custom-entry send reaches the picked tool, not the active one",
