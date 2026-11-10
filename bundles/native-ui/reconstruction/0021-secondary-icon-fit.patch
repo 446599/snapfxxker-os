@@ -1,0 +1,34 @@
+diff --git a/ui_xml/motion_panel.xml b/ui_xml/motion_panel.xml
+index 723876fd5c990ea677d773c183884a4d095afc0a..8a30ffd1fa7c4c4f4fb3838da995aec01af94614 100644
+--- a/ui_xml/motion_panel.xml
++++ b/ui_xml/motion_panel.xml
+@@ -365,7 +365,7 @@
+             <ui_button name="motion_home_all" width="0" flex_grow="1" height="100%" text="回零" icon="home" variant="primary" moves_machine="true">
+               <event_cb trigger="clicked" callback="on_motion_home" user_data="all"/>
+             </ui_button>
+-            <ui_button name="header_pos_swap" width="#u1_touch_target" height="100%" icon="swap_horizontal" variant="secondary">
++            <ui_button name="header_pos_swap" width="#u1_touch_target" height="100%" icon="swap_horizontal" variant="secondary" style_pad_all="0">
+               <event_cb trigger="clicked" callback="on_motion_swap_coords_clicked"/>
+             </ui_button>
+           </lv_obj>
+diff --git a/ui_xml/temp_graph_overlay.xml b/ui_xml/temp_graph_overlay.xml
+index 19850089859771c64ba3b50589fb722a009a38ee..53a7390f655187466fb9a190685a910627ae6430 100644
+--- a/ui_xml/temp_graph_overlay.xml
++++ b/ui_xml/temp_graph_overlay.xml
+@@ -124,14 +124,14 @@
+         <lv_obj width="0" flex_grow="1" height="100%" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="0" scrollable="false">
+           <text_body text="目标温度" style_text_color="#text_muted" height="#u1_text_line"/>
+           <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+-            <ui_button name="bed_target_minus" width="#u1_touch_target" height="#u1_touch_target" icon="minus" variant="secondary">
++            <ui_button name="bed_target_minus" width="#u1_touch_target" height="#u1_touch_target" icon="minus" variant="secondary" style_pad_all="0">
+               <event_cb trigger="clicked" callback="on_u1_bed_adjust" user_data="-5"/>
+             </ui_button>
+             <lv_obj name="bed_target_keypad" width="0" flex_grow="1" height="100%" style_pad_all="0" scrollable="false" clickable="true">
+               <event_cb trigger="clicked" callback="on_temp_graph_custom_clicked"/>
+               <temp_display name="bed_target_draft" size="lg" bind_current="temp_bed_draft" align="center" clickable="false" event_bubble="true"/>
+             </lv_obj>
+-            <ui_button name="bed_target_plus" width="#u1_touch_target" height="#u1_touch_target" icon="plus" variant="secondary">
++            <ui_button name="bed_target_plus" width="#u1_touch_target" height="#u1_touch_target" icon="plus" variant="secondary" style_pad_all="0">
+               <event_cb trigger="clicked" callback="on_u1_bed_adjust" user_data="5"/>
+             </ui_button>
+           </lv_obj>

@@ -128,6 +128,12 @@
       "sha256": "e629cdc8da8084267298f817f2eaa912ad7e11106d17eeeda78f063125cfa44e",
       "component": "44px overlay header and full touch-target fit",
       "verification": "Native geometry found56px inherited header; XML now44px with no1px content clip. XML parse and whitespace pass; affected page recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0021-secondary-icon-fit.patch",
+      "sha256": "50d7c09e135a33829b16391621774c2a869d087d96dc26874157a38f92b8f548",
+      "component": "Unclipped icons within44px secondary controls",
+      "verification": "Native overflow identified3px glyph clipping; zero padding on three44px icon buttons. XML parses and whitespace pass; recapture pending."
     }
   ],
   "validation": {
