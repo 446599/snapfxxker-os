@@ -1,0 +1,112 @@
+{
+  "title": "U1 UI.5 native implementation review — not a firmware release",
+  "created_at_utc": "2026-11-10T11:44:03.793567+00:00",
+  "native_resolution": [
+    480,
+    320
+  ],
+  "runtime": "native LVGL program with isolated mock devices; not physical-printer validation",
+  "approved_reference": {
+    "name": "u1-dual-ring-nozzle-preview.html",
+    "library_version": "9",
+    "sha256": "a42c2fb6c556450d6699a7d288dab9a2790094b778527cbe58111f010210fce0",
+    "visual_similarity": null,
+    "acceptance_status": "not certified: original browser pixels unavailable; reference height is inconsistent with physical 480x320"
+  },
+  "source_baseline_ui4": "3cf7eff27fb640781ef0bbccf03742e54a9e2117",
+  "source_checkpoint": "171ec32ec623414c9929ac0359f4d475964e68ba",
+  "review_patch_sha256": "76b13794ec269adddaa672e445d5c1ecfc86c2f87b953db88c326416da1c90f9",
+  "published": false,
+  "focused_unit_tests": {
+    "test_cases": 31,
+    "assertions": 294,
+    "passed": true
+  },
+  "source_retention": {
+    "original_callback_rows": 1354,
+    "unresolved_rows": 0,
+    "core_rows": 81,
+    "secondary_rows": 200,
+    "qualification": "static source mapping, not hardware or complete runtime certification"
+  },
+  "screenshots": {
+    "overview-printing": {
+      "path": "screenshots/overview-printing.png",
+      "sha256": "5bf1cc1e6b1de3c3bc41521621beb49a218c6e997d7a346a15e82db95048b471"
+    },
+    "overview-idle": {
+      "path": "screenshots/overview-idle.png",
+      "sha256": "e501420c55559a29c391755dc4bf25a6bdc370239df21f8d2ffc9d2bf4faf906"
+    },
+    "overview-long-content": {
+      "path": "screenshots/overview-long-content.png",
+      "sha256": "0ad50babfbea90104201495514bebd7906752f2d53b7a773e60cd940cd682d49"
+    },
+    "controls": {
+      "path": "screenshots/controls.png",
+      "sha256": "ae019571243ccad4b5fe30c2c75f66eaf1aafec40a2671f0b042e7cc3d9294e5"
+    },
+    "material-external": {
+      "path": "screenshots/material-external.png",
+      "sha256": "4a84283bebc07eb983828630e1a72a0ce42f0aae8c2790e668026cde7b542e2f"
+    },
+    "material-ace": {
+      "path": "screenshots/material-ace.png",
+      "sha256": "e6863826b5685b30790f1f3e60927f5e66dfd7df09dfdc5466cb2a88fbe27ab4"
+    },
+    "material-ace-candidate": {
+      "path": "screenshots/material-ace-candidate.png",
+      "sha256": "52f91d9132a9019d8d3e5df2ffc3845521351c12b610ce34c8503c3e5dc7d64b"
+    },
+    "material-ace-empty": {
+      "path": "screenshots/material-ace-empty.png",
+      "sha256": "8eb9f842dbac5c9348a7cdb7706533f3c4dcbd798af354d582994c12b0e0161d"
+    },
+    "settings": {
+      "path": "screenshots/settings.png",
+      "sha256": "4498301d732e5cec5fdcde91660a1a4c1026ad61deb9d505321dabea1655f358"
+    },
+    "movement": {
+      "path": "screenshots/movement.png",
+      "sha256": "b547ef318a9a5fe7553352c832e68c8bef0e10b83e1c13ca58553e641246f27f"
+    },
+    "movement-locked": {
+      "path": "screenshots/movement-locked.png",
+      "sha256": "a7c69e3c5e9498e001e25bbbdf888c083067702d93f08c2968b9a2936befd17d"
+    },
+    "fans": {
+      "path": "screenshots/fans.png",
+      "sha256": "2257c6ef86f7fa8a8b72f89d16de941945d0e344f28595ecf8f1e8f1ec646a53"
+    },
+    "temperature": {
+      "path": "screenshots/temperature.png",
+      "sha256": "66c1a8da26ddc596fc6f6cf711f7ed67f7d8f09da53c3584c72f6d6a8bfe6c37"
+    },
+    "nozzle": {
+      "path": "screenshots/nozzle.png",
+      "sha256": "b22f112132a4ce90dc17a2d72fc0439b2045135cc2d99714e210cd93a245836a"
+    },
+    "bed": {
+      "path": "screenshots/bed.png",
+      "sha256": "6f4d4f64700fed2972f61a2cc403c4a065842e2f3d5a93d8e6349dca27785bd5"
+    },
+    "speed": {
+      "path": "screenshots/speed.png",
+      "sha256": "4256da80853c3476859e0ca3c20ad43c0743e8ecdec7f255450853287698ee97"
+    },
+    "material-edit": {
+      "path": "screenshots/material-edit.png",
+      "sha256": "7b32d85b8a2eba5df8a7a612f132eaa48317afd55009f0b14f3bb270ecd180e2"
+    },
+    "material-partial-save": {
+      "path": "screenshots/material-partial-save.png",
+      "sha256": "a4554828aff31f9f3c6f07593f4b92d631361513be245464db599dc0cfdaae4d"
+    }
+  },
+  "intentional_size_adaptations": [
+    "XY dial 208px instead of source224px",
+    "nozzle content214px instead of216px",
+    "speed cards74px instead of84px to retain More controls",
+    "reference overview source totals approximately366px including navigation; native screen is320px"
+  ]
+}
