@@ -56,6 +56,12 @@
       "sha256": "7798b3c822ad7b54db1021764c73e6f5a70cd2719f9045121bacd6d021b2d587",
       "component": "Four control cards and retained complete controls dashboard",
       "verification": "XML parse, retained-grid check and whitespace check passed; native runtime pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0009-bed-draft.patch",
+      "sha256": "c1635baf5c53a7ec483aff9448ee1f5814b783485c310dcb3502087d561f0daa",
+      "component": "Bed temperature draft and explicit apply action",
+      "verification": "XML parse and whitespace check passed; native runtime pending"
     }
   ],
   "validation": {
