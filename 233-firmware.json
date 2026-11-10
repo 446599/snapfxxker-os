@@ -1,9 +1,9 @@
 {
   "name": "233固件",
   "slug": "233-firmware",
-  "version": "2.1.0-233-dev.3-ui.2",
+  "version": "2.1.0-233-dev.3-ui.3",
   "target": "Snapmaker U1",
-  "status": "native-ui-source-integration-draft",
+  "status": "native-ui-review-fixes-offline-verified",
   "build_profile": "rsyncfix-perms1-native-ui-overlay",
   "output_template": "firmware/U1_233_{version}_upgrade.bin",
   "base_firmware": {
@@ -49,12 +49,12 @@
   },
   "initialized_at": "2026-11-06T14:58:45.401524+08:00",
   "validation": {
-    "native_arm64_rebuilt": false,
+    "native_arm64_rebuilt": true,
     "firmware_built": false,
     "firmware_flashed": false,
     "published": false,
     "boot_verified": false,
-    "scope": "Initial native source integration. Current ARM64 runtime must be rebuilt in CI, imported and pinned before firmware packaging. No physical deployment for this revision."
+    "scope": "Review fixes for df0f5c3 passed 67 Python checks, a clean fixed-source ARM64 build and runtime payload verification. No complete firmware image was built or deployed for this revision. Runtime binaries are not part of this source commit; rebuild/import the current package before firmware packaging."
   },
   "previous_validation": {
     "version": "2.1.0-233-dev.2-perms.1",

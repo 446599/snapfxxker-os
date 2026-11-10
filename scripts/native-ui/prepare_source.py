@@ -82,6 +82,10 @@ def prepare(output, no_submodules=False):
     if sibling.exists():
         raise ValueError("Refusing to replace an existing sibling device-service directory")
     shutil.copytree(service, sibling, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    # The Klipper-side upgrade endpoint also supplies native-screen errors.
+    # Keep its source beside the companion for the runtime CJK glyph scan.
+    shutil.copy2(REPO / "overlays/233-native-ui/root/home/lava/klipper/klippy/extras/u1_native_upgrade.py",
+                 sibling / "u1_native_upgrade.py")
     (output.parent / "source-provenance.json").write_text(json.dumps({
         "upstream": source, "device_service": manifest["device_service"],
         "submodules_initialized": not no_submodules,

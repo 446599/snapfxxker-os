@@ -55,12 +55,15 @@ def validate_source(manifest, partial_tree):
             "Native overlay must follow the verified multiACE overlay")
     for path in [*(REPO / "scripts/native-ui").glob("*.py"),
                  *(overlay / "usr/local").rglob("*.py"),
+                 *(overlay / "home/lava/klipper/klippy/extras").glob("*.py"),
                  *(REPO / "tests/native-ui").glob("*.py")]:
         ast.parse(path.read_text(), filename=str(path))
     shell_paths = [REPO / "build-233.sh", REPO / "scripts/create_firmware.sh",
                    *(REPO / "scripts/native-ui").glob("*.sh"),
                    *(REPO / "overlays/233-native-ui/pre-scripts").glob("*.sh"),
                    *(overlay / "etc/init.d").glob("S*"),
+                   *(overlay / "etc/hooks/klipper.d").glob("*.sh"),
+                   *(overlay / "etc/hooks/moonraker.d").glob("*.sh"),
                    *(overlay / "etc/hooks/lmd.d").glob("*.sh")]
     for path in shell_paths:
         subprocess.run(["bash", "-n", str(path)], check=True)

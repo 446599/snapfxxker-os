@@ -3,6 +3,7 @@
 # SNMK format/data map follow tools/upfile by @paxx12 and @james-coder (2025).
 """Loopback companion for the U1 native screen. Uses existing multiACE and U1 installers."""
 
+from contextlib import contextmanager
 import hashlib
 import http.client
 import json
@@ -10,14 +11,19 @@ import os
 from pathlib import Path
 import re
 import secrets
+import socket
+import stat
 import shutil
 import struct
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.request
 from urllib.parse import quote, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from idle_checks import require_idle, require_machine_idle
 
 DECODE = bytes.fromhex(
     "00a2e90ede64ee12463be779a5805533323c0b7ececc5937019b4ec1ab1872119c5be58de80d699729d9c5af4a617a6339c6bcd092ae7fdd6c073ab991f7c7453440b52844e6cb4d3d9e942b60d22f3e67d652d3a8d4f81adaec707ca01d064f6e2db836f04322bdb4829deba45676e425159871c350497708fb4723aa8a20fcf68c85301ec962ba530ff257517b131f96c0357387dbb7a3ed905f9adce3e10a1b17ea41fe5826cd05c202886a9f9374e22a09ac815c1cf38bfa84a1d75dbe7538e0a62c2e6686ef5468b6a9f50cf9b3bf14b2fdbbd504f4a748f16d6b997d4bb0ad2195d1cfc424ca8eb18316df1910274c6f313f5a6578c8d803895e8f42ff"
@@ -31,7 +37,28 @@ STATE_LOCK = threading.RLock()
 STATE = {"state": "idle", "pct": 0, "msg": "请选择本地固件", "error": ""}
 PREPARED = {}
 ACTIVE_PROCESS = None
-BUSY = {"validating", "flashing", "reboot_pending"}
+BUSY = {"validating", "flashing", "reboot_pending", "recovery_required"}
+# Local printer APIs must never inherit HTTP(S)_PROXY from the service environment.
+# Keep this opener private so unrelated HTTP clients retain their proxy settings.
+LOCAL_HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+KLIPPY_SOCKET = Path("/home/lava/printer_data/comms/klippy.sock")
+UPGRADE_HANDSHAKE = Path("/run/u1-native-upgrade")
+CONTROL_SERVICES = {
+    "moonraker": (Path("/etc/init.d/S61moonraker"), Path("/var/run/moonraker.pid"),
+                  "/home/lava/moonraker/moonraker/moonraker.py"),
+    "klipper": (Path("/etc/init.d/S60klipper"), Path("/var/run/klipper.pid"),
+                "/home/lava/klipper/klippy/klippy.py"),
+    "multiace": (Path("/etc/init.d/S98multiace-web"), Path("/tmp/multiace_web.pid"),
+                 "uvicorn"),
+}
+UPGRADE_SCOPE = {
+    "id": "u1-all",
+    "installer_target": "all",
+    "components": ["soc", "main_mcu", "toolhead_mcu_0", "toolhead_mcu_1",
+                   "toolhead_mcu_2", "toolhead_mcu_3"],
+    "description": "U1 主机系统、主控 MCU 及四个工具头 MCU；不更新 ACE 固件",
+}
+
 
 # The installed PAXX server is authoritative for available settings and values.
 # These tables only arrange and translate the native screen's presentation.
@@ -141,7 +168,7 @@ def paxx_request(path, payload=None):
         method="GET" if payload is None else "POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=20 if payload is None else 180) as response:
+        with LOCAL_HTTP.open(request, timeout=20 if payload is None else 180) as response:
             body = response.read().decode("utf-8", errors="replace")
             if payload is not None:
                 return body
@@ -290,7 +317,7 @@ def json_request(url, data=None, method=None, headers=None):
         method=method,
     )
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with LOCAL_HTTP.open(req, timeout=20) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as exc:
         try:
@@ -429,32 +456,240 @@ def validate_u1(path):
     }
 
 
-def require_idle(status):
-    if (
-        status.get("webhooks", {}).get("state") != "ready"
-        or status.get("print_stats", {}).get("state")
-        not in ("standby", "complete", "cancelled")
-        or status.get("idle_timeout", {}).get("state") not in ("Ready", "Idle")
-    ):
-        raise ValueError("请等待打印机就绪并结束打印、暂停或运动操作")
 
 
 def machine_idle():
-    result = json_request(
-        "http://127.0.0.1:7125/printer/objects/query?print_stats&webhooks&idle_timeout&ace",
-        headers=paxx_auth_headers(),
-    )
-    status = result.get("result", {}).get("status", {})
-    require_idle(status)
-    ace = status.get("ace", {})
-    if (
-        (ace and ace.get("status") != "ready")
-        or ace.get("busy")
-        or (ace.get("tag_op") or {}).get("busy")
-        or (ace.get("location_hold") or {}).get("active")
-    ):
-        raise ValueError("请先结束耗材操作并确认料路位置")
+    # Discovery distinguishes an absent ACE from an omitted/stale status field.
+    # Read heater names first, then query every relevant object in ONE snapshot.
+    base = "http://127.0.0.1:7125/printer/objects/"
+    headers = paxx_auth_headers()
+    objects = json_request(base + "list", headers=headers).get("result", {}).get("objects")
+    if not isinstance(objects, list) or not all(isinstance(name, str) for name in objects):
+        raise ValueError("无法读取打印机对象列表")
+    required = {"print_stats", "webhooks", "idle_timeout", "heaters"}
+    if not required.issubset(objects):
+        raise ValueError("打印机状态对象不完整")
+    heater_status = json_request(base + "query?heaters", headers=headers)
+    heaters = heater_status.get("result", {}).get("status", {}).get("heaters", {})
+    heater_names = heaters.get("available_heaters")
+    if (not isinstance(heater_names, list) or not heater_names
+            or any(not isinstance(name, str) or name not in objects for name in heater_names)):
+        raise ValueError("无法读取完整加热器列表")
+    requested = required | set(heater_names) | {
+        name for name in objects
+        if name in ("ace", "ace_bg_swap", "ace_native_guard")
+        or name.startswith("filament_feed ")
+    }
+    result = json_request(base + "query?" + "&".join(quote(name, safe="")
+                          for name in sorted(requested)), headers=headers)
+    snapshot = result.get("result", {}).get("status", {})
+    if not isinstance(snapshot, dict) or not requested.issubset(snapshot):
+        raise ValueError("打印机状态数据不完整，请刷新后重试")
+    require_machine_idle(snapshot)
 
+
+@contextmanager
+def device_operation():
+    """Serialize all companion writes; a running installer retains the gate."""
+    if not LOCK.acquire(blocking=False):
+        raise ValueError("另一项设备操作正在进行，请等待完成")
+    try:
+        if STATE["state"] in BUSY or (
+                ACTIVE_PROCESS is not None and ACTIVE_PROCESS.poll() is None):
+            raise ValueError("固件升级正在进行")
+        yield
+    finally:
+        LOCK.release()
+
+
+def sync_spoolman(payload):
+    with device_operation():
+        return web("spoolman/sync", payload)
+
+
+
+def process_identity(pid):
+    """PID reuse is not an exit acknowledgement from the original process."""
+    proc = Path("/proc") / str(pid)
+    try:
+        fields = (proc / "stat").read_text().rsplit(")", 1)[1].split()
+        if fields[0] == "Z":
+            return None
+        return fields[19], (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode()
+    except FileNotFoundError:
+        return None
+
+
+def service_process(name, required=False):
+    _, pidfile, marker = CONTROL_SERVICES[name]
+    if not pidfile.exists():
+        if required:
+            raise ValueError("无法确认控制服务进程：" + name)
+        return None
+    try:
+        pid = int(pidfile.read_text().strip())
+    except ValueError as exc:
+        raise ValueError("控制服务 PID 无效：" + name) from exc
+    if pid <= 1:
+        raise ValueError("控制服务 PID 无效：" + name)
+    identity = process_identity(pid)
+    if identity is None:
+        if required:
+            raise ValueError("控制服务没有运行：" + name)
+        return None
+    if marker not in identity[1].split():
+        raise ValueError("控制服务进程与 PID 不匹配：" + name)
+    return {"pid": pid, "identity": identity}
+
+
+def wait_process_exit(process, timeout=20):
+    deadline = time.monotonic() + timeout
+    while process_identity(process["pid"]) == process["identity"]:
+        if time.monotonic() >= deadline:
+            raise ValueError("无法确认控制服务已退出")
+        time.sleep(0.05)
+
+
+def wait_service_start(name, timeout=5):
+    # start-stop-daemon -b returns before the pidfile and exec command line
+    # necessarily exist. Accept only the expected running process, with a
+    # bounded wait; retain the last useful error if startup never completes.
+    deadline = time.monotonic() + timeout
+    last_error = None
+    while True:
+        try:
+            process = service_process(name, required=True)
+            if process is not None:
+                return process
+        except (ValueError, FileNotFoundError) as exc:
+            last_error = exc
+        if time.monotonic() >= deadline:
+            if last_error is not None:
+                raise last_error
+            raise ValueError("无法确认控制服务进程：" + name)
+        time.sleep(0.05)
+
+
+def control_service(name, action):
+    script = CONTROL_SERVICES[name][0]
+    subprocess.run([str(script), action], check=True, timeout=45,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+
+def klippy_prepare(token):
+    request = {"id": 1, "method": "u1_upgrade/prepare", "params": {"token": token}}
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+        peer.settimeout(20)
+        peer.connect(str(KLIPPY_SOCKET))
+        peer.sendall(json.dumps(request).encode() + b"\x03")
+        content = b""
+        while len(content) <= 1024 * 1024:
+            chunk = peer.recv(65536)
+            if not chunk:
+                # Atomic quiescence ends Klippy before a socket reply is sent.
+                # The root-created, nonce-bound receipt is the acknowledgement.
+                return
+            content += chunk
+            while b"\x03" in content:
+                line, content = content.split(b"\x03", 1)
+                reply = json.loads(line)
+                if reply.get("id") != 1:
+                    continue
+                if "error" in reply:
+                    raise ValueError(str(reply["error"].get("message", reply["error"])))
+                return
+    raise ValueError("Klipper 升级互斥响应无效")
+
+
+def prepare_upgrade_request(token, pid):
+    UPGRADE_HANDSHAKE.mkdir(mode=0o755, parents=True, exist_ok=True)
+    directory = UPGRADE_HANDSHAKE.lstat()
+    if not stat.S_ISDIR(directory.st_mode) or directory.st_uid != 0 or directory.st_mode & 0o022:
+        raise ValueError("升级互斥目录权限不正确")
+    owner = (Path("/proc") / str(pid)).stat()
+    for name, mode, contents in (
+            ("request.json", 0o644, {"token": token, "pid": pid}),
+            ("receipt.json", 0o600, {})):
+        fd = os.open(str(UPGRADE_HANDSHAKE / name),
+                     os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, mode)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise ValueError("升级互斥文件无效")
+            os.fchmod(fd, mode)
+            os.fchown(fd, 0 if name == "request.json" else owner.st_uid,
+                      0 if name == "request.json" else owner.st_gid)
+            os.write(fd, json.dumps(contents).encode())
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
+class UpgradeControls:
+    """Fence Moonraker writers, then ask Klippy to atomically check and exit.
+
+    No MCU power is switched here: the stock installer must still read the MCU
+    model before it runs its own stop/power/flash sequence.
+    """
+    def __init__(self):
+        self.original = {}
+        self.touched = []
+        self.accepted = False
+        self.request_created = False
+
+    def quiesce(self):
+        self.original["klipper"] = service_process("klipper", required=True)
+        self.original["moonraker"] = service_process("moonraker", required=True)
+        self.original["multiace"] = service_process("multiace")
+        token = secrets.token_hex(24)
+        pid = self.original["klipper"]["pid"]
+        # Install the service-start lease BEFORE stopping writers. Init hooks
+        # prevent PAXX or another supervisor from restarting control services.
+        self.request_created = True
+        prepare_upgrade_request(token, pid)
+        self.touched.append("moonraker")
+        control_service("moonraker", "stop")
+        wait_process_exit(self.original["moonraker"])
+        if service_process("moonraker") is not None:
+            raise ValueError("Moonraker 已重新启动，升级已停止")
+        # Mark before sending: an EOF/timeout can mean Klippy has already exited.
+        self.touched.append("klipper")
+        klippy_prepare(token)
+        receipt = json.loads((UPGRADE_HANDSHAKE / "receipt.json").read_text())
+        if receipt != {"accepted": True, "token": token, "pid": pid}:
+            raise ValueError("未收到有效的 Klipper 升级互斥确认")
+        self.accepted = True
+        wait_process_exit(self.original["klipper"])
+        if service_process("klipper") is not None:
+            raise ValueError("Klipper 已重新启动，升级已停止")
+        # ACE OTA owns a serial port only after ACE_FW_RELEASE sets fw_hold.
+        # The atomic endpoint rejects fw_hold before exiting. With Moonraker
+        # gone no new release can succeed, so only now may the web worker stop.
+        if self.original["multiace"] is not None:
+            self.touched.append("multiace")
+            control_service("multiace", "stop")
+            wait_process_exit(self.original["multiace"])
+        for name in self.original:
+            if service_process(name) is not None:
+                raise ValueError("控制服务未停止，升级已取消：" + name)
+
+    def restore(self):
+        # This method is only called before Popen succeeds. Revoking the lease
+        # lets the init hooks accept the explicit recovery starts below.
+        if self.request_created:
+            (UPGRADE_HANDSHAKE / "request.json").unlink(missing_ok=True)
+        failures = []
+        # Restore only services this attempt stopped, in dependency order.
+        for name in ("klipper", "moonraker", "multiace"):
+            if name not in self.touched or self.original.get(name) is None:
+                continue
+            try:
+                if service_process(name) is None:
+                    control_service(name, "start")
+                    wait_service_start(name)
+            except Exception as exc:
+                failures.append(name + ": " + str(exc))
+        if failures:
+            raise ValueError("控制服务恢复失败：" + "; ".join(failures))
 
 def set_state(**values):
     with STATE_LOCK:
@@ -474,7 +709,7 @@ def sha256_file(path):
 
 
 def prepare(payload):
-    with LOCK:
+    with device_operation():
         if STATE["state"] in BUSY or (
             ACTIVE_PROCESS is not None and ACTIVE_PROCESS.poll() is None
         ):
@@ -507,6 +742,7 @@ def prepare(payload):
                 name=path.name,
                 sha256=sha,
                 token=token,
+                scope=dict(UPGRADE_SCOPE),
             )
             PREPARED.update(info)
             PREPARED["size"] = (STORE / "package.bin").stat().st_size
@@ -517,6 +753,7 @@ def prepare(payload):
                 target=target,
                 file=path.name,
                 sha256=sha,
+                scope=dict(UPGRADE_SCOPE),
             )
             return dict(PREPARED)
         except Exception as exc:
@@ -526,63 +763,79 @@ def prepare(payload):
 
 def run_u1(path):
     global ACTIVE_PROCESS
-    try:
-        set_state(state="flashing", pct=None, msg="正在执行 U1 系统升级，请保持供电")
-        # The installer owns its flash/reboot lifecycle. The UI never kills this process.
-        with (STORE / "upgrade.log").open("w") as log:
-            proc = subprocess.Popen(
-                [str(INSTALLER), "upgrade", "all", str(path)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                errors="replace",
-                bufsize=1,
-            )
-            ACTIVE_PROCESS = proc
-            reboot_seen = False
-            for line in proc.stdout:
-                log.write(line)
-                log.flush()
-                if "upgrade soc finish, prepare to reboot" in line:
-                    reboot_seen = True
-                    set_state(
-                        state="reboot_pending",
-                        pct=100,
-                        msg="写入完成，等待重启后核对版本",
-                    )
-                elif line.strip():
-                    set_state(msg=line.strip()[-240:])
-            code = proc.wait()
-            proc.stdout.close()
-        if code != 0:
-            raise ValueError("系统升级脚本退出码 " + str(code))
-        set_state(
-            state="reboot_pending",
-            pct=100,
-            msg="等待重启后核对版本"
-            if reboot_seen
-            else "升级脚本已退出，请核对机器版本",
-        )
-    except Exception as exc:
-        set_state(state="error", error=str(exc), msg="升级失败，请查看日志")
+    with LOCK:
+        controls = UpgradeControls()
+        installer_started = False
+        try:
+            machine_idle()
+            set_state(state="flashing", pct=None,
+                      msg="正在锁定控制服务并核对设备状态", scope=dict(UPGRADE_SCOPE))
+            controls.quiesce()
+            set_state(msg="正在升级 U1 主机与全部 MCU，请保持供电")
+            # The installer owns its flash/reboot lifecycle. Never kill it.
+            with (STORE / "upgrade.log").open("w") as log:
+                proc = subprocess.Popen(
+                    [str(INSTALLER), "upgrade", UPGRADE_SCOPE["installer_target"], str(path)],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, errors="replace", bufsize=1,
+                )
+                installer_started = True
+                ACTIVE_PROCESS = proc
+                reboot_seen = False
+                for line in proc.stdout:
+                    log.write(line)
+                    log.flush()
+                    if "upgrade soc finish, prepare to reboot" in line:
+                        reboot_seen = True
+                        set_state(state="reboot_pending", pct=100,
+                                  msg="写入完成，等待重启后核对版本")
+                    elif line.strip():
+                        set_state(msg=line.strip()[-240:])
+                code = proc.wait()
+                proc.stdout.close()
+            if code != 0:
+                raise ValueError("系统升级脚本退出码 " + str(code))
+            set_state(state="reboot_pending", pct=100,
+                      msg="等待重启后核对版本" if reboot_seen
+                      else "升级脚本已退出，请核对机器版本")
+        except Exception as exc:
+            if not installer_started:
+                try:
+                    controls.restore()
+                except Exception as restore_exc:
+                    set_state(state="recovery_required", error=str(restore_exc),
+                              msg="升级未启动，控制服务需要人工恢复")
+                    return
+                set_state(state="error", error=str(exc), msg="升级未启动，请查看错误后重试")
+            else:
+                # The stock installer may have written some partitions. Do not
+                # restart controls or permit another write until recovery/reboot.
+                set_state(state="recovery_required", error=str(exc),
+                          msg="升级失败，请保持供电并查看日志")
 
 
 def start(payload):
-    with LOCK:
+    with device_operation():
         if (
             STATE["state"] != "prepared"
             or not PREPARED
             or payload.get("token") != PREPARED["token"]
         ):
             raise ValueError("请重新选择并校验固件")
-        machine_idle()
         path = Path(PREPARED["path"])
         if sha256_file(path) != PREPARED["sha256"]:
             raise ValueError("暂存固件发生变化，请重新校验")
         if not INSTALLER.is_file() or not os.access(INSTALLER, os.X_OK):
             raise ValueError("当前系统缺少 U1 升级执行器")
-        set_state(state="flashing", pct=0, msg="启动 U1 升级", boot_id=boot_id())
-        threading.Thread(target=run_u1, args=(path,), daemon=True).start()
+        # Hashing a full package can take seconds: inspect live state afterwards.
+        machine_idle()
+        set_state(state="flashing", pct=0, msg="启动 U1 主机及 MCU 升级",
+                  boot_id=boot_id(), scope=dict(UPGRADE_SCOPE))
+        try:
+            threading.Thread(target=run_u1, args=(path,), daemon=True).start()
+        except Exception:
+            set_state(state="error", msg="无法启动升级任务，请重新校验", error="升级线程启动失败")
+            raise
         return {"ok": True}
 
 
@@ -639,7 +892,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.command == "GET" and route == "/state":
                 result = web("state")
             elif self.command == "POST" and route == "/spoolman/sync":
-                result = web("spoolman/sync", data)
+                result = sync_spoolman(data)
             else:
                 self.send_error(404)
                 return

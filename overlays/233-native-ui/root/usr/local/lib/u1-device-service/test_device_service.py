@@ -212,7 +212,9 @@ class WorkflowTests(unittest.TestCase):
         )
         executable.chmod(0o700)
         self.store.mkdir()
-        with patch.object(service, "INSTALLER", executable):
+        with (patch.object(service, "INSTALLER", executable),
+              patch.object(service, "machine_idle"),
+              patch.object(service, "UpgradeControls")):
             service.run_u1(self.package)
         self.assertEqual(service.STATE["state"], "reboot_pending")
         self.assertIn("prepare to reboot", (self.store / "upgrade.log").read_text())
@@ -313,7 +315,10 @@ class PaxxSettingsTests(unittest.TestCase):
         })
         env.start()
         self.addCleanup(env.stop)
-        self.idle = patch.object(service, "json_request", return_value={"result": {"status": {
+        self.idle = patch.object(service, "json_request", return_value={"result": {
+            "objects": ["webhooks", "print_stats", "idle_timeout", "heaters", "extruder"],
+            "status": {"heaters": {"available_heaters": ["extruder"]},
+            "extruder": {"target": 0, "power": 0},
             "webhooks": {"state": "ready"}, "print_stats": {"state": "standby"},
             "idle_timeout": {"state": "Ready"},
         }}})

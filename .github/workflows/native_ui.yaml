@@ -64,7 +64,11 @@ jobs:
           key: native-ui-cross-debs-${{ hashFiles('bundles/native-ui/cross-packages.json') }}
 
       - name: Validate source pins and retained multiACE integration
-        run: python3 scripts/native-ui/validate.py --source-only
+        run: |
+          python3 scripts/native-ui/validate.py --source-only
+          python3 -m unittest discover -s tests/native-ui -v
+          python3 -m unittest discover \
+            -s overlays/233-native-ui/root/usr/local/lib/u1-device-service -p 'test_*.py' -v
 
       - name: Rebuild patched native source for ARM64
         run: |
@@ -77,9 +81,6 @@ jobs:
           python3 scripts/native-ui/pin_runtime.py \
             --runtime "$RUNNER_TEMP/native-ui-build/helixscreen-233-native-ui.tar.gz"
           python3 scripts/native-ui/validate.py
-          python3 -m unittest discover -s tests/native-ui -v
-          python3 -m unittest discover \
-            -s overlays/233-native-ui/root/usr/local/lib/u1-device-service -p 'test_*.py' -v
 
       - name: Upload validated ARM64 runtime and build inventory
         uses: actions/upload-artifact@v4

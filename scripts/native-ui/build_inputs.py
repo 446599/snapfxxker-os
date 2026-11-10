@@ -21,6 +21,9 @@ RECIPE_PATHS = (
     "bundles/native-ui/cross-packages.json",
     "bundles/native-ui/font-tools/package.json",
     "bundles/native-ui/font-tools/package-lock.json",
+    "overlays/233-native-ui/root/home/lava/klipper/klippy/extras/u1_native_upgrade.py",
+    "overlays/233-native-ui/root/etc/hooks/klipper.d/30-u1-native-upgrade.sh",
+    "overlays/233-native-ui/root/etc/hooks/moonraker.d/30-u1-native-upgrade.sh",
 )
 
 
