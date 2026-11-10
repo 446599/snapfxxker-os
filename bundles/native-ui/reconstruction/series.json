@@ -110,6 +110,12 @@
       "sha256": "2f26b883dd86468d8226904662a1831cb0ec98970df6ef5e13a32a1780295ee4",
       "component": "Measured preview visibility for custom narrow task tiles",
       "verification": "Two XML files parse; measured fit bindings and whitespace check passed. Native render pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0018-material-subject-const.patch",
+      "sha256": "9a53732bfa0732ea5ea51734aea54586ee63604e2f904d97635ab18eeb0a7c63",
+      "component": "LVGL subject API compile compatibility",
+      "verification": "Corrects native compiler constness error; whitespace check passed; native rebuild pending."
     }
   ],
   "validation": {
