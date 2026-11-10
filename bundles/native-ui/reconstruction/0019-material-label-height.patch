@@ -1,0 +1,26 @@
+diff --git a/ui_xml/head_inventory.xml b/ui_xml/head_inventory.xml
+index 07659cefab5d06ee5c522bb4e969d39265515551..1caf990ca586ec541080c0127eac90f47b4b6e66 100644
+--- a/ui_xml/head_inventory.xml
++++ b/ui_xml/head_inventory.xml
+@@ -3,9 +3,10 @@
+ <component>
+   <consts>
+     <px name="inventory_compact_card_h" value="80"/>
+-    <px name="inventory_line_h" value="16"/>
++    <px name="inventory_line_h" value="22"/>
+     <px name="inventory_top_pad" value="4"/>
+-    <px name="inventory_bottom_pad" value="6"/>
++    <px name="inventory_bottom_pad" value="2"/>
++    <px name="inventory_gap" value="6"/>
+     <px name="inventory_spool_w" value="40"/>
+     <px name="inventory_selected_border" value="2"/>
+   </consts>
+@@ -29,7 +30,7 @@
+       <text_small text="打印中"><bind_flag_if cond="not inventory_online or print_state_enum ne 1" flag="hidden"/></text_small>
+       <text_small text="已暂停"><bind_flag_if cond="not inventory_online or print_state_enum ne 2" flag="hidden"/></text_small>
+     </lv_obj>
+-    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" flex_flow="column" style_pad_hor="#u1_page_pad" style_pad_top="#inventory_top_pad" style_pad_bottom="#inventory_bottom_pad" style_pad_gap="#u1_card_gap" scroll_dir="ver">
++    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" flex_flow="column" style_pad_hor="#u1_page_pad" style_pad_top="#inventory_top_pad" style_pad_bottom="#inventory_bottom_pad" style_pad_gap="#inventory_gap" scroll_dir="ver">
+       <lv_obj name="inventory_heads" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="#space_xxs" style_pad_gap="#space_xxs" style_bg_color="#elevated_bg" style_bg_opa="255" style_radius="#u1_card_radius" scrollable="false">
+         <repeat count="4">
+           <lv_obj name="inventory_head_${i}" width="0" flex_grow="1" height="100%" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#space_sm" style_radius="#u1_nav_radius" clickable="true" scrollable="false">

@@ -116,6 +116,12 @@
       "sha256": "9a53732bfa0732ea5ea51734aea54586ee63604e2f904d97635ab18eeb0a7c63",
       "component": "LVGL subject API compile compatibility",
       "verification": "Corrects native compiler constness error; whitespace check passed; native rebuild pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0019-material-label-height.patch",
+      "sha256": "6d687afda4bb4706ab542dbac295ae186ba34610317d193bed9a9fc79187acca",
+      "component": "Material overview CJK row clipping correction",
+      "verification": "Native geometry exposed 6px label clipping; corrected row heights/gaps preserve242px body,44px actions,80px cards. XML parse and whitespace passed; recapture pending."
     }
   ],
   "validation": {
