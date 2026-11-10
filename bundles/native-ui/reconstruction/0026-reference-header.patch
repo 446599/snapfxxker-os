@@ -1,0 +1,66 @@
+diff --git a/ui_xml/header_bar.xml b/ui_xml/header_bar.xml
+index 190f7c10c49f64af3933640e842a2c99c8f4aca5..f8b6c0c7845970d457b7c9bd515c06488edd049a 100644
+--- a/ui_xml/header_bar.xml
++++ b/ui_xml/header_bar.xml
+@@ -13,6 +13,7 @@
+        - XML-controlled action button visibility via hide_action_button prop
+   -->
+   <consts>
++    <px name="u1_header_back_width" value="64"/>
+     <!-- Cap for the header's action buttons.
+          These must fit INSIDE header_height, not merely be a comfortable
+          standalone touch target. button_height's own ladder exceeds
+@@ -43,12 +44,6 @@
+     <px name="header_slot2_min_width_xlarge" value="90"/>
+     <px name="header_slot2_min_width_xxlarge" value="90"/>
+   </consts>
+-  <styles>
+-    <!-- The title slot's left inset: a step tighter at 480x272, where the
+-         title gives up every px the bar's chrome takes. -->
+-    <style name="header_title_inset" pad_left="#space_sm"/>
+-    <style name="header_title_inset_micro" pad_left="#space_xs"/>
+-  </styles>
+   <!-- API Properties -->
+   <api>
+     <prop name="title" type="string"/>
+@@ -148,14 +143,10 @@
+          alone, as action_button_2_hidden_cond does. -->
+     <prop name="action_icon_hidden_cond" type="string" default=""/>
+   </api>
+-  <view extends="lv_obj" width="100%" height="#u1_header_height" style_pad_left="0" style_pad_right="#space_lg" style_pad_top="0" style_pad_bottom="0" flex_flow="row" style_flex_main_place="space_between" style_flex_track_place="center" style_flex_cross_place="center" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_border_width="0">
+-    <!-- Back button: flex_grow region covers arrow + title = huge touch target -->
+-    <lv_obj name="back_button" height="100%" flex_grow="1" style_pad_right="0" style_pad_top="0" style_pad_bottom="0" scrollable="false" clickable="true" style_flex_cross_place="center" style_flex_track_place="center" flex_flow="row" style_pad_gap="#space_xs" style_min_height="#u1_touch_target">
+-      <bind_style_if_eq name="header_title_inset_micro" subject="ui_breakpoint" ref_value="0"/>
+-      <bind_style_if_ge name="header_title_inset" subject="ui_breakpoint" ref_value="1"/>
+-      <event_cb trigger="clicked" callback="$back_button_callback"/>
+-      <icon src="back" size="sm" variant="text" clickable="false" event_bubble="true"/>
+-      <text_body text="返回" clickable="false" event_bubble="true"/>
++  <view extends="lv_obj" width="100%" height="#u1_header_height" style_pad_hor="#u1_page_pad" style_pad_top="0" style_pad_bottom="0" style_pad_gap="#space_xs" flex_flow="row" style_flex_main_place="space_between" style_flex_track_place="center" style_flex_cross_place="center" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_border_width="0">
++    <!-- The title grows on the left; actions and the fixed back target keep
++         their room at the right, matching the confirmed U1 header. -->
++    <lv_obj name="header_title_area" width="0" height="100%" flex_grow="1" style_pad_all="0" style_min_width="0" scrollable="false" clickable="false" style_flex_cross_place="center" style_flex_track_place="center" flex_flow="row" style_pad_gap="#space_xs">
+       <!-- bind_text is deliberately FIRST. An unsupplied title_subject resolves to the
+            empty name, which is a registered no-op INT subject, and binding to that
+            stamps "0" over the title. Applying text/translation_tag afterwards puts the
+@@ -177,7 +168,7 @@
+          <header_bar-header_content> tag inside its header_bar instantiation;
+          the engine re-parents that tag's children into this object. Sits
+          between the title region and the action buttons, so the growing
+-         back_button keeps it clear of the title. Carries no padding of its
++         title area keeps it clear of the trailing controls. Carries no padding of its
+          own: injected content brings its left margin with it (see
+          header_coords in motion_panel.xml), so an unfilled slot is zero
+          width and a header that asks for nothing renders exactly as if the
+@@ -233,5 +224,12 @@
+       <bind_flag_if_eq subject="z_offset_save_available" flag="hidden" ref_value="0"/>
+       <event_cb trigger="clicked" callback="on_header_save_z_offset"/>
+     </ui_button>
++    <!-- Keep the native callback and stable back_button name at the far right. -->
++    <lv_obj name="back_button" width="#u1_header_back_width" height="100%" style_pad_all="0" style_pad_gap="#space_xs" style_min_height="#u1_touch_target" scrollable="false" clickable="true" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center">
++      <style name="styles.press_wash" selector="pressed"/>
++      <event_cb trigger="clicked" callback="$back_button_callback"/>
++      <icon src="back" size="xs" variant="text" clickable="false" event_bubble="true"/>
++      <text_body text="返回" clickable="false" event_bubble="true"/>
++    </lv_obj>
+   </view>
+ </component>

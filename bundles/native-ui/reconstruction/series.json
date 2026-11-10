@@ -158,6 +158,12 @@
       "sha256": "fb93b3035c4adcdd99db8c0ec78d30e5b8751b50d94966f11f9ff04907b42375",
       "component": "Ordinary overlay backdrop stops above bottom navigation",
       "verification": "Native screenshots showed backdrop covering bottom46pxnav. Ordinary overlay backdrop uses live navbar bounds and1:1 crop; confirmation modal path unchanged. Whitespace pass; native rebuild/pointer checks pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0026-reference-header.patch",
+      "sha256": "1b4dfc5dd48170f8250dbda3d65bb4e94a73a56fdde43d26ed3adaa9f44a92d1",
+      "component": "Reference header title/back alignment",
+      "verification": "Retained UI.5 reference has titleleft and backright; native API/callback slots retained. XML parse and whitespace pass; final capture pending."
     }
   ],
   "validation": {
