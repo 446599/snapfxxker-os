@@ -86,6 +86,12 @@
       "sha256": "1e96cad536d6c812411848f48b84965efdecb771db787e642b07eabb7e847b23",
       "component": "Home layout and compact four-head status strip",
       "verification": "Six XML files parse; native tool controls retained; whitespace check passed. Native render pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0014-material-main.patch",
+      "sha256": "cbaf8e20829727a2e9fa02d8689239663737f72b21de8b667d7af8bf59b52c89",
+      "component": "Material inventory external spool and ACE cards",
+      "verification": "XML parse and whitespace check passed; explicit source and operation gates reviewed. Native runtime pending."
     }
   ],
   "validation": {
