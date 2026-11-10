@@ -1,9 +1,9 @@
 {
   "name": "233固件",
   "slug": "233-firmware",
-  "version": "2.1.0-233-dev.3-ui.3",
+  "version": "2.1.0-233-dev.3-ui.4",
   "target": "Snapmaker U1",
-  "status": "native-ui-slot-rollback-package-offline-verified",
+  "status": "native-ui-full-redesign-offline-package-verified",
   "build_profile": "rsyncfix-perms1-native-ui-overlay",
   "output_template": "firmware/U1_233_{version}_upgrade.bin",
   "base_firmware": {
@@ -52,9 +52,8 @@
     "native_arm64_rebuilt": true,
     "firmware_built": true,
     "firmware_flashed": false,
-    "published": false,
     "boot_verified": false,
-    "scope": "UI.3 includes the three df0f5c3 review fixes and the 1fdd0ac slot-scoped configuration fix. 76 Python tests passed. ARM64 runtime was rebuilt after cleaning all build outputs, all 35 CJK fonts regenerated, and the complete firmware was built from the pinned rsyncfix base. Full container and rootfs integrity checks passed. Ten actual old-loader rollback steps passed again using files extracted from the final image. No printer access, flashing or hardware boot verification.",
+    "scope": "UI.4 full native interface redesign. 78 Python tests and 108 selected native tests (799 assertions) passed. 485 XML layouts checked, 35 CJK font faces rebuilt; the required 1,368 codepoints are present. Six patches match the frozen source. ARM64 runtime and complete firmware integrity checks passed; the 10-step source-level slot rollback probe passed. No printer connection, flashing, hardware boot, touch, motion, heating or ACE operation verification.",
     "slot_rollback_config_verified": true
   },
   "previous_validation": {
@@ -72,13 +71,14 @@
     "scope": "Startup, imports and data; no new motion or thermal test."
   },
   "artifact": {
-    "file": "U1_233_2.1.0-233-dev.3-ui.3_upgrade.bin",
-    "bytes": 286714394,
-    "sha256": "297401a8cce1191859241b95bed27518f3492a873b900e473f9121ca18648020",
-    "runtime_id": "233-native-ui-20261110.3",
-    "runtime_sha256": "fd7293c7caf79cacc5ea41704c8dad5f3146ff11cc383dedb4a6aadd684b9241",
-    "build_input_fingerprint": "88a9bf9a9c7636c6b26357360cb1ad6e1950deba22c9d7b1180740bd5702d1dc",
+    "file": "U1_233_2.1.0-233-dev.3-ui.4_upgrade.bin",
+    "bytes": 286833178,
+    "sha256": "fbad25547ebe72fb82e1a8dc7876f2466ed161e055a50d88a2b6998fa73f2f00",
+    "runtime_id": "233-native-ui-20261110.4",
+    "runtime_sha256": "115e1ff059d65646b454976d35daa5dbcf592685d92c094f44848f6990880cc6",
+    "build_input_fingerprint": "25c261bdc873d453ccdda7a3cdec4a2a55e565e96f8dbe2c2cb6dab5fbf95be5",
     "download_index": "docs/233/native-ui-20261110-artifacts.md",
-    "rollback_report": "docs/233/native-ui-slot-rollback-20261110.md"
+    "release_url": "https://github.com/446599/snapfxxker-os/releases/tag/v2.1.0-233-dev.3-ui.4",
+    "validation_report": "docs/233/native-ui-full-redesign-20261110.md"
   }
 }

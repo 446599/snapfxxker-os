@@ -43,7 +43,42 @@ def is_arm64_elf(path):
 
 
 def fresh_home_layout():
-    """Seat the confirmed overview controls on the U1's 480x320 home grid."""
+    """Four heads, the task, and two quick readings on the U1's 480x320 grid."""
+    widgets = [
+        {"id": "tool_switcher", "enabled": True, "col": 0, "row": 0,
+         "colspan": 10, "rowspan": 2},
+        {"id": "print_status", "enabled": True, "col": 0, "row": 2,
+         "colspan": 10, "rowspan": 4, "config": {"layout_style": "detailed"}},
+        {"id": "bed_temperature", "enabled": True, "col": 0, "row": 6,
+         "colspan": 5, "rowspan": 2},
+        {"id": "speed_flow", "enabled": True, "col": 5, "row": 6,
+         "colspan": 5, "rowspan": 2},
+    ]
+    widgets.extend({"id": name, "enabled": False} for name in
+                   ("printer_image", "notifications", "led", "fan_stack",
+                    "temperature", "filament", "tips"))
+    return {"grid": "10x8", "main_page_index": 0, "next_page_id": 1,
+            "pages": [{"id": "main", "widgets": widgets}]}
+
+
+def migrate_shipped_dashboard(settings):
+    """Upgrade only the exact previous default; custom pages remain the user's."""
+    changed = False
+    printers = settings.get("printers", {})
+    if not isinstance(printers, dict):
+        return False
+    for printer in printers.values():
+        if not isinstance(printer, dict):
+            continue
+        panels = printer.get("panel_widgets", {})
+        if isinstance(panels, dict) and panels.get("home") == previous_home_layout():
+            panels["home"] = fresh_home_layout()
+            changed = True
+    return changed
+
+
+def previous_home_layout():
+    """Exact UI.3 dashboard, used only to identify an unmodified shipped layout."""
     widgets = [
         {"id": "tool_switcher", "enabled": True, "col": 0, "row": 0,
          "colspan": 8, "rowspan": 2},
@@ -131,8 +166,21 @@ def setup(root=Path("/"), run=subprocess.run, owner=(1000, 1000)):
         run([config_tool, "add", str(config), "components", "gui", "helixscreen"],
             check=True)
 
+    # A new application layout must also reach users booting from the prior
+    # UI slot. Compare its shipped dashboard exactly before migrating it.
+    settings_path = extended / "helixscreen/settings.json"
+    if initialized and settings_path.is_file():
+        settings = json.loads(settings_path.read_text())
+        if not isinstance(settings, dict):
+            raise ValueError("Existing UI settings must be a JSON object")
+        if migrate_shipped_dashboard(settings):
+            backup = settings_path.with_name("settings.json.pre-233-ui4-dashboard")
+            if not backup.exists():
+                shutil.copy2(settings_path, backup)
+            atomic_json(settings_path, settings, owner)
+
     atomic_json(marker, {"runtime": os.path.realpath(runtime),
-                         "theme_initialized": True}, owner)
+                         "theme_initialized": True, "layout_revision": 4}, owner)
     return "Bundled native UI ready"
 
 

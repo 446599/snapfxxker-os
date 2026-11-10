@@ -101,6 +101,33 @@ class NativeUiBootTests(unittest.TestCase):
             self.assertFalse(cells & occupied)
             occupied |= cells
 
+    def test_existing_ui3_dashboard_migrates_without_touching_device_settings(self):
+        self.setup_ui()
+        settings = json.loads(self.settings_path().read_text())
+        settings["printers"]["default"]["panel_widgets"]["home"] = native_setup.previous_home_layout()
+        settings["display"]["calibration"] = {"valid": True, "a": 1.23}
+        original = json.loads(json.dumps(settings))
+        self.settings_path().write_text(json.dumps(settings))
+        self.setup_ui()
+        updated = json.loads(self.settings_path().read_text())
+        self.assertEqual(updated["printers"]["default"]["panel_widgets"]["home"],
+                         native_setup.fresh_home_layout())
+        self.assertEqual(updated["display"], original["display"])
+        self.assertEqual(updated["printers"]["default"]["moonraker_host"], "127.0.0.1")
+        backup = self.settings_path().with_name("settings.json.pre-233-ui4-dashboard")
+        self.assertEqual(json.loads(backup.read_text()), original)
+        self.setup_ui()
+        self.assertEqual(json.loads(self.settings_path().read_text()), updated)
+        self.assertEqual(json.loads(backup.read_text()), original)
+
+    def test_dashboard_migration_preserves_a_modified_widget_position(self):
+        settings = {"printers": {"default": {"panel_widgets": {
+            "home": native_setup.previous_home_layout()}}}}
+        settings["printers"]["default"]["panel_widgets"]["home"]["pages"][0]["widgets"][0]["colspan"] = 6
+        original = json.loads(json.dumps(settings))
+        self.assertFalse(native_setup.migrate_shipped_dashboard(settings))
+        self.assertEqual(settings, original)
+
     def test_existing_connections_calibration_and_material_data_are_preserved(self):
         original = {"config_version": 32, "language": "en", "display": {
             "theme": "other", "calibration": {"valid": True, "a": 1.23}},

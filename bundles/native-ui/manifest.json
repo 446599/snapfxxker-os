@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "id": "233-native-ui-20261110.3",
-  "firmware_version": "2.1.0-233-dev.3-ui.3",
+  "id": "233-native-ui-20261110.4",
+  "firmware_version": "2.1.0-233-dev.3-ui.4",
   "source": {
     "repository": "https://github.com/prestonbrown/helixscreen.git",
     "commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
@@ -25,6 +25,10 @@
       {
         "path": "bundles/native-ui/patches/0005-upgrade-scope.patch",
         "sha256": "4744c6d49812c5356fcea5b5912c459a581828c668345cf1d418714b66835913"
+      },
+      {
+        "path": "bundles/native-ui/patches/0006-u1-full-interface.patch",
+        "sha256": "c703289246481379c1ed9a9c7d02188c7275d634f6c0b7ff75b40a92b2ced441"
       }
     ],
     "submodules": [
@@ -98,16 +102,16 @@
     }
   },
   "runtime": {
-    "path": "overlays/233-native-ui/root/usr/local/share/233-firmware/helixscreen-233-native-ui-20261110.3.tar.gz",
-    "sha256": "fd7293c7caf79cacc5ea41704c8dad5f3146ff11cc383dedb4a6aadd684b9241",
-    "bytes": 33166250,
+    "path": "overlays/233-native-ui/root/usr/local/share/233-firmware/helixscreen-233-native-ui-20261110.4.tar.gz",
     "root_directory": "helixscreen",
-    "package_version": "1.2.0-233.20261110.3",
-    "binary_sha256": "95c85694f0c48d51c9b0b9bf419e6fdf3c666f8c868779b2dbefc6aed2039568",
+    "package_version": "1.2.0-233.20261110.4",
     "build_mode": "fork/developer; ENABLE_REMOTE_CONTROL=yes; ENABLE_DIAGNOSTIC_UPLOADS=no; ENABLE_MOCKS=yes",
     "source_rebuild": "Fixed source and font inputs; binary build timestamps/toolchain identity can change the binary hash.",
     "file_manifest": "bundles/native-ui/runtime-files.json",
-    "build_input_fingerprint": "88a9bf9a9c7636c6b26357360cb1ad6e1950deba22c9d7b1180740bd5702d1dc"
+    "sha256": "115e1ff059d65646b454976d35daa5dbcf592685d92c094f44848f6990880cc6",
+    "bytes": 33286246,
+    "binary_sha256": "539796c3f9f0d0278894471b9d92205d38b36d18dbde3d359c0bb209a7867835",
+    "build_input_fingerprint": "25c261bdc873d453ccdda7a3cdec4a2a55e565e96f8dbe2c2cb6dab5fbf95be5"
   },
   "device_service": {
     "path": "overlays/233-native-ui/root/usr/local/lib/u1-device-service",
