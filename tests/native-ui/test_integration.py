@@ -111,7 +111,7 @@ class NativeUiBootTests(unittest.TestCase):
         self.setup_ui()
         updated = json.loads(self.settings_path().read_text())
         self.assertEqual(updated["printers"]["default"]["panel_widgets"]["home"],
-                         native_setup.fresh_home_layout())
+                         native_setup.previous_ui4_home_layout())
         self.assertEqual(updated["display"], original["display"])
         self.assertEqual(updated["printers"]["default"]["moonraker_host"], "127.0.0.1")
         backup = self.settings_path().with_name("settings.json.pre-233-ui4-dashboard")
@@ -127,6 +127,45 @@ class NativeUiBootTests(unittest.TestCase):
         original = json.loads(json.dumps(settings))
         self.assertFalse(native_setup.migrate_shipped_dashboard(settings))
         self.assertEqual(settings, original)
+
+    def test_ui5_runtime_uses_task_above_shared_status_strip(self):
+        component = self.runtime / "ui_xml/components/panel_widget_tool_switcher.xml"
+        component.parent.mkdir()
+        component.write_text('<component><view name="tool_switcher_status_strip"/></component>')
+        self.setup_ui()
+        settings = json.loads(self.settings_path().read_text())
+        home = settings["printers"]["default"]["panel_widgets"]["home"]
+        self.assertEqual(home, native_setup.fresh_home_layout())
+        self.assertEqual(home["grid"], "12x6")
+        widgets = {item["id"]: item for item in home["pages"][0]["widgets"] if item["enabled"]}
+        self.assertEqual(widgets["print_status"]["row"], 0)
+        self.assertEqual(widgets["print_status"]["rowspan"], 4)
+        self.assertEqual([widgets[name]["row"] for name in
+                          ("tool_switcher", "speed_flow", "bed_temperature")], [4, 4, 4])
+        occupied = set()
+        for widget in widgets.values():
+            cells = {(x, y) for x in range(widget["col"], widget["col"] + widget["colspan"])
+                     for y in range(widget["row"], widget["row"] + widget["rowspan"])}
+            self.assertTrue(all(0 <= x < 12 and 0 <= y < 6 for x, y in cells))
+            self.assertFalse(cells & occupied)
+            occupied |= cells
+        self.assertEqual(len(occupied), 72)
+
+    def test_ui5_upgrade_only_replaces_exact_ui3_or_ui4_dashboards(self):
+        for previous in (native_setup.previous_home_layout, native_setup.previous_ui4_home_layout):
+            with self.subTest(previous=previous.__name__):
+                custom = previous()
+                custom["pages"].append({"id": "my-tools", "widgets": []})
+                settings = {"display": {"calibration": {"a": 1.23}}, "printers": {
+                    "stock": {"panel_widgets": {"home": previous()}, "material": {"keep": True}},
+                    "custom": {"panel_widgets": {"home": custom}}}}
+                self.assertTrue(native_setup.migrate_shipped_dashboard(settings, overview=True))
+                self.assertEqual(settings["printers"]["stock"]["panel_widgets"]["home"],
+                                 native_setup.fresh_home_layout())
+                self.assertEqual(settings["printers"]["custom"]["panel_widgets"]["home"], custom)
+                self.assertEqual(settings["printers"]["stock"]["material"], {"keep": True})
+                self.assertEqual(settings["display"], {"calibration": {"a": 1.23}})
+                self.assertFalse(native_setup.migrate_shipped_dashboard(settings, overview=True))
 
     def test_existing_connections_calibration_and_material_data_are_preserved(self):
         original = {"config_version": 32, "language": "en", "display": {
