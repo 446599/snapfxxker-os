@@ -1,0 +1,643 @@
+diff --git a/include/ui_material_workspace.h b/include/ui_material_workspace.h
+index 2e8ba9948163e928bd74092542956b59d21d288f..57bfc0fab93c2d88a5068c8b5226ff730977517e 100644
+--- a/include/ui_material_workspace.h
++++ b/include/ui_material_workspace.h
+@@ -47,9 +47,14 @@ class MaterialWorkspace : public OverlayBase {
+     void refresh_nozzle();
+     void refresh_temperatures();
+     void browse_head(int delta);
++    void stage_nozzle_target(int delta);
++    void apply_nozzle_target();
++    void edit_nozzle_material();
+     void activate_head();
+     void edit_external();
+     void save_external();
++    void return_from_editor();
++    std::string load_refusal() const;
+     void move_filament(int millimeters);
+     void finish_motion();
+     void load_library();
+@@ -77,6 +82,9 @@ class MaterialWorkspace : public OverlayBase {
+     std::array<std::string, 5> overview_heaters_{};
+     std::array<ObserverGuard, 5> overview_current_observers_, overview_target_observers_;
+     bool binding_temperatures_ = false;
++    bool nozzle_draft_dirty_ = false;
++    int nozzle_draft_c_ = 0;
++    std::string nozzle_draft_extruder_;
+     int head_ = 0, unit_ = 0, slot_ = -1;
+     std::string spool_id_, firmware_token_;
+     nlohmann::json spools_ = nlohmann::json::array(), files_ = nlohmann::json::array();
+@@ -88,18 +96,21 @@ class MaterialWorkspace : public OverlayBase {
+     ObserverGuard temperature_observer_, target_observer_;
+     std::string pending_action_;
+     std::optional<int> confirmed_source_;
++    std::optional<int> confirmed_target_;
+     nlohmann::json pending_args_;
+     lv_subject_t page_{}, busy_{}, list_count_{}, file_count_{}, confirmed_{}, progress_{},
+         ready_{}, auto_sensor_{}, auto_enabled_{}, settings_ready_{}, external_{},
+-        edit_external_{}, editable_{}, manual_ready_{}, nozzle_color_{}, nozzle_head_{};
++        edit_external_{}, editable_{}, manual_ready_{}, nozzle_color_{}, nozzle_head_{},
++        nozzle_heat_ready_{}, nozzle_target_dirty_{}, nozzle_activation_ready_{},
++        nozzle_active_{}, nozzle_editable_{};
+     lv_subject_t title_{}, status_{}, detail_{}, form_material_{}, form_color_{}, form_weight_{},
+         form_vendor_{}, file_info_{}, version_{}, nozzle_title_{}, nozzle_temperature_{},
+-        nozzle_material_{}, nozzle_source_{}, manual_hint_{};
++        nozzle_material_{}, nozzle_source_{}, manual_hint_{}, nozzle_target_{};
+     char title_buf_[128]{}, status_buf_[512]{}, detail_buf_[512]{}, form_material_buf_[64]{},
+         form_color_buf_[32]{}, form_weight_buf_[32]{}, form_vendor_buf_[64]{},
+         file_info_buf_[512]{}, version_buf_[64]{}, nozzle_title_buf_[32]{},
+         nozzle_temperature_buf_[64]{}, nozzle_material_buf_[96]{}, nozzle_source_buf_[96]{},
+-        manual_hint_buf_[192]{};
++        manual_hint_buf_[192]{}, nozzle_target_buf_[32]{};
+     helix::xml::IndexedSubjectPool auto_values_{"workspace_auto",
+                                                 helix::xml::IndexedSubjectPool::Type::String, 32};
+     helix::xml::IndexedSubjectPool overview_current_{
+diff --git a/src/printer/material_workspace.cpp b/src/printer/material_workspace.cpp
+index 1bd856db489359131c5e6863752abbcbbd6c8605..9edde8ae0a891f9266db299474c12e4a41fd0675 100644
+--- a/src/printer/material_workspace.cpp
++++ b/src/printer/material_workspace.cpp
+@@ -68,7 +68,7 @@ std::string manual_move_refusal(int head) {
+     if (info.current_tool != head || !active || active->index != head || !active->extruder_name ||
+         *active->extruder_name != slot->extruder_name ||
+         state.temperature_state().active_extruder_name() != slot->extruder_name)
+-        return "请先在首页点选该喷头";
++        return "请先激活此喷头";
+     if (auto* motion = lv_xml_get_subject(nullptr, kFilamentMotionSubjectName);
+         motion && lv_subject_get_int(motion) != static_cast<int>(FilamentMotion::Idle))
+         return "请等待当前进退料结束";
+@@ -77,7 +77,7 @@ std::string manual_move_refusal(int head) {
+                                                         slot->extruder_name);
+     if (!temperature || !ui::temperature::is_extrusion_safe(
+                             ui::temperature::deci_to_degrees(lv_subject_get_int(temperature)), floor))
+-        return "请先在温度页将该喷头加热至可挤出温度";
++        return "请先加热喷头至可挤出温度";
+     return {};
+ }
+ 
+diff --git a/src/ui/filament/ui_material_workspace.cpp b/src/ui/filament/ui_material_workspace.cpp
+index b74315fa33cbfd6bbc599acfc8d6c26809008876..7bb885f527f0f9db24dd46887ea5aa10eab556f0 100644
+--- a/src/ui/filament/ui_material_workspace.cpp
++++ b/src/ui/filament/ui_material_workspace.cpp
+@@ -7,6 +7,7 @@
+ #include "ui_nav.h"
+ #include "ui_temperature_utils.h"
+ #include "ui_overlay_temp_graph.h"
++#include "ui_error_reporting.h"
+ 
+ #include "ams_backend.h"
+ #include "ams_state.h"
+@@ -23,6 +24,7 @@
+ #include "settings_manager.h"
+ #include "tool_change_request.h"
+ #include "tool_state.h"
++#include "temperature_controller.h"
+ 
+ #include <spdlog/fmt/fmt.h>
+ 
+@@ -59,6 +61,11 @@ void MaterialWorkspace::init_subjects() {
+         UI_MANAGED_SUBJECT_INT(editable_, 0, "workspace_editable", subjects_);
+         UI_MANAGED_SUBJECT_INT(manual_ready_, 0, "workspace_manual_ready", subjects_);
+         UI_MANAGED_SUBJECT_INT(nozzle_head_, 0, "workspace_nozzle_head", subjects_);
++        UI_MANAGED_SUBJECT_INT(nozzle_heat_ready_, 0, "workspace_nozzle_heat_ready", subjects_);
++        UI_MANAGED_SUBJECT_INT(nozzle_target_dirty_, 0, "workspace_nozzle_target_dirty", subjects_);
++        UI_MANAGED_SUBJECT_INT(nozzle_activation_ready_, 0, "workspace_nozzle_activation_ready", subjects_);
++        UI_MANAGED_SUBJECT_INT(nozzle_active_, 0, "workspace_nozzle_active", subjects_);
++        UI_MANAGED_SUBJECT_INT(nozzle_editable_, 0, "workspace_nozzle_editable", subjects_);
+         overview_current_.ensure_size(5);
+         overview_target_.ensure_size(5);
+         overview_colors_.ensure_size(4);
+@@ -68,6 +75,8 @@ void MaterialWorkspace::init_subjects() {
+                                   "workspace_nozzle_title", subjects_);
+         UI_MANAGED_SUBJECT_STRING(nozzle_temperature_, nozzle_temperature_buf_, "—°C",
+                                   "workspace_nozzle_temperature", subjects_);
++        UI_MANAGED_SUBJECT_STRING(nozzle_target_, nozzle_target_buf_, "—°C",
++                                  "workspace_nozzle_target", subjects_);
+         UI_MANAGED_SUBJECT_STRING(nozzle_material_, nozzle_material_buf_, "等待耗材信息",
+                                   "workspace_nozzle_material", subjects_);
+         UI_MANAGED_SUBJECT_STRING(nozzle_source_, nozzle_source_buf_, "等待供料状态",
+@@ -109,6 +118,8 @@ void MaterialWorkspace::open(int head, int unit, bool library, std::function<voi
+     ++session_;
+     firmware_entry_ = false;
+     head_ = std::clamp(head, 0, 3);
++    nozzle_draft_dirty_ = false;
++    nozzle_draft_extruder_.clear();
+     unit_ = unit;
+     on_return_ = std::move(on_return);
+     library_origin_ = -1;
+@@ -135,6 +146,9 @@ void MaterialWorkspace::open_action(int head, int unit, const std::string& actio
+         return;
+     open(head, unit, false, std::move(on_return));
+     act(action);
++    if (action == "edit" && lv_subject_get_int(&page_) == 2 &&
++        lv_subject_get_int(&edit_external_))
++        edit_origin_ = -1;
+ }
+ void MaterialWorkspace::open_temperature() {
+     if (subjects_initialized_ && lv_subject_get_int(&busy_))
+@@ -396,15 +410,34 @@ void MaterialWorkspace::refresh_nozzle() {
+     auto& temperatures = get_printer_state().temperature_state();
+     auto* current = extruder.empty() ? nullptr : temperatures.get_extruder_temp_subject(extruder);
+     auto* target = extruder.empty() ? nullptr : temperatures.get_extruder_target_subject(extruder);
+-    char formatted[64]{};
+-    if (online && current && target) {
+-        temperature::format_temperature_pair_f(
+-            temperature::deci_to_degrees_f(lv_subject_get_int(current)),
+-            temperature::deci_to_degrees_f(lv_subject_get_int(target)), formatted,
+-            sizeof(formatted));
+-        lv_subject_copy_string(&nozzle_temperature_, formatted);
++    lv_subject_copy_string(&nozzle_temperature_, online && current
++        ? fmt::format("{:.0f}°C", temperature::deci_to_degrees_f(lv_subject_get_int(current))).c_str()
++        : "—°C");
++    if (nozzle_draft_extruder_ != extruder) {
++        nozzle_draft_extruder_ = extruder;
++        nozzle_draft_dirty_ = false;
++    }
++    if (online && target) {
++        const int actual_target = static_cast<int>(std::lround(
++            temperature::deci_to_degrees_f(lv_subject_get_int(target))));
++        if (!nozzle_draft_dirty_)
++            nozzle_draft_c_ = actual_target;
++        else if (actual_target == nozzle_draft_c_)
++            nozzle_draft_dirty_ = false;
++        lv_subject_copy_string(&nozzle_target_, fmt::format("{}°C", nozzle_draft_c_).c_str());
+     } else
+-        lv_subject_copy_string(&nozzle_temperature_, "— / —°C");
++        lv_subject_copy_string(&nozzle_target_, "—°C");
++    lv_subject_set_int(&nozzle_target_dirty_, nozzle_draft_dirty_);
++    const bool job = lv_subject_get_int(
++        get_printer_state().print_state().get_job_holds_machine_subject()) != 0;
++    const bool head_ready = online && head_slot && !info.units.empty() &&
++        info.units.front().connected && info.action == AmsAction::IDLE &&
++        info.path_hold_reason.empty() && !job;
++    lv_subject_set_int(&nozzle_activation_ready_, head_ready);
++    lv_subject_set_int(&nozzle_active_,
++        lv_subject_get_int(ToolState::instance().get_active_tool_subject()) == head_);
++    lv_subject_set_int(&nozzle_heat_ready_, online && current && target &&
++        !extruder.empty() && !job && get_temperature_controller() && get_moonraker_api());
+     SlotInfo material = head_slot ? *head_slot : SlotInfo{};
+     std::string source = "等待供料状态";
+     if (online && head_slot) {
+@@ -422,6 +455,8 @@ void MaterialWorkspace::refresh_nozzle() {
+     lv_subject_copy_string(&nozzle_source_, source.c_str());
+     lv_subject_set_color(&nozzle_color_, lv_color_hex(online && head_slot
+                                                        ? material.color_rgb : kAmsDefaultSlotColor));
++    lv_subject_set_int(&nozzle_editable_, head_ready &&
++        (material_workspace::uses_external_spools(info) || backend->upstream_slot(head_).has_value()));
+     const auto refusal = material_workspace::manual_move_refusal(head_);
+     lv_subject_set_int(&manual_ready_, refusal.empty());
+     lv_subject_copy_string(&manual_hint_, refusal.empty() ? "每次 5 mm · 操作当前喷头" : refusal.c_str());
+@@ -430,14 +465,94 @@ void MaterialWorkspace::refresh_nozzle() {
+ void MaterialWorkspace::browse_head(int delta) {
+     if (lv_subject_get_int(&busy_))
+         return;
+-    head_ = std::clamp(head_ + delta, 0, 3);
++    const int next = std::clamp(head_ + delta, 0, 3);
++    if (next == head_)
++        return;
++    head_ = next;
++    nozzle_draft_dirty_ = false;
++    nozzle_draft_extruder_.clear();
+     refresh();
+ }
+ 
++void MaterialWorkspace::stage_nozzle_target(int delta) {
++    refresh_nozzle();
++    auto* controller = get_temperature_controller();
++    if (!controller || !lv_subject_get_int(&nozzle_heat_ready_))
++        return;
++    const int ceiling = static_cast<int>(controller->keypad_max_for(nozzle_draft_extruder_,
++        controller->effective_keypad_max(HeaterType::Nozzle, 300.0f)));
++    const int next = std::clamp(nozzle_draft_c_ + delta, 0, ceiling);
++    if (next == nozzle_draft_c_)
++        return;
++    nozzle_draft_c_ = next;
++    nozzle_draft_dirty_ = true;
++    lv_subject_set_int(&nozzle_target_dirty_, 1);
++    lv_subject_copy_string(&nozzle_target_, fmt::format("{}°C", nozzle_draft_c_).c_str());
++}
++
++void MaterialWorkspace::apply_nozzle_target() {
++    refresh_nozzle();
++    auto* controller = get_temperature_controller();
++    if (!controller || !lv_subject_get_int(&nozzle_heat_ready_) || !nozzle_draft_dirty_ ||
++        nozzle_draft_extruder_.empty())
++        return;
++    const auto token = object_lifetime_.token();
++    const unsigned session = session_;
++    lv_subject_set_int(&busy_, 1);
++    lv_subject_copy_string(&status_, "正在设置目标温度");
++    SendOptions options;
++    options.on_success = [this, token, session] {
++        token.defer("MaterialWorkspace::temperature_requested", [this, session] {
++            if (session != session_)
++                return;
++            lv_subject_set_int(&busy_, 0);
++            lv_subject_copy_string(&status_, "设置已受理，温度以设备反馈为准");
++            refresh_nozzle();
++        });
++    };
++    options.on_error = [this, token, session](const MoonrakerError&) {
++        token.defer("MaterialWorkspace::temperature_failed", [this, session] {
++            if (session != session_)
++                return;
++            lv_subject_set_int(&busy_, 0);
++            lv_subject_copy_string(&status_, "目标温度设置失败，请重试");
++            refresh_nozzle();
++        });
++    };
++    // This targets the browsed head by its real heater name; it does not mount it.
++    controller->set_target(nozzle_draft_extruder_, nozzle_draft_c_, std::move(options));
++}
++
++void MaterialWorkspace::edit_nozzle_material() {
++    refresh_nozzle();
++    auto* backend = AmsState::instance().get_backend();
++    if (!backend || !lv_subject_get_int(&nozzle_editable_))
++        return;
++    const auto info = backend->get_system_info();
++    if (material_workspace::uses_external_spools(info)) {
++        unit_ = -1;
++        refresh();
++        edit_external();
++        return;
++    }
++    const auto source = backend->upstream_slot(head_);
++    if (!source)
++        return;
++    for (size_t u = 1; u < info.units.size(); ++u) {
++        for (const auto& slot : info.units[u].slots) {
++            if (slot.global_index == *source) {
++                unit_ = static_cast<int>(u) - 1;
++                act("edit");
++                return;
++            }
++        }
++    }
++}
++
+ void MaterialWorkspace::activate_head() {
+     refresh();
+     auto* motion = lv_xml_get_subject(nullptr, kFilamentMotionSubjectName);
+-    if (!lv_subject_get_int(&ready_) ||
++    if (!lv_subject_get_int(&nozzle_activation_ready_) ||
+         (motion && lv_subject_get_int(motion) != static_cast<int>(FilamentMotion::Idle))) {
+         lv_subject_copy_string(&status_, "请等待设备空闲并确认料路位置后激活喷头");
+         return;
+@@ -464,6 +579,7 @@ void MaterialWorkspace::activate_head() {
+             if (session != session_)
+                 return;
+             lv_subject_copy_string(&status_, "喷头激活失败，请查看设备提示");
++            NOTIFY_ERROR("喷头激活失败，请查看设备提示");
+             refresh();
+         });
+     };
+@@ -488,6 +604,15 @@ void MaterialWorkspace::edit_external() {
+     page(2);
+ }
+ 
++void MaterialWorkspace::return_from_editor() {
++    if (edit_origin_ < 0) {
++        if (on_return_)
++            on_return_(head_);
++        nav::go_back();
++    } else
++        page(edit_origin_);
++}
++
+ void MaterialWorkspace::save_external() {
+     auto* backend = AmsState::instance().get_backend();
+     if (!backend || !original_slot_ || !lv_subject_get_int(&editable_) ||
+@@ -543,8 +668,10 @@ void MaterialWorkspace::save_external() {
+                     return;
+                 }
+                 original_slot_.reset();
+-                page(edit_origin_);
++                return_from_editor();
+                 lv_subject_copy_string(&status_, partial.empty() ? "耗材信息已保存" : partial.c_str());
++                if (!partial.empty())
++                    NOTIFY_WARNING("{}", partial);
+                 refresh();
+             });
+         });
+@@ -574,6 +701,8 @@ void MaterialWorkspace::move_filament(int millimeters) {
+         motion_rpc_pending_ = false;
+         lv_subject_copy_string(&status_, error.empty() ? "命令已受理，装载状态以设备反馈为准"
+                                                      : error.c_str());
++        if (!error.empty())
++            NOTIFY_ERROR("{}", error);
+         if (!error.empty())
+             motion_timer_.reset();
+         if (!motion_timer_)
+@@ -599,6 +728,33 @@ void MaterialWorkspace::finish_motion() {
+         refresh_nozzle();
+ }
+ 
++std::string MaterialWorkspace::load_refusal() const {
++    auto* backend = AmsState::instance().get_backend();
++    if (!backend || !lv_subject_get_int(&ready_))
++        return "请等待设备空闲、在线并确认料路位置";
++    const auto info = backend->get_system_info();
++    if (unit_ < 0 || static_cast<size_t>(unit_ + 1) >= info.units.size())
++        return "请重新选择候选耗材";
++    const auto& unit = info.units[static_cast<size_t>(unit_) + 1];
++    const auto selected = std::find_if(unit.slots.begin(), unit.slots.end(), [this](const SlotInfo& slot) {
++        return slot.global_index == slot_ && slot.mapped_tool == head_ && slot.slot_index == head_;
++    });
++    if (!unit.connected || selected == unit.slots.end())
++        return "候选耗材设备已离线或连接已变化";
++    if (selected->status == SlotStatus::EMPTY)
++        return "空槽不可装料";
++    if (selected->status != SlotStatus::AVAILABLE && selected->status != SlotStatus::FROM_BUFFER &&
++        selected->status != SlotStatus::LOADED)
++        return "请先确认候选耗材状态";
++    const auto source = backend->upstream_slot(head_);
++    if (source && *source == slot_)
++        return "所选耗材已是当前供料";
++    const auto* head_slot = material_workspace::head_slot(info, head_);
++    if (!head_slot || (backend->slot_is_actively_loaded(head_slot->global_index) && !source))
++        return "请先确认当前喷头料路";
++    return {};
++}
++
+ void MaterialWorkspace::run(const std::string& action, const nlohmann::json& args) {
+     lv_subject_set_int(&busy_, 1);
+     const auto token = object_lifetime_.token();
+@@ -808,7 +964,7 @@ void MaterialWorkspace::act(const std::string& action) {
+         if (current_page == 2) {
+             // Form subjects are only a draft. Back never commits them.
+             original_slot_.reset();
+-            page(edit_origin_);
++            return_from_editor();
+             return;
+         }
+         if (current_page == 9 && manual_origin_ >= 0) {
+@@ -849,6 +1005,18 @@ void MaterialWorkspace::act(const std::string& action) {
+         browse_head(action == "previous_head" ? -1 : 1);
+         return;
+     }
++    if (action == "nozzle_target_down" || action == "nozzle_target_up") {
++        stage_nozzle_target(action == "nozzle_target_down" ? -5 : 5);
++        return;
++    }
++    if (action == "nozzle_apply") {
++        apply_nozzle_target();
++        return;
++    }
++    if (action == "edit_nozzle_material") {
++        edit_nozzle_material();
++        return;
++    }
+     if (action == "manual") {
+         manual_origin_ = lv_subject_get_int(&page_);
+         page(9);
+@@ -1004,6 +1172,19 @@ void MaterialWorkspace::act(const std::string& action) {
+         }
+         auto* backend = AmsState::instance().get_backend();
+         if (pending_action_ == "load" || pending_action_ == "unload") {
++            if (pending_action_ == "load") {
++                if (!confirmed_target_ || slot_ != *confirmed_target_) {
++                    lv_subject_copy_string(&status_, "候选耗材连接已变化，请重新确认");
++                    page(0);
++                    return;
++                }
++                const auto refusal = load_refusal();
++                if (!refusal.empty()) {
++                    lv_subject_copy_string(&status_, refusal.c_str());
++                    page(0);
++                    return;
++                }
++            }
+             const auto source = backend->upstream_slot(head_);
+             if (source != confirmed_source_) {
+                 lv_subject_copy_string(&status_, "当前供料已变化，请重新确认操作");
+@@ -1133,6 +1314,13 @@ void MaterialWorkspace::act(const std::string& action) {
+         run("read_tag", {{"ACE", unit_}, {"SLOT", head_}});
+         return;
+     }
++    if (action == "load") {
++        const auto refusal = load_refusal();
++        if (!refusal.empty()) {
++            lv_subject_copy_string(&status_, refusal.c_str());
++            return;
++        }
++    }
+     pending_action_ = action;
+     pending_args_ = {{"ACE", unit_}, {"SLOT", head_}};
+     std::string prompt;
+@@ -1141,6 +1329,7 @@ void MaterialWorkspace::act(const std::string& action) {
+     if (action == "load" || action == "unload") {
+         auto* backend = AmsState::instance().get_backend();
+         confirmed_source_ = backend ? backend->upstream_slot(head_) : std::nullopt;
++        confirmed_target_ = slot_;
+         if (action == "unload") {
+             if (!confirmed_source_) {
+                 lv_subject_copy_string(&status_, "当前喷头没有已确认料路");
+diff --git a/ui_xml/material_workspace.xml b/ui_xml/material_workspace.xml
+index 6956385b49d3b14b5312d7b438321a8645ef4fc4..07ae99bf9baf1000d950a2a4ab82ac89bae23121 100644
+--- a/ui_xml/material_workspace.xml
++++ b/ui_xml/material_workspace.xml
+@@ -10,11 +10,37 @@
+     <px name="workspace_swatch" value="24"/>
+     <px name="workspace_temperature_card_h" value="64"/>
+     <px name="workspace_temperature_bed_h" value="56"/>
++    <px name="workspace_nozzle_body_h" value="214"/>
++    <px name="workspace_nozzle_temp_h" value="148"/>
++    <px name="workspace_nozzle_reading_h" value="36"/>
++    <px name="workspace_nozzle_right_w" value="152"/>
++    <px name="workspace_nozzle_move_h" value="60"/>
++    <px name="workspace_nozzle_line_h" value="16"/>
++    <px name="workspace_nozzle_gap" value="6"/>
++    <px name="workspace_back_w" value="80"/>
+   </consts>
+-  <view name="material_workspace" extends="overlay_panel" title_subject="workspace_title" title_transform="none" back_button_callback="workspace_back" bg_color="#screen_bg">
+-    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scroll_dir="ver" scrollable="true">
++  <view name="material_workspace" extends="lv_obj" width="100%" height="#u1_overlay_height" align="top_left" flex_flow="column" style_pad_all="0" style_pad_gap="0" style_border_width="0" style_bg_color="#screen_bg" style_bg_opa="255" scrollable="false">
++    <header_bar name="overlay_header" title_subject="workspace_title" title_transform="none" back_button_callback="workspace_back">
++      <bind_flag_if cond="workspace_page eq 9" flag="hidden"/>
++    </header_bar>
++    <lv_obj name="workspace_nozzle_header" width="100%" height="#u1_header_height" flex_flow="row" style_pad_hor="#u1_page_pad" style_pad_ver="0" style_pad_gap="#space_xs" style_flex_cross_place="center" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" scrollable="false">
++      <bind_flag_if cond="workspace_page ne 9" flag="hidden"/>
++      <ui_button name="workspace_previous_head" icon="chevron_left" variant="ghost" width="#u1_touch_target" height="#u1_touch_target" style_pad_all="0" style_shadow_width="0">
++        <bind_state_if cond="workspace_busy or workspace_nozzle_head eq 0" state="disabled"/>
++        <event_cb trigger="clicked" callback="workspace_action" user_data="previous_head"/>
++      </ui_button>
++      <text_body width="0" flex_grow="1" bind_text="workspace_nozzle_title" style_text_color="#text_muted" style_text_align="center"/>
++      <ui_button name="workspace_next_head" icon="chevron_right" variant="ghost" width="#u1_touch_target" height="#u1_touch_target" style_pad_all="0" style_shadow_width="0">
++        <bind_state_if cond="workspace_busy or workspace_nozzle_head eq 3" state="disabled"/>
++        <event_cb trigger="clicked" callback="workspace_action" user_data="next_head"/>
++      </ui_button>
++      <ui_button name="workspace_nozzle_back" text="返回" icon="chevron_left" variant="ghost" width="#workspace_back_w" height="#u1_touch_target" style_pad_all="0" style_shadow_width="0">
++        <event_cb trigger="clicked" callback="workspace_back"/>
++      </ui_button>
++    </lv_obj>
++    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_pad_hor="#u1_page_pad" style_pad_ver="#u1_card_gap" style_pad_gap="#u1_card_gap" scroll_dir="ver" scrollable="true">
+       <text_small name="workspace_status" width="100%" bind_text="workspace_status" style_text_color="#text_muted" long_mode="wrap">
+-        <bind_flag_if cond="workspace_page eq 10" flag="hidden"/>
++        <bind_flag_if cond="workspace_page eq 9 or workspace_page eq 10" flag="hidden"/>
+       </text_small>
+       <lv_obj name="workspace_page_0" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+         <bind_flag_if cond="workspace_page ne 0" flag="hidden"/>
+@@ -121,51 +147,59 @@
+           <event_cb trigger="clicked" callback="workspace_action" user_data="temperature_bed"/>
+         </lv_obj>
+       </lv_obj>
+-      <lv_obj name="workspace_page_9" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++      <lv_obj name="workspace_page_9" width="100%" height="#workspace_nozzle_body_h" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+         <bind_flag_if cond="workspace_page ne 9" flag="hidden"/>
+-        <lv_obj width="100%" height="#workspace_action_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_md" style_flex_cross_place="center" scrollable="false">
+-          <ui_button name="workspace_previous_head" icon="chevron_left" variant="outline" width="#workspace_arrow_w" height="100%">
+-            <bind_state_if cond="workspace_busy or workspace_nozzle_head eq 0" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="previous_head"/>
+-          </ui_button>
+-          <text_heading width="0" flex_grow="1" bind_text="workspace_nozzle_title" style_text_align="center"/>
+-          <ui_button name="workspace_activate_head" text="激活此喷头" variant="outline" width="148" height="100%" style_pad_hor="#space_sm">
+-            <bind_state_if cond="workspace_busy or not workspace_ready or filament_manual_motion ne 0" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="activate_head"/>
+-          </ui_button>
+-          <ui_button name="workspace_next_head" icon="chevron_right" variant="outline" width="#workspace_arrow_w" height="100%">
+-            <bind_state_if cond="workspace_busy or workspace_nozzle_head eq 3" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="next_head"/>
+-          </ui_button>
+-        </lv_obj>
+-        <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
+-          <lv_obj name="workspace_nozzle_info" width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_sm" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" scrollable="false" style_border_width="1" style_border_color="#border">
+-            <text_heading width="100%" bind_text="workspace_nozzle_temperature" style_text_font="#font_heading" long_mode="dots"/>
+-            <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" scrollable="false">
+-              <lv_obj width="#workspace_swatch" height="#workspace_swatch" style_bg_opa="255" style_radius="#space_xs" style_border_width="1" style_border_color="#border" scrollable="false">
+-                <bind_style_prop prop="bg_color" subject="workspace_nozzle_color"/>
+-              </lv_obj>
+-              <text_body width="0" flex_grow="1" bind_text="workspace_nozzle_material" long_mode="wrap"/>
++        <lv_obj name="workspace_nozzle_info" width="0" flex_grow="1" height="100%" flex_flow="column" style_pad_all="0" style_pad_gap="0" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" scrollable="false">
++          <lv_obj name="workspace_nozzle_temperature_box" width="100%" height="#workspace_nozzle_temp_h" flex_flow="column" style_pad_all="#space_sm" style_pad_gap="#space_xs" scrollable="false">
++            <text_heading name="workspace_nozzle_actual" width="100%" height="#workspace_nozzle_reading_h" bind_text="workspace_nozzle_temperature" style_text_align="center" style_text_color="#text_muted"/>
++            <lv_obj name="workspace_nozzle_target_bar" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="0" style_bg_color="#elevated_bg" style_bg_opa="255" style_radius="#u1_nav_radius" style_flex_cross_place="center" scrollable="false">
++              <ui_button name="workspace_nozzle_target_down" icon="minus" variant="ghost" width="#u1_touch_target" height="100%" style_pad_all="0" style_shadow_width="0">
++                <bind_state_if cond="workspace_busy or not workspace_nozzle_heat_ready" state="disabled"/>
++                <event_cb trigger="clicked" callback="workspace_action" user_data="nozzle_target_down"/>
++              </ui_button>
++              <text_heading name="workspace_nozzle_target" width="0" flex_grow="1" bind_text="workspace_nozzle_target" style_text_align="center"/>
++              <ui_button name="workspace_nozzle_target_up" icon="plus" variant="ghost" width="#u1_touch_target" height="100%" style_pad_all="0" style_shadow_width="0">
++                <bind_state_if cond="workspace_busy or not workspace_nozzle_heat_ready" state="disabled"/>
++                <event_cb trigger="clicked" callback="workspace_action" user_data="nozzle_target_up"/>
++              </ui_button>
+             </lv_obj>
+-            <text_body width="100%" bind_text="workspace_nozzle_source" style_text_color="#text_muted" long_mode="wrap"/>
+-          </lv_obj>
+-          <lv_obj name="workspace_nozzle_actions" width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
+-            <ui_button name="workspace_retract" text="回抽 5 mm" icon="arrow_up" variant="outline" width="100%" height="#workspace_action_h">
+-              <bind_state_if cond="workspace_busy or not workspace_manual_ready" state="disabled"/>
+-              <event_cb trigger="clicked" callback="workspace_action" user_data="retract"/>
+-            </ui_button>
+-            <ui_button name="workspace_extrude" text="挤出 5 mm" icon="arrow_down" variant="primary" width="100%" height="#workspace_action_h">
+-              <bind_state_if cond="workspace_busy or not workspace_manual_ready" state="disabled"/>
+-              <event_cb trigger="clicked" callback="workspace_action" user_data="extrude"/>
++            <ui_button name="workspace_nozzle_apply" text="应用" variant="primary" width="100%" height="#u1_touch_target" style_pad_all="0" style_border_width="0" style_shadow_width="0">
++              <bind_state_if cond="workspace_busy or not workspace_nozzle_heat_ready or not workspace_nozzle_target_dirty" state="disabled"/>
++              <event_cb trigger="clicked" callback="workspace_action" user_data="nozzle_apply"/>
+             </ui_button>
+           </lv_obj>
++          <lv_obj name="workspace_nozzle_edit" width="100%" height="0" flex_grow="1" flex_flow="row" style_pad_all="#space_sm" style_pad_gap="#space_sm" style_flex_cross_place="center" style_border_width="#u1_border" style_border_color="#border" style_border_side="top" clickable="true" scrollable="false">
++            <bind_state_if cond="workspace_busy or not workspace_nozzle_editable" state="disabled"/>
++            <style name="styles.press_wash" selector="pressed"/>
++            <lv_obj width="#workspace_swatch" height="#workspace_swatch" style_bg_opa="255" style_radius="#workspace_swatch" style_pad_all="0" style_border_width="#u1_border" style_border_color="#border" clickable="false" event_bubble="true" scrollable="false"><bind_style_prop prop="bg_color" subject="workspace_nozzle_color"/></lv_obj>
++            <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" clickable="false" event_bubble="true" scrollable="false">
++              <text_body width="100%" bind_text="workspace_nozzle_material" long_mode="dots" clickable="false" event_bubble="true"/>
++              <text_small width="100%" bind_text="workspace_nozzle_source" style_text_color="#text_muted" long_mode="dots" clickable="false" event_bubble="true"/>
++            </lv_obj>
++            <icon src="pencil" size="sm" clickable="false" event_bubble="true"/>
++            <event_cb trigger="clicked" callback="workspace_action" user_data="edit_nozzle_material"/>
++          </lv_obj>
++        </lv_obj>
++        <lv_obj name="workspace_nozzle_actions" width="#workspace_nozzle_right_w" height="100%" flex_flow="column" style_pad_all="#space_sm" style_pad_gap="#workspace_nozzle_gap" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" scrollable="false">
++          <lv_obj width="100%" height="#workspace_nozzle_line_h" flex_flow="row" style_pad_all="0" style_flex_main_place="space_between" scrollable="false">
++            <text_small text="挤出机" style_text_color="#text_muted"/>
++            <text_small text="5 mm" style_text_color="#text_muted"/>
++          </lv_obj>
++          <ui_button name="workspace_retract" text="回抽" icon="arrow_up" icon_position="top" variant="outline" width="100%" height="#workspace_nozzle_move_h" style_bg_color="#elevated_bg" style_border_width="0" style_shadow_width="0" style_pad_all="#space_xs">
++            <bind_state_if cond="workspace_busy or not workspace_manual_ready" state="disabled"/>
++            <event_cb trigger="clicked" callback="workspace_action" user_data="retract"/>
++          </ui_button>
++          <ui_button name="workspace_extrude" text="挤出" icon="arrow_down" icon_position="top" variant="outline" width="100%" height="#workspace_nozzle_move_h" style_bg_color="#elevated_bg" style_border_width="0" style_shadow_width="0" style_pad_all="#space_xs">
++            <bind_state_if cond="workspace_busy or not workspace_manual_ready" state="disabled"/>
++            <event_cb trigger="clicked" callback="workspace_action" user_data="extrude"/>
++          </ui_button>
++          <ui_button name="workspace_activate_head" text="激活此喷头" variant="ghost" width="100%" height="#u1_touch_target" style_pad_all="0" style_text_font="#font_small" style_shadow_width="0">
++            <bind_flag_if cond="workspace_nozzle_active" flag="hidden"/>
++            <bind_state_if cond="workspace_busy or not workspace_nozzle_activation_ready or filament_manual_motion ne 0" state="disabled"/>
++            <event_cb trigger="clicked" callback="workspace_action" user_data="activate_head"/>
++          </ui_button>
++          <text_small name="workspace_manual_hint" width="100%" height="#u1_touch_target" bind_text="workspace_manual_hint" long_mode="wrap" style_text_color="#text_muted"><bind_flag_if cond="not workspace_nozzle_active" flag="hidden"/></text_small>
+         </lv_obj>
+-        <text_body width="100%" bind_text="workspace_manual_hint" style_text_color="#text_muted" long_mode="wrap"/>
+-        <ui_button name="workspace_nozzle_edit" text="编辑当前耗材" variant="outline" width="100%" height="#workspace_action_h">
+-          <bind_flag_if cond="not workspace_external" flag="hidden"/>
+-          <bind_state_if cond="workspace_busy or not workspace_editable" state="disabled"/>
+-          <event_cb trigger="clicked" callback="workspace_action" user_data="edit"/>
+-        </ui_button>
+       </lv_obj>
+       <lv_obj name="workspace_page_1" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+         <bind_flag_if cond="workspace_page ne 1 or workspace_external" flag="hidden"/>
+@@ -192,31 +226,26 @@
+       </lv_obj>
+       <lv_obj name="workspace_page_2" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+         <bind_flag_if cond="workspace_page ne 2" flag="hidden"/>
+-        <text_heading text="耗材信息" width="100%"/>
+         <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+           <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+             <text_small text="耗材类型"/>
+-            <text_input name="spool_material" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_material" keyboard_hint="text" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius"/>
++            <text_input name="spool_material" width="100%" height="#u1_touch_target" one_line="true" bind_text="workspace_material" keyboard_hint="text" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius"/>
+           </lv_obj>
+           <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+             <text_small text="颜色 HEX"/>
+-            <text_input name="spool_color" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_color" keyboard_hint="text" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius"/>
++            <text_input name="spool_color" width="100%" height="#u1_touch_target" one_line="true" bind_text="workspace_color" keyboard_hint="text" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius"/>
+           </lv_obj>
+           <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+             <text_small text="品牌"/>
+-            <text_input name="spool_vendor" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_vendor" keyboard_hint="text" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius"/>
++            <text_input name="spool_vendor" width="100%" height="#u1_touch_target" one_line="true" bind_text="workspace_vendor" keyboard_hint="text" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius"/>
+           </lv_obj>
+           <lv_obj name="workspace_weight_field" width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+             <bind_flag_if cond="workspace_edit_external or workspace_external" flag="hidden"/>
+             <text_small text="剩余重量 g · 留空保留原值"/>
+-            <text_input name="spool_weight" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_weight" keyboard_hint="numeric" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius"/>
++            <text_input name="spool_weight" width="100%" height="#u1_touch_target" one_line="true" bind_text="workspace_weight" keyboard_hint="numeric" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius"/>
+           </lv_obj>
+         </lv_obj>
+         <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+-          <ui_button name="workspace_save_spool" text="保存线盘" variant="primary" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_min_width="48%">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="save_spool"/>
+-          </ui_button>
+           <ui_button name="workspace_assign_spool" text="绑定当前槽位" variant="outline" width="48%" height="#workspace_action_h" style_shadow_width="0" style_min_width="48%">
+             <bind_flag_if cond="workspace_edit_external or workspace_external" flag="hidden"/>
+             <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+@@ -227,10 +256,6 @@
+             <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+             <event_cb trigger="clicked" callback="workspace_action" user_data="unbind"/>
+           </ui_button>
+-          <ui_button name="workspace_return_library" text="取消" variant="outline" width="48%" height="#workspace_action_h" style_shadow_width="0" style_min_width="48%">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="back"/>
+-          </ui_button>
+         </lv_obj>
+       </lv_obj>
+       <lv_obj name="workspace_page_3" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+@@ -365,5 +390,16 @@
+         </repeat>
+       </lv_obj>
+     </lv_obj>
++    <lv_obj name="workspace_editor_footer" width="100%" height="content" flex_flow="row" style_pad_hor="#u1_page_pad" style_pad_top="0" style_pad_bottom="#u1_card_gap" style_pad_gap="#u1_card_gap" scrollable="false">
++      <bind_flag_if cond="workspace_page ne 2" flag="hidden"/>
++      <ui_button name="workspace_return_library" text="取消" variant="outline" width="0" flex_grow="1" height="#u1_touch_target" style_bg_color="#elevated_bg" style_border_width="0" style_shadow_width="0">
++        <bind_state_if cond="workspace_busy" state="disabled"/>
++        <event_cb trigger="clicked" callback="workspace_action" user_data="back"/>
++      </ui_button>
++      <ui_button name="workspace_save_spool" text="保存耗材" variant="primary" width="0" flex_grow="1" height="#u1_touch_target" style_border_width="0" style_shadow_width="0">
++        <bind_state_if cond="workspace_busy" state="disabled"/>
++        <event_cb trigger="clicked" callback="workspace_action" user_data="save_spool"/>
++      </ui_button>
++    </lv_obj>
+   </view>
+ </component>

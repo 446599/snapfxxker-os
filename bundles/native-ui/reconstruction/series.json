@@ -98,6 +98,12 @@
       "sha256": "40dd15395333b790b025af2cda3f224ea8e93857c9fa03b79aa29aa62ff4bb0f",
       "component": "Temperature subject lifecycle and apply-only command regression",
       "verification": "Whitespace check passed; targeted native test execution pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0016-nozzle-editor.patch",
+      "sha256": "edf19a91b7c1875909ec22920100576d29a0f752538eef1b2b29563d959a9158",
+      "component": "Nozzle temperature drafts, explicit tool actions and material editor",
+      "verification": "XML parse and whitespace check passed; no-send draft and candidate load gates implemented. Native build/runtime pending."
     }
   ],
   "validation": {
