@@ -1,0 +1,191 @@
+{
+  "source_commit": "30a5cfdfe5f329c6f5b70e03e4a7a07213f3f0b5",
+  "source_codepoints": 1367,
+  "manifest_codepoints": 1368,
+  "runtime_faces": 35,
+  "source_missing_from_manifest": [],
+  "faces": [
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_10.bin",
+      "sha256": "69f659744aeefbb321a2a201328349ee2101239c369a1e973c78a1a9463a6aee",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_11.bin",
+      "sha256": "a53a60d6b4eae99bdf63a187b69c6f5e95fc7a0f57bae16088cd9a20a11e867f",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_12.bin",
+      "sha256": "4acd54aeb1b2cfb22dd0ef61c7806f783832d4b23507a366faa75f4e40ba4b7d",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_14.bin",
+      "sha256": "750f63d4073325612b5eec70822dd81bc6e0d0cd4ade0a4a9880c16be69496e6",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_16.bin",
+      "sha256": "6c552f175c4d54f6bcaf012cf027abd119e301aa2f56330c4580e05e24a67660",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_18.bin",
+      "sha256": "2b48c78a1919a30af7b4ebc0d9e07aba43fa9904f1f2361adc03b18b1b286c4a",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_20.bin",
+      "sha256": "f2c568def18de56fa35cc3501b1bca564e72acddc0166d7e78aaa442eb5d8df9",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_24.bin",
+      "sha256": "5a5de28fe7daa6aab28e09cba0cf76b1b4198fe9ca6484dd0fc4417256758671",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_26.bin",
+      "sha256": "1da756a483042d8dfb465d7c25de5ada5d3e6ecc707aa9c7e95fe434933d7fd6",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_28.bin",
+      "sha256": "b47d2ef79ac50eb61fac1ab87103de7d2dcc84dbfab1504de65e346626699cb0",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_32.bin",
+      "sha256": "bcb0f1c06cd78bb8a61ff3040df4c7a677e0dbbd0598f2e9168f50c53873c62a",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_40.bin",
+      "sha256": "7a2d8572ab198899e32af053a7ba567476284a3cf02fa509344b8a4d0cd6dd11",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_48.bin",
+      "sha256": "348ab0ca39ded071a35463f201266a6ba08e24ddfc231778b483dcb18d19a397",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_64.bin",
+      "sha256": "b9eab0a9d0200b1268410c34c09b7d5f169d90de876498b367e4532a6cf0af13",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_8.bin",
+      "sha256": "b0ccea680340c3c6a567665df866b44f412a52a490875ac3b61d93b9671547f9",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_bold_14.bin",
+      "sha256": "750f63d4073325612b5eec70822dd81bc6e0d0cd4ade0a4a9880c16be69496e6",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_bold_16.bin",
+      "sha256": "6c552f175c4d54f6bcaf012cf027abd119e301aa2f56330c4580e05e24a67660",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_bold_18.bin",
+      "sha256": "2b48c78a1919a30af7b4ebc0d9e07aba43fa9904f1f2361adc03b18b1b286c4a",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_bold_20.bin",
+      "sha256": "f2c568def18de56fa35cc3501b1bca564e72acddc0166d7e78aaa442eb5d8df9",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_bold_24.bin",
+      "sha256": "5a5de28fe7daa6aab28e09cba0cf76b1b4198fe9ca6484dd0fc4417256758671",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_bold_28.bin",
+      "sha256": "b47d2ef79ac50eb61fac1ab87103de7d2dcc84dbfab1504de65e346626699cb0",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_bold_32.bin",
+      "sha256": "bcb0f1c06cd78bb8a61ff3040df4c7a677e0dbbd0598f2e9168f50c53873c62a",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_bold_40.bin",
+      "sha256": "7a2d8572ab198899e32af053a7ba567476284a3cf02fa509344b8a4d0cd6dd11",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_bold_48.bin",
+      "sha256": "348ab0ca39ded071a35463f201266a6ba08e24ddfc231778b483dcb18d19a397",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_bold_64.bin",
+      "sha256": "b9eab0a9d0200b1268410c34c09b7d5f169d90de876498b367e4532a6cf0af13",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_light_10.bin",
+      "sha256": "69f659744aeefbb321a2a201328349ee2101239c369a1e973c78a1a9463a6aee",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_light_11.bin",
+      "sha256": "a53a60d6b4eae99bdf63a187b69c6f5e95fc7a0f57bae16088cd9a20a11e867f",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_light_12.bin",
+      "sha256": "4acd54aeb1b2cfb22dd0ef61c7806f783832d4b23507a366faa75f4e40ba4b7d",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_light_14.bin",
+      "sha256": "750f63d4073325612b5eec70822dd81bc6e0d0cd4ade0a4a9880c16be69496e6",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_light_16.bin",
+      "sha256": "6c552f175c4d54f6bcaf012cf027abd119e301aa2f56330c4580e05e24a67660",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_light_18.bin",
+      "sha256": "2b48c78a1919a30af7b4ebc0d9e07aba43fa9904f1f2361adc03b18b1b286c4a",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_light_20.bin",
+      "sha256": "f2c568def18de56fa35cc3501b1bca564e72acddc0166d7e78aaa442eb5d8df9",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_light_26.bin",
+      "sha256": "1da756a483042d8dfb465d7c25de5ada5d3e6ecc707aa9c7e95fe434933d7fd6",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_light_32.bin",
+      "sha256": "bcb0f1c06cd78bb8a61ff3040df4c7a677e0dbbd0598f2e9168f50c53873c62a",
+      "missing_source_codepoints": []
+    },
+    {
+      "path": "assets/fonts/cjk/noto_sans_cjk_light_40.bin",
+      "sha256": "7a2d8572ab198899e32af053a7ba567476284a3cf02fa509344b8a4d0cd6dd11",
+      "missing_source_codepoints": []
+    }
+  ],
+  "passed": true,
+  "rebake_required": false,
+  "scan_scope": "Current working tree, including final material/nozzle/editor literals before root captured their checkpoint; source_commit records HEAD at scan time.",
+  "font_files_changed": [],
+  "converter_required_for_current_assets": false,
+  "github_source_checkpoint": "a0057695acad0038c1171d3711f36f9550e92d3f",
+  "reconstructed_not_original_checkpoint": true
+}

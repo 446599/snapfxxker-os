@@ -1,0 +1,11 @@
+{
+  "source_commit": "5866cbef15d0e5221e343eec37a7e6d8971334af",
+  "patches_applied": 18,
+  "changed_paths_checked": 46,
+  "mismatches": [],
+  "xml_files_parsed": 485,
+  "result": "pass",
+  "scope": "Ordered patches applied with index checks to clean UI.4 affected files and compared byte-for-byte with committed reconstruction. Full upstream download not repeated.",
+  "github_source_checkpoint": "a0057695acad0038c1171d3711f36f9550e92d3f",
+  "reconstructed_not_original_checkpoint": true
+}

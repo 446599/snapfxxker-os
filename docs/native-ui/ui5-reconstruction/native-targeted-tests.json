@@ -1,0 +1,11 @@
+{
+  "result": "pass",
+  "assertions": 142,
+  "test_cases": 29,
+  "filter": "[temp_graph_overlay],[material-workspace],a print or disabled nav gates the move grid",
+  "scope": "Targeted native Catch2 build using existing project harness and app objects. Test sources: temp_graph_overlay, motion_move_tab, material_workspace and required ui_switch/ui_button provider tests. Not the full 1863-file suite.",
+  "source_commit": "5866cbef15d0e5221e343eec37a7e6d8971334af",
+  "log": "build-logs/ui5-targeted-tests.log",
+  "github_source_checkpoint": "a0057695acad0038c1171d3711f36f9550e92d3f",
+  "reconstructed_not_original_checkpoint": true
+}
