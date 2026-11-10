@@ -1,0 +1,43 @@
+diff --git a/ui_xml/fan_control_overlay.xml b/ui_xml/fan_control_overlay.xml
+index db5ddcc8a198f8247e408f26e682be045a034477..8b9f72e1dd22de5587f27691f8bffd32a826dd2b 100644
+--- a/ui_xml/fan_control_overlay.xml
++++ b/ui_xml/fan_control_overlay.xml
+@@ -12,7 +12,19 @@
+   </api>
+   <view name="fan_control_overlay" extends="overlay_panel" title="$title" bg_color="#screen_bg">
+     <!-- Main Content Area - minimal padding for maximum card space -->
+-    <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_row="0" scrollable="false" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="center" style_pad_all="#u1_page_pad" style_pad_top="#fan_grid_gap" style_pad_bottom="#u1_card_gap" style_pad_gap="#fan_grid_gap">
++    <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_row="0" scrollable="true" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="center" style_pad_all="#u1_page_pad" style_pad_top="#fan_grid_gap" style_pad_bottom="#u1_card_gap" style_pad_gap="#fan_grid_gap">
++      <text_body name="fan_connection_status" text="等待设备连接" width="100%" style_text_align="center">
++        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
++      </text_body>
++      <!-- ================================================================== -->
++      <!-- Single flex-wrap row for all fans (controllable first, then auto) -->
++      <!-- ================================================================== -->
++      <lv_obj name="fans_container" width="100%" height="content" flex_grow="0" style_pad_all="0" style_pad_gap="#fan_grid_gap" style_flex_track_place="start" scrollable="false" flex_flow="row_wrap" style_flex_main_place="start" style_flex_cross_place="start">
++        <bind_flag_if_not_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
++        <!-- Only dynamic fan widgets belong here: population clears this container. -->
++        <!-- Chamber modes stay as the following sibling in the shared scroll content. -->
++        <!-- Controllable fans are added first, then auto-controlled fans -->
++      </lv_obj>
+       <!-- Chamber air modes (helix::chamber_air): each button sends its mode.
+            Hidden unless the printer offers at least one mode and any accessory
+            the modes need is fitted (chamber_air_available). A printer that
+@@ -44,17 +56,6 @@
+           </button_group_item>
+         </button_group>
+       </lv_obj>
+-      <text_body name="fan_connection_status" text="等待设备连接" width="100%" style_text_align="center">
+-        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+-      </text_body>
+-      <!-- ================================================================== -->
+-      <!-- Single flex-wrap row for all fans (controllable first, then auto) -->
+-      <!-- ================================================================== -->
+-      <lv_obj name="fans_container" width="100%" height="0" flex_grow="1" style_pad_all="0" style_pad_gap="#fan_grid_gap" style_flex_track_place="start" scrollable="true" flex_flow="row_wrap" style_flex_main_place="start" style_flex_cross_place="start">
+-        <bind_flag_if_not_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+-        <!-- All fan widgets (FanDial and fan_status_card) are created here dynamically by C++ -->
+-        <!-- Controllable fans are added first, then auto-controlled fans -->
+-      </lv_obj>
+     </lv_obj>
+   </view>
+ </component>

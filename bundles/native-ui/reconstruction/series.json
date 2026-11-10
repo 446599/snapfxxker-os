@@ -164,6 +164,12 @@
       "sha256": "1b4dfc5dd48170f8250dbda3d65bb4e94a73a56fdde43d26ed3adaa9f44a92d1",
       "component": "Reference header title/back alignment",
       "verification": "Retained UI.5 reference has titleleft and backright; native API/callback slots retained. XML parse and whitespace pass; final capture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0027-fan-controls-order.patch",
+      "sha256": "036ea8cc432cc820f8a9776018da10607362d140bfdc8685fa76f382941c448d",
+      "component": "Fan cards first with retained chamber-air controls",
+      "verification": "Native review found airstrip pushing thirdrow out; reordered existing namedcontrols into same scroll body. XML parse and whitespace pass; final scroll/capture pending."
     }
   ],
   "validation": {
