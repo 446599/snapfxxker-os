@@ -50,6 +50,12 @@
       "sha256": "cf12f993b614f1f1eeb1fb1ecc18d65a0d9b1c4d5a7f831b94ef97fdede5e2f6",
       "component": "Four speed presets with retained advanced tune controls",
       "verification": "XML parse and whitespace check passed; native runtime pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0008-controls-menu.patch",
+      "sha256": "7798b3c822ad7b54db1021764c73e6f5a70cd2719f9045121bacd6d021b2d587",
+      "component": "Four control cards and retained complete controls dashboard",
+      "verification": "XML parse, retained-grid check and whitespace check passed; native runtime pending"
     }
   ],
   "validation": {
