@@ -74,6 +74,12 @@
       "sha256": "4f212eab79d4ccef23c9538e2efa96e4e48bcfe3d2eccbf684479f496f76b951",
       "component": "Four-head temperature overview and bounded nozzle browsing",
       "verification": "XML parse and whitespace check passed. Native rendering and command checks pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0012-motion-layout.patch",
+      "sha256": "9c65481844b89cbf5a17b7fa5ab726df2bcf88e69d53b1df9c7b5cbdf99119f8",
+      "component": "208px dual-ring motion layout and fixed Z increments",
+      "verification": "XML parse and whitespace check passed. Native geometry and command checks pending."
     }
   ],
   "validation": {
