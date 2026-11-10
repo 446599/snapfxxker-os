@@ -1,0 +1,107 @@
+diff --git a/src/ui/panel_widgets/print_status_widget.cpp b/src/ui/panel_widgets/print_status_widget.cpp
+index 65f2e685a5942290db8b25d57461489312152746..7e4a882b6ab2efef51019ca72b97fc150457ada7 100644
+--- a/src/ui/panel_widgets/print_status_widget.cpp
++++ b/src/ui/panel_widgets/print_status_widget.cpp
+@@ -150,6 +150,8 @@ void PrintStatusWidget::init_static_subjects() {
+ 
+     // Detailed-layout subjects
+     lv_subject_init_int(&layout_effective_subject_, 0);
++    lv_subject_init_int(&task_preview_visible_subject_, 0);
++    s_static_subjects.publish("print_status_task_preview_visible", &task_preview_visible_subject_);
+     // Observed through layout_effective_subject_for_test(), the width-gating guard.
+     s_static_subjects.publish(
+         "print_status_layout_effective",
+@@ -585,6 +587,7 @@ void PrintStatusWidget::on_size_changed(int /*colspan*/, int /*rowspan*/, int wi
+                                         int height_px) {
+     last_width_px_ = width_px;
+     last_height_px_ = height_px;
++    update_task_preview_fit();
+ 
+     // Width band from physical pixels, not colspan — see panel_widget_size.h. Three
+     // bands (0=compact, 1=normal, 2=wide) mirror the old colspan<=1 / ==2 / >=3
+@@ -639,6 +642,33 @@ void PrintStatusWidget::on_size_changed(int /*colspan*/, int /*rowspan*/, int wi
+                   height_px, use_column ? "column" : "row", is_compact_);
+ }
+ 
++void PrintStatusWidget::update_task_preview_fit() {
++    const int inset = theme_manager_get_spacing("u1_page_pad");
++    const int border = theme_manager_get_spacing("u1_border");
++    const int gap = theme_manager_get_spacing("u1_card_gap");
++    const int target = theme_manager_get_spacing("u1_touch_target");
++    const int button_pad = theme_manager_get_spacing("space_xs");
++    const lv_font_t* body_font = theme_manager_get_font("font_body");
++    const lv_font_t* icon_font = theme_manager_get_font("icon_font_sm");
++    const int icon_width = icon_font ? lv_font_get_line_height(icon_font) : target / 2;
++    const int files_width = ui::measure_text_px(lv_tr("选择文件"), body_font) + icon_width +
++                            button_pad + 2 * (button_pad + border);
++    const int reprint_width = ui::measure_text_px(lv_tr("重新打印"), body_font) +
++                              2 * (button_pad + border);
++    // The two text buttons share the available width equally. A queue button
++    // costs its own touch target only while the queue is visible.
++    int idle_actions_width = 2 * std::max(files_width, reprint_width) + gap;
++    if (lv_subject_get_int(&queue_hidden_subject_) == 0) {
++        idle_actions_width += target + gap;
++    }
++    const int print_actions_width = 2 * target + 3 * gap + icon_width +
++        ui::measure_text_px("999 / 999", body_font);
++    const int required_data_width = std::max(idle_actions_width, print_actions_width);
++    const int preview_width = theme_manager_get_spacing("u1_model_width");
++    const int data_width = last_width_px_ - 2 * (inset + border) - preview_width - inset;
++    lv_subject_set_int(&task_preview_visible_subject_, data_width >= required_data_width ? 1 : 0);
++}
++
+ // Apply the imperative print-card flex layout (thumbnail row vs column) for the
+ // current is_column_ state. Split out of on_size_changed so attach() can re-apply
+ // it: widget instances are recycled across rebuilds, but a fresh XML component
+@@ -872,6 +902,7 @@ void PrintStatusWidget::update_job_queue_row_visibility() {
+     }
+     bool queue_visible = show_job_queue_ && has_jobs;
+     lv_subject_set_int(&queue_hidden_subject_, queue_visible ? 0 : 1);
++    update_task_preview_fit();
+ 
+     // The library_actions container hides when no action row is visible — re-evaluate
+     // here since queue visibility contributes to that combined state.
+diff --git a/src/ui/panel_widgets/print_status_widget.h b/src/ui/panel_widgets/print_status_widget.h
+index 1e5367d2384fb1709b131f8f71f41952e970680b..0dc6f8376440376a53a5ff96f6ec8539208a415b 100644
+--- a/src/ui/panel_widgets/print_status_widget.h
++++ b/src/ui/panel_widgets/print_status_widget.h
+@@ -379,6 +379,7 @@ class PrintStatusWidget : public PanelWidget {
+ 
+     // Detailed-layout subjects (static inline — shared across all widget instances)
+     static inline lv_subject_t layout_effective_subject_{}; // after width gating
++    static inline lv_subject_t task_preview_visible_subject_{};
+     // Combined gate: (width band == wide) AND (filament_used > 0). Avoids the
+     // phantom-row gap when filament hasn't started extruding yet.
+     static inline lv_subject_t show_filament_active_subject_{};
+@@ -723,6 +724,7 @@ class PrintStatusWidget : public PanelWidget {
+     // Recompute the view subject from (is_active_, layout_style_, is_compact_).
+     // Drives bind_flag_if_not_eq on the five card-body siblings.
+     void update_view_subject();
++    void update_task_preview_fit();
+     /// Finds and wires the widgets of the active branch (views 3 and 4), which the XML
+     /// builds only while a print holds the machine; clears them when it is not built.
+     void bind_active_branch();
+diff --git a/ui_xml/components/print_status_detailed_active.xml b/ui_xml/components/print_status_detailed_active.xml
+index c1c90d87a15f2f4656a2f5008128631283826f39..8fb4fc021882567701d52d7145c89b3099c42d23 100644
+--- a/ui_xml/components/print_status_detailed_active.xml
++++ b/ui_xml/components/print_status_detailed_active.xml
+@@ -8,6 +8,7 @@
+     <lv_obj name="detailed_model_preview" width="#u1_model_width" height="100%"
+             style_pad_all="#space_xs" style_radius="#u1_icon_badge_radius"
+             style_bg_color="#screen_bg" style_bg_opa="255" scrollable="false" clickable="false" event_bubble="true">
++      <bind_flag_if_eq subject="print_status_task_preview_visible" flag="hidden" ref_value="0"/>
+       <lv_image name="detailed_thumb" width="100%" height="100%" bind_src="print_thumbnail_path"
+                 inner_align="contain" clickable="false" event_bubble="true">
+         <bind_flag_if_eq subject="print_has_thumbnail" flag="hidden" ref_value="0"/>
+diff --git a/ui_xml/components/print_status_detailed_idle.xml b/ui_xml/components/print_status_detailed_idle.xml
+index 0515e3878e7069e9439e7830364471e3c9ad6f44..948aa1ed01952be7d6e13ac453dc6d6af6c1e164 100644
+--- a/ui_xml/components/print_status_detailed_idle.xml
++++ b/ui_xml/components/print_status_detailed_idle.xml
+@@ -7,6 +7,7 @@
+     <lv_obj name="idle_model_preview" width="#u1_model_width" height="100%" style_pad_all="#space_xs"
+             style_radius="#u1_icon_badge_radius" style_bg_color="#screen_bg" style_bg_opa="255"
+             scrollable="false" clickable="false" event_bubble="true">
++      <bind_flag_if_eq subject="print_status_task_preview_visible" flag="hidden" ref_value="0"/>
+       <lv_image name="idle_thumb" width="100%" height="100%" bind_src="print_status_idle_thumb_path"
+                 inner_align="contain" clickable="false" event_bubble="true"/>
+     </lv_obj>

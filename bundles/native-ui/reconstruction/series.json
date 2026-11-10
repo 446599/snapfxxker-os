@@ -104,6 +104,12 @@
       "sha256": "edf19a91b7c1875909ec22920100576d29a0f752538eef1b2b29563d959a9158",
       "component": "Nozzle temperature drafts, explicit tool actions and material editor",
       "verification": "XML parse and whitespace check passed; no-send draft and candidate load gates implemented. Native build/runtime pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0017-narrow-task-card.patch",
+      "sha256": "2f26b883dd86468d8226904662a1831cb0ec98970df6ef5e13a32a1780295ee4",
+      "component": "Measured preview visibility for custom narrow task tiles",
+      "verification": "Two XML files parse; measured fit bindings and whitespace check passed. Native render pending."
     }
   ],
   "validation": {
