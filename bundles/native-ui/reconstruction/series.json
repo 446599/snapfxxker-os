@@ -68,6 +68,12 @@
       "sha256": "1796fd7f644089a5de4a6a329c1dc57dd3e937c8f6ba7d8888280a7235852cd6",
       "component": "Home task card reconstructed from UI.5 review",
       "verification": "Three XML files parse; whitespace check passed. Native render validation pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0011-temperature-overview.patch",
+      "sha256": "4f212eab79d4ccef23c9538e2efa96e4e48bcfe3d2eccbf684479f496f76b951",
+      "component": "Four-head temperature overview and bounded nozzle browsing",
+      "verification": "XML parse and whitespace check passed. Native rendering and command checks pending."
     }
   ],
   "validation": {
