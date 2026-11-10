@@ -26,6 +26,12 @@
       "sha256": "de86a1f89149aa684e4a8b26041ed14b67630c2968489a8b97da8c5742d03ca5",
       "component": "Printing lock for ring, Z, home and coordinate keypad",
       "verification": "XML parse and whitespace check passed; native build and runtime checks pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0004-settings-menu.patch",
+      "sha256": "eec21ace625b6b16f7eec72f317621c2712c9a565e5eda556b1e6448259dbdb1",
+      "component": "Advanced and grouped settings with retained native entrypoints",
+      "verification": "XML parse and whitespace check passed; native build and runtime checks pending"
     }
   ],
   "validation": {
