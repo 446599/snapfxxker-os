@@ -14,6 +14,12 @@
       "sha256": "4000f1bc274046bc57883ced340ba117323b04f7302c11af3b5656c56bb335de",
       "component": "Confirmed palette and common spacing",
       "verification": "XML/JSON parse and whitespace check passed; native build pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0002-bottom-navigation.patch",
+      "sha256": "60cc5861497d8e188c2d4e00b1d5e0c30b0d590102d7da14860631a7e4728ec8",
+      "component": "Four-tab bottom navigation and full-width overlay geometry",
+      "verification": "XML parse and whitespace check passed; native build pending"
     }
   ],
   "validation": {
