@@ -134,6 +134,12 @@
       "sha256": "50d7c09e135a33829b16391621774c2a869d087d96dc26874157a38f92b8f548",
       "component": "Unclipped icons within44px secondary controls",
       "verification": "Native overflow identified3px glyph clipping; zero padding on three44px icon buttons. XML parses and whitespace pass; recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0022-nozzle-label-fit.patch",
+      "sha256": "38890805a684ff683df39bed5f20eb1b0e5482b8382e3714a3636c819abe6151",
+      "component": "Nozzle manual-control text line height",
+      "verification": "Native overflow found6px label clipping;22px text row and4px gaps retain214px column. XML parse and whitespace pass; recapture pending."
     }
   ],
   "validation": {

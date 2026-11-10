@@ -1,0 +1,15 @@
+diff --git a/ui_xml/material_workspace.xml b/ui_xml/material_workspace.xml
+index 07ae99bf9baf1000d950a2a4ab82ac89bae23121..44d46b593dd7d69f74b3d40b187269c467de9f98 100644
+--- a/ui_xml/material_workspace.xml
++++ b/ui_xml/material_workspace.xml
+@@ -15,8 +15,8 @@
+     <px name="workspace_nozzle_reading_h" value="36"/>
+     <px name="workspace_nozzle_right_w" value="152"/>
+     <px name="workspace_nozzle_move_h" value="60"/>
+-    <px name="workspace_nozzle_line_h" value="16"/>
+-    <px name="workspace_nozzle_gap" value="6"/>
++    <px name="workspace_nozzle_line_h" value="22"/>
++    <px name="workspace_nozzle_gap" value="4"/>
+     <px name="workspace_back_w" value="80"/>
+   </consts>
+   <view name="material_workspace" extends="lv_obj" width="100%" height="#u1_overlay_height" align="top_left" flex_flow="column" style_pad_all="0" style_pad_gap="0" style_border_width="0" style_bg_color="#screen_bg" style_bg_opa="255" scrollable="false">
