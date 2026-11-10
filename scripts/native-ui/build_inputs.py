@@ -24,6 +24,7 @@ RECIPE_PATHS = (
     "overlays/233-native-ui/root/home/lava/klipper/klippy/extras/u1_native_upgrade.py",
     "overlays/233-native-ui/root/etc/hooks/klipper.d/30-u1-native-upgrade.sh",
     "overlays/233-native-ui/root/etc/hooks/moonraker.d/30-u1-native-upgrade.sh",
+    "overlays/233-native-ui/root/usr/local/share/u1-native-upgrade/klipper.cfg",
 )
 
 

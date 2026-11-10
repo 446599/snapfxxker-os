@@ -228,6 +228,20 @@ class UpgradeHookTests(unittest.TestCase):
         self.tmp = Path(tmp.name)
         self.lease = self.tmp / "request.json"
         self.config = self.tmp / "extended/klipper"
+        self.system_config = self.tmp / "system/upgrade/klipper.cfg"
+        self.system_config.parent.mkdir(parents=True)
+        self.system_config.write_bytes(
+            (OVERLAY / "usr/local/share/u1-native-upgrade/klipper.cfg").read_bytes())
+        self.system_module = self.tmp / "system/u1_native_upgrade.py"
+        self.system_module.write_bytes(
+            (OVERLAY / "home/lava/klipper/klippy/extras/u1_native_upgrade.py").read_bytes())
+        self.helper = self.tmp / "slot_config.py"
+        helper = (OVERLAY / "usr/local/lib/u1-device-service/slot_config.py").read_text()
+        helper = helper.replace("/oem/printer_data/config/extended/klipper", str(self.config))
+        helper = helper.replace("/usr/local/share/u1-native-upgrade", str(self.system_config.parent))
+        helper = helper.replace("/home/lava/klipper/klippy/extras/u1_native_upgrade.py",
+                                str(self.system_module))
+        self.helper.write_text(helper)
 
     def run_hook(self, service, action):
         source = (OVERLAY / "etc/hooks" / (service + ".d") /
@@ -235,21 +249,30 @@ class UpgradeHookTests(unittest.TestCase):
         # Only filesystem destinations are redirected. No real init script,
         # service control, printer configuration or hardware is executed.
         source = source.replace("/run/u1-native-upgrade/request.json", str(self.lease))
-        source = source.replace("/oem/printer_data/config/extended/klipper", str(self.config))
+        source = source.replace("/usr/local/lib/u1-device-service/slot_config.py", str(self.helper))
         script = self.tmp / (service + "-hook.sh")
         script.write_text(source)
         return subprocess.run(["sh", str(script), action], capture_output=True, text=True)
 
-    def test_loading_hook_creates_only_its_config_and_preserves_existing_section(self):
+    def test_loading_hook_creates_optional_include_and_preserves_existing_notes(self):
         result = self.run_hook("klipper", "start")
         self.assertEqual(result.returncode, 0, result.stderr)
         config = self.config / "u1_native_upgrade.cfg"
-        self.assertIn("[u1_native_upgrade]", config.read_text())
+        self.assertNotIn("[u1_native_upgrade]", config.read_text())
+        self.assertIn("[include " + str(self.system_config.parent) + "/*.cfg]", config.read_text())
+        self.assertIn("[u1_native_upgrade]", self.system_config.read_text())
         self.assertEqual(config.stat().st_mode & 0o777, 0o644)
         custom = config.read_text() + "# retain operator note\n"
         config.write_text(custom)
         self.assertEqual(self.run_hook("klipper", "start").returncode, 0)
         self.assertEqual(config.read_text(), custom)
+
+    def test_missing_slot_module_rejects_start_without_shared_write(self):
+        self.system_module.unlink()
+        result = self.run_hook("klipper", "start")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("current system slot is missing", result.stderr)
+        self.assertFalse(self.config.exists())
 
     def test_lease_blocks_service_restarts_but_allows_stop_and_explicit_recovery(self):
         self.lease.write_text(json.dumps({"token": TOKEN, "pid": 123}))

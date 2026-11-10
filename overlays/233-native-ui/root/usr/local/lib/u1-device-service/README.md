@@ -8,6 +8,12 @@
 
 本批是源码集成，尚未部署到设备；ARM64 运行包和整包固件需按仓库构建说明分别生成与验证。
 
+### 系统槽位与回退
+
+`[u1_native_upgrade]` 只保存在当前系统镜像的 `/usr/local/share/u1-native-upgrade/klipper.cfg`，与该镜像中的 Klipper 模块一起生效。共享的 `/oem/printer_data/config/extended/klipper/u1_native_upgrade.cfg` 仅包含可选的 `[include /usr/local/share/u1-native-upgrade/*.cfg]`。旧 `perms.1` 系统中没有匹配文件，固定版本的 Klipper 加载器允许通配 include 为空，因此不会尝试导入新模块。
+
+Klipper 启动钩子在维护锁检查通过后运行 `slot_config.py`。它会将 `1fdd0ac` 写入的无选项旧配置段迁移为通配 include，保留其他配置段、注释、权限及所有者，原内容备份为不匹配 `*.cfg` 的文件。重复启动不重写已有正确配置。未知配置项、符号链接或非普通文件会保留原对象并报告错误；迁移不会修改主 `printer.cfg`。
+
 ## 本地升级
 
 - 支持本机 U1 的完整 `.bin` 升级包。

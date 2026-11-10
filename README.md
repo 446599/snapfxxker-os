@@ -2,9 +2,9 @@
 
 面向 **Snapmaker U1 + Anycubic ACE** 的集成固件工程，以 PAXX Extended Firmware 为底座，集成 multiACE 的 ACE 控制、耗材管理与 Web 界面。
 
-当前开发版本：`2.1.0-233-dev.3-ui.3`，处于**首批原生 UI 源码集成**阶段。黄白界面由 233 固件自己的源码补丁、启动 overlay 和构建入口管理；本修订尚未部署到打印机，也未发布 Release。新的 ARM64 运行包必须从当前补丁重新构建、通过校验并导入，才能继续制作固件包；仓库不携带上一版 UI 二进制冒充本次构建。
+当前开发版本：`2.1.0-233-dev.3-ui.3`。源码、ARM64 运行包和整机升级包已完成本轮离线验证，交付清单与校验和见 [当前产物索引](docs/233/native-ui-20261110-artifacts.md)。黄白界面由 233 固件自己的源码补丁、启动 overlay 和构建入口管理；本修订尚未部署到打印机，也未发布 GitHub Release。
 
-本次修复 `df0f5c3` 审查中的升级互斥、字体补丁链和回环代理问题，验证范围见 [修复记录](docs/233/native-ui-review-fixes-20261110.md)。旧 `ui.2` 产物对应原提交，不包含这些修复。
+当前包包含 `df0f5c3` 审查中的升级互斥、字体补丁链和回环代理修复，以及 `1fdd0ac` 的持久配置回退修复。共 76 项 Python 回归通过；实际包内文件已通过新槽 → 旧槽 → 新槽的真实配置加载链离线验证。具体范围见 [三项修复记录](docs/233/native-ui-review-fixes-20261110.md) 和 [槽位回退记录](docs/233/native-ui-slot-rollback-20261110.md)。旧 `ui.2` 对应原提交，不包含这些修复。
 
 已经部署并启动验证的上一版是 `2.1.0-233-dev.2-perms.1`。其 Klipper、ACE 启动与数据核对记录保留在 [233-firmware.json](233-firmware.json) 的 `previous_validation`；这些记录不作为本次 UI 修订的实机验证。构建仍使用原来的 rsyncfix 基线和已验证的 multiACE 包。
 
@@ -67,7 +67,7 @@ python3 scripts/native-ui/validate.py
 ./build-233.sh
 ```
 
-该入口依次应用 `overlays/233-dev.2-perms.1` 和 `overlays/233-native-ui`，使用已校验的现场 rsyncfix 基线、本地离线 multiACE 快照及匹配当前源码的 ARM64 UI 包，输出 `firmware/U1_233_2.1.0-233-dev.3-ui.2_upgrade.bin`。专用 CI 只构建和校验原生运行包，不自动制作整包固件、不发布 Release、不刷机。
+该入口依次应用 `overlays/233-dev.2-perms.1` 和 `overlays/233-native-ui`，使用已校验的现场 rsyncfix 基线、本地离线 multiACE 快照及匹配当前源码的 ARM64 UI 包，输出 `firmware/U1_233_2.1.0-233-dev.3-ui.3_upgrade.bin`。专用 CI 只构建和校验原生运行包，不自动制作整包固件、不发布 Release、不刷机。
 
 ## 来源与许可
 

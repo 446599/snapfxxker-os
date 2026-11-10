@@ -1,64 +1,67 @@
-# U1 原生 UI：2026-11-10 构建产物
+# U1 原生 UI：ui.3 当前交付文件
 
-固件版本：`2.1.0-233-dev.3-ui.2`。配套源码分支：`codex/u1-native-ui-20261110`。
+当前完整固件版本：`2.1.0-233-dev.3-ui.3`。日期：2026-11-10（北京时间）。当前分支：`codex/u1-native-ui-20261110`。
 
-完整升级包已经生成并通过离线完整性校验。文件入口如下；需要登录保存这些文件的 ChatGPT 账号。这里记录下载链接与校验值，文件并非 GitHub Release 附件。
+本次包包含 `df0f5c3` 的升级互斥、字体补丁链与回环代理修复，以及 `1fdd0ac` 的系统槽位回退修复。旧 `ui.2` 对应原提交，本页改为记录以下 `ui.3` 交付文件，已移除旧 `ui.2` 下载链接。源码以包含本索引的提交为准；构建输入指纹见下文。
 
-## 文件下载
+## 当前交付文件
 
-| 文件 | 字节数 | 内容 |
+| 文件 | 字节数 | 用途 |
 | --- | ---: | --- |
-| [U1_233_2.1.0-233-dev.3-ui.2_upgrade.bin](https://chatgpt.com/library?file_id=libfile_fde3_f-8f23aede74188191b001071e32e22cbf_25260bb8fed081918d26cd0aacc1e06f&account_id=personal) | 286,698,010 | 完整整机升级包 |
-| [U1-native-ui-20261110.1-runtime.zip](https://chatgpt.com/library?file_id=libfile_fde3_f-b625a4b01e488191b18e1bab7c955bbd_25260bb8fed081918d26cd0aacc1e06f&account_id=personal) | 36,635,513 | ARM64 运行归档、相邻 manifest、调试符号及构建记录 |
-| [U1-native-ui-20261110.1-source-overlay.zip](https://chatgpt.com/library?file_id=libfile_fde3_f-3058c97c450081918d264feeb9f270e7_25260bb8fed081918d26cd0aacc1e06f&account_id=personal) | 760,210 | 本次 58 个源码接入文件及清单 |
-| [U1_233_2.1.0-233-dev.3-ui.2-verification.zip](https://chatgpt.com/library?file_id=libfile_fde3_f-519992244c648191a1017a94b25261e1_25260bb8fed081918d26cd0aacc1e06f&account_id=personal) | 25,509 | 完整校验报告、构建结果、辅助验证脚本及 SHA256SUMS |
+| `U1_233_2.1.0-233-dev.3-ui.3_upgrade.bin` | 286,714,394 | 完整 U1 整机升级包 |
+| `U1-native-ui-20261110.3-runtime.zip` | 33,227,346 | 重建导入用 ARM64 运行包，内含归档及相邻文件清单 |
+| `U1_233_2.1.0-233-dev.3-ui.3-verification.zip` | 480,098 | 76 项测试、实际包校验、可复现回退探针和日志 |
+
+整机包、运行包、验证 ZIP 和 `SHA256SUMS` 已在本次交付会话中提供。私有下载链接尚未写入本仓库，需所有者明确授权后添加；本页仅记录文件名、用途及校验和。尚未发布 GitHub Release。
 
 ## SHA-256
 
 ```text
-1e64571be3b3d7553d21ffc5a2917c91dbde54330b83b85ad79903c346ca6b04  U1_233_2.1.0-233-dev.3-ui.2_upgrade.bin
-f855bdec909f12dbf5f0e41a20ee4abdf8b7036c4b937a905be5bf605560b678  U1-native-ui-20261110.1-runtime.zip
-b61ba21ae9b83b6cbaf7e50c6235d876b35627a118abf1583e6e4e90f8183242  U1-native-ui-20261110.1-source-overlay.zip
-698c506e1e6ecf082e7a1fcb1b2501a4e6be6dcd6655dffba70035ad02eac0dd  U1_233_2.1.0-233-dev.3-ui.2-verification.zip
+297401a8cce1191859241b95bed27518f3492a873b900e473f9121ca18648020  U1_233_2.1.0-233-dev.3-ui.3_upgrade.bin
+317956572c41d55dd5fedb05c0c41b70560edec7add9be407bc2c521992fbbd7  U1-native-ui-20261110.3-runtime.zip
+3712cf4124d8265c56158b1cdab7f24332d8ebf0610b66a8c75f292791e200fb  U1_233_2.1.0-233-dev.3-ui.3-verification.zip
 ```
 
-## 构建与验证范围
+## 版本与来源
 
-- ARM64 主界面、启动程序和守护程序已编译；运行包清单包含 1,082 个文件、484 个 XML 布局、35 个中文字体文件。
-- 17 项安装、集成及来源验证测试与 19 项设备服务测试通过，共 36 项。
-- 最终 `.bin` 的 12 类独立完整性检查通过，包括 UPFILE、RKFW、RKAF 校验、硬件标识、分区映射、版本和内嵌包校验。
-- 包头版本与系统内 `/etc/FULLVERSION` 均为 `2.1.0-233-dev.3-ui.2`。
-- 根文件系统为 247,123,968 字节；每个 system 分区容量 314,572,800 字节，剩余 67,448,832 字节。
-- MCU 与 10 项非 rootfs 分区载荷保持原样。13,158 个未改路径的内容、UID/GID、权限与时间戳保持一致；221 组硬链接及 493 个别名保留。
+| 项目 | 固定值 |
+| --- | --- |
+| 固件版本 | `2.1.0-233-dev.3-ui.3` |
+| 运行包标识 | `233-native-ui-20261110.3` |
+| 运行包安装版本 | `1.2.0-233.20261110.3` |
+| HelixScreen 基线 | `cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1`，原有 5 个补丁保持不变 |
+| multiACE | 原有 `1.27b-233.20261109` managed 包及固定 provider 提交 |
+| 整包输入 | 原始 rsyncfix 基线，依次应用 `233-dev.2-perms.1` 与当前 `233-native-ui` overlay |
 
-验证 ZIP 中保留独立固件验证报告、完整 rootfs 语义审计和辅助脚本。归档内的 GitHub 上传状态记录生成于源码推送之前，后续提交状态以本分支的 Git 历史为准。
+构建输入指纹：`88a9bf9a9c7636c6b26357360cb1ad6e1950deba22c9d7b1180740bd5702d1dc`。
 
-## 已知限制
+运行 ZIP 内 `helixscreen-233-native-ui-20261110.3.tar.gz` 为 33,166,250 字节，SHA-256 `fd7293c7caf79cacc5ea41704c8dad5f3146ff11cc383dedb4a6aadd684b9241`。当前源码 manifest 已记录这个实际分发包的 pin；运行归档与派生文件清单仍通过下载/导入提供，不作为 Git 大文件提交。
 
-本构建尚未刷入真实 U1，未完成实际启动、屏幕显示、触摸、运动、加热、风扇或 ACE 进退料验收。模拟环境的 socket 交互验证受到环境权限限制。
+## 验证结果
 
-原生导航仍为左侧五项，预览中的底部四项导航尚未完全迁移。本次首页默认布局包含四喷头、打印速度、热床及打印状态；外置料卷页面隐藏余量，ACE 页面保留余量信息。
+| 检查 | 结果 |
+| --- | --- |
+| 源码集成与服务回归 | 37 + 39 = 76 项通过 |
+| 旧故障复现及新 → 旧 → 新配置加载 | 10 步按预期通过；实际镜像提取文件再次复测通过 |
+| ARM64 重编 | 清理编译产物后重编主程序、启动程序和守护程序成功 |
+| 字体和布局 | 35 个字体重建；484 个 XML 布局校验通过 |
+| 运行包 | 1,080 个文件，逐文件哈希、架构、权限和构建指纹通过 |
+| 整机包 | UPFILE 校验和/分区 MD5、RKFW MD5、RKAF CRC 通过；设备服务实际读取验证通过 |
+| rootfs | 13,187 个路径、10,278 个普通文件内容及元数据核对通过；221 组硬链接、493 个别名保留 |
+| 未更改组件 | MCU、硬件标识、分区映射及 10 个非 rootfs 分区与基线一致 |
 
-## 运行包来源与导入
+rootfs 为 247,140,352 字节，每系统槽容量 314,572,800 字节。其 SHA-256 为 `e8cac86d41226b572fd8aee4b63f6dcea3064803a9cbfad2887b4ee686e61260`。本次工具与构建记录见验证 ZIP；通用 Docker 构建入口的权限检查保持原样。
 
-源码接入基于 `446599/snapfxxker-os` 的 `e901b4af2ca10c4e85fb6ebc6d687be983de937e`。源补丁和构建输入指纹为：
+回退验证使用固定固件中的真实启动和配置加载代码，保留同一模拟持久 `/oem`，由无动作替身替代硬件调用。它证明本问题涉及的加载兼容性。**本轮没有连接、重启或刷写打印机；实际设备启动、显示触摸和硬件动作尚未验收。**
 
-```text
-ec25d9810f80eb0e3c1c5ea5ea94d659cf72c9d1559e19b7116cf63fda9d17df
-```
+## 导入对应运行包
 
-运行 ZIP 内的 `helixscreen-233-native-ui-20261110.1.tar.gz` 为 33,163,101 字节，SHA-256：
-
-```text
-7fc01b1c52b17d51002a9e82ac4035d99a733df6fb4a82edde5ecc09f5c25fb1
-```
-
-源码仓库中的初始运行包 pin 保持为空。下载并解压运行 ZIP，使 `.tar.gz` 与 `.tar.gz.manifest.json` 保持相邻，然后在对应源码检出目录导入：
+解压运行 ZIP，保持 `.tar.gz` 与 `.tar.gz.manifest.json` 相邻，在包含本次修复的源码 checkout 中执行：
 
 ```sh
-python3 scripts/native-ui/pin_runtime.py \
-  --runtime /实际路径/helixscreen-233-native-ui-20261110.1.tar.gz
+python3 scripts/native-ui/pin_runtime.py --runtime /path/to/helixscreen-233-native-ui-20261110.3.tar.gz
 python3 scripts/native-ui/validate.py
+./build-233.sh --plan
 ```
 
-后续构建步骤、工具链与依赖来源见 [原生 UI 构建说明](native-ui.md)。本次完整固件使用标准 SquashFS pseudo-file 导出和重建保留数字文件归属及元数据，再使用仓库封装工具生成升级包；所用辅助脚本在验证 ZIP 中。
+详细修复见 [槽位回退记录](native-ui-slot-rollback-20261110.md) 和 [原三项修复记录](native-ui-review-fixes-20261110.md)；源码重建与整机打包步骤见 [构建说明](native-ui.md)。
