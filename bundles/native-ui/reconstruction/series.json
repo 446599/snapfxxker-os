@@ -122,6 +122,12 @@
       "sha256": "6d687afda4bb4706ab542dbac295ae186ba34610317d193bed9a9fc79187acca",
       "component": "Material overview CJK row clipping correction",
       "verification": "Native geometry exposed 6px label clipping; corrected row heights/gaps preserve242px body,44px actions,80px cards. XML parse and whitespace passed; recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0020-overlay-header-fit.patch",
+      "sha256": "e629cdc8da8084267298f817f2eaa912ad7e11106d17eeeda78f063125cfa44e",
+      "component": "44px overlay header and full touch-target fit",
+      "verification": "Native geometry found56px inherited header; XML now44px with no1px content clip. XML parse and whitespace pass; affected page recapture pending."
     }
   ],
   "validation": {
