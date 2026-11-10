@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "status": "reconstruction-in-progress",
+  "baseline_repository_commit": "49b8b2205171820f81845751d7f1927a4ec5f7f1",
+  "baseline_manifest": {
+    "path": "bundles/native-ui/manifest.json",
+    "sha256": "3c5591e20fce2ca0dfefc6a8f56d7a7b18738b44e88983ec805f8e2f379245b8"
+  },
+  "historical_ui5_checkpoint": "171ec32ec623414c9929ac0359f4d475964e68ba",
+  "byte_identical_original_recovery": false,
+  "patches": [],
+  "validation": {
+    "native_build": "pending",
+    "visual_similarity_percent": null,
+    "hardware_tested": false
+  }
+}
