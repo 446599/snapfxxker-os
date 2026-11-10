@@ -1,10 +1,10 @@
 {
   "name": "233固件",
   "slug": "233-firmware",
-  "version": "2.1.0-233-dev.2-perms.1",
+  "version": "2.1.0-233-dev.3-ui.2",
   "target": "Snapmaker U1",
-  "status": "deployed-boot-verified",
-  "build_profile": "rsyncfix-overlay",
+  "status": "native-ui-source-integration-draft",
+  "build_profile": "rsyncfix-perms1-native-ui-overlay",
   "output_template": "firmware/U1_233_{version}_upgrade.bin",
   "base_firmware": {
     "version": "2.1.0-233-dev.1-rsyncfix.1",
@@ -31,6 +31,13 @@
       "url": "https://github.com/paxx12/screen-apps.git",
       "path": "deps/screen-apps",
       "commit": "4a81b50d9b6ef7a2c253b45dd00fe6f732c9d203"
+    },
+    "helixscreen": {
+      "url": "https://github.com/prestonbrown/helixscreen.git",
+      "commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+      "license": "GPL-3.0-or-later",
+      "source_manifest": "bundles/native-ui/manifest.json",
+      "integration_owner": "233 firmware overlay and source patch series"
     }
   },
   "managed_provider_pin": {
@@ -42,6 +49,15 @@
   },
   "initialized_at": "2026-11-06T14:58:45.401524+08:00",
   "validation": {
+    "native_arm64_rebuilt": false,
+    "firmware_built": false,
+    "firmware_flashed": false,
+    "published": false,
+    "boot_verified": false,
+    "scope": "Initial native source integration. Current ARM64 runtime must be rebuilt in CI, imported and pinned before firmware packaging. No physical deployment for this revision."
+  },
+  "previous_validation": {
+    "version": "2.1.0-233-dev.2-perms.1",
     "firmware_built": true,
     "firmware_flashed": true,
     "published": false,

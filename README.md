@@ -2,7 +2,9 @@
 
 面向 **Snapmaker U1 + Anycubic ACE** 的集成固件工程，以 PAXX Extended Firmware 为底座，集成 multiACE 的 ACE 控制、耗材管理与 Web 界面。
 
-当前开发版本：`2.1.0-233-dev.2-perms.1`。此修订已部署并启动验证，Klipper 和 ACE 显示 ready，运行模块与数据核对一致；本次未进行新的运动或加热测试，也未发布 Release。上一版 `2.1.0-233-dev.2` 的现场目录权限已修复。构建基线为现场已安装的 `2.1.0-233-dev.1-rsyncfix.1`。
+当前开发版本：`2.1.0-233-dev.3-ui.2`，处于**首批原生 UI 源码集成**阶段。黄白界面由 233 固件自己的源码补丁、启动 overlay 和构建入口管理；本修订尚未部署到打印机，也未发布 Release。新的 ARM64 运行包必须从当前补丁重新构建、通过校验并导入，才能继续制作固件包；仓库不携带上一版 UI 二进制冒充本次构建。
+
+已经部署并启动验证的上一版是 `2.1.0-233-dev.2-perms.1`。其 Klipper、ACE 启动与数据核对记录保留在 [233-firmware.json](233-firmware.json) 的 `previous_validation`；这些记录不作为本次 UI 修订的实机验证。构建仍使用原来的 rsyncfix 基线和已验证的 multiACE 包。
 
 ## 源码基线
 
@@ -11,9 +13,10 @@
 | PAXX 扩展固件 | [SnapmakerU1-Extended-Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) | develop / `bb1fd3705ec9608d71122462b07556613dbbbb1f` |
 | multiACE | [decay71/multiACE](https://github.com/decay71/multiACE) | v1.27b / `a1a7b91b1fd297c1486a13ea22c61e01499a196d` |
 | screen-apps | [paxx12/screen-apps](https://github.com/paxx12/screen-apps) | PAXX 指定的 `4a81b50d9b6ef7a2c253b45dd00fe6f732c9d203` |
+| 原生屏幕引擎 | [HelixScreen](https://github.com/prestonbrown/helixscreen) | `cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1` + [233 源码补丁清单](bundles/native-ui/manifest.json) |
 | 系统基线 | 233 现场 rsyncfix 包 | `2.1.0-233-dev.1-rsyncfix.1`；原厂上游为 `2.1.0.157`，校验和见 [233-firmware.json](233-firmware.json) |
 
-主仓库和 multiACE 工作分支均为 `codex/233-firmware`。主仓库的 `upstream` 指向 PAXX，目前未设置 233 自己的发布远端。
+233 集成仓库为 [446599/snapfxxker-os](https://github.com/446599/snapfxxker-os)。本批变更在功能分支中审查；不向 HelixScreen 上游写入代码，也不更改 multiACE 的固定版本与现有映射配置。
 
 multiACE 上游 main 在拉取时为 `1.50-pre`，其代码和历史已拉取并保留在 `providers/multiACE` 的 `origin/main`。初始集成锁定 PAXX 当前使用的 v1.27b；升级预发布版本需要单独评估接口、配置与 managed 包兼容性。
 
@@ -24,6 +27,9 @@ multiACE 上游 main 在拉取时为 `1.50-pre`，其代码和历史已拉取并
 ├── 233-firmware.json        项目名称、开发版本、上游提交与包校验和
 ├── build-233.sh             233 命名的构建入口
 ├── overlays/               PAXX 基础功能及已有 multiACE 集成
+├── overlays/233-native-ui/  233 原生界面启动、持久化设置和设备服务
+├── bundles/native-ui/      固定源码、文本补丁、工具链及许可清单
+├── scripts/native-ui/      还原、交叉编译、导入和运行包校验
 ├── providers/multiACE/     固定版本的 multiACE 源码子模块
 ├── deps/screen-apps/       PAXX 固定的屏幕应用子模块
 ├── docs/233/               233 的集成计划与初始化记录
@@ -44,21 +50,30 @@ git submodule update --init --recursive
 ./build-233.sh --plan
 ```
 
-以后实际构建使用：
+先使用 [233 Native UI 工作流](.github/workflows/native_ui.yaml) 为当前提交重建 ARM64 运行包，下载通过校验的 Actions artifact。将归档及相邻的 `.manifest.json` 放在同一目录，再导入：
+
+```sh
+python3 scripts/native-ui/pin_runtime.py --runtime /path/to/helixscreen-233-native-ui.tar.gz
+python3 scripts/native-ui/validate.py
+```
+
+源码和构建规则的指纹必须与本地 checkout 相同。未导入、来源不匹配或仍是旧版运行包时，固件入口会退出并提示重新构建。完整步骤与本地构建命令见 [原生 UI 构建说明](docs/233/native-ui.md)。
+
+完成导入后，实际固件构建使用：
 
 ```sh
 ./build-233.sh
 ```
 
-该入口使用已校验的现场 rsyncfix 基线和本地离线 multiACE 快照构建 `firmware/U1_233_2.1.0-233-dev.2-perms.1_upgrade.bin`。具体环境和安装边界见下文；旧版 PAXX 上游构建流程可见 [README.upstream.md](README.upstream.md)。
+该入口依次应用 `overlays/233-dev.2-perms.1` 和 `overlays/233-native-ui`，使用已校验的现场 rsyncfix 基线、本地离线 multiACE 快照及匹配当前源码的 ARM64 UI 包，输出 `firmware/U1_233_2.1.0-233-dev.3-ui.2_upgrade.bin`。专用 CI 只构建和校验原生运行包，不自动制作整包固件、不发布 Release、不刷机。
 
 ## 来源与许可
 
-PAXX 和 multiACE 的版权、来源与 GPL-3.0 许可均保留。233 是这个派生集成工程的名称；各组件的许可证与作者说明继续适用。参阅 [LICENSE](LICENSE)、[multiACE LICENSE](providers/multiACE/LICENSE) 及 [PAXX 原始说明](README.upstream.md)。
+PAXX、multiACE 和 HelixScreen 的版权、来源与 GPL 许可均保留。233 是这个派生集成工程的名称；各组件的许可证与作者说明继续适用。参阅 [LICENSE](LICENSE)、[multiACE LICENSE](providers/multiACE/LICENSE)、[原生 UI 第三方材料](bundles/native-ui/licenses/README.md) 及 [PAXX 原始说明](README.upstream.md)。分发二进制时，需要一并提供对应源码、补丁、构建资料和相应许可要求的材料。
 
-### 233-dev.2-perms.1 离线集成构建
+### 已验证的 233-dev.2-perms.1 基础 overlay
 
-`./build-233.sh` 以已安装的 `2.1.0-233-dev.1-rsyncfix.1` 包为输入，校验 SHA-256 后仅覆盖系统镜像中经过审查的离线 multiACE 包、版本及安装脚本；不会下载上游 multiACE，也不会读取或修改 `providers/multiACE` 的未提交工作。默认输入文件为 `firmware/U1_233_2.1.0-233-dev.1-rsyncfix.1_upgrade.bin`；可使用 `FW233_BASE`、`FW233_OUTPUT` 指定路径。`./build-233.sh --plan` 显示构建计划。
+基础 overlay 以已安装的 `2.1.0-233-dev.1-rsyncfix.1` 包为输入，保留系统镜像中经过审查的离线 multiACE 包、版本及安装脚本；不会下载上游 multiACE，也不会读取或修改 `providers/multiACE` 的未提交工作。当前构建在它之后应用原生 UI overlay。默认输入文件为 `firmware/U1_233_2.1.0-233-dev.1-rsyncfix.1_upgrade.bin`；可使用 `FW233_BASE`、`FW233_OUTPUT` 指定路径。`./build-233.sh --plan` 显示构建顺序。
 
 构建需要 Docker 和 `codex-233-overlay-tools:20261109` 镜像，构建定义见 `bundles/233-dev.2/Dockerfile`。已验证工具镜像 ID `sha256:b05ed54dd0b006fef266849fc3d11bfa73cfeb9db6f315127e0d2361d5f569cd`；容器内 Linux 文件系统展开 rootfs 并执行原有文件所有权检查。离线应用包的逐文件清单和来源见 `bundles/233-dev.2/manifest.json`；它是本次审查过的快照，后续 provider 修改不会自动进入固件。
 

@@ -83,7 +83,7 @@ for overlay; do
   if [[ -d "$overlay/pre-scripts/" ]]; then
     for scriptfile in "$overlay/pre-scripts/"*.sh; do
       echo "[+] Running pre-script: $(basename "$scriptfile")"
-      ./"$scriptfile" "$ROOTFS_DIR"
+      "$scriptfile" "$ROOTFS_DIR"
     done
   fi
 
@@ -105,7 +105,7 @@ for overlay; do
   if [[ -d "$overlay/scripts/" ]]; then
     for scriptfile in "$overlay/scripts/"*.sh; do
       echo "[+] Running script: $(basename "$scriptfile")"
-      ./"$scriptfile" "$ROOTFS_DIR"
+      "$scriptfile" "$ROOTFS_DIR"
     done
   fi
 done
@@ -130,7 +130,11 @@ echo ">> Replace rootfs.img in firmware..."
 mv -v "$BUILD_DIR/rk-unpacked"/{rootfs-v2,rootfs}.img
 
 echo ">> Update version..."
-git rev-parse --short HEAD >> "$BUILD_DIR/UPFILE_VERSION"
+if [[ -n "${FIRMWARE_VERSION_OVERRIDE:-}" ]]; then
+  printf '%s\n' "$FIRMWARE_VERSION_OVERRIDE" > "$BUILD_DIR/UPFILE_VERSION"
+else
+  git rev-parse --short HEAD >> "$BUILD_DIR/UPFILE_VERSION"
+fi
 
 echo ">> Repacking firmware..."
 "$ROOT_DIR/scripts/helpers/pack_firmware.sh" "$BUILD_DIR" "$OUT_FIRMWARE"

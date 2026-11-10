@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: 233 Native UI
+
+on:
+  pull_request:
+    paths:
+      - 'bundles/native-ui/**'
+      - 'scripts/native-ui/**'
+      - 'overlays/233-native-ui/**'
+      - 'tests/native-ui/**'
+      - '.github/workflows/native_ui.yaml'
+      - 'build-233.sh'
+      - '233-firmware.json'
+      - 'scripts/create_firmware.sh'
+  push:
+    branches: [main]
+    paths:
+      - 'bundles/native-ui/**'
+      - 'scripts/native-ui/**'
+      - 'overlays/233-native-ui/**'
+      - 'tests/native-ui/**'
+      - '.github/workflows/native_ui.yaml'
+      - 'build-233.sh'
+      - '233-firmware.json'
+      - 'scripts/create_firmware.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ui-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arm64-runtime:
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      U1_DEB_CACHE: /tmp/233-native-ui-debs
+    steps:
+      - name: Install host tools for the recorded cross toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential crossbuild-essential-arm64 git ca-certificates \
+            pkg-config cmake python3 python3-pil nodejs npm ccache file \
+            autoconf automake libtool flex bison patch xz-utils
+
+      - name: Checkout source integration
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Restore checksum-verified Debian downloads
+        uses: actions/cache@v4
+        with:
+          path: /tmp/233-native-ui-debs
+          key: native-ui-cross-debs-${{ hashFiles('bundles/native-ui/cross-packages.json') }}
+
+      - name: Validate source pins and retained multiACE integration
+        run: python3 scripts/native-ui/validate.py --source-only
+
+      - name: Rebuild patched native source for ARM64
+        run: |
+          set -euo pipefail
+          scripts/native-ui/build.sh "$RUNNER_TEMP/native-ui-build" \
+            2>&1 | tee "$RUNNER_TEMP/native-ui-build.log"
+
+      - name: Pin and verify this build in the disposable checkout
+        run: |
+          python3 scripts/native-ui/pin_runtime.py \
+            --runtime "$RUNNER_TEMP/native-ui-build/helixscreen-233-native-ui.tar.gz"
+          python3 scripts/native-ui/validate.py
+          python3 -m unittest discover -s tests/native-ui -v
+          python3 -m unittest discover \
+            -s overlays/233-native-ui/root/usr/local/lib/u1-device-service -p 'test_*.py' -v
+
+      - name: Upload validated ARM64 runtime and build inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: 233-native-ui-arm64-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/native-ui-build/helixscreen-233-native-ui.tar.gz
+            ${{ runner.temp }}/native-ui-build/helixscreen-233-native-ui.tar.gz.manifest.json
+
+      - name: Upload build log and source provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 233-native-ui-build-log-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/native-ui-build.log
+            ${{ runner.temp }}/native-ui-build/source/source-provenance.json
+            ${{ runner.temp }}/native-ui-build/build-start.json
+
+      - name: Record validation scope
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## 233 native UI build
+          The pinned native source and current patches were rebuilt for ARM64.
+          The runtime archive, source/build fingerprint, XML assets, CJK fonts,
+          first-boot behavior and companion service checks passed.
+          This workflow creates an Actions artifact only. It does not publish a
+          release, build the complete firmware image, flash a printer or verify
+          real motion, heating, fan control or ACE hardware behavior.
+          EOF

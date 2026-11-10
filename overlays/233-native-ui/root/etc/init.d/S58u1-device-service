@@ -1,0 +1,32 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+NAME=u1-device-service
+PIDFILE=/var/run/u1-device-service.pid
+LAUNCHER=/usr/local/lib/u1-device-service/launch.py
+CFG=/oem/printer_data/config/extended/extended2.cfg
+export PYTHONDONTWRITEBYTECODE=1
+
+start() {
+    selected=$(/usr/local/bin/extended-config.py get "$CFG" components gui snapmaker 2>/dev/null)
+    [ "$selected" = helixscreen ] || return 0
+    if [ -s "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+        echo "$NAME already running"
+        return 0
+    fi
+    rm -f "$PIDFILE"
+    start-stop-daemon -S -b -m -p "$PIDFILE" -x /usr/bin/python3 -- "$LAUNCHER"
+}
+
+stop() {
+    if [ -s "$PIDFILE" ]; then
+        start-stop-daemon -K -p "$PIDFILE" -s TERM || return $?
+        rm -f "$PIDFILE"
+    fi
+}
+
+case "${1:-}" in
+    start) start ;;
+    stop) stop ;;
+    restart|reload) stop && start ;;
+    *) echo "Usage: $0 {start|stop|restart}" >&2; exit 2 ;;
+esac

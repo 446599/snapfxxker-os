@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "id": "233-native-ui-20261110.1",
+  "firmware_version": "2.1.0-233-dev.3-ui.2",
+  "source": {
+    "repository": "https://github.com/prestonbrown/helixscreen.git",
+    "commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+    "patches": [
+      {
+        "path": "bundles/native-ui/patches/0001-native-ui-v2.patch",
+        "sha256": "57aa8b67378a0cd2612fa4f57fc0115544bf107b4d845022931bf43b04d8640d"
+      },
+      {
+        "path": "bundles/native-ui/patches/0002-native-ui-v3.patch",
+        "sha256": "d2f55a24f1ad1e48060b959706a9150b57fc0928881ce98f73a9177aa8b0a80a"
+      },
+      {
+        "path": "bundles/native-ui/patches/0003-advanced-yellow-white.patch",
+        "sha256": "5b88ee18ae7e0df846a370763c4d7b61643ec61ce66768484286feca42a9c345"
+      },
+      {
+        "path": "bundles/native-ui/patches/0004-confirmed-controls.patch",
+        "sha256": "81a767561743ef061598d3e2fd0a8dc0d12b67420377d34d6cc913e141c417cd"
+      }
+    ],
+    "submodules": [
+      {
+        "path": "lib/cpp-terminal",
+        "commit": "48ae2f284084850901c45b6c10a9d68949c1b272"
+      },
+      {
+        "path": "lib/glm",
+        "commit": "a583c59e1616a628b18195869767ea4d6faca5f4"
+      },
+      {
+        "path": "lib/helix-xml",
+        "commit": "08c7b07612e03de3c2e67e10a8a3ccd44e21de03"
+      },
+      {
+        "path": "lib/libhv",
+        "commit": "71770e04becaa149e0ef8ffc4d3900c5466ddddb"
+      },
+      {
+        "path": "lib/libjpeg-turbo",
+        "commit": "c85e6b905bf237038faa936dab160ebfc5da0344"
+      },
+      {
+        "path": "lib/libnl",
+        "commit": "bdf83151326e365f137fe0e36dc9b1b7aeb1cf33"
+      },
+      {
+        "path": "lib/linenoise",
+        "commit": "452e3793858a15cc006bb3aa3ea06378eb98c5b5"
+      },
+      {
+        "path": "lib/lua",
+        "commit": "312b9efaa1061c2c4cad08554dbc1351c3270eef"
+      },
+      {
+        "path": "lib/lv_i18n",
+        "commit": "f6ac92ee2c31b57032fc6addc9aa15de2fee4568"
+      },
+      {
+        "path": "lib/lv_markdown",
+        "commit": "77ec2c0c91614a50575a44c39d8db52c057ae681"
+      },
+      {
+        "path": "lib/lvgl",
+        "commit": "80ca777e37a2b176770726a02e07a6fb79ef0b39"
+      },
+      {
+        "path": "lib/sdl2",
+        "commit": "5d249570393f7a37e037abf22cd6012a4cc56a71"
+      },
+      {
+        "path": "lib/spdlog",
+        "commit": "14ab43ec0b9df6cf793c75785ec5f70b65f2f965"
+      },
+      {
+        "path": "lib/wpa_supplicant",
+        "commit": "b5e326d24298ac52fba3c4e5ba5ae79780c78dc9"
+      }
+    ],
+    "v3_original_patch_sha256": "3b572d2a15b7d3c5a0919e3e66c655266407b436a7b938f41bd2d486affb60d0",
+    "v3_patch_note": "Only the 18 HelixScreen sections are included, rebased from source/helixscreen/ to the repository root. Companion source is tracked separately.",
+    "font_sources": {
+      "assets/fonts/NotoSansCJKsc-Regular.otf": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+      "assets/fonts/NotoSansCJKjp-Regular.otf": "68a3fc98800b2a27b371f2fb79991daf3633bd89309d4ffaa6946fd587f375b5"
+    },
+    "font_converter": "lv_font_conv@1.5.3",
+    "third_party_manifest": {
+      "path": "bundles/native-ui/licenses/native-third-party-manifest.json",
+      "sha256": "48f0ab0ed2ba23fce96ce7e178b09f1ba141e0be2741d22a80525e890a572a6b"
+    }
+  },
+  "runtime": {
+    "path": "overlays/233-native-ui/root/usr/local/share/233-firmware/helixscreen-233-native-ui-20261110.1.tar.gz",
+    "sha256": null,
+    "bytes": null,
+    "root_directory": "helixscreen",
+    "package_version": "1.2.0-233.20261110.1",
+    "binary_sha256": null,
+    "build_mode": "fork/developer; ENABLE_REMOTE_CONTROL=yes; ENABLE_DIAGNOSTIC_UPLOADS=no; ENABLE_MOCKS=yes",
+    "source_rebuild": "Fixed source and font inputs; binary build timestamps/toolchain identity can change the binary hash.",
+    "file_manifest": "bundles/native-ui/runtime-files.json",
+    "build_input_fingerprint": null
+  },
+  "device_service": {
+    "path": "overlays/233-native-ui/root/usr/local/lib/u1-device-service",
+    "sha256": "63da761f7db22c706d7bda90f3e57fa9c6a8df8bc67cee83ede6ddfffef6cc32",
+    "listen": "127.0.0.1:7136",
+    "upstream": "http://127.0.0.1/firmware-config/api"
+  },
+  "ui": {
+    "theme_name": "U1 Yellow White",
+    "theme_id": "u1-warm",
+    "language": "zh",
+    "dark_mode": false,
+    "settings_label": "高级设置"
+  },
+  "validation": {
+    "hardware_deployed": false,
+    "display_touch_verified": false,
+    "live_settings_apply_verified": false,
+    "complete_firmware_built": false,
+    "runtime_packaged": false,
+    "source_patch_roundtrip_verified": true
+  }
+}

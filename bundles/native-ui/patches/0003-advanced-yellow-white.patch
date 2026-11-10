@@ -1,0 +1,291 @@
+diff --git a/assets/config/themes/defaults/u1-warm.json b/assets/config/themes/defaults/u1-warm.json
+--- a/assets/config/themes/defaults/u1-warm.json
++++ b/assets/config/themes/defaults/u1-warm.json
+@@ -1,40 +1,40 @@
+ {
+-  "name": "U1 Clean",
++  "name": "U1 Yellow & White",
+   "dark": {
+-    "screen_bg": "#141C18",
+-    "overlay_bg": "#1C2620",
+-    "card_bg": "#202B24",
+-    "elevated_bg": "#29372E",
+-    "border": "#3A4B40",
+-    "text": "#EEF4F0",
+-    "text_muted": "#AABAAE",
+-    "text_subtle": "#83958A",
+-    "primary": "#8CC5A4",
+-    "secondary": "#819789",
+-    "tertiary": "#83ACA9",
+-    "info": "#8EB4C0",
+-    "success": "#8CC5A4",
+-    "warning": "#D0B177",
+-    "danger": "#DB8F8F",
+-    "focus": "#8CC5A4"
++    "screen_bg": "#17191D",
++    "overlay_bg": "#202328",
++    "card_bg": "#292D32",
++    "elevated_bg": "#343940",
++    "border": "#454B53",
++    "text": "#F7F8FA",
++    "text_muted": "#B8BEC6",
++    "text_subtle": "#969EA8",
++    "primary": "#F2C230",
++    "secondary": "#9DA3AC",
++    "tertiary": "#C99D1E",
++    "info": "#8EB9DE",
++    "success": "#8FC7A0",
++    "warning": "#EBB655",
++    "danger": "#F28E8E",
++    "focus": "#F2C230"
+   },
+   "light": {
+-    "screen_bg": "#FAFCFB",
+-    "overlay_bg": "#F1F4F2",
++    "screen_bg": "#FAFAF8",
++    "overlay_bg": "#F6F6F3",
+     "card_bg": "#FFFFFF",
+-    "elevated_bg": "#EEF3F0",
+-    "border": "#D9E2DC",
+-    "text": "#202A25",
+-    "text_muted": "#68756E",
+-    "text_subtle": "#8E9992",
+-    "primary": "#246F52",
+-    "secondary": "#62796B",
+-    "tertiary": "#6D8C7A",
+-    "info": "#3A7881",
+-    "success": "#246F52",
+-    "warning": "#AC751D",
+-    "danger": "#B44E4E",
+-    "focus": "#246F52"
++    "elevated_bg": "#F2F3F1",
++    "border": "#E0E2DD",
++    "text": "#24272B",
++    "text_muted": "#656B73",
++    "text_subtle": "#7A8189",
++    "primary": "#F2C230",
++    "secondary": "#6C747F",
++    "tertiary": "#B58A08",
++    "info": "#2B6C98",
++    "success": "#287A4B",
++    "warning": "#986400",
++    "danger": "#B94343",
++    "focus": "#8C6C00"
+   },
+   "border_radius_size": 4,
+   "border_width": 1,
+diff --git a/src/ui/settings/ui_firmware_settings.cpp b/src/ui/settings/ui_firmware_settings.cpp
+--- a/src/ui/settings/ui_firmware_settings.cpp
++++ b/src/ui/settings/ui_firmware_settings.cpp
+@@ -47,7 +47,7 @@
+         UI_MANAGED_SUBJECT_INT(selected_option_, -1, "firmware_selected_option", subjects_);
+         UI_MANAGED_SUBJECT_INT(dirty_, 0, "firmware_dirty", subjects_);
+         UI_MANAGED_SUBJECT_INT(has_output_, 0, "firmware_has_output", subjects_);
+-        UI_MANAGED_SUBJECT_STRING(title_, title_buf_, "PAXX 设置", "firmware_title", subjects_);
++        UI_MANAGED_SUBJECT_STRING(title_, title_buf_, "高级设置", "firmware_title", subjects_);
+         UI_MANAGED_SUBJECT_STRING(status_, status_buf_, "正在读取设置", "firmware_status", subjects_);
+         UI_MANAGED_SUBJECT_STRING(description_, description_buf_, "", "firmware_description", subjects_);
+         UI_MANAGED_SUBJECT_STRING(current_, current_buf_, "", "firmware_current", subjects_);
+@@ -105,7 +105,7 @@
+     if (!show(lv_screen_active())) return;
+     if (applying_) return;
+     lv_subject_set_int(&busy_, 0);
+-    set_page(0, "PAXX 设置");
++    set_page(0, "高级设置");
+     refresh();
+ }
+ 
+@@ -169,7 +169,7 @@
+         lv_subject_copy_string(&status_, after_apply
+             ? (mock ? "模拟已应用 · 已刷新全部设置" : "已生效 · 已刷新全部设备设置")
+             : (mock ? "模拟预览 · 未连接打印机" : "按用途分组 · 读取自当前固件"));
+-        set_page(0, "PAXX 设置");
++        set_page(0, "高级设置");
+         if (!retained_group.empty())
+             for (size_t i = 0; i < groups_.size(); ++i)
+                 if (safe_string(groups_[i], "id") == retained_group) {
+@@ -346,7 +346,7 @@
+     }
+     const int page = lv_subject_get_int(&page_);
+     if (page == 0) nav::go_back();
+-    else if (page == 1 || page == 4) set_page(0, "PAXX 设置");
++    else if (page == 1 || page == 4) set_page(0, "高级设置");
+     else if (page == 3 && setting_index_ >= 0)
+         set_page(2, safe_string(settings_[setting_index_], "label"));
+     else choose_group(group_index_);
+diff --git a/ui_xml/ams_edit_overlay.xml b/ui_xml/ams_edit_overlay.xml
+--- a/ui_xml/ams_edit_overlay.xml
++++ b/ui_xml/ams_edit_overlay.xml
+@@ -446,8 +446,8 @@
+             <bind_flag_if_eq subject="ams_edit_add_spoolman_visible" flag="hidden" ref_value="0"/>
+             <style name="styles.press_wash" selector="pressed"/>
+             <event_cb trigger="clicked" callback="ams_edit_add_to_spoolman_cb"/>
+-            <icon src="plus" size="xs" variant="primary" clickable="false" event_bubble="true"/>
+-            <text_small text="Add to Spoolman + label" style_text_color="#primary" clickable="false" event_bubble="true"/>
++            <icon src="plus" size="xs" variant="text" clickable="false" event_bubble="true"/>
++            <text_small text="Add to Spoolman + label" style_text_color="#text" clickable="false" event_bubble="true"/>
+           </lv_obj>
+           <lv_obj name="btn_reset_tag"
+                   width="content" height="content" style_pad_hor="#space_xs" style_pad_ver="#space_xxs" flex_flow="row"
+@@ -457,8 +457,8 @@
+             <bind_flag_if_eq subject="ams_edit_reset_tag_visible" flag="hidden" ref_value="0"/>
+             <style name="styles.press_wash" selector="pressed"/>
+             <event_cb trigger="clicked" callback="ams_edit_reset_tag_cb"/>
+-            <icon src="undo" size="xs" variant="primary" clickable="false" event_bubble="true"/>
+-            <text_small text="Reset to tag" style_text_color="#primary" clickable="false" event_bubble="true"/>
++            <icon src="undo" size="xs" variant="text" clickable="false" event_bubble="true"/>
++            <text_small text="Reset to tag" style_text_color="#text" clickable="false" event_bubble="true"/>
+           </lv_obj>
+           <lv_obj name="btn_clear_spool"
+                   width="content" height="content" style_pad_hor="#space_xs" style_pad_ver="#space_xxs" flex_flow="row"
+@@ -468,8 +468,8 @@
+             <bind_flag_if_eq subject="ams_edit_clear_visible" flag="hidden" ref_value="0"/>
+             <style name="styles.press_wash" selector="pressed"/>
+             <event_cb trigger="clicked" callback="ams_edit_clear_spool_cb"/>
+-            <icon src="close" size="xs" variant="primary" clickable="false" event_bubble="true"/>
+-            <text_small text="Clear Spool" style_text_color="#primary" clickable="false" event_bubble="true"/>
++            <icon src="close" size="xs" variant="text" clickable="false" event_bubble="true"/>
++            <text_small text="Clear Spool" style_text_color="#text" clickable="false" event_bubble="true"/>
+           </lv_obj>
+         </lv_obj>
+         <lv_obj name="more_section"
+diff --git a/ui_xml/firmware_settings.xml b/ui_xml/firmware_settings.xml
+--- a/ui_xml/firmware_settings.xml
++++ b/ui_xml/firmware_settings.xml
+@@ -11,7 +11,7 @@
+   </consts>
+   <styles>
+     <style name="option_idle" bg_color="#elevated_bg" bg_opa="255" border_width="0"/>
+-    <style name="option_selected" bg_color="#card_bg" bg_opa="255" border_color="#primary" border_width="2"/>
++    <style name="option_selected" bg_color="#primary" bg_opa="38" border_color="#primary" border_width="2"/>
+   </styles>
+   <view name="firmware_settings" extends="overlay_panel" title_subject="firmware_title"
+         title_transform="none" back_button_callback="firmware_back" bg_color="#screen_bg"
+@@ -66,7 +66,7 @@
+               <bind_style_if_not_eq name="option_idle" subject="firmware_selected_option" ref_value="${i}"/>
+               <bind_state_if cond="firmware_busy or not firmware_ready" state="disabled"/>
+               <text_body width="0" flex_grow="1" bind_text="firmware_option_label_${i}" long_mode="wrap" event_bubble="true"/>
+-              <icon src="check" size="sm" variant="primary" event_bubble="true">
++              <icon src="check" size="sm" variant="text" event_bubble="true">
+                 <bind_flag_if_not_eq subject="firmware_selected_option" flag="hidden" ref_value="${i}"/>
+               </icon>
+               <event_cb trigger="clicked" callback="firmware_option_select" user_data="${i}"/>
+diff --git a/ui_xml/head_inventory.xml b/ui_xml/head_inventory.xml
+--- a/ui_xml/head_inventory.xml
++++ b/ui_xml/head_inventory.xml
+@@ -61,7 +61,7 @@
+             <lv_bar name="inventory_gauge_${i}" width="100%" height="#inventory_gauge_h" min_value="0" max_value="100" bind_value="inventory_unit_${i}_fill" style_bg_color="#border" style_bg_opa="100" style_bg_color-indicator="#primary" style_radius="#space_xs" style_radius-indicator="#space_xs" clickable="false" event_bubble="true"/>
+             <text_small name="inventory_percent_${i}" bind_text="inventory_unit_${i}_percent" hidden="true" clickable="false" event_bubble="true"/>
+             <text_small name="inventory_environment_${i}" width="100%" bind_text="inventory_unit_${i}_env" style_text_align="center" long_mode="dots" clickable="false" event_bubble="true"/>
+-            <text_small name="inventory_current_${i}" text="供料中" style_text_color="#primary" clickable="false" event_bubble="true">
++            <text_small name="inventory_current_${i}" text="供料中" style_text_color="#success" clickable="false" event_bubble="true">
+               <bind_flag_if_eq subject="inventory_unit_${i}_current" flag="hidden" ref_value="0"/>
+             </text_small>
+             <text_small name="inventory_candidate_${i}" text="候选" style_text_color="#text_subtle" clickable="false" event_bubble="true">
+diff --git a/ui_xml/navigation_bar.xml b/ui_xml/navigation_bar.xml
+--- a/ui_xml/navigation_bar.xml
++++ b/ui_xml/navigation_bar.xml
+@@ -48,7 +48,9 @@
+   <styles>
+     <style name="nav_icon_with_label" translate_y="#nav_label_icon_offset"/>
+     <style name="nav_label_idle" text_color="#text_muted"/>
+-    <style name="nav_label_active" text_color="#primary"/>
++    <style name="nav_label_active" text_color="#text"/>
++    <style name="nav_button_active" bg_color="#primary" bg_opa="38" radius="#space_sm"/>
++    <style name="nav_button_idle" bg_opa="0"/>
+     <!-- One bar, two axes. Each pair is bound complementarily on ui_is_portrait
+          so exactly one is ever live, and the attributes they carry must NOT
+          also appear inline on the element: an inline width/height/pad is a
+@@ -133,11 +135,13 @@
+     <ui_button name="nav_btn_home"
+                width="100%" height="100%" flex_grow="1" variant="ghost" flex_flow="column"
+                style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0" style_pad_all="0">
++      <bind_style_if name="nav_button_active" cond="active_panel eq 0"/>
++      <bind_style_if name="nav_button_idle" cond="active_panel ne 0"/>
+       <!-- Disabled and hidden during grid edit mode, leaving the bar to the edit buttons -->
+       <bind_state_if_eq subject="home_edit_mode" state="disabled" ref_value="1"/>
+       <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+       <!-- Active icon (accent color) - full opacity/scale when active_panel == 0 -->
+-      <icon name="nav_icon_home_active" src="home" size="#icon_size" variant="primary" floating="true" align="center">
++      <icon name="nav_icon_home_active" src="home" size="#icon_size" variant="text" floating="true" align="center">
+         <style name="nav_icon_fade"/>
+         <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <style name="nav_icon_fade_on" selector="checked"/>
+@@ -163,6 +167,8 @@
+     <ui_button name="nav_btn_controls"
+                width="100%" height="100%" flex_grow="1" variant="ghost" flex_flow="column"
+                style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0" style_pad_all="0">
++      <bind_style_if name="nav_button_active" cond="active_panel eq 2"/>
++      <bind_style_if name="nav_button_idle" cond="active_panel ne 2"/>
+       <!-- Disabled clickability when not enabled (disconnected OR klippy not ready) -->
+       <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+       <!-- Disabled and hidden during grid edit mode, leaving the bar to the edit buttons -->
+@@ -173,7 +179,7 @@
+         <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="0"/>
+         <!-- Active icon (accent) - full opacity/scale when on controls panel -->
+         <icon name="nav_icon_controls_active"
+-              src="fine_tune" size="#icon_size" variant="primary" floating="true" align="center">
++              src="fine_tune" size="#icon_size" variant="text" floating="true" align="center">
+           <style name="nav_icon_fade"/>
+         <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+           <style name="nav_icon_fade_on" selector="checked"/>
+@@ -205,6 +211,8 @@
+     <ui_button name="nav_btn_filament"
+                width="100%" height="100%" flex_grow="1" variant="ghost" flex_flow="column"
+                style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0" style_pad_all="0">
++      <bind_style_if name="nav_button_active" cond="active_panel eq 3"/>
++      <bind_style_if name="nav_button_idle" cond="active_panel ne 3"/>
+       <!-- Disabled clickability when not enabled (disconnected OR klippy not ready) -->
+       <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+       <!-- Disabled and hidden during grid edit mode, leaving the bar to the edit buttons -->
+@@ -215,7 +223,7 @@
+         <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="0"/>
+         <!-- Active icon (accent) - full opacity/scale when on filament panel -->
+         <icon name="nav_icon_filament_active"
+-              src="filament" size="#icon_size" variant="primary" floating="true" align="center">
++              src="filament" size="#icon_size" variant="text" floating="true" align="center">
+           <style name="nav_icon_fade"/>
+         <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+           <style name="nav_icon_fade_on" selector="checked"/>
+@@ -246,11 +254,13 @@
+     <ui_button name="nav_btn_settings"
+                width="100%" height="100%" flex_grow="1" variant="ghost" flex_flow="column"
+                style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0" style_pad_all="0">
++      <bind_style_if name="nav_button_active" cond="active_panel eq 4"/>
++      <bind_style_if name="nav_button_idle" cond="active_panel ne 4"/>
+       <!-- Disabled and hidden during grid edit mode, leaving the bar to the edit buttons -->
+       <bind_state_if_eq subject="home_edit_mode" state="disabled" ref_value="1"/>
+       <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+       <icon name="nav_icon_settings_active"
+-            src="settings" size="#icon_size" variant="primary" floating="true" align="center">
++            src="settings" size="#icon_size" variant="text" floating="true" align="center">
+         <style name="nav_icon_fade"/>
+         <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <style name="nav_icon_fade_on" selector="checked"/>
+@@ -274,11 +284,13 @@
+     <ui_button name="nav_btn_advanced"
+                width="100%" height="100%" flex_grow="1" variant="ghost" flex_flow="column"
+                style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0" style_pad_all="0">
++      <bind_style_if name="nav_button_active" cond="active_panel eq 5"/>
++      <bind_style_if name="nav_button_idle" cond="active_panel ne 5"/>
+       <!-- Disabled and hidden during grid edit mode, leaving the bar to the edit buttons -->
+       <bind_state_if_eq subject="home_edit_mode" state="disabled" ref_value="1"/>
+       <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+       <icon name="nav_icon_advanced_active"
+-            src="dots_vertical" size="#icon_size" variant="primary" floating="true" align="center">
++            src="dots_vertical" size="#icon_size" variant="text" floating="true" align="center">
+         <style name="nav_icon_fade"/>
+         <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <style name="nav_icon_fade_on" selector="checked"/>
+diff --git a/ui_xml/settings_panel.xml b/ui_xml/settings_panel.xml
+--- a/ui_xml/settings_panel.xml
++++ b/ui_xml/settings_panel.xml
+@@ -17,7 +17,7 @@
+     <setting_section_header title="SETTINGS" icon="settings"/>
+     <setting_group name="group_extended_firmware">
+       <bind_flag_if cond="not local_upgrade_available" flag="hidden"/>
+-      <setting_action_row name="row_firmware_settings" label="PAXX 设置" icon="tune"
++      <setting_action_row name="row_firmware_settings" label="高级设置" icon="tune"
+                           callback="on_firmware_settings_clicked"
+                           description="打印、耗材、摄像与远程" description_min_bp="0"/>
+     </setting_group>
