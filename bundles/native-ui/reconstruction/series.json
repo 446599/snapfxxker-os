@@ -8,7 +8,14 @@
   },
   "historical_ui5_checkpoint": "171ec32ec623414c9929ac0359f4d475964e68ba",
   "byte_identical_original_recovery": false,
-  "patches": [],
+  "patches": [
+    {
+      "path": "bundles/native-ui/reconstruction/0001-palette-spacing.patch",
+      "sha256": "4000f1bc274046bc57883ced340ba117323b04f7302c11af3b5656c56bb335de",
+      "component": "Confirmed palette and common spacing",
+      "verification": "XML/JSON parse and whitespace check passed; native build pending"
+    }
+  ],
   "validation": {
     "native_build": "pending",
     "visual_similarity_percent": null,
