@@ -62,6 +62,12 @@
       "sha256": "c1635baf5c53a7ec483aff9448ee1f5814b783485c310dcb3502087d561f0daa",
       "component": "Bed temperature draft and explicit apply action",
       "verification": "XML parse and whitespace check passed; native runtime pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0010-home-task-card.patch",
+      "sha256": "1796fd7f644089a5de4a6a329c1dc57dd3e937c8f6ba7d8888280a7235852cd6",
+      "component": "Home task card reconstructed from UI.5 review",
+      "verification": "Three XML files parse; whitespace check passed. Native render validation pending."
     }
   ],
   "validation": {
