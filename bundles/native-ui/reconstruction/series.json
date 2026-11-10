@@ -38,6 +38,12 @@
       "sha256": "132606e9419461be215e6c583acd56dd1f4291a998dddecd92e8621d18056b0d",
       "component": "Compact fan cards and five-percent adjustments",
       "verification": "XML parse and whitespace check passed; native build and runtime checks pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0006-overlay-height.patch",
+      "sha256": "2750cc99742c5c095e39ac48c77a26dafa4955617a812deff6c901e366f4980a",
+      "component": "Screen-height driven bottom-navigation overlay height",
+      "verification": "Source inspection and whitespace check passed; native runtime pending"
     }
   ],
   "validation": {
