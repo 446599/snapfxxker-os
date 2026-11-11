@@ -1,14 +1,14 @@
 {
-  "version": "1.27b-233.20261111-single.2",
+  "version": "1.27b-233.20261111-single.3",
   "live_snapshot_sha256": "c85cc57352aadd2ab3bbcebfc0863264ce4fd2fa593b8867d414a5fa29296070",
-  "archive_sha256": "811398431b13acc78502c9ede4d8fe105d85408095ea048a528846d5bd9621b9",
+  "archive_sha256": "1345e92477f9a27245b698da56a7f2e2ddce07ba602152805144f8273c08e65f",
   "files": {
     "LICENSE": {
       "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
       "bytes": 35149
     },
     "VERSION": {
-      "sha256": "89fbf5dcbc748793cc9b4963f688d7a96b2fee66ef10eab2414c8b93ae3923ce",
+      "sha256": "0b6c77f1c0e9103996268f9895ff886717e6bbf4705edc03a55de3bd84cc5ba6",
       "bytes": 28
     },
     "config/extended/ace.cfg": {
@@ -32,8 +32,8 @@
       "bytes": 83675
     },
     "klipper/extras/ace.py": {
-      "sha256": "29c0c9fbe9e404cf2c79c1a55f488d8560dbf2ff7f1036895cd59fd82f89b1f3",
-      "bytes": 1262198
+      "sha256": "c4aea9565ccc6041bb24106c6097b8b82762c48d8b086ef4a9f21bd14792787f",
+      "bytes": 1267918
     },
     "klipper/extras/ace_async_uid.py": {
       "sha256": "8e8bd06de21fb2340cb254523cd4338b816d4b79afd7439289567d78258d9bd6",
@@ -76,8 +76,8 @@
       "bytes": 13950
     },
     "klipper/extras/ace_location_hold.py": {
-      "sha256": "fb6c88ecffd4f8ba172f7606e0ad204e879e1400b6da48ff0e8543678534fb4f",
-      "bytes": 3752
+      "sha256": "14486341b8cc2a2272f6fdf5719f9837f177c897d56d4740fe8f811059d9e233",
+      "bytes": 12587
     },
     "klipper/extras/ace_manual_measure.py": {
       "sha256": "639ee58855d0cf772147709042b727b23a061d97d7cca67b1e0c3e34bfad08a7",
@@ -128,8 +128,8 @@
       "bytes": 21471
     },
     "klipper/extras/ace_slot_actions.py": {
-      "sha256": "2bc8fbd2486a7c58a492e61932741352e9ddaf92e85a47066d4a545c368aee4e",
-      "bytes": 35193
+      "sha256": "06a0e8f0ee2a17c9a0edab94101862fe9ea5722a60c926262089b84d8093f6c0",
+      "bytes": 36062
     },
     "klipper/extras/ace_stop_guard.py": {
       "sha256": "281356af197c695fcc4a406e1b8fc58e6e727bf94c04cc17cfb384ece8c77a72",
@@ -144,8 +144,8 @@
       "bytes": 15726
     },
     "klipper/extras/filament_feed_ace.py": {
-      "sha256": "af1c4284f50beade4419f4177915483b00709894a5e2515f5d9c1b018c7f946d",
-      "bytes": 258897
+      "sha256": "6c4ebfb8c1bc7563ac83d46f3db297b41d07ad4d262c2dc9b1c96f570df3dd21",
+      "bytes": 262233
     },
     "klipper/extras/filament_switch_sensor_ace.py": {
       "sha256": "92bf276593c0cb2953de8955868224916458032fcffdb1de0cfe415c4871ddc0",
@@ -180,8 +180,8 @@
       "bytes": 1190
     },
     "web/backend/main.py": {
-      "sha256": "09dd20fc366f8e3353bff2a1a9cfed2722cb7c48cd1facf23f5be9e482b64c4f",
-      "bytes": 236622
+      "sha256": "6dfc2be594507a670e58d14f16ddc72d4469198a64ad803e8fab8d1678578aef",
+      "bytes": 239158
     },
     "web/backend/preflight_core.py": {
       "sha256": "8946826b438501589058444cd7a3af5e67df6d9afef12a8189ff1f6ca739b6b6",
@@ -3452,8 +3452,8 @@
       "bytes": 2573
     },
     "web/frontend/app.js": {
-      "sha256": "f86dbb32554f028d26d9f43bec84ba761795b67ff17a309be3ec786e3c77656a",
-      "bytes": 346981
+      "sha256": "cd2a25eee524b988fac46cba9fa5d154c45aa63cf0f19f668575c258e6a06a45",
+      "bytes": 354210
     },
     "web/frontend/dashboard-redesign.css": {
       "sha256": "6880bd6c7625a709c38a00602157ea0e1d0f79ce73cf06953afb1cd108a6bb03",
@@ -3464,8 +3464,8 @@
       "bytes": 711
     },
     "web/frontend/index.html": {
-      "sha256": "5650945bffb05b458bf7e08569cae8f47978d2ae37f763735183d981f75ca219",
-      "bytes": 226764
+      "sha256": "0cbf6e48ceb23b0a507daa5fd9a0b25b53e9fa43adc8c4bf0276678ffb41b985",
+      "bytes": 228284
     },
     "web/frontend/manifest.webmanifest": {
       "sha256": "3183c8ade82e1e9917f5476b903950c8e5f57d073dc849f1f538ea7a914b92b6",
@@ -3501,10 +3501,11 @@
     }
   },
   "derived_overrides": {
-    "klipper/extras/ace.py": "automatic insertion, native single-read handling, and validated lane motor status",
+    "klipper/extras/ace.py": "single-read RFID, queue epoch, safe unload cancel, and route hold",
     "klipper/extras/ace_rc522.py": "single-cycle RFID handling and bounded measured motion",
-    "klipper/extras/filament_feed_ace.py": "stop-guard command error handling",
-    "klipper/extras/ace_slot_actions.py": "sensor-ended high-speed ACE ejection",
+    "klipper/extras/filament_feed_ace.py": "guarded errors and protected manual unload cleanup",
+    "klipper/extras/ace_slot_actions.py": "sensor-ended high-speed ACE ejection and route hold recovery",
+    "klipper/extras/ace_location_hold.py": "persistent RFID uncertain-position route protection",
     "VERSION": "managed package version"
   },
   "vendor_source": "captured running multiACE vendor; CPython 3.11 aarch64",
@@ -3552,6 +3553,14 @@
     "03-feed-guard.patch": "4cad3aabe38b65c7ff87d15264352991aed72200b422a4ae9b526baff1c8b751",
     "04-fast-eject.patch": "f51f767d258aa6674643625104343c393829cab34d57ad770f788906cceadf76",
     "05-bootstrap-ace.patch": "3ab80f9619955e2cc0f9515fd29a772babb41c46f41dec409b18da5b0afebbda",
-    "06-bootstrap-feed.patch": "38dac44c7e26060557fafafa9eedf6946427d5fe101074fd92cf9b79f617f7e4"
+    "06-bootstrap-feed.patch": "38dac44c7e26060557fafafa9eedf6946427d5fe101074fd92cf9b79f617f7e4",
+    "07-queue-epoch.patch": "063b416d7d15377aab194d66663757db9e340eedddbf03412924c62ae17e8a41",
+    "08-cancel-ace.patch": "5a087d65b7610560b606236c4ade40c7aebb2977a1817d5cf515fc47718ca33a",
+    "09-cancel-feed.patch": "c753a8d0562e701ab98d83a05b075c3f04f5952eafab57c7cad8fa8bf2a6d785",
+    "10-rfid-hold.patch": "636eac91fb2a6cb7e35b31ef6a4e49b7226bc352d3b33726c7c814f2994b6407",
+    "11-web-backend.patch": "712a9161fbe72f035ea838d348f4b1f58be83c6958a94062e0b7b6eb64c46926",
+    "12-web-app.patch": "bd6eeaa403a329488ce0868beb2c61383eb9e6e3a56b1ff0976d9d46fd46a32a",
+    "13-web-index.patch": "002e2858f0a26c68d444dd84d42248ec4caee45c82d41e85ae0dee5d85f5efb1",
+    "14-park-scope.patch": "b020dd80d5b3d01449640675c8c6c5e91e35838244f541d8a21a54ac52f43036"
   }
 }

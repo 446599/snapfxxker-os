@@ -1,13 +1,13 @@
 import ast, pathlib, types, unittest
 import atexit, tempfile, tarfile
 REPO=pathlib.Path(__file__).resolve().parents[2]
-ARCHIVE=REPO/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.2.tar.gz'
+ARCHIVE=REPO/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.3.tar.gz'
 TMP=tempfile.TemporaryDirectory(prefix='managed-feed-tests-')
 atexit.register(TMP.cleanup)
 HERE=pathlib.Path(TMP.name)
 with tarfile.open(ARCHIVE,'r:gz') as archive:
     for name in ('filament_feed_ace.py','ace_stop_guard.py'):
-        member=archive.getmember('multiace-1.27b-233.20261111-single.2/klipper/extras/'+name)
+        member=archive.getmember('multiace-1.27b-233.20261111-single.3/klipper/extras/'+name)
         (HERE/name).write_bytes(archive.extractfile(member).read())
 SOURCE=HERE/'filament_feed_ace.py'
 GUARD=HERE/'ace_stop_guard.py'

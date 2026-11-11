@@ -11,15 +11,19 @@ import tarfile
 import tempfile
 
 HERE = Path(__file__).resolve().parent
-VERSION = '1.27b-233.20261111-single.2'
+VERSION = '1.27b-233.20261111-single.3'
 OLD_VERSION = '1.27b-233.20261109'
 BASE = HERE / 'base' / ('multiace-managed-' + OLD_VERSION + '.tar.gz')
 BASE_SHA = 'a18a762e4cb1061fe778bb919311a076bbfdfc445e2bb73bf72b5ae26544fc3f'
 EXPECTED = {
-    'klipper/extras/ace.py': '29c0c9fbe9e404cf2c79c1a55f488d8560dbf2ff7f1036895cd59fd82f89b1f3',
+    'web/backend/main.py': '6dfc2be594507a670e58d14f16ddc72d4469198a64ad803e8fab8d1678578aef',
+    'web/frontend/app.js': 'cd2a25eee524b988fac46cba9fa5d154c45aa63cf0f19f668575c258e6a06a45',
+    'web/frontend/index.html': '0cbf6e48ceb23b0a507daa5fd9a0b25b53e9fa43adc8c4bf0276678ffb41b985',
+    'klipper/extras/ace.py': 'c4aea9565ccc6041bb24106c6097b8b82762c48d8b086ef4a9f21bd14792787f',
     'klipper/extras/ace_rc522.py': '4ee7e0d0da5c5fd0a1cdf51c2d0ed065181d0b21844a5b52c1baf304258355b3',
-    'klipper/extras/filament_feed_ace.py': 'af1c4284f50beade4419f4177915483b00709894a5e2515f5d9c1b018c7f946d',
-    'klipper/extras/ace_slot_actions.py': '2bc8fbd2486a7c58a492e61932741352e9ddaf92e85a47066d4a545c368aee4e',
+    'klipper/extras/filament_feed_ace.py': '6c4ebfb8c1bc7563ac83d46f3db297b41d07ad4d262c2dc9b1c96f570df3dd21',
+    'klipper/extras/ace_location_hold.py': '14486341b8cc2a2272f6fdf5719f9837f177c897d56d4740fe8f811059d9e233',
+    'klipper/extras/ace_slot_actions.py': '06a0e8f0ee2a17c9a0edab94101862fe9ea5722a60c926262089b84d8093f6c0',
 }
 
 def sha(data):
@@ -82,10 +86,11 @@ def main():
                     files={name:{'sha256':sha(data),'bytes':len(data)} for name,data in sorted(files.items())},
                     patches={p.name:sha(p.read_bytes()) for p in sorted((HERE/'patches').glob('*.patch'))},
                     derived_overrides={
-                        'klipper/extras/ace.py':'automatic insertion, native single-read handling, and validated lane motor status',
+                        'klipper/extras/ace.py':'single-read RFID, queue epoch, safe unload cancel, and route hold',
                         'klipper/extras/ace_rc522.py':'single-cycle RFID handling and bounded measured motion',
-                        'klipper/extras/filament_feed_ace.py':'stop-guard command error handling',
-                        'klipper/extras/ace_slot_actions.py':'sensor-ended high-speed ACE ejection',
+                        'klipper/extras/filament_feed_ace.py':'guarded errors and protected manual unload cleanup',
+                        'klipper/extras/ace_slot_actions.py':'sensor-ended high-speed ACE ejection and route hold recovery',
+                        'klipper/extras/ace_location_hold.py':'persistent RFID uncertain-position route protection',
                         'VERSION':'managed package version',
                     })
     args.manifest.parent.mkdir(parents=True, exist_ok=True)

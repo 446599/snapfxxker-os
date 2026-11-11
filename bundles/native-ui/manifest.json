@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "233-native-ui-20261111.5",
-  "firmware_version": "2.1.0-233-dev.3-ui.6",
+  "firmware_version": "2.1.0-233-dev.3-ui.7",
   "source": {
     "repository": "https://github.com/prestonbrown/helixscreen.git",
     "commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",

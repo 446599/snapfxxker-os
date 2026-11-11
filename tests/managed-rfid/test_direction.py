@@ -1,13 +1,13 @@
 import ast, pathlib, unittest, logging, sys, types
 import atexit, tempfile, tarfile
 REPO=pathlib.Path(__file__).resolve().parents[2]
-ARCHIVE=REPO/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.2.tar.gz'
+ARCHIVE=REPO/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.3.tar.gz'
 TMP=tempfile.TemporaryDirectory(prefix='managed-rfid-tests-')
 atexit.register(TMP.cleanup)
 ROOT=pathlib.Path(TMP.name)
 with tarfile.open(ARCHIVE,'r:gz') as archive:
     for name in ('ace.py','ace_rc522.py'):
-        member=archive.getmember('multiace-1.27b-233.20261111-single.2/klipper/extras/'+name)
+        member=archive.getmember('multiace-1.27b-233.20261111-single.3/klipper/extras/'+name)
         (ROOT/name).write_bytes(archive.extractfile(member).read())
 def load_method(path,name,ns):
     tree=ast.parse(path.read_text()); fn=next(x for node in tree.body if isinstance(node,ast.ClassDef) for x in node.body if isinstance(x,ast.FunctionDef) and x.name==name)
@@ -505,6 +505,7 @@ class InsertEntryTests(unittest.TestCase):
                 self._tag_read_busy=False;self._active_device_index=0;self.head_feed_length=[10]*4
                 self._location_hold=types.SimpleNamespace(blocks_route=lambda **kw:False)
                 self.preload_calls=0
+            def _rfid_route_heads(self,idx,slot):return {slot}
             def _location_identity(self,idx):return ('port',(1,2,3))
             def _insert_fresh_lane(self,*a):return ('ready',-10,True,100,10)
             def _insert_native_once(self,*a):return False

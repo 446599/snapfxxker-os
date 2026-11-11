@@ -1,12 +1,12 @@
 import importlib.util,pathlib,sys,types,unittest
 import atexit,tempfile,tarfile
 REPO=pathlib.Path(__file__).resolve().parents[2]
-ARCHIVE=REPO/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.2.tar.gz'
+ARCHIVE=REPO/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.3.tar.gz'
 TMP=tempfile.TemporaryDirectory(prefix='managed-eject-test-');atexit.register(TMP.cleanup)
 p=pathlib.Path(TMP.name)
 with tarfile.open(ARCHIVE,'r:gz') as archive:
  for name in ('ace_slot_actions.py','ace_location_hold.py'):
-  member=archive.getmember('multiace-1.27b-233.20261111-single.2/klipper/extras/'+name)
+  member=archive.getmember('multiace-1.27b-233.20261111-single.3/klipper/extras/'+name)
   (p/name).write_bytes(archive.extractfile(member).read())
 pkg=types.ModuleType('ejectpkg');pkg.__path__=[str(p)];sys.modules['ejectpkg']=pkg
 from ejectpkg.ace_slot_actions import SlotActions,MAX_MM,SPEED_MM_S
@@ -18,7 +18,7 @@ class Reactor:
 class TestEject(unittest.TestCase):
  def test_continues_after_first_finite_segment_until_gate_empty(self):
   tr=object();r=Reactor();source={0:None,1:None,2:None,3:None};calls=[]
-  a=types.SimpleNamespace(reactor=r,_head_source=source,_ace_devices=[PORT],_serials={0:tr},_connected_per_ace={0:True},_serial_failed_per_ace={},_swap_in_progress=True,_location_hold=types.SimpleNamespace(active=False,valid_marker=True,blocks_route=lambda **kw:False),_normal_load_speed=types.SimpleNamespace(park=None),_save_head_source=lambda:None,_latch_stop_fault=lambda *args:self.fail(str(args)))
+  a=types.SimpleNamespace(reactor=r,_rfid_route_heads=lambda idx,slot:{slot},_head_source=source,_ace_devices=[PORT],_serials={0:tr},_connected_per_ace={0:True},_serial_failed_per_ace={},_swap_in_progress=True,_location_hold=types.SimpleNamespace(active=False,valid_marker=True,blocks_route=lambda **kw:False,route_token=lambda *a:None),_normal_load_speed=types.SimpleNamespace(park=None),_save_head_source=lambda:None,_latch_stop_fault=lambda *args:self.fail(str(args)))
   x=SlotActions.__new__(SlotActions);x.ace=a;x.cancel=False;x.state={'seq':1,'state':'running','kind':'eject'};x._check=lambda *a,**kw:None;x._eject_lease=None;x._eject_pending=None
   stops=iter([True,True,False]);x._eject_stop_ready=lambda *args:next(stops)
   lanes=iter([{0:'rollback',1:'ready',2:'ready',3:'ready'},{0:'ready',1:'ready',2:'ready',3:'ready'},{0:'rollback',1:'ready',2:'ready',3:'ready'}])
@@ -36,7 +36,7 @@ class TestEject(unittest.TestCase):
  def test_no_cmd76_reply_still_completes_on_empty_and_stopped(self):
   tr=object();r=Reactor();sensors=[types.SimpleNamespace(runout_buttun_state=False) for _ in range(4)];sent=[];source={0:None,1:None,2:None,3:{'ace_index':0,'slot':3}}
   printer=types.SimpleNamespace(lookup_object=lambda n,d=None:types.SimpleNamespace(state='standby') if n=='print_stats' else (sensors[int(n.split(' e')[1][0])] if n.startswith('filament_motion_sensor e') else d))
-  a=types.SimpleNamespace(reactor=r,printer=printer,_head_source=source,_ace_devices=[PORT],_serials={0:tr},_connected_per_ace={0:True},_serial_failed_per_ace={},_swap_in_progress=True,_location_hold=types.SimpleNamespace(active=False,valid_marker=True,blocks_route=lambda **kw:False),_normal_load_speed=types.SimpleNamespace(park=None),_latch_stop_fault=lambda *x:self.fail('fault'))
+  a=types.SimpleNamespace(reactor=r,printer=printer,_rfid_route_heads=lambda idx,slot:{slot},_head_source=source,_ace_devices=[PORT],_serials={0:tr},_connected_per_ace={0:True},_serial_failed_per_ace={},_swap_in_progress=True,_location_hold=types.SimpleNamespace(active=False,valid_marker=True,blocks_route=lambda **kw:False,route_token=lambda *a:None),_normal_load_speed=types.SimpleNamespace(park=None),_latch_stop_fault=lambda *x:self.fail('fault'))
   a.send_request_to=lambda idx,req,cb:sent.append(req)
   a._save_head_source=lambda:None
   x=SlotActions.__new__(SlotActions);a._slot_actions=x;x.ace=a;x.cancel=False;x.state={'seq':1,'state':'running','kind':'eject','progress':0};x._eject_lease=None;x._eject_pending=None
@@ -81,8 +81,8 @@ class TestEjectedCommit(unittest.TestCase):
   from ejectpkg.ace_location_hold import LocationHold
   with tempfile.TemporaryDirectory() as td:
    path=pathlib.Path(td)/'marker';doc={'reason':'position_unconfirmed_after_seek','ace_uid':list(UID),'slot':3,'head':3,'port':PORT};path.write_text(json.dumps(doc));os.chmod(path,0o600);old=path.read_bytes();sources={0:None,1:{'ace_index':0,'slot':1},2:None,3:{'ace_index':0,'slot':3}};speed=types.SimpleNamespace(park='old',record_park=lambda *a:self.fail('ejected cannot record park'))
-   a=types.SimpleNamespace(_head_source=sources,_ace_devices=[PORT],_location_hold=LocationHold(str(path)),_normal_load_speed=speed,_save_head_source=lambda:None);x=SlotActions.__new__(SlotActions);x.ace=a
-   with patch.object(m,'PATH',str(path)),patch.object(m,'LocationHold',lambda p=None:LocationHold(p or str(path))):x._commit_ejected(0,3,object(),UID,hashlib.sha256(old).hexdigest(),sources)
+   a=types.SimpleNamespace(_head_source=sources,_ace_devices=[PORT],_location_hold=LocationHold(str(path),str(path)+'.routes'),_normal_load_speed=speed,_save_head_source=lambda:None);x=SlotActions.__new__(SlotActions);x.ace=a
+   with patch.object(m,'PATH',str(path)),patch.object(m,'LocationHold',lambda p=None,**kw:LocationHold(p or str(path),kw.get('routes_path') or str(path)+'.routes')):x._commit_ejected(0,3,object(),UID,hashlib.sha256(old).hexdigest(),sources)
    self.assertIsNone(a._head_source[3]);self.assertEqual(a._head_source[1]['slot'],1);self.assertIsNone(speed.park);self.assertFalse(a._location_hold.active);self.assertEqual(json.loads(path.read_text())['state'],'verified_ejected')
  def test_other_lane_cannot_change_target_marker(self):
   import tempfile,json,os
@@ -103,18 +103,18 @@ class TestHeldFlow(unittest.TestCase):
    path=pathlib.Path(td)/'marker';doc={'reason':'position_unconfirmed_after_seek','ace_uid':list(UID),'slot':3,'head':3,'port':PORT};path.write_text(json.dumps(doc));os.chmod(path,0o600)
    tr=object();r=Reactor();sensors=[types.SimpleNamespace(runout_buttun_state=False) for _ in range(4)];source={0:None,1:{'ace_index':0,'slot':1},2:None,3:{'ace_index':0,'slot':3}};moves=[]
    printer=types.SimpleNamespace(lookup_object=lambda n,d=None:types.SimpleNamespace(state='standby') if n=='print_stats' else (sensors[int(n.split(' e')[1][0])] if n.startswith('filament_motion_sensor e') else d))
-   a=types.SimpleNamespace(reactor=r,printer=printer,_head_source=source,_ace_devices=[PORT],_serials={0:tr},_connected_per_ace={0:True},_serial_failed_per_ace={},_swap_in_progress=True,_location_hold=LocationHold(str(path)),_normal_load_speed=types.SimpleNamespace(park='reference'),_save_head_source=lambda:None,_latch_stop_fault=lambda *x:self.fail('fault'));a.send_request_to=lambda idx,req,cb:None
+   a=types.SimpleNamespace(reactor=r,printer=printer,_rfid_route_heads=lambda idx,slot:{slot},_head_source=source,_ace_devices=[PORT],_serials={0:tr},_connected_per_ace={0:True},_serial_failed_per_ace={},_swap_in_progress=True,_location_hold=LocationHold(str(path),str(path)+'.routes'),_normal_load_speed=types.SimpleNamespace(park='reference'),_save_head_source=lambda:None,_latch_stop_fault=lambda *x:self.fail('fault'));a.send_request_to=lambda idx,req,cb:None
    x=SlotActions.__new__(SlotActions);a._slot_actions=x;x.ace=a;x.cancel=False;x.state={'seq':1,'state':'running','kind':'eject','progress':0};x._eject_lease=None;x._eject_pending=None;x._check=lambda *args,**kwargs:None;stops=iter([True,False]);x._eject_stop_ready=lambda *args:next(stops);x._eject_stable=lambda *args:False
    def req(idx,method,params,cmd,**kw):
     if method=='discover_device':return {'uid1':UID[0],'uid2':UID[1],'uid3':UID[2]}
     moves.append((method,dict(params)));return {}
    x._request=req;x._lane_states=lambda *args,**kw:{0:'ready',1:'ready',2:'ready',3:'rollback'};gates=iter([True]*15+[False]);x._gate=lambda *args,**kw:next(gates)
-   with patch.object(m,'PATH',str(path)),patch.object(m,'LocationHold',lambda p=None:LocationHold(p or str(path))):x._run(0,3,tr)
+   with patch.object(m,'PATH',str(path)),patch.object(m,'LocationHold',lambda p=None,**kw:LocationHold(p or str(path),kw.get('routes_path') or str(path)+'.routes')):x._run(0,3,tr)
    self.assertEqual(x.state['state'],'complete',x.state);self.assertEqual(len(moves),1);self.assertNotIn('verified_mm',x.state);self.assertEqual(json.loads(path.read_text())['state'],'verified_ejected');self.assertIsNone(a._head_source[3]);self.assertIsNone(a._normal_load_speed.park)
 
 class TestFailures(unittest.TestCase):
  def setup_run(self):
-  tr=object();r=Reactor();source={0:None,1:None,2:None,3:None};a=types.SimpleNamespace(reactor=r,_head_source=source,_ace_devices=[PORT],_serials={0:tr},_connected_per_ace={0:True},_serial_failed_per_ace={},_swap_in_progress=True,_location_hold=types.SimpleNamespace(active=False,valid_marker=True,blocks_route=lambda **kw:False),_normal_load_speed=types.SimpleNamespace(park=None));a._save_head_source=lambda:None;a.send_request_to=lambda *args:None;a.fault=[];a._latch_stop_fault=lambda *args:a.fault.append(args)
+  tr=object();r=Reactor();source={0:None,1:None,2:None,3:None};a=types.SimpleNamespace(reactor=r,_rfid_route_heads=lambda idx,slot:{slot},_head_source=source,_ace_devices=[PORT],_serials={0:tr},_connected_per_ace={0:True},_serial_failed_per_ace={},_swap_in_progress=True,_location_hold=types.SimpleNamespace(active=False,valid_marker=True,blocks_route=lambda **kw:False,route_token=lambda *a:None),_normal_load_speed=types.SimpleNamespace(park=None));a._save_head_source=lambda:None;a.send_request_to=lambda *args:None;a.fault=[];a._latch_stop_fault=lambda *args:a.fault.append(args)
   x=SlotActions.__new__(SlotActions);x.ace=a;x.cancel=False;x.state={'seq':1,'state':'running','kind':'eject','progress':0};x._check=lambda *a,**kw:None;x._eject_lease=None;x._eject_pending=None;return x,a,tr
  def test_motor_ack_timeout_never_reissues_and_stop_failure_latches(self):
   x,a,tr=self.setup_run();calls=[];stops=[0]
@@ -138,6 +138,6 @@ class TestPendingBeforeMotion(unittest.TestCase):
   import ejectpkg.ace_slot_actions as m
   from ejectpkg.ace_location_hold import LocationHold
   with tempfile.TemporaryDirectory() as td:
-   path=pathlib.Path(td)/'marker';doc={'reason':'position_unconfirmed_after_seek','state':'verified_recovered','ace_uid':list(UID),'slot':3,'head':3,'port':PORT,'head_triggered':True,'head_clear':True,'gate_present':True,'stopped':True,'encoder_target_reached':True,'target_mm':1393};path.write_text(json.dumps(doc));os.chmod(path,0o600);a=types.SimpleNamespace(_location_hold=LocationHold(str(path)));x=SlotActions.__new__(SlotActions);x.ace=a
-   with patch.object(m,'PATH',str(path)),patch.object(m,'LocationHold',lambda p=None:LocationHold(p or str(path))):digest=x._arm_eject_pending(hashlib.sha256(path.read_bytes()).hexdigest())
+   path=pathlib.Path(td)/'marker';doc={'reason':'position_unconfirmed_after_seek','state':'verified_recovered','ace_uid':list(UID),'slot':3,'head':3,'port':PORT,'head_triggered':True,'head_clear':True,'gate_present':True,'stopped':True,'encoder_target_reached':True,'target_mm':1393};path.write_text(json.dumps(doc));os.chmod(path,0o600);a=types.SimpleNamespace(_location_hold=LocationHold(str(path),str(path)+'.routes'));x=SlotActions.__new__(SlotActions);x.ace=a
+   with patch.object(m,'PATH',str(path)),patch.object(m,'LocationHold',lambda p=None,**kw:LocationHold(p or str(path),kw.get('routes_path') or str(path)+'.routes')):digest=x._arm_eject_pending(hashlib.sha256(path.read_bytes()).hexdigest())
    self.assertTrue(a._location_hold.active);self.assertEqual(json.loads(path.read_text())['state'],'eject_in_progress');self.assertEqual(digest,hashlib.sha256(path.read_bytes()).hexdigest())

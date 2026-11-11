@@ -1,0 +1,64 @@
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -3966,9 +3966,61 @@
+                     self.motor_tachometer.get_counts()))
+         gcmd.respond_info(msg, log=False)
+ 
++    def _protected_unload_cancel(self, channel, head, gcmd):
++        """No ACE/feeder motion: only release a prepared manual unload."""
++        ace = getattr(self, 'ace', None)
++        if (ace is None or type(channel) is not int or not 0 <= channel < FEED_CHANNEL_NUMS or
++                type(head) is not int or not 0 <= head <= 3 or
++                self.filament_ch[channel] != head or ace.head_uses_ace(head)):
++            raise gcmd.error('无效的取消清理请求')
++        ps = self.printer.lookup_object('print_stats', None)
++        if (ps is None or getattr(ps, 'state', '').lower() not in
++                ('standby', 'complete', 'cancelled') or
++                self.channel_active is not None or
++                self.channel_state[channel] != FEED_STA_UNLOAD_HEAT_FINISH):
++            raise gcmd.error('送料通道忙碌或不在可取消状态')
++        other_name = 'right' if self.module_name == 'left' else 'left'
++        other = self.printer.lookup_object('filament_feed ' + other_name, None)
++        if other is not None and getattr(other, 'channel_active', 'unknown') is not None:
++            raise gcmd.error('另一送料模块正在运行或状态未知')
++        heater_name = 'extruder' if head == 0 else 'extruder%d' % head
++        self.printer.lookup_object(heater_name).get_heater().set_temp(0.)
++        sensor = self.printer.lookup_object('filament_motion_sensor e%d_filament' % head, None)
++        helper = getattr(sensor, 'runout_helper', None)
++        if helper is None or not callable(getattr(helper, 'cmd_SET_FILAMENT_SENSOR', None)):
++            raise gcmd.error('喷头传感器不可用，已关闭加热')
++        self.channel_error[channel] = FEED_OK
++        self._set_channel_state(channel, FEED_STA_UNLOAD_FAIL, True)
++        if self.module_exist[channel] and self.config['auto_mode'][channel]:
++            state = (FEED_STA_PRELOAD_FINISH if
++                     self._port[channel].get_filament_detected() else FEED_STA_WAIT_INSERT)
++            self._set_channel_state(channel, state)
++        manager = self.printer.lookup_object('machine_state_manager', None)
++        if (manager is not None and getattr(getattr(ace, '_slot_actions', None), 'state', {}).get('state') != 'running' and
++                str(manager.get_status().get('main_state')) == 'AUTO_UNLOAD'):
++            self._ms_after_feed_op()
++
++        self.hide_heat_finish[channel] = False
++        class _EnableSensor:
++            def get_int(self, name, default=None, **kwargs):
++                return 1 if name in ('ENABLE', 'SAVE') else default
++            def error(self, *args, **kwargs):
++                return gcmd.error(*args, **kwargs)
++        helper.cmd_SET_FILAMENT_SENSOR(_EnableSensor())
++
+     def cmd_FEED_AUTO(self, gcmd):
+         ace = getattr(self, 'ace', None)
+         action = getattr(getattr(ace, '_slot_actions', None), 'state', {})
++        # Do not enter _do_feed while locked: it can issue ACE motion.
++        stage = (gcmd.get('STAGE', '') or '').strip().lower()
++        locked = ace is not None and (ace._stop_guard.message() is not None or
++                    action.get('state') == 'running')
++        if stage == 'cancel' and locked:
++            if (gcmd.get_int('UNLOAD', 0) != 1 or gcmd.get_int('LOAD', 0) != 0 or
++                    gcmd.get_int('AUTO', None) is not None):
++                raise gcmd.error('无效的取消清理请求')
++            self._protected_unload_cancel(gcmd.get_int('CHANNEL'), gcmd.get_int('EXTRUDER'), gcmd)
++            return
+         if action.get('kind') in ('measure', 'roundtrip', 'hotpark') and action.get('state') == 'running':
+             raise gcmd.error('测量会话进行中，送料命令已拒绝')
+         require_printer_clear(self.printer, gcmd)
