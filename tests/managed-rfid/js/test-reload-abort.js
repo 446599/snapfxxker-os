@@ -1,2 +1,38 @@
-const fs=require('fs'),vm=require('vm'),assert=require('assert');const src=fs.readFileSync(process.argv[2],'utf8');const i=src.indexOf('    async function reloadState(signal) {'),j=src.indexOf('    const macroLog = ref',i);assert(i>=0&&j>i);let resolveFetch,applied=0,requestOptions;const ctx={API:'/api',fetch:(_url,opts)=>{requestOptions=opts;return new Promise(r=>resolveFetch=r)},loadError:{value:'previous'},applyState:()=>applied++,hideSplash:()=>{}};vm.createContext(ctx);vm.runInContext(src.slice(i,j),ctx);
-(async()=>{const c=new AbortController(),p=ctx.reloadState(c.signal);assert.strictEqual(requestOptions.signal,c.signal);c.abort();resolveFetch({ok:true,json:async()=>({error:'late'})});await p;assert.equal(applied,0);assert.equal(ctx.loadError.value,'previous');console.log(JSON.stringify({result:'pass',case:'aborted late state ignored'}))})().catch(e=>{console.error(e);process.exit(1)});
+const fs = require("fs"),
+  vm = require("vm"),
+  assert = require("assert");
+const src = fs.readFileSync(process.argv[2], "utf8");
+const i = src.indexOf("    async function reloadState(signal) {"),
+  j = src.indexOf("    const macroLog = ref", i);
+assert(i >= 0 && j > i);
+let resolveFetch,
+  applied = 0,
+  requestOptions;
+const ctx = {
+  API: "/api",
+  fetch: (_url, opts) => {
+    requestOptions = opts;
+    return new Promise((r) => (resolveFetch = r));
+  },
+  loadError: { value: "previous" },
+  applyState: () => applied++,
+  hideSplash: () => {},
+};
+vm.createContext(ctx);
+vm.runInContext(src.slice(i, j), ctx);
+(async () => {
+  const c = new AbortController(),
+    p = ctx.reloadState(c.signal);
+  assert.strictEqual(requestOptions.signal, c.signal);
+  c.abort();
+  resolveFetch({ ok: true, json: async () => ({ error: "late" }) });
+  await p;
+  assert.equal(applied, 0);
+  assert.equal(ctx.loadError.value, "previous");
+  console.log(
+    JSON.stringify({ result: "pass", case: "aborted late state ignored" }),
+  );
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
