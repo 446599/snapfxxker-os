@@ -47,9 +47,36 @@ def require_ace_idle(ace):
     devices = ace.get("aces")
     if not isinstance(devices, list) or ace.get("device_count", len(devices)) != len(devices):
         raise ValueError("无法确认 ACE 设备状态")
-    for device in [ace] + devices:
+    for position, device in enumerate([ace] + devices):
         if not isinstance(device, dict):
             raise ValueError("无法确认 ACE 设备状态")
+        if device is not ace and device.get("connected") is False:
+            # A configured but unconnected port may be a spare. It is only
+            # ignorable when its identity is well formed and no loaded head
+            # depends on it; all global operations were checked above.
+            idx = device.get("idx")
+            sources = ace.get("head_source")
+            if (type(idx) is not int or idx != position - 1
+                    or not isinstance(sources, dict)
+                    or set(sources) not in (set(range(4)), {str(i) for i in range(4)})
+                    or device.get("status") != "unknown"
+                    or device.get("fw_hold") is not False
+                    or device.get("auto_dry_running") is not False
+                    or device.get("slots") != []
+                    or not isinstance(device.get("dryer_status"), dict)
+                    or device["dryer_status"].get("rotisserie")
+                    or (device["dryer_status"] and
+                        device["dryer_status"].get("status") != "stop")):
+                raise ValueError("无法确认未连接 ACE 的占用状态")
+            for source in sources.values():
+                if source is not None and (not isinstance(source, dict)
+                        or type(source.get("ace_index")) is not int
+                        or not 0 <= source["ace_index"] < len(devices)
+                        or type(source.get("slot")) is not int
+                        or not 0 <= source["slot"] < 4
+                        or source.get("ace_index") == idx):
+                    raise ValueError("未连接 ACE 仍有喷头依赖")
+            continue
         if device is not ace and (device.get("status") != "ready"
                                  or device.get("connected") is not True
                                  or device.get("fw_hold")):
@@ -62,7 +89,15 @@ def require_ace_idle(ace):
         if not isinstance(slots, list) or (device is not ace and not slots):
             raise ValueError("无法确认 ACE 设备状态")
         for slot in slots:
-            if not isinstance(slot, dict) or slot.get("status") not in ("empty", "ready"):
+            if not isinstance(slot, dict):
+                raise ValueError("无法确认 ACE 槽位状态")
+            # Newer multiACE exposes its device-reported motor phase. Never
+            # fall back to material identity when that phase is unavailable.
+            # Older releases lack the key and retain their prior checks.
+            if "slot_status" in slot:
+                if slot["slot_status"] != "ready":
+                    raise ValueError("请先结束 ACE 槽位进退料操作")
+            elif slot.get("status") not in ("empty", "ready"):
                 raise ValueError("请先结束 ACE 槽位进退料操作")
 
 

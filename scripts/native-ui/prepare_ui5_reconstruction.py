@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Prepare the explicitly identified UI.5 reconstruction on the saved UI.4 source."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -15,7 +16,9 @@ SERIES_PATH = REPO / "bundles/native-ui/reconstruction/series.json"
 def load_series():
     series = json.loads(SERIES_PATH.read_text())
     baseline = series["baseline_manifest"]
-    if prepare_source.digest(REPO / baseline["path"]) != baseline["sha256"]:
+    source = json.loads((REPO / baseline["path"]).read_text())["source"]
+    raw = json.dumps(source, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    if hashlib.sha256(raw).hexdigest() != baseline["source_sha256"]:
         raise ValueError("UI.4 baseline manifest has changed; review the reconstruction base")
     for patch in series["patches"]:
         if prepare_source.digest(REPO / patch["path"]) != patch["sha256"]:

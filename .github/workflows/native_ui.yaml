@@ -67,6 +67,7 @@ jobs:
         run: |
           python3 scripts/native-ui/validate.py --source-only
           python3 -m unittest discover -s tests/native-ui -v
+          python3 -m unittest discover -s tests/managed-rfid -v
           python3 -m unittest discover \
             -s overlays/233-native-ui/root/usr/local/lib/u1-device-service -p 'test_*.py' -v
 

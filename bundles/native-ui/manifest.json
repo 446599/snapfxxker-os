@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "id": "233-native-ui-20261110.4",
-  "firmware_version": "2.1.0-233-dev.3-ui.4",
+  "id": "233-native-ui-20261111.5",
+  "firmware_version": "2.1.0-233-dev.3-ui.5",
   "source": {
     "repository": "https://github.com/prestonbrown/helixscreen.git",
     "commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
@@ -102,16 +102,16 @@
     }
   },
   "runtime": {
-    "path": "overlays/233-native-ui/root/usr/local/share/233-firmware/helixscreen-233-native-ui-20261110.4.tar.gz",
+    "path": "overlays/233-native-ui/root/usr/local/share/233-firmware/helixscreen-233-native-ui-20261111.5.tar.gz",
     "root_directory": "helixscreen",
-    "package_version": "1.2.0-233.20261110.4",
+    "package_version": "1.2.0-233.20261111.5",
     "build_mode": "fork/developer; ENABLE_REMOTE_CONTROL=yes; ENABLE_DIAGNOSTIC_UPLOADS=no; ENABLE_MOCKS=yes",
     "source_rebuild": "Fixed source and font inputs; binary build timestamps/toolchain identity can change the binary hash.",
     "file_manifest": "bundles/native-ui/runtime-files.json",
-    "sha256": "115e1ff059d65646b454976d35daa5dbcf592685d92c094f44848f6990880cc6",
-    "bytes": 33286246,
-    "binary_sha256": "539796c3f9f0d0278894471b9d92205d38b36d18dbde3d359c0bb209a7867835",
-    "build_input_fingerprint": "25c261bdc873d453ccdda7a3cdec4a2a55e565e96f8dbe2c2cb6dab5fbf95be5"
+    "sha256": "2e97ddfb4d1768c2f3db9b2b5571c341fa802bf0670683e564f6344bb68ddfee",
+    "bytes": 33303696,
+    "binary_sha256": "3d2e73c25390c17fb55fe521a5860f2b84abefd4c077bfc77d29acf143398d30",
+    "build_input_fingerprint": "b118223c4fe7b5345c9ff22477020e2e8a4ecbef203ffa0512aae6952dd665e8"
   },
   "device_service": {
     "path": "overlays/233-native-ui/root/usr/local/lib/u1-device-service",

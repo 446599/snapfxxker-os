@@ -7,7 +7,7 @@ mkdir -p "$1"
 work="$(cd "$1" && pwd)"
 [[ -z "$(ls -A "$work")" ]] || { echo 'Use an empty output directory' >&2; exit 2; }
 case "$work" in *' '*) echo 'The upstream cross Makefiles require a path without spaces' >&2; exit 2 ;; esac
-python3 "$repo/scripts/native-ui/prepare_source.py" --output "$work/source/helixscreen"
+python3 "$repo/scripts/native-ui/prepare_ui5_reconstruction.py" --output "$work/source/helixscreen"
 python3 "$repo/scripts/native-ui/prepare_toolchain.py" --output "$work/cross-root" --cache "${U1_DEB_CACHE:-$repo/tmp/native-ui-debs}"
 mkdir -p "$work/font-tools"
 cp "$repo/bundles/native-ui/font-tools/"*.json "$work/font-tools/"

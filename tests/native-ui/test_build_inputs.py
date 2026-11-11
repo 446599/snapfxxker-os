@@ -32,6 +32,7 @@ class RuntimeProvenanceTests(unittest.TestCase):
             target = self.repo / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("fixed recipe\n")
+        (self.repo / "bundles/native-ui/reconstruction/series.json").write_text(json.dumps({"patches": []}))
         self.patch = self.repo / "bundles/native-ui/change.patch"
         self.patch.write_text("diff --git a/native.cpp b/native.cpp\n--- a/native.cpp\n+++ b/native.cpp\n")
         notices = self.repo / "bundles/native-ui/notices.json"
@@ -81,6 +82,18 @@ class RuntimeProvenanceTests(unittest.TestCase):
         self.manifest_path.write_text(json.dumps(self.manifest))
         with self.assertRaisesRegex(ValueError, "missing current source/build provenance"):
             build_inputs.verify_runtime_inputs(runtime, self.repo)
+
+    def test_reconstruction_patch_is_included_and_tampering_is_rejected(self):
+        patch = self.repo / "bundles/native-ui/reconstruction/new.patch"
+        patch.write_text("diff --git a/native.cpp b/native.cpp\n--- a/native.cpp\n+++ b/native.cpp\n")
+        series = self.repo / "bundles/native-ui/reconstruction/series.json"
+        series.write_text(json.dumps({"patches": [{"path": str(patch.relative_to(self.repo)),
+            "sha256": hashlib.sha256(patch.read_bytes()).hexdigest()}]}))
+        record = build_inputs.record_start(self.source, self.marker, self.repo)
+        self.assertIn(str(patch.relative_to(self.repo)), record["inputs"]["recipe_files"])
+        patch.write_text(patch.read_text() + "+tampered\n")
+        with self.assertRaisesRegex(ValueError, "Reconstruction patch checksum mismatch"):
+            build_inputs.current_inputs(self.repo)
 
     def test_changed_build_recipe_invalidates_runtime(self):
         runtime = {"build": self.verify()}

@@ -14,6 +14,8 @@ RECIPE_PATHS = (
     "scripts/native-ui/build.sh",
     "scripts/native-ui/build_inputs.py",
     "scripts/native-ui/prepare_source.py",
+    "scripts/native-ui/prepare_ui5_reconstruction.py",
+    "bundles/native-ui/reconstruction/series.json",
     "scripts/native-ui/prepare_toolchain.py",
     "scripts/native-ui/make-recorded.sh",
     "scripts/native-ui/package_runtime.py",
@@ -47,7 +49,12 @@ def current_inputs(repo=REPO):
     service = repo / manifest["device_service"]["path"]
     if digest(service / "device_service.py") != manifest["device_service"]["sha256"]:
         raise ValueError("Companion service checksum mismatch")
+    reconstruction = json.loads((repo / "bundles/native-ui/reconstruction/series.json").read_text())
+    for patch in reconstruction["patches"]:
+        if digest(repo / patch["path"]) != patch["sha256"]:
+            raise ValueError("Reconstruction patch checksum mismatch: " + patch["path"])
     files = {path: digest(repo / path) for path in RECIPE_PATHS}
+    files.update({patch["path"]: digest(repo / patch["path"]) for patch in reconstruction["patches"]})
     files.update({str(path.relative_to(repo)): digest(path)
                   for path in sorted(service.glob("*.py")) if not path.name.startswith("test_")})
     inputs = {"schema_version": 1, "source": source, "recipe_files": files}
@@ -58,7 +65,8 @@ def source_snapshot(source, repo=REPO):
     """Record the actual edited source files, including uncommitted local changes."""
     manifest = json.loads((repo / "bundles/native-ui/manifest.json").read_text())
     names = set(manifest["source"]["font_sources"])
-    for patch in manifest["source"]["patches"]:
+    reconstruction = json.loads((repo / "bundles/native-ui/reconstruction/series.json").read_text())
+    for patch in [*manifest["source"]["patches"], *reconstruction["patches"]]:
         previous = None
         target = None
         for line in (repo / patch["path"]).read_text().splitlines():

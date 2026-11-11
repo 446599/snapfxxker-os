@@ -1,9 +1,9 @@
 {
   "name": "233固件",
   "slug": "233-firmware",
-  "version": "2.1.0-233-dev.3-ui.4",
+  "version": "2.1.0-233-dev.3-ui.5",
   "target": "Snapmaker U1",
-  "status": "native-ui-full-redesign-offline-package-verified",
+  "status": "native-ui-rfid-integration-package-verified",
   "build_profile": "rsyncfix-perms1-native-ui-overlay",
   "output_template": "firmware/U1_233_{version}_upgrade.bin",
   "base_firmware": {
@@ -41,9 +41,9 @@
     }
   },
   "managed_provider_pin": {
-    "version": "1.27b-233.20261109",
-    "path": "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261109.tar.gz",
-    "sha256": "a18a762e4cb1061fe778bb919311a076bbfdfc445e2bb73bf72b5ae26544fc3f",
+    "version": "1.27b-233.20261111-single.1",
+    "path": "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.1.tar.gz",
+    "sha256": "68fb9a083c5c4cd80c5e8259c0890793dd3a61e3cde6122916626e34de7ad219",
     "source_of_pin": "bundles/233-dev.2/manifest.json",
     "local_provider_changes_bundled": true
   },
@@ -53,8 +53,8 @@
     "firmware_built": true,
     "firmware_flashed": false,
     "boot_verified": false,
-    "scope": "UI.4 full native interface redesign. 78 Python tests and 108 selected native tests (799 assertions) passed. 485 XML layouts checked, 35 CJK font faces rebuilt; the required 1,368 codepoints are present. Six patches match the frozen source. ARM64 runtime and complete firmware integrity checks passed; the 10-step source-level slot rollback probe passed. No printer connection, flashing, hardware boot, touch, motion, heating or ACE operation verification.",
-    "slot_rollback_config_verified": true
+    "python_tests_passed": 156,
+    "scope": "UI.5 reconstructed source with 28 patches, single-pass automatic RFID, 80 mm/s inlet-sensor ACE eject, and upgrade idle checks. Native AArch64 runtime, 1081 package files, 485 XML layouts and 35 CJK faces verified. Full OTA and rootfs independently unpacked and checked. Device deployment is pending."
   },
   "previous_validation": {
     "version": "2.1.0-233-dev.2-perms.1",
@@ -71,14 +71,14 @@
     "scope": "Startup, imports and data; no new motion or thermal test."
   },
   "artifact": {
-    "file": "U1_233_2.1.0-233-dev.3-ui.4_upgrade.bin",
-    "bytes": 286833178,
-    "sha256": "fbad25547ebe72fb82e1a8dc7876f2466ed161e055a50d88a2b6998fa73f2f00",
-    "runtime_id": "233-native-ui-20261110.4",
-    "runtime_sha256": "115e1ff059d65646b454976d35daa5dbcf592685d92c094f44848f6990880cc6",
-    "build_input_fingerprint": "25c261bdc873d453ccdda7a3cdec4a2a55e565e96f8dbe2c2cb6dab5fbf95be5",
-    "download_index": "docs/233/native-ui-20261110-artifacts.md",
-    "release_url": "https://github.com/446599/snapfxxker-os/releases/tag/v2.1.0-233-dev.3-ui.4",
-    "validation_report": "docs/233/native-ui-full-redesign-20261110.md"
+    "file": "U1_233_2.1.0-233-dev.3-ui.5_upgrade.bin",
+    "bytes": 286861850,
+    "sha256": "c2eb1680c4dbe8f899ac70954d2db8815a16f6a0b9ddf423ad1941339c7971a8",
+    "runtime_id": "233-native-ui-20261111.5",
+    "runtime_sha256": "2e97ddfb4d1768c2f3db9b2b5571c341fa802bf0670683e564f6344bb68ddfee",
+    "runtime_binary_sha256": "3d2e73c25390c17fb55fe521a5860f2b84abefd4c077bfc77d29acf143398d30",
+    "build_input_fingerprint": "b118223c4fe7b5345c9ff22477020e2e8a4ecbef203ffa0512aae6952dd665e8",
+    "managed_provider_sha256": "68fb9a083c5c4cd80c5e8259c0890793dd3a61e3cde6122916626e34de7ad219",
+    "source_base_commit": "6843f476d128a6439285297e5243c7221b1ac97e"
   }
 }

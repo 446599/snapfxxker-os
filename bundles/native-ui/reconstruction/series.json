@@ -4,7 +4,8 @@
   "baseline_repository_commit": "49b8b2205171820f81845751d7f1927a4ec5f7f1",
   "baseline_manifest": {
     "path": "bundles/native-ui/manifest.json",
-    "sha256": "3c5591e20fce2ca0dfefc6a8f56d7a7b18738b44e88983ec805f8e2f379245b8"
+    "sha256": "3c5591e20fce2ca0dfefc6a8f56d7a7b18738b44e88983ec805f8e2f379245b8",
+    "source_sha256": "19ff93f15c33ca066582824152d6fb293c54988e48b66654d440477c312bffca"
   },
   "historical_ui5_checkpoint": "171ec32ec623414c9929ac0359f4d475964e68ba",
   "byte_identical_original_recovery": false,
@@ -170,6 +171,12 @@
       "sha256": "036ea8cc432cc820f8a9776018da10607362d140bfdc8685fa76f382941c448d",
       "component": "Fan cards first with retained chamber-air controls",
       "verification": "Native review found airstrip pushing thirdrow out; reordered existing namedcontrols into same scroll body. XML parse and whitespace pass; final scroll/capture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0028-ui5-xml-schema.patch",
+      "sha256": "5f6894ff313a7f168aa6adcf42b84a4363553cc6524a0bbf4954270f3fd8d8d5",
+      "component": "Refresh generated XML schema for reconstruction",
+      "verification": "485 XML files linted without errors; schema regeneration matches"
     }
   ],
   "validation": {

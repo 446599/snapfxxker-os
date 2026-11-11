@@ -77,6 +77,42 @@ class IdleChecksTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     require_machine_idle(snapshot)
 
+    def test_disconnected_spare_requires_no_loaded_or_active_dependency(self):
+        snapshot = idle_snapshot()
+        ace = snapshot["ace"]
+        ace["head_source"] = {str(i): None for i in range(4)}
+        ace["aces"].append({"idx": 2, "connected": False, "status": "unknown",
+                            "fw_hold": False, "auto_dry_running": False,
+                            "dryer_status": {}, "slots": []})
+        ace["device_count"] = 3
+        ace["head_ace"] = {str(i): 2 for i in range(4)}
+        require_machine_idle(snapshot)
+        for value in ({"ace_index": 2, "slot": 0}, {"ace_index": 2}, "invalid"):
+            bad = copy.deepcopy(snapshot)
+            bad["ace"]["head_source"]["0"] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                require_machine_idle(bad)
+        for key, value in (("fw_hold", True), ("auto_dry_running", True),
+                           ("slots", [{"status": "ready"}]), ("status", "busy"),
+                           ("dryer_status", {"status": "stop", "rotisserie": True})):
+            bad = copy.deepcopy(snapshot)
+            bad["ace"]["aces"][2][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                require_machine_idle(bad)
+
+    def test_native_phase_overrides_material_identity_but_must_be_ready(self):
+        snapshot = idle_snapshot()
+        slot = snapshot["ace"]["aces"][0]["slots"][0]
+        slot.update(status="unknown", slot_status="ready")
+        require_machine_idle(snapshot)
+        for phase in (None, "unknown", "feeding", "preloading", "rollback"):
+            slot["slot_status"] = phase
+            with self.subTest(phase=phase), self.assertRaises(ValueError):
+                require_machine_idle(snapshot)
+        del slot["slot_status"]
+        with self.assertRaises(ValueError):
+            require_machine_idle(snapshot)
+
     def test_background_and_stock_feeder_wait_are_not_idle(self):
         for name, value in (
                 ("ace_bg_swap", {"busy": [3]}),

@@ -28,7 +28,10 @@ docker run --rm -e CI=1 -e "FIRMWARE_VERSION_OVERRIDE=$version" -v "$root:/src:r
 set -euo pipefail
 mkdir -p /tmp/work
 cp -a /src/scripts /src/tools /tmp/work/
+mkdir -p /tmp/work/overlays/233-dev.2-perms.1 /tmp/work/overlays/233-native-ui
+tar -C /src/overlays/233-dev.2-perms.1 --exclude="__pycache__" --exclude="*.pyc" --exclude="*.pyo" -cf - . | tar -C /tmp/work/overlays/233-dev.2-perms.1 -xf -
+tar -C /src/overlays/233-native-ui --exclude="__pycache__" --exclude="*.pyc" --exclude="*.pyo" -cf - . | tar -C /tmp/work/overlays/233-native-ui -xf -
 cd /tmp/work
 make -C tools
-scripts/create_firmware.sh /input/base.bin /tmp/build233 "/output/$OUTFILE" /src/overlays/233-dev.2-perms.1 /src/overlays/233-native-ui
+scripts/create_firmware.sh /input/base.bin /tmp/build233 "/output/$OUTFILE" /tmp/work/overlays/233-dev.2-perms.1 /tmp/work/overlays/233-native-ui
 '

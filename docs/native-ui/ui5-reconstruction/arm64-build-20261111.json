@@ -1,0 +1,17 @@
+{
+  "status": "built-and-packaged",
+  "base_commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+  "reconstruction_patches": 28,
+  "reconstruction_scope": "27 recovered UI patches plus generated XML schema refresh; not claimed identical to the lost original UI5 checkpoint",
+  "target": "snapmaker-u1 / AArch64 ELF",
+  "compiler": "Debian aarch64-linux-gnu-gcc 14.2.0-19",
+  "source_snapshot_sha256": "e93de50da370607a414b5c0abe3a90bfa740617ba4137e47b9a6f46c38415fbb",
+  "build_input_fingerprint": "b118223c4fe7b5345c9ff22477020e2e8a4ecbef203ffa0512aae6952dd665e8",
+  "binary_sha256": "3d2e73c25390c17fb55fe521a5860f2b84abefd4c077bfc77d29acf143398d30",
+  "binary_bytes": 27244584,
+  "runtime_sha256": "2e97ddfb4d1768c2f3db9b2b5571c341fa802bf0670683e564f6344bb68ddfee",
+  "runtime_bytes": 33303696,
+  "xml_layouts_validated": 485,
+  "cjk_font_faces": 35,
+  "hardware_tested": false
+}
