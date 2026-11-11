@@ -3,7 +3,7 @@
   "slug": "233-firmware",
   "version": "2.1.0-233-dev.3-ui.6",
   "target": "Snapmaker U1",
-  "status": "native-ui-rfid-integration-package-verified",
+  "status": "deployed-and-boot-verified",
   "build_profile": "rsyncfix-perms1-native-ui-overlay",
   "output_template": "firmware/U1_233_{version}_upgrade.bin",
   "base_firmware": {
@@ -51,10 +51,24 @@
   "validation": {
     "native_arm64_rebuilt": true,
     "firmware_built": true,
-    "firmware_flashed": false,
-    "boot_verified": false,
+    "firmware_flashed": true,
+    "boot_verified": true,
     "python_tests_passed": 159,
-    "scope": "UI.5 AArch64 runtime reused with unchanged build fingerprint for OS ui.6. Self-contained single.2 has complete runtime import closure and latest-first bootstraps. 159 Python tests and full OTA/rootfs checks passed. Single.2 real ACE 2 slot 1 eject completed in about 8.5 seconds with inlet empty and STOP confirmed on ui.5. ui.6 OS boot verification pending."
+    "scope": "OS ui.6 cold boot on slot A verified with three ACE devices, all 12 native lane states ready, four head sensors empty, 15 read-only module bindings and passing read-only OTA idle check. Single.2 real ACE 2 slot 1 eject completed in about 8.5 seconds with inlet empty and STOP confirmed. The empty-route entry completed again after cold boot without unwind. Native framebuffer rendering and restored automatic drying settings verified. Physical touch across pages, full dual-spool RFID scenarios and a new insert/remaining-length cycle were not retested in this deployment.",
+    "boot_slot": "A",
+    "boot_version": "2.1.0-233-dev.3-ui.6",
+    "source_integration_commit": "712aa2fa275008bceb80f54740c78c9923f8e7d1",
+    "device_evidence": "verification/integrated-deploy-20261111/device/ui6-final-evidence.json",
+    "physical_eject": {
+      "ace_number": 2,
+      "slot_number": 1,
+      "command_speed_mm_s": 80,
+      "completion_seconds_approx": 8.5,
+      "inlet_empty": true,
+      "stop_confirmed": true
+    },
+    "gui_framebuffer_verified": true,
+    "physical_touch_tested": false
   },
   "previous_validation": {
     "version": "2.1.0-233-dev.2-perms.1",

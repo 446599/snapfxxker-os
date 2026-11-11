@@ -13,5 +13,9 @@
   "runtime_bytes": 33303696,
   "xml_layouts_validated": 485,
   "cjk_font_faces": 35,
-  "hardware_tested": false
+  "hardware_tested": false,
+  "os_boot_verified": "2.1.0-233-dev.3-ui.6",
+  "os_boot_slot": "A",
+  "framebuffer_verified": true,
+  "physical_touch_tested": false
 }
