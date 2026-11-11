@@ -1,14 +1,14 @@
 {
-  "version": "1.27b-233.20261111-single.1",
+  "version": "1.27b-233.20261111-single.2",
   "live_snapshot_sha256": "c85cc57352aadd2ab3bbcebfc0863264ce4fd2fa593b8867d414a5fa29296070",
-  "archive_sha256": "68fb9a083c5c4cd80c5e8259c0890793dd3a61e3cde6122916626e34de7ad219",
+  "archive_sha256": "811398431b13acc78502c9ede4d8fe105d85408095ea048a528846d5bd9621b9",
   "files": {
     "LICENSE": {
       "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
       "bytes": 35149
     },
     "VERSION": {
-      "sha256": "07b9ef698f3407d802d4f6f8774baf32065f269630e14433b702c8c3459cdefb",
+      "sha256": "89fbf5dcbc748793cc9b4963f688d7a96b2fee66ef10eab2414c8b93ae3923ce",
       "bytes": 28
     },
     "config/extended/ace.cfg": {
@@ -32,8 +32,8 @@
       "bytes": 83675
     },
     "klipper/extras/ace.py": {
-      "sha256": "5c712f73861558853f70c2040e5db576a30643bc4996ea1b6d5ee28cc4aa4c87",
-      "bytes": 1262140
+      "sha256": "29c0c9fbe9e404cf2c79c1a55f488d8560dbf2ff7f1036895cd59fd82f89b1f3",
+      "bytes": 1262198
     },
     "klipper/extras/ace_async_uid.py": {
       "sha256": "8e8bd06de21fb2340cb254523cd4338b816d4b79afd7439289567d78258d9bd6",
@@ -144,12 +144,16 @@
       "bytes": 15726
     },
     "klipper/extras/filament_feed_ace.py": {
-      "sha256": "005b28a027cce08a5aed94e3fc65d00cf4eff53c118797e70db95fa119d3cfdd",
-      "bytes": 258847
+      "sha256": "af1c4284f50beade4419f4177915483b00709894a5e2515f5d9c1b018c7f946d",
+      "bytes": 258897
     },
     "klipper/extras/filament_switch_sensor_ace.py": {
       "sha256": "92bf276593c0cb2953de8955868224916458032fcffdb1de0cfe415c4871ddc0",
       "bytes": 19259
+    },
+    "klipper/extras/measurement_candidate.py": {
+      "sha256": "4886a0720dcdc884f76ed873e60d93ad40b3ed054a1a8477cfe4e4c9742621d1",
+      "bytes": 6135
     },
     "klipper/kinematics/extruder_ace.py": {
       "sha256": "feba0a0f796a49435594faec9612d186d1b82a0893e9bc273090434997db4991",
@@ -3546,6 +3550,8 @@
     "01-ace.patch": "de9532582b2fd4faa63c014f26ddc74955f823a4a93010875120a4fe562466c2",
     "02-rc522.patch": "ce26a6df3c51da05a22b1f07df1f47ebc71f20f76d61a5056717882a5dc896ef",
     "03-feed-guard.patch": "4cad3aabe38b65c7ff87d15264352991aed72200b422a4ae9b526baff1c8b751",
-    "04-fast-eject.patch": "f51f767d258aa6674643625104343c393829cab34d57ad770f788906cceadf76"
+    "04-fast-eject.patch": "f51f767d258aa6674643625104343c393829cab34d57ad770f788906cceadf76",
+    "05-bootstrap-ace.patch": "3ab80f9619955e2cc0f9515fd29a772babb41c46f41dec409b18da5b0afebbda",
+    "06-bootstrap-feed.patch": "38dac44c7e26060557fafafa9eedf6946427d5fe101074fd92cf9b79f617f7e4"
   }
 }

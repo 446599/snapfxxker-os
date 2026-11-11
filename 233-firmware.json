@@ -1,7 +1,7 @@
 {
   "name": "233固件",
   "slug": "233-firmware",
-  "version": "2.1.0-233-dev.3-ui.5",
+  "version": "2.1.0-233-dev.3-ui.6",
   "target": "Snapmaker U1",
   "status": "native-ui-rfid-integration-package-verified",
   "build_profile": "rsyncfix-perms1-native-ui-overlay",
@@ -41,9 +41,9 @@
     }
   },
   "managed_provider_pin": {
-    "version": "1.27b-233.20261111-single.1",
-    "path": "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.1.tar.gz",
-    "sha256": "68fb9a083c5c4cd80c5e8259c0890793dd3a61e3cde6122916626e34de7ad219",
+    "version": "1.27b-233.20261111-single.2",
+    "path": "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.2.tar.gz",
+    "sha256": "811398431b13acc78502c9ede4d8fe105d85408095ea048a528846d5bd9621b9",
     "source_of_pin": "bundles/233-dev.2/manifest.json",
     "local_provider_changes_bundled": true
   },
@@ -53,8 +53,8 @@
     "firmware_built": true,
     "firmware_flashed": false,
     "boot_verified": false,
-    "python_tests_passed": 156,
-    "scope": "UI.5 reconstructed source with 28 patches, single-pass automatic RFID, 80 mm/s inlet-sensor ACE eject, and upgrade idle checks. Native AArch64 runtime, 1081 package files, 485 XML layouts and 35 CJK faces verified. Full OTA and rootfs independently unpacked and checked. Device deployment is pending."
+    "python_tests_passed": 159,
+    "scope": "UI.5 AArch64 runtime reused with unchanged build fingerprint for OS ui.6. Self-contained single.2 has complete runtime import closure and latest-first bootstraps. 159 Python tests and full OTA/rootfs checks passed. Single.2 real ACE 2 slot 1 eject completed in about 8.5 seconds with inlet empty and STOP confirmed on ui.5. ui.6 OS boot verification pending."
   },
   "previous_validation": {
     "version": "2.1.0-233-dev.2-perms.1",
@@ -70,7 +70,7 @@
     ],
     "scope": "Startup, imports and data; no new motion or thermal test."
   },
-  "artifact": {
+  "superseded_artifact": {
     "file": "U1_233_2.1.0-233-dev.3-ui.5_upgrade.bin",
     "bytes": 286861850,
     "sha256": "c2eb1680c4dbe8f899ac70954d2db8815a16f6a0b9ddf423ad1941339c7971a8",
@@ -79,6 +79,19 @@
     "runtime_binary_sha256": "3d2e73c25390c17fb55fe521a5860f2b84abefd4c077bfc77d29acf143398d30",
     "build_input_fingerprint": "b118223c4fe7b5345c9ff22477020e2e8a4ecbef203ffa0512aae6952dd665e8",
     "managed_provider_sha256": "68fb9a083c5c4cd80c5e8259c0890793dd3a61e3cde6122916626e34de7ad219",
-    "source_base_commit": "6843f476d128a6439285297e5243c7221b1ac97e"
+    "source_base_commit": "6843f476d128a6439285297e5243c7221b1ac97e",
+    "version": "2.1.0-233-dev.3-ui.5",
+    "reason": "Legacy helper directory precedence and omitted measurement_candidate runtime dependency; superseded by the self-contained single.2 integration."
+  },
+  "artifact": {
+    "file": "U1_233_2.1.0-233-dev.3-ui.6_upgrade.bin",
+    "bytes": 286861850,
+    "sha256": "cf6ad63e7e422c6c0d6cf81271ce59244a5857eaf50963b2d6ecf9b44d5c65aa",
+    "runtime_id": "233-native-ui-20261111.5",
+    "runtime_sha256": "2e97ddfb4d1768c2f3db9b2b5571c341fa802bf0670683e564f6344bb68ddfee",
+    "runtime_binary_sha256": "3d2e73c25390c17fb55fe521a5860f2b84abefd4c077bfc77d29acf143398d30",
+    "build_input_fingerprint": "b118223c4fe7b5345c9ff22477020e2e8a4ecbef203ffa0512aae6952dd665e8",
+    "managed_provider_sha256": "811398431b13acc78502c9ede4d8fe105d85408095ea048a528846d5bd9621b9",
+    "integration_base_commit": "1669812028f66256bd9b942a47e29108071065a7"
   }
 }

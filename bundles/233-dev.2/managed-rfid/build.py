@@ -11,14 +11,14 @@ import tarfile
 import tempfile
 
 HERE = Path(__file__).resolve().parent
-VERSION = '1.27b-233.20261111-single.1'
+VERSION = '1.27b-233.20261111-single.2'
 OLD_VERSION = '1.27b-233.20261109'
 BASE = HERE / 'base' / ('multiace-managed-' + OLD_VERSION + '.tar.gz')
 BASE_SHA = 'a18a762e4cb1061fe778bb919311a076bbfdfc445e2bb73bf72b5ae26544fc3f'
 EXPECTED = {
-    'klipper/extras/ace.py': '5c712f73861558853f70c2040e5db576a30643bc4996ea1b6d5ee28cc4aa4c87',
+    'klipper/extras/ace.py': '29c0c9fbe9e404cf2c79c1a55f488d8560dbf2ff7f1036895cd59fd82f89b1f3',
     'klipper/extras/ace_rc522.py': '4ee7e0d0da5c5fd0a1cdf51c2d0ed065181d0b21844a5b52c1baf304258355b3',
-    'klipper/extras/filament_feed_ace.py': '005b28a027cce08a5aed94e3fc65d00cf4eff53c118797e70db95fa119d3cfdd',
+    'klipper/extras/filament_feed_ace.py': 'af1c4284f50beade4419f4177915483b00709894a5e2515f5d9c1b018c7f946d',
     'klipper/extras/ace_slot_actions.py': '2bc8fbd2486a7c58a492e61932741352e9ddaf92e85a47066d4a545c368aee4e',
 }
 
@@ -58,6 +58,11 @@ def main():
             if sha(data) != digest:
                 raise ValueError('patched source SHA mismatch: ' + name)
             files[name] = data
+    source = (HERE / 'sources' / 'measurement_candidate.py').read_bytes()
+    if sha(source) != '4886a0720dcdc884f76ed873e60d93ad40b3ed054a1a8477cfe4e4c9742621d1':
+        raise ValueError('measurement source SHA mismatch')
+    files['klipper/extras/measurement_candidate.py'] = source
+    modes['klipper/extras/measurement_candidate.py'] = 0o644
     files['VERSION'] = (VERSION + '\n').encode()
     out = args.output
     out.parent.mkdir(parents=True, exist_ok=True)
