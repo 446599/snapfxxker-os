@@ -1,9 +1,9 @@
 {
   "name": "233固件",
   "slug": "233-firmware",
-  "version": "2.1.0-233-dev.3-ui.7",
+  "version": "2.1.0-233-dev.3-ui.8",
   "target": "Snapmaker U1",
-  "status": "offline-flow-audit-verified-candidate",
+  "status": "device-verified-scope-recorded",
   "build_profile": "rsyncfix-perms1-native-ui-overlay",
   "output_template": "firmware/U1_233_{version}_upgrade.bin",
   "base_firmware": {
@@ -41,9 +41,9 @@
     }
   },
   "managed_provider_pin": {
-    "version": "1.27b-233.20261111-single.3",
-    "path": "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.3.tar.gz",
-    "sha256": "1345e92477f9a27245b698da56a7f2e2ddce07ba602152805144f8273c08e65f",
+    "version": "1.27b-233.20261111-single.5",
+    "path": "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.5.tar.gz",
+    "sha256": "93ff99aebcee86fa5d1057864f4761d1d826afa41debeb783c0672328030bca6",
     "source_of_pin": "bundles/233-dev.2/manifest.json",
     "local_provider_changes_bundled": true
   },
@@ -52,10 +52,25 @@
     "native_arm64_rebuilt": true,
     "native_runtime_reused": true,
     "firmware_built": true,
-    "firmware_flashed": false,
-    "boot_verified": false,
-    "scope": "Offline flow-audit candidate. 117 managed, 42 native UI and 41 service regressions passed. Queue epochs, protected cancellation, bounded web reads, scoped durable RFID recovery and calibrated park isolation were reviewed. Full thermal load/unload, dual-spool physical attribution, per-route park generalization and ui.7 hardware boot remain acceptance work. Latest read-only live baseline is ui.6 on 2026-11-11 18:52 Asia/Shanghai.",
-    "python_tests_passed": 200
+    "firmware_flashed": true,
+    "boot_verified": true,
+    "scope": "ui.8 cold boot on A verified. Three ACE devices and 12 native slot phases ready, four head sensors empty, 15 read-only module bindings verified. Scoped position holds and exact EJECT recovery exercised. Native orange PLA insertion identified AHPLVO-106. single.5 bounded manual search had encoder +47 forward and -45 return, final relative residual +2 mm with per-command reset and stable terminal evidence. 50 mm search obtained no host tag identity. Native framebuffer rendered ready, original automatic drying settings restored. Full thermal load/unload, full-range manual tag attribution, remaining-mass accuracy and all-route precise parking remain acceptance work.",
+    "python_tests_passed": 223,
+    "boot_slot": "A",
+    "boot_version": "2.1.0-233-dev.3-ui.8",
+    "hardware_evidence": "verification/on-device-ui7-20261111/ui8-final-evidence.json",
+    "physical_touch_tested": false,
+    "browser_click_tested": false,
+    "manual_relative_return": {
+      "search_command_mm": 50,
+      "forward_encoder_mm": 47,
+      "return_encoder_mm": 45,
+      "residual_encoder_mm": 2,
+      "standstill_verified": true,
+      "tag_identified": false
+    },
+    "eject_verified": true,
+    "native_orange_identification_verified": true
   },
   "previous_validation": {
     "version": "2.1.0-233-dev.2-perms.1",
@@ -120,17 +135,41 @@
       "integration_base_commit": "1669812028f66256bd9b942a47e29108071065a7"
     }
   },
+  "last_candidate_snapshot": {
+    "version": "2.1.0-233-dev.3-ui.7",
+    "artifact": {
+      "file": "U1_233_2.1.0-233-dev.3-ui.7-flowfix_candidate_upgrade.bin",
+      "bytes": 286865946,
+      "sha256": "eaadabdecd811c50447898bb37b550df70546d13c8a273b864558215f4c4d934",
+      "runtime_id": "233-native-ui-20261111.5",
+      "runtime_sha256": "2e97ddfb4d1768c2f3db9b2b5571c341fa802bf0670683e564f6344bb68ddfee",
+      "runtime_binary_sha256": "3d2e73c25390c17fb55fe521a5860f2b84abefd4c077bfc77d29acf143398d30",
+      "build_input_fingerprint": "b118223c4fe7b5345c9ff22477020e2e8a4ecbef203ffa0512aae6952dd665e8",
+      "managed_provider_sha256": "1345e92477f9a27245b698da56a7f2e2ddce07ba602152805144f8273c08e65f",
+      "source_base_commit": "0788b0030fc1c9579b829b81448226456b7fe450",
+      "candidate": true,
+      "device_verified": false
+    },
+    "validation": {
+      "native_arm64_rebuilt": true,
+      "native_runtime_reused": true,
+      "firmware_built": true,
+      "firmware_flashed": false,
+      "boot_verified": false,
+      "scope": "Offline flow-audit candidate. 117 managed, 42 native UI and 41 service regressions passed. Queue epochs, protected cancellation, bounded web reads, scoped durable RFID recovery and calibrated park isolation were reviewed. Full thermal load/unload, dual-spool physical attribution, per-route park generalization and ui.7 hardware boot remain acceptance work. Latest read-only live baseline is ui.6 on 2026-11-11 18:52 Asia/Shanghai.",
+      "python_tests_passed": 200
+    }
+  },
   "artifact": {
-    "file": "U1_233_2.1.0-233-dev.3-ui.7-flowfix_candidate_upgrade.bin",
-    "bytes": 286865946,
-    "sha256": "eaadabdecd811c50447898bb37b550df70546d13c8a273b864558215f4c4d934",
+    "file": "U1_233_2.1.0-233-dev.3-ui.8_upgrade.bin",
+    "bytes": 286874138,
+    "sha256": "61cf26cf6ca7b232334b3b316b7d6b79f1fd7476315903b414f1db7b2426832c",
     "runtime_id": "233-native-ui-20261111.5",
     "runtime_sha256": "2e97ddfb4d1768c2f3db9b2b5571c341fa802bf0670683e564f6344bb68ddfee",
     "runtime_binary_sha256": "3d2e73c25390c17fb55fe521a5860f2b84abefd4c077bfc77d29acf143398d30",
     "build_input_fingerprint": "b118223c4fe7b5345c9ff22477020e2e8a4ecbef203ffa0512aae6952dd665e8",
-    "managed_provider_sha256": "1345e92477f9a27245b698da56a7f2e2ddce07ba602152805144f8273c08e65f",
-    "source_base_commit": "0788b0030fc1c9579b829b81448226456b7fe450",
-    "candidate": true,
-    "device_verified": false
+    "managed_provider_sha256": "93ff99aebcee86fa5d1057864f4761d1d826afa41debeb783c0672328030bca6",
+    "source_base_commit": "c4ce64e05e81bed17d530992863a16d856334694",
+    "device_verified": true
   }
 }

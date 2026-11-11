@@ -11,7 +11,7 @@ import tarfile
 import tempfile
 
 HERE = Path(__file__).resolve().parent
-VERSION = '1.27b-233.20261111-single.3'
+VERSION = '1.27b-233.20261111-single.5'
 OLD_VERSION = '1.27b-233.20261109'
 BASE = HERE / 'base' / ('multiace-managed-' + OLD_VERSION + '.tar.gz')
 BASE_SHA = 'a18a762e4cb1061fe778bb919311a076bbfdfc445e2bb73bf72b5ae26544fc3f'
@@ -20,10 +20,10 @@ EXPECTED = {
     'web/frontend/app.js': 'cd2a25eee524b988fac46cba9fa5d154c45aa63cf0f19f668575c258e6a06a45',
     'web/frontend/index.html': '0cbf6e48ceb23b0a507daa5fd9a0b25b53e9fa43adc8c4bf0276678ffb41b985',
     'klipper/extras/ace.py': 'c4aea9565ccc6041bb24106c6097b8b82762c48d8b086ef4a9f21bd14792787f',
-    'klipper/extras/ace_rc522.py': '4ee7e0d0da5c5fd0a1cdf51c2d0ed065181d0b21844a5b52c1baf304258355b3',
+    'klipper/extras/ace_rc522.py': 'fa1aaa0052533670f84f5103d94f4ac831daa89aa99a9fbb162997ff0a7becc7',
     'klipper/extras/filament_feed_ace.py': '6c4ebfb8c1bc7563ac83d46f3db297b41d07ad4d262c2dc9b1c96f570df3dd21',
     'klipper/extras/ace_location_hold.py': '14486341b8cc2a2272f6fdf5719f9837f177c897d56d4740fe8f811059d9e233',
-    'klipper/extras/ace_slot_actions.py': '06a0e8f0ee2a17c9a0edab94101862fe9ea5722a60c926262089b84d8093f6c0',
+    'klipper/extras/ace_slot_actions.py': 'd7c4a831151dd7bbcd1cc1220c855b3ad180e80a1dd2f19525789368d7e7fc67',
 }
 
 def sha(data):

@@ -1,13 +1,13 @@
 import ast, pathlib, unittest, logging, sys, types
 import atexit, tempfile, tarfile
 REPO=pathlib.Path(__file__).resolve().parents[2]
-ARCHIVE=REPO/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.3.tar.gz'
+ARCHIVE=REPO/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.5.tar.gz'
 TMP=tempfile.TemporaryDirectory(prefix='managed-rfid-tests-')
 atexit.register(TMP.cleanup)
 ROOT=pathlib.Path(TMP.name)
 with tarfile.open(ARCHIVE,'r:gz') as archive:
     for name in ('ace.py','ace_rc522.py'):
-        member=archive.getmember('multiace-1.27b-233.20261111-single.3/klipper/extras/'+name)
+        member=archive.getmember('multiace-1.27b-233.20261111-single.5/klipper/extras/'+name)
         (ROOT/name).write_bytes(archive.extractfile(member).read())
 def load_method(path,name,ns):
     tree=ast.parse(path.read_text()); fn=next(x for node in tree.body if isinstance(node,ast.ClassDef) for x in node.body if isinstance(x,ast.FunctionDef) and x.name==name)

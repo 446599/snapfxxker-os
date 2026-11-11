@@ -14,9 +14,9 @@ from build_inputs import current_inputs, verify_runtime_inputs
 
 REPO = Path(__file__).resolve().parents[2]
 PROVIDER = {
-    "version": "1.27b-233.20261111-single.3",
-    "path": "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.3.tar.gz",
-    "sha256": "1345e92477f9a27245b698da56a7f2e2ddce07ba602152805144f8273c08e65f",
+    "version": "1.27b-233.20261111-single.5",
+    "path": "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.5.tar.gz",
+    "sha256": "93ff99aebcee86fa5d1057864f4761d1d826afa41debeb783c0672328030bca6",
 }
 SUBMODULES = {
     "providers/multiACE": "a1a7b91b1fd297c1486a13ea22c61e01499a196d",

@@ -6,9 +6,9 @@ import types
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-ARCHIVE = ROOT/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.3.tar.gz'
+ARCHIVE = ROOT/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.5.tar.gz'
 with tarfile.open(ARCHIVE,'r:gz') as archive:
-    source = archive.extractfile('multiace-1.27b-233.20261111-single.3/klipper/extras/ace.py').read()
+    source = archive.extractfile('multiace-1.27b-233.20261111-single.5/klipper/extras/ace.py').read()
 tree = ast.parse(source)
 cls = next(node for node in tree.body if isinstance(node,ast.ClassDef) and any(isinstance(x,ast.FunctionDef) and x.name=='get_status' for x in node.body))
 status = next(x for x in cls.body if isinstance(x,ast.FunctionDef) and x.name=='get_status')

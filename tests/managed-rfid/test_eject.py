@@ -1,12 +1,12 @@
 import importlib.util,pathlib,sys,types,unittest
 import atexit,tempfile,tarfile
 REPO=pathlib.Path(__file__).resolve().parents[2]
-ARCHIVE=REPO/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.3.tar.gz'
+ARCHIVE=REPO/'overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.5.tar.gz'
 TMP=tempfile.TemporaryDirectory(prefix='managed-eject-test-');atexit.register(TMP.cleanup)
 p=pathlib.Path(TMP.name)
 with tarfile.open(ARCHIVE,'r:gz') as archive:
  for name in ('ace_slot_actions.py','ace_location_hold.py'):
-  member=archive.getmember('multiace-1.27b-233.20261111-single.3/klipper/extras/'+name)
+  member=archive.getmember('multiace-1.27b-233.20261111-single.5/klipper/extras/'+name)
   (p/name).write_bytes(archive.extractfile(member).read())
 pkg=types.ModuleType('ejectpkg');pkg.__path__=[str(p)];sys.modules['ejectpkg']=pkg
 from ejectpkg.ace_slot_actions import SlotActions,MAX_MM,SPEED_MM_S

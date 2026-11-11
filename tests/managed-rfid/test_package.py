@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = '1.27b-233.20261111-single.3'
+VERSION = '1.27b-233.20261111-single.5'
 NAME = 'multiace-managed-' + VERSION + '.tar.gz'
 
 def digest(data):

@@ -4,7 +4,7 @@ from unittest.mock import patch
 REPO = pathlib.Path(__file__).resolve().parents[2]
 ARCHIVE = (
     REPO
-    / "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.3.tar.gz"
+    / "overlays/233-dev.2-perms.1/root/usr/local/share/233-firmware/multiace-managed-1.27b-233.20261111-single.5.tar.gz"
 )
 TMP = tempfile.TemporaryDirectory(prefix="cancel-package-")
 atexit.register(TMP.cleanup)
