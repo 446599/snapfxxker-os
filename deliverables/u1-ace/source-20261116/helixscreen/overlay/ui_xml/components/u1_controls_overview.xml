@@ -1,0 +1,141 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- U1 480x320 Control hub: four live status cards, not doorway tiles. -->
+<component>
+  <view extends="lv_obj" width="100%" height="100%" flex_flow="column"
+        style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap"
+        style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+    <lv_obj name="u1_controls_main_top" width="100%" height="0" flex_grow="1" flex_flow="row"
+            style_pad_all="0" style_pad_gap="#u1_card_gap" style_bg_opa="0"
+            style_border_width="0" scrollable="false">
+      <lv_obj name="u1_controls_temperature" width="0" flex_grow="1" height="100%" flex_flow="column"
+              style_pad_hor="#u1_card_pad_roomy" style_pad_ver="#u1_card_pad" style_pad_gap="#u1_compact_gap"
+              clickable="true" scrollable="false">
+        <style name="styles.u1_card"/>
+        <style name="styles.press_wash" selector="pressed"/>
+        <event_cb trigger="clicked" callback="on_u1_controls_temperature"/>
+        <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_compact_gap"
+                style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+          <icon src="thermometer" size="xs" variant="secondary" clickable="false" event_bubble="true"/>
+          <text_small text="温度" width="0" flex_grow="1" style_text_font="#u1_aux_font" style_text_color="#text"
+                      long_mode="dots" clickable="false" event_bubble="true"/>
+          <text_small bind_text="u1_controls_bed_caption" style_text_font="#u1_aux_font" style_text_color="#text_muted"
+                      clickable="false" event_bubble="true"/>
+          <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
+        </lv_obj>
+        <!-- A single cell owns the temperature, dot and head number so they
+             share a centerline even when some heads are unavailable. -->
+        <lv_obj width="100%" height="0" flex_grow="1" flex_flow="row"
+                style_pad_all="0" style_pad_gap="#u1_compact_gap" style_flex_cross_place="center"
+                clickable="false" event_bubble="true" scrollable="false">
+          <repeat count="4">
+            <lv_obj width="0" flex_grow="1" height="100%" flex_flow="column"
+                    style_pad_all="0" style_pad_gap="#u1_compact_gap" style_flex_main_place="center"
+                    style_flex_cross_place="center" style_flex_track_place="center"
+                    clickable="false" event_bubble="true" scrollable="false">
+              <bind_flag_if cond="tool_count le ${i} and ${i} gt 0" flag="hidden"/>
+              <text_body bind_text="u1_controls_nozzle_temp_${i}" width="100%" height="#u1_text_line"
+                         style_text_align="center" style_text_font="#u1_body_font"
+                         clickable="false" event_bubble="true">
+                <bind_style_if name="styles.invisible" cond="tool_count le ${i}"/>
+              </text_body>
+              <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0"
+                      style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" style_flex_main_place="center"
+                      clickable="false" scrollable="false" event_bubble="true">
+                <color_dot name="u1_controls_head_color_${i}" color_subject="tool_switcher_seg_${i}_color"
+                           colors_subject="tool_switcher_seg_${i}_colors" size="#u1_head_dot"
+                           clickable="false" event_bubble="true">
+                  <bind_flag_if_eq subject="tool_switcher_seg_${i}_has_color" ref_value="0" flag="hidden"/>
+                </color_dot>
+                <text_small text="—" style_text_font="#u1_aux_font" style_text_color="#text_muted" clickable="false" event_bubble="true">
+                  <bind_flag_if_eq subject="tool_switcher_seg_${i}_has_color" ref_value="1" flag="hidden"/>
+                </text_small>
+                <text_small text="${i + 1}" style_text_font="#u1_aux_font" style_text_color="#text_muted"
+                            clickable="false" event_bubble="true"/>
+              </lv_obj>
+            </lv_obj>
+          </repeat>
+        </lv_obj>
+      </lv_obj>
+
+      <lv_obj name="u1_controls_motion" width="0" flex_grow="1" height="100%" flex_flow="column"
+              style_pad_hor="#u1_card_pad_roomy" style_pad_ver="#u1_card_pad" style_pad_gap="#u1_compact_gap"
+              clickable="true" scrollable="false">
+        <style name="styles.u1_card"/>
+        <style name="styles.press_wash" selector="pressed"/>
+        <event_cb trigger="clicked" callback="on_controls_quick_actions"/>
+        <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_compact_gap"
+                style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+          <icon src="axis_arrow" size="xs" variant="secondary" clickable="false" event_bubble="true"/>
+          <text_small text="移动" width="0" flex_grow="1" style_text_font="#u1_aux_font" style_text_color="#text"
+                      long_mode="dots" clickable="false" event_bubble="true"/>
+          <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
+        </lv_obj>
+        <lv_obj width="100%" height="0" flex_grow="1" flex_flow="column" style_pad_all="0"
+                style_pad_gap="#u1_compact_gap" style_flex_main_place="center" clickable="false"
+                event_bubble="true" scrollable="false">
+          <text_heading bind_text="u1_controls_motion_state" width="100%" height="#u1_progress_line" style_text_font="#font_progress" style_text_color="#text" long_mode="dots"
+                        clickable="false" event_bubble="true"/>
+          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="0"
+                  style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+            <text_small style_text_font="#u1_aux_font" text="可移动 · X · Y · Z" style_text_color="#text_muted" clickable="false" event_bubble="true">
+              <bind_flag_if cond="machine_motion_blocked" flag="hidden"/>
+            </text_small>
+            <text_small style_text_font="#u1_aux_font" text="已锁定 · X · Y · Z" style_text_color="#text_muted" clickable="false" event_bubble="true">
+              <bind_flag_if cond="not machine_motion_blocked" flag="hidden"/>
+            </text_small>
+          </lv_obj>
+        </lv_obj>
+      </lv_obj>
+    </lv_obj>
+
+    <lv_obj name="u1_controls_main_bottom" width="100%" height="0" flex_grow="1" flex_flow="row"
+            style_pad_all="0" style_pad_gap="#u1_card_gap" style_bg_opa="0"
+            style_border_width="0" scrollable="false">
+      <lv_obj name="u1_controls_fans" width="0" flex_grow="1" height="100%" flex_flow="column"
+              style_pad_hor="#u1_card_pad_roomy" style_pad_ver="#u1_card_pad" style_pad_gap="#u1_compact_gap"
+              clickable="true" scrollable="false">
+        <style name="styles.u1_card"/>
+        <style name="styles.press_wash" selector="pressed"/>
+        <event_cb trigger="clicked" callback="on_controls_cooling"/>
+        <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_compact_gap"
+                style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+          <icon src="fan" size="xs" variant="secondary" clickable="false" event_bubble="true"/>
+          <text_small text="风扇" width="0" flex_grow="1" style_text_font="#u1_aux_font" style_text_color="#text"
+                      long_mode="dots" clickable="false" event_bubble="true"/>
+          <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
+        </lv_obj>
+        <lv_obj width="100%" height="0" flex_grow="1" flex_flow="column" style_pad_all="0"
+                style_pad_gap="#u1_compact_gap" style_flex_main_place="center" clickable="false"
+                event_bubble="true" scrollable="false">
+          <text_heading bind_text="controls_fan_speed" width="100%" height="#u1_progress_line" style_text_font="#font_progress" style_text_color="#text" long_mode="dots"
+                        clickable="false" event_bubble="true"/>
+          <text_small style_text_font="#u1_aux_font" text="模型风扇 · 4 路" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+        </lv_obj>
+      </lv_obj>
+
+      <lv_obj name="u1_controls_speed" width="0" flex_grow="1" height="100%" flex_flow="column"
+              style_pad_hor="#u1_card_pad_roomy" style_pad_ver="#u1_card_pad" style_pad_gap="#u1_compact_gap"
+              clickable="true" scrollable="false">
+        <style name="styles.u1_card"/>
+        <style name="styles.press_wash" selector="pressed"/>
+        <event_cb trigger="clicked" callback="on_u1_controls_speed"/>
+        <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_compact_gap"
+                style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+          <icon src="speed" size="xs" variant="secondary" clickable="false" event_bubble="true"/>
+          <text_small text="打印速度" width="0" flex_grow="1" style_text_font="#u1_aux_font" style_text_color="#text"
+                      long_mode="dots" clickable="false" event_bubble="true"/>
+          <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
+        </lv_obj>
+        <lv_obj width="100%" height="0" flex_grow="1" flex_flow="column" style_pad_all="0"
+                style_pad_gap="#u1_compact_gap" style_flex_main_place="center" clickable="false"
+                event_bubble="true" scrollable="false">
+          <text_heading bind_text="controls_speed_pct" width="100%" height="#u1_progress_line" style_text_font="#font_progress" style_text_color="#text" long_mode="dots"
+                        clickable="false" event_bubble="true"/>
+          <text_small style_text_font="#u1_aux_font" text="倍率" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+        </lv_obj>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

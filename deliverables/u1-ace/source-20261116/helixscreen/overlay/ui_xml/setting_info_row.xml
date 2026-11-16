@@ -1,0 +1,38 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Reusable Settings Info Row Component -->
+<!-- Creates a read-only row showing a label and value -->
+<!-- Usage: <setting_info_row label="Version" label_tag="Version" icon="info" value="1.0.0" value_tag="1.0.0"/> -->
+<component>
+  <api>
+    <prop name="label" type="string" default="Info"/>
+    <prop name="label_tag" type="string" default=""/>
+    <prop name="icon" type="string" default=""/>
+    <prop name="value" type="string" default=""/>
+    <prop name="value_tag" type="string" default=""/>
+    <!-- Follow a subject instead of a static value: the subject name, or empty to
+         show the static value. -->
+    <prop name="bind_value" type="string" default=""/>
+    <!-- Follow a subject for the label too: the subject name, or empty for the
+         static label. -->
+    <prop name="bind_label" type="string" default=""/>
+  </api>
+  <!-- The label has a fixed proportional slot, and long values wrap in the
+       remaining space. Use value or bind_value to get this alignment. -->
+  <view name="info_row" extends="lv_obj" width="100%" height="content" flex_flow="row" style_flex_main_place="start" style_flex_cross_place="center" style_bg_opa="0" style_border_width="0" scrollable="false" style_min_height="#u1_touch_target" style_flex_track_place="center">
+    <bind_style_if_le name="styles.setting_row_compact" subject="ui_breakpoint" ref_value="1"/>
+    <bind_style_if_ge name="styles.setting_row_standard" subject="ui_breakpoint" ref_value="2"/>
+    <!-- Left side: Optional icon -->
+    <lv_obj scrollable="false">
+      <style name="styles.u1_setting_icon_slot"/>
+      <icon hidden_if_empty="$icon" name="row_icon" src="$icon" size="sm" variant="secondary" align="center"/>
+    </lv_obj>
+    <!-- Middle: Label -->
+    <text_body name="label" width="36%" long_mode="wrap" text="$label" translation_tag="$label_tag" bind_text="$bind_label" style_text_font="#font_body_bold"/>
+    <!-- Right side: Value (secondary color) -->
+    <text_muted name="value" width="0" style_text_font="#u1_aux_font" text="$value" translation_tag="$value_tag" bind_text="$bind_value" flex_grow="1" style_text_align="right" long_mode="wrap"/>
+    <!-- Establish the cross-axis track before centering short single-line values. -->
+    <lv_obj width="0" height="#u1_touch_target" style_pad_all="0" style_border_width="0" style_bg_opa="0" scrollable="false" clickable="false"/>
+  </view>
+</component>

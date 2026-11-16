@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <view name="performance_overlay" extends="overlay_panel" title="Performance" bg_color="#screen_bg" title_transform="none" title_font="#u1_body_font" title_color="#text">
+    <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_top="#space_xs" style_pad_left="#space_sm" style_pad_right="#space_sm" style_pad_bottom="#space_xs" scrollable="true" flex_flow="column" style_pad_all="#space_sm" style_pad_gap="#u1_card_gap" scrollbar_mode="auto">
+
+      <text_small text="HOST" style_text_color="#text_muted" style_pad_top="#space_md"/>
+      <ui_card width="100%" flex_flow="column" style_pad_gap="#space_sm" style_radius="#u1_card_radius" style_border_width="#u1_border" style_border_color="#border" style_border_opa="255" style_bg_color="#card_bg" style_bg_opa="255" style_shadow_width="0">
+        <perf_metric_row label="CPU" label_tag="CPU" bind_value="perf_host_cpu_pct" bind_text="perf_host_cpu_pct_text" bind_present="perf_host_cpu_pct_present" sparkline_source="host_cpu_pct"/>
+        <perf_metric_row label="Memory" label_tag="Memory" bind_value="perf_host_mem_pct_used" bind_text="perf_host_mem_free_text" bind_present="perf_host_mem_present" sparkline_source="host_mem_pct_used"/>
+        <text_muted name="throttle_warning" bind_text="perf_host_throttle_text">
+          <bind_flag_if_eq subject="perf_host_throttle_state" flag="hidden" ref_value="0"/>
+        </text_muted>
+      </ui_card>
+
+      <text_small text="MCU" style_text_color="#text_muted" style_pad_top="#space_md"/>
+      <ui_card name="mcu_card" width="100%" flex_flow="column" style_pad_gap="#space_sm" style_radius="#u1_card_radius" style_border_width="#u1_border" style_border_color="#border" style_border_opa="255" style_bg_color="#card_bg" style_bg_opa="255" style_shadow_width="0"/>
+
+    </lv_obj>
+  </view>
+</component>

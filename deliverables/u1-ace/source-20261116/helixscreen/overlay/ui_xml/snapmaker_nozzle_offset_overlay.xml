@@ -1,0 +1,111 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Snapmaker U1 multi-toolhead offset calibration: heat, wipe and brush each nozzle, -->
+<!-- take the PEI sheet off, probe every head, save. One block per nozzle_offset_cal_state. -->
+<component>
+  <view name="snapmaker_nozzle_offset_overlay" extends="overlay_panel" title="四喷头偏移校准" bg_color="#screen_bg" title_font="#font_heading" title_color="#text">
+    <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" scrollable="false" flex_flow="column" style_pad_gap="8" style_pad_top="8" style_pad_bottom="8" style_pad_left="12" style_pad_right="12">
+      <!-- ================================================================== -->
+      <!-- INTRO (0) -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_intro" width="100%" flex_grow="1" style_pad_all="8" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start" style_pad_gap="8" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius" scrollable="false" scroll_dir="ver" height="0">
+        <bind_flag_if_not_eq subject="nozzle_offset_cal_state" flag="hidden" ref_value="0"/>
+        <lv_obj name="state_intro_scroll_body" width="100%" height="0" flex_grow="1" style_pad_all="0" style_pad_right="4" flex_flow="column" style_pad_gap="8" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+          <text_small width="100%" text="Measures each toolhead's X, Y and Z offset so every head prints in the same place. Takes about 20 minutes." style_text_align="left" long_mode="wrap"/>
+          <lv_obj width="90%" height="content" style_bg_color="#card_bg" style_radius="#border_radius" style_pad_all="#space_md" flex_flow="column" style_pad_gap="#space_xs" scrollable="false" style_border_color="#border" style_border_width="1">
+            <text_small width="100%" text="1. Each nozzle is heated, wiped and parked at the front for you to brush clean"/>
+            <text_small width="100%" text="2. Take the PEI sheet off the bed when asked"/>
+            <text_small width="100%" text="3. Every toolhead is probed and the offsets are saved"/>
+            <text_small width="100%" text="Keep hands clear except when asked. The printer moves on its own." style_text_color="#text_muted"/>
+          </lv_obj>
+        </lv_obj>
+        <ui_button name="btn_nozzle_offset_start" width="100%" text="Start Calibration" moves_machine="true" style_min_height="#u1_touch_target" height="44" style_radius="8" style_margin_top="0" style_margin_bottom="0">
+          <event_cb trigger="clicked" callback="on_nozzle_offset_start"/>
+        </ui_button>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- WORKING (1): a command is running -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_working" width="100%" flex_grow="1" style_pad_all="8" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start" style_pad_gap="8" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius" scroll_dir="ver" height="0">
+        <bind_flag_if_not_eq subject="nozzle_offset_cal_state" flag="hidden" ref_value="1"/>
+        <lv_obj name="state_working_scroll_body" width="100%" height="0" flex_grow="1" style_pad_all="0" style_pad_right="4" flex_flow="column" style_pad_gap="8" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+          <spinner size="lg"/>
+          <text_heading name="nozzle_offset_step" width="100%" bind_text="nozzle_offset_cal_title" style_text_align="left" long_mode="wrap"/>
+          <text_small name="nozzle_offset_progress" width="100%" bind_text="nozzle_offset_cal_progress" style_text_align="left" style_text_color="#text_muted" long_mode="wrap"/>
+        </lv_obj>
+        <ui_button name="btn_nozzle_offset_cancel_working" width="100%" text="Cancel" variant="danger" style_min_height="#u1_touch_target" style_radius="8" height="44" style_margin_top="0" style_margin_bottom="0">
+          <event_cb trigger="clicked" callback="on_nozzle_offset_close"/>
+        </ui_button>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- CLEAN NOZZLE (2): the parked head waits for the brush -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_clean" width="100%" flex_grow="1" style_pad_all="8" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start" style_pad_gap="8" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius" scroll_dir="ver" height="0">
+        <bind_flag_if_not_eq subject="nozzle_offset_cal_state" flag="hidden" ref_value="2"/>
+        <lv_obj name="state_clean_scroll_body" width="100%" height="0" flex_grow="1" style_pad_all="0" style_pad_right="4" flex_flow="column" style_pad_gap="8" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+          <icon src="fire" size="lg" variant="warning"/>
+          <text_heading name="nozzle_offset_clean_title" width="100%" bind_text="nozzle_offset_cal_title" style_text_align="left" long_mode="wrap"/>
+          <text_small name="nozzle_offset_clean_text" width="100%" bind_text="nozzle_offset_cal_prompt" style_text_align="left" long_mode="wrap"/>
+        </lv_obj>
+        <lv_obj width="100%" height="44" style_pad_all="0" flex_flow="row" style_flex_main_place="center" style_pad_gap="8" scrollable="false" style_margin_top="0" style_margin_bottom="0">
+          <ui_button name="btn_nozzle_offset_cancel_clean" flex_grow="1" text="Cancel" variant="danger" style_min_height="#u1_touch_target" style_radius="8" width="0" height="44" style_min_width="0">
+            <event_cb trigger="clicked" callback="on_nozzle_offset_close"/>
+          </ui_button>
+          <ui_button name="btn_nozzle_offset_clean_next" flex_grow="2" text="Next" variant="primary" moves_machine="true" style_min_height="#u1_touch_target" style_radius="8" width="0" height="44" style_min_width="0">
+            <event_cb trigger="clicked" callback="on_nozzle_offset_next"/>
+          </ui_button>
+        </lv_obj>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- REMOVE PLATE (3): the plate check wants the bare bed -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_plate" width="100%" flex_grow="1" style_pad_all="8" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start" style_pad_gap="8" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius" scroll_dir="ver" height="0">
+        <bind_flag_if_not_eq subject="nozzle_offset_cal_state" flag="hidden" ref_value="3"/>
+        <lv_obj name="state_plate_scroll_body" width="100%" height="0" flex_grow="1" style_pad_all="0" style_pad_right="4" flex_flow="column" style_pad_gap="8" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+          <icon src="layers" size="lg" variant="warning"/>
+          <text_heading name="nozzle_offset_plate_title" width="100%" bind_text="nozzle_offset_cal_title" style_text_align="left" long_mode="wrap"/>
+          <text_small name="nozzle_offset_plate_text" width="100%" bind_text="nozzle_offset_cal_prompt" style_text_align="left" long_mode="wrap"/>
+        </lv_obj>
+        <lv_obj width="100%" height="44" style_pad_all="0" flex_flow="row" style_flex_main_place="center" style_pad_gap="8" scrollable="false" style_margin_top="0" style_margin_bottom="0">
+          <ui_button name="btn_nozzle_offset_cancel_plate" flex_grow="1" text="Cancel" variant="danger" style_min_height="#u1_touch_target" style_radius="8" width="0" height="44" style_min_width="0">
+            <event_cb trigger="clicked" callback="on_nozzle_offset_close"/>
+          </ui_button>
+          <ui_button name="btn_nozzle_offset_plate_next" flex_grow="2" text="Next" variant="primary" moves_machine="true" style_min_height="#u1_touch_target" style_radius="8" width="0" height="44" style_min_width="0">
+            <event_cb trigger="clicked" callback="on_nozzle_offset_next"/>
+          </ui_button>
+        </lv_obj>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- DONE (4) -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_done" width="100%" flex_grow="1" style_pad_all="8" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start" style_pad_gap="8" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius" scroll_dir="ver" height="0">
+        <bind_flag_if_not_eq subject="nozzle_offset_cal_state" flag="hidden" ref_value="4"/>
+        <lv_obj name="state_done_scroll_body" width="100%" height="0" flex_grow="1" style_pad_all="0" style_pad_right="4" flex_flow="column" style_pad_gap="8" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+          <icon src="check_circle" size="lg" variant="success"/>
+          <text_heading width="100%" text="Offsets Saved" style_text_align="left" long_mode="wrap"/>
+          <text_small width="100%" text="Place the PEI sheet back onto the heated bed." style_text_align="left" long_mode="wrap"/>
+          <text_small name="nozzle_offset_results" width="100%" bind_text="nozzle_offset_cal_results" style_text_align="left" style_text_color="#text_muted" long_mode="wrap"/>
+        </lv_obj>
+        <ui_button name="btn_nozzle_offset_done" width="100%" text="Done" style_min_height="#u1_touch_target" style_radius="8" height="44" style_margin_top="0" style_margin_bottom="0">
+          <event_cb trigger="clicked" callback="on_nozzle_offset_close"/>
+        </ui_button>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- FAILED (5): the firmware exit already ran, heaters are off -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_failed" width="100%" flex_grow="1" style_pad_all="8" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start" style_pad_gap="8" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius" scroll_dir="ver" height="0">
+        <bind_flag_if_not_eq subject="nozzle_offset_cal_state" flag="hidden" ref_value="5"/>
+        <lv_obj name="state_failed_scroll_body" width="100%" height="0" flex_grow="1" style_pad_all="0" style_pad_right="4" flex_flow="column" style_pad_gap="8" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+          <icon src="alert_circle" size="lg" variant="danger"/>
+          <text_heading width="100%" text="Calibration Failed" style_text_align="left" long_mode="wrap"/>
+          <text_small name="nozzle_offset_error" width="100%" bind_text="nozzle_offset_cal_error" style_text_align="left" long_mode="wrap"/>
+          <text_small width="100%" text="Nothing was saved and the heaters are off." style_text_align="left" style_text_color="#text_muted" long_mode="wrap"/>
+        </lv_obj>
+        <ui_button name="btn_nozzle_offset_failed_done" width="100%" text="Done" style_min_height="#u1_touch_target" style_radius="8" height="44" style_margin_top="0" style_margin_bottom="0">
+          <event_cb trigger="clicked" callback="on_nozzle_offset_close"/>
+        </ui_button>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

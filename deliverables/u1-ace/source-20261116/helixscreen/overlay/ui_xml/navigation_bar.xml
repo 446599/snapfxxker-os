@@ -1,0 +1,163 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="nav_label_icon_offset" value="-8"/>
+    <!-- Nav bar width per breakpoint (selected by horizontal resolution in C++) -->
+    <px name="nav_width_micro" value="0"/>
+    <px name="nav_width_tiny" value="0"/>
+    <px name="nav_width_small" value="0"/>
+    <px name="nav_width_medium" value="0"/>
+    <px name="nav_width_large" value="0"/>
+    <px name="nav_width_xlarge" value="0"/>
+    <px name="nav_width_xxlarge" value="0"/>
+
+    <!-- Nav bar inactive-icon size: one rung below #icon_size, so the selected
+         button reads larger as well as brighter. micro matches #icon_size
+         instead, because one rung down there is a 16px face and a 16px outline
+         glyph has strokes too thin to read in a 42px strip.
+         test_nav_icon_size_ladder.cpp enforces the relationship. -->
+    <string name="icon_size_nav_inactive_micro" value="md"/>
+    <string name="icon_size_nav_inactive_tiny" value="sm"/>
+    <string name="icon_size_nav_inactive_small" value="sm"/>
+    <string name="icon_size_nav_inactive_medium" value="md"/>
+    <string name="icon_size_nav_inactive_large" value="md"/>
+    <string name="icon_size_nav_inactive_xlarge" value="md"/>
+    <string name="icon_size_nav_inactive_xxlarge" value="md"/>
+
+    <!-- Navbar E-stop diameter: the larger of #button_height and 44px, so the
+         target never shrinks below the circles it stands in for. micro's 42px
+         navbar cannot fit that with a margin, so its disc is 34px and
+         nav_estop_reach extends the tap target back to the full 42px. -->
+    <px name="nav_estop_size_micro" value="34"/>
+    <px name="nav_estop_size_tiny" value="44"/>
+    <px name="nav_estop_size_small" value="48"/>
+    <px name="nav_estop_size_medium" value="52"/>
+    <px name="nav_estop_size_large" value="72"/>
+    <px name="nav_estop_size_xlarge" value="80"/>
+    <px name="nav_estop_size_xxlarge" value="96"/>
+    <px name="nav_estop_reach_micro" value="4"/>
+    <px name="nav_estop_reach_tiny" value="0"/>
+    <px name="nav_estop_reach_small" value="0"/>
+    <px name="nav_estop_reach_medium" value="0"/>
+    <px name="nav_estop_reach_large" value="0"/>
+    <px name="nav_estop_reach_xlarge" value="0"/>
+    <px name="nav_estop_reach_xxlarge" value="0"/>
+  </consts>
+  <styles>
+    <!-- Keep the full nav cell under the finger throughout a press. -->
+    <style name="nav_pressed" transform_scale_x="256" transform_scale_y="256"
+           outline_width="0" bg_color="#elevated_bg" bg_opa="128"/>
+  </styles>
+  <view extends="lv_obj" width="100%" height="#u1_nav_height" flex_flow="row"
+        style_flex_main_place="center" style_flex_cross_place="center" style_pad_hor="0"
+        style_pad_ver="0" style_pad_gap="0" style_border_width="#u1_border"
+        style_border_side="full" style_border_color="#border" style_radius="#u1_card_radius"
+        style_bg_color="#card_bg" style_bg_opa="255" scrollable="false">
+    <ui_button name="nav_btn_edit_add" text="添加组件" icon="plus" width="0" flex_grow="1" height="#u1_touch_target" variant="ghost">
+      <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="0"/>
+      <event_cb trigger="clicked" callback="on_edit_add_widget_clicked"/>
+    </ui_button>
+    <ui_button name="nav_btn_edit_delete_page" text="删除页面" icon="delete" width="0" flex_grow="1" height="#u1_touch_target" variant="ghost">
+      <bind_flag_if cond="home_edit_mode eq 1 and home_edit_page_deletable eq 1" flag="hidden" invert="true"/>
+      <event_cb trigger="clicked" callback="on_edit_delete_page_clicked"/>
+    </ui_button>
+    <ui_button name="nav_btn_edit_done" text="完成" width="0" flex_grow="1" height="#u1_touch_target" variant="primary">
+      <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="0"/>
+      <event_cb trigger="clicked" callback="on_edit_done_clicked"/>
+    </ui_button>
+    <ui_button name="nav_btn_home" width="0" flex_grow="1" height="100%" variant="ghost"
+               style_min_width="0" style_pad_all="#u1_compact_gap" style_border_width="0" style_radius="#u1_card_radius">
+      <style name="nav_pressed" selector="pressed"/>
+      <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+      <lv_obj name="u1_nav_selection_home" width="100%" height="100%" align="center"
+              ignore_layout="true" clickable="false" scrollable="false"
+              style_pad_all="0" style_radius="#u1_card_radius" style_border_width="#u1_border"
+              style_border_side="full" style_border_color="#primary" style_shadow_width="0">
+        <bind_flag_if cond="active_panel eq 0 or active_panel eq 1" flag="hidden" invert="true"/>
+        <bind_style_if name="styles.u1_selected_light" cond="settings_dark_mode eq 0"/>
+        <bind_style_if name="styles.u1_selected_dark" cond="settings_dark_mode eq 1"/>
+      </lv_obj>
+      <lv_obj name="u1_nav_content_home" width="content" height="content" align="center" flex_flow="row"
+              style_pad_all="0" style_pad_gap="#u1_nav_icon_gap" style_flex_cross_place="center"
+              clickable="false" event_bubble="true" scrollable="false">
+        <icon name="u1_nav_icon_home" src="home_outline" size="sm" variant="text" clickable="false" event_bubble="true"/>
+        <text_body name="nav_label_home" text="总览" clickable="false" event_bubble="true" style_text_font="#u1_body_font"/>
+      </lv_obj>
+    </ui_button>
+    <ui_button name="nav_btn_controls" width="0" flex_grow="1" height="100%" variant="ghost"
+               style_min_width="0" style_pad_all="#u1_compact_gap" style_border_width="0" style_radius="#u1_card_radius">
+      <style name="nav_pressed" selector="pressed"/>
+      <event_cb trigger="clicked" callback="on_u1_controls_main"/>
+      <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+      <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+      <lv_obj name="u1_nav_selection_controls" width="100%" height="100%" align="center"
+              ignore_layout="true" clickable="false" scrollable="false"
+              style_pad_all="0" style_radius="#u1_card_radius" style_border_width="#u1_border"
+              style_border_side="full" style_border_color="#primary" style_shadow_width="0">
+        <bind_flag_if cond="active_panel eq 2" flag="hidden" invert="true"/>
+        <bind_style_if name="styles.u1_selected_light" cond="settings_dark_mode eq 0"/>
+        <bind_style_if name="styles.u1_selected_dark" cond="settings_dark_mode eq 1"/>
+      </lv_obj>
+      <lv_obj name="u1_nav_content_controls" width="content" height="content" align="center" flex_flow="row"
+              style_pad_all="0" style_pad_gap="#u1_nav_icon_gap" style_flex_cross_place="center"
+              clickable="false" event_bubble="true" scrollable="false">
+        <icon name="u1_nav_icon_controls" src="fine_tune" size="sm" variant="text" clickable="false" event_bubble="true"/>
+        <text_body name="nav_label_controls" text="控制" clickable="false" event_bubble="true" style_text_font="#u1_body_font"/>
+      </lv_obj>
+    </ui_button>
+    <ui_button name="nav_btn_filament" width="0" flex_grow="1" height="100%" variant="ghost"
+               style_min_width="0" style_pad_all="#u1_compact_gap" style_border_width="0" style_radius="#u1_card_radius">
+      <style name="nav_pressed" selector="pressed"/>
+      <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+      <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+      <lv_obj name="u1_nav_selection_filament" width="100%" height="100%" align="center"
+              ignore_layout="true" clickable="false" scrollable="false"
+              style_pad_all="0" style_radius="#u1_card_radius" style_border_width="#u1_border"
+              style_border_side="full" style_border_color="#primary" style_shadow_width="0">
+        <bind_flag_if cond="active_panel eq 3" flag="hidden" invert="true"/>
+        <bind_style_if name="styles.u1_selected_light" cond="settings_dark_mode eq 0"/>
+        <bind_style_if name="styles.u1_selected_dark" cond="settings_dark_mode eq 1"/>
+      </lv_obj>
+      <lv_obj name="u1_nav_content_filament" width="content" height="content" align="center" flex_flow="row"
+              style_pad_all="0" style_pad_gap="#u1_nav_icon_gap" style_flex_cross_place="center"
+              clickable="false" event_bubble="true" scrollable="false">
+        <icon name="u1_nav_icon_filament" src="filament_outline" size="sm" variant="text" clickable="false" event_bubble="true"/>
+        <text_body name="nav_label_filament" text="耗材" clickable="false" event_bubble="true" style_text_font="#u1_body_font"/>
+      </lv_obj>
+    </ui_button>
+    <ui_button name="nav_btn_settings" width="0" flex_grow="1" height="100%" variant="ghost"
+               style_min_width="0" style_pad_all="#u1_compact_gap" style_border_width="0" style_radius="#u1_card_radius">
+      <style name="nav_pressed" selector="pressed"/>
+      <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+      <lv_obj name="u1_nav_selection_settings" width="100%" height="100%" align="center"
+              ignore_layout="true" clickable="false" scrollable="false"
+              style_pad_all="0" style_radius="#u1_card_radius" style_border_width="#u1_border"
+              style_border_side="full" style_border_color="#primary" style_shadow_width="0">
+        <bind_flag_if cond="active_panel eq 4 or active_panel eq 5" flag="hidden" invert="true"/>
+        <bind_style_if name="styles.u1_selected_light" cond="settings_dark_mode eq 0"/>
+        <bind_style_if name="styles.u1_selected_dark" cond="settings_dark_mode eq 1"/>
+      </lv_obj>
+      <lv_obj name="u1_nav_content_settings" width="content" height="content" align="center" flex_flow="row"
+              style_pad_all="0" style_pad_gap="#u1_nav_icon_gap" style_flex_cross_place="center"
+              clickable="false" event_bubble="true" scrollable="false">
+        <icon name="u1_nav_icon_settings" src="settings" size="sm" variant="text" clickable="false" event_bubble="true"/>
+        <text_body name="nav_label_settings" text="设置" clickable="false" event_bubble="true" style_text_font="#u1_body_font"/>
+      </lv_obj>
+    </ui_button>
+    <ui_button name="nav_printer_badge" width="#u1_touch_target" height="#u1_touch_target" variant="ghost" style_pad_all="0">
+      <bind_flag_if cond="show_printer_switcher eq 1 and home_edit_mode eq 0" flag="hidden" invert="true"/>
+      <lv_obj name="nav_printer_icon_wrap" width="content" height="content" align="center" style_pad_all="0" clickable="false" event_bubble="true">
+        <icon src="printer_3d" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
+        <lv_obj name="nav_printer_dot" width="#u1_status_dot" height="#u1_status_dot" align="top_right" style_radius="#u1_brand_radius" style_bg_color="#success" style_bg_opa="255" style_pad_all="0" clickable="false" event_bubble="true"/>
+      </lv_obj>
+    </ui_button>
+    <lv_obj name="nav_drying_slot" width="#u1_touch_target" height="#u1_touch_target" style_pad_all="0" style_bg_opa="0" style_border_width="0" clickable="false" scrollable="false">
+      <bind_flag_if_eq subject="bed_drying_state" flag="hidden" ref_value="0"/>
+    </lv_obj>
+    <lv_obj name="nav_estop_slot" width="#u1_touch_target" height="#u1_touch_target" style_pad_all="0" style_bg_opa="0" style_border_width="0" clickable="false" scrollable="false">
+      <bind_flag_if_eq subject="estop_visible" flag="hidden" ref_value="0"/>
+    </lv_obj>
+  </view>
+</component>

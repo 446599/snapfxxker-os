@@ -1,0 +1,1497 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -759,14 +759,10 @@
+         self._serial = None
+         self.printer = config.get_printer()
+         self.reactor = self.printer.get_reactor()
+-        self._stop_guard = StopFaultLatch(os.path.join(
+-            os.environ.get('MULTIACE_CONFIG_DIR', '/home/lava/printer_data/config'),
+-            'persistent', 'multiace-stop-faults.json'))
+-        from .ace_latch_recovery import restore_checkpoint
+-        restore_checkpoint(self._stop_guard)
+-        self._stop_guard.restore_persistent()
+-        self.gcode = StopGuardGCode(self.printer.lookup_object('gcode'),
+-                                   lambda: self._stop_guard)
++        # Original STOP failures end the current operation; they do not
++        # install a persistent global motor lock or disable auto insertion.
++        self._stop_guard = StopFaultLatch()
++        self.gcode = self.printer.lookup_object('gcode')
+         self._name = config.get_name()
+         self.send_time = None
+         self.ace_dev_fd = None
+@@ -3392,6 +3388,7 @@
+             return v
+         return self.retract_length
+ 
++
+     def get_swap_retract_length(self, ace_idx, slot):
+         """Swap unload retract length with per-ACE/per-slot override
+         priority, falling back to the global swap_retract_length. A value
+@@ -3706,9 +3703,6 @@
+         fault_identity = self._location_identity(idx)
+         if self._skip_legacy_auto_insert(idx):
+             return {'kind': 'controlled_wait', 'parked': False}
+-        port, uid = self._location_identity(idx)
+-        if self._location_hold.blocks_route(idx=idx,slot=slot,port=port,ace_uid=uid,heads=self._rfid_route_heads(idx,slot)):
+-            return {'kind': 'position_unconfirmed', 'parked': False}
+         if not hasattr(self, '_insert_read_running'):
+             self._insert_read_running = set()
+         if not hasattr(self, '_insert_epochs'):
+@@ -3726,38 +3720,20 @@
+             result = self._insert_uid_read(idx, slot, depth, guard=guard)
+         except Exception:
+             logging.exception('[multiACE] [insert-read]')
+-            self._latch_stop_fault(idx, slot, 'insert operation failed; motion unconfirmed', identity=fault_identity)
+-            return {'kind': 'error', 'parked': False}
++            result = {'kind': 'unread', 'parked': False}
+         finally:
+             self._insert_read_running.discard(key)
+-        if isinstance(result,dict) and result.get('kind')=='native':
+-            if not result.get('parked') or not guard() or getattr(self,'_tag_read_busy',False):
+-                return {'kind':'stop_unconfirmed','parked':False}
+-            if self.head_feed_length[slot] <= 0:
+-                return {'kind':'native','parked':True}
+-            return self._insert_checked_preload(idx,slot,guard,epoch,transport)
+-        if not isinstance(result, dict) or result.get('kind') not in ('success', 'no_tag', 'unread'):
+-            return result or {'kind': 'error', 'parked': False}
+-        if result.get('relative_unknown'):
++        if isinstance(result, dict) and result.get('kind') in ('queued', 'transport_changed', 'cancelled'):
+             return result
+-        if not result.get('parked') or not guard() or getattr(self, '_tag_read_busy', False):
+-            return {'kind': 'stop_unconfirmed', 'parked': False}
+-        uid = result.get('uid')
+-        if result['kind'] != 'success' and (getattr(self, '_rc_last_uid', {}) or {}).get(key) != (uid or initial_uid):
+-            return {'kind': 'uid_changed', 'parked': False}
+-        if result['kind'] == 'success' and (not uid or (getattr(self, '_rc_last_uid', {}) or {}).get(key) != uid):
+-            return {'kind': 'uid_changed', 'parked': False}
+-        if self.head_feed_length[slot] <= 0:
+-            return {'kind': 'skipped', 'parked': True}
+-        return self._insert_checked_preload(idx, slot, guard, epoch, transport)
++        if not guard() or getattr(self, '_tag_read_busy', False):
++            return {'kind': 'cancelled', 'parked': False}
++        # Leave the newly inserted material in ACE; no numeric preload.
++        return result or {'kind': 'unread', 'parked': False}
+ 
+     def _insert_tag_read_safe(self, idx, slot, depth='auto'):
+         fault_identity = self._location_identity(idx)
+         if self._skip_legacy_auto_insert(idx):
+             return {'kind': 'controlled_wait', 'parked': False}
+-        port, uid = self._location_identity(idx)
+-        if self._location_hold.blocks_route(idx=idx,slot=slot,port=port,ace_uid=uid,heads=self._rfid_route_heads(idx,slot)):
+-            return {'kind': 'position_unconfirmed', 'parked': False}
+         if not hasattr(self, '_insert_read_running'):
+             self._insert_read_running = set()
+         if not hasattr(self, '_insert_epochs'):
+@@ -3780,25 +3756,14 @@
+             self._insert_read_running.discard(key)
+ 
+     def _insert_stop_bound(self, idx, slot, transport):
+-        fault_identity = self._location_identity(idx) if self._serials.get(idx) is transport else None
+-        box = {}
+-        def callback(*args, **kw):
+-            box['response'] = kw.get('response', args[-1] if args else None)
+-        if self._serials.get(idx) is not transport:
+-            self._latch_stop_fault(idx, slot, 'insert original transport unavailable', identity=fault_identity)
++        if transport is None or self._serials.get(idx) is not transport:
+             return False
+-        self.send_request_to(idx, {'method': 'stop_feed_filament',
+-            'params': {'index': slot}, '_insert_stop_transport': transport,
+-            '_insert_reject': callback}, callback)
+-        deadline = self.reactor.monotonic() + 3.0
+-        while 'response' not in box and self.reactor.monotonic() < deadline:
+-            self.reactor.pause(self.reactor.monotonic() + 0.05)
+-        response = box.get('response')
+-        if (not isinstance(response, dict) or response.get('code') != 0
+-                or response.get('_v2_payload_valid') is not True):
+-            self._latch_stop_fault(idx, slot, 'insert stop acknowledgement unconfirmed', identity=fault_identity)
++        try:
++            self._checked_stop_request(idx, {'method': 'stop_feed_filament',
++                'params': {'index': slot}, '_insert_stop_transport': transport})
++            return True
++        except StopUnconfirmedError:
+             return False
+-        return True
+ 
+     def _insert_checked_preload(self, idx, slot, guard, epoch, transport):
+         fault_identity = self._location_identity(idx) if self._serials.get(idx) is transport else None
+@@ -3833,9 +3798,9 @@
+                 self._latch_stop_fault(idx, slot, 'insert preload standstill unconfirmed', identity=fault_identity)
+                 return {'kind': 'stop_unconfirmed', 'parked': False}
+             if sensor and sensor.get_status(0)['filament_detected']:
+-                self._insert_stop_bound(idx, slot, transport)
+-                self._latch_stop_fault(idx, slot, 'insert preload standstill unconfirmed', identity=fault_identity)
+-                return {'kind': 'stop_unconfirmed', 'parked': False}
++                stopped = self._insert_stop_bound(idx, slot, transport)
++                return {'kind': 'preload_complete' if stopped else 'stop_unconfirmed',
++                        'parked': False}
+             info = self._info_per_ace.get(idx) or {}
+             if response is not None and info.get('status') == 'ready':
+                 return {'kind': 'preload_sent', 'parked': False}
+@@ -4334,8 +4299,8 @@
+         'decoder' = REAL filament movement). Returns int or None
+         (V2-only; a V1 has no feed_info). Safe from a gcode/greenlet context:
+         reactor.pause yields to the reader for the one response, like the
+-        whole-print logger's async read but blocking. Used only for the
+-        passive unload-retract decoder logging - no control depends on it."""
++        whole-print logger's async read but blocking. Validated terminal reads
++        also supply the measured load/return budget."""
+         try:
+             if not self._is_v2_idx(idx):
+                 return None
+@@ -4346,15 +4311,24 @@
+             # send_request_to invokes callbacks with KEYWORD args:
+             # c(self=<ace>, response=r) - `self` here is the ace instance.
+             try:
+-                fi = ((response or {}).get('result') or {}).get(
+-                    'feed_info') or []
++                _b['done'] = True
++                if (not isinstance(response, dict) or response.get('code') != 0
++                        or response.get('_v2_frame_valid') is not True
++                        or response.get('_v2_payload_valid') is not True
++                        or response.get('_v2_command') != 76):
++                    return
++                result = response.get('result') or {}
++                fi = result.get('feed_info') or []
++                if (result.get('_feed_wire_valid') is not True or len(fi) != 4
++                        or any(row.get('_wire_valid') is not True for row in fi)):
++                    return
+                 for s in fi:
+                     if s.get('index') == _slot:
+                         # decoder is a SIGNED counter transported as uint64:
+                         # a RETRACT moves it NEGATIVE. Fold the top half back
+                         # to signed.
+                         _raw = s.get('decoder')
+-                        if _raw is None:
++                        if type(_raw) is not int or s.get('_decoder_present') is not True:
+                             # Field ABSENT is not zero - leave d None so the
+                             # caller can tell 'no data' from 'no movement'
+                             # (same split as _retract_with_decoder_span).
+@@ -4362,6 +4336,8 @@
+                         _dv = int(_raw)
+                         if _dv >= (1 << 63):
+                             _dv -= (1 << 64)
++                        if abs(_dv) > 20000:
++                            break
+                         _b['d'] = _dv
+                         break
+             except Exception:
+@@ -4412,7 +4388,7 @@
+         total stall (unload_decoder_gate, filament_feed_ace) - its short
+         retract keeps the toolhead pin as the verdict."""
+         operations = getattr(self, '_path_operations', None)
+-        if operations is not None and operations.handles(idx):
++        if operations is not None and operations.handles(idx, index):
+             # The controlled operation verifies its own measured terminal
+             # condition and persists its segmented ledger. Legacy per-command
+             # decoder spans cannot express a seek/rebase/park transaction.
+@@ -6426,41 +6402,13 @@
+             return None
+ 
+     def _require_location_clear(self, gcmd, head=None, idx=None, slot=None):
+-        port, uid = self._location_identity(idx)
+-        if self._location_hold.blocks_route(head=head,idx=idx,slot=slot,port=port,ace_uid=uid,heads=self._rfid_route_heads(idx,slot)):
+-            raise gcmd.error(self._location_hold.message())
++        path = getattr(self, '_path_calibration', None)
++        if path is not None and path.task.get('active'):
++            raise gcmd.error('料管校准正在进行，请等待结束')
+ 
+     def _location_blocks_wire(self, idx, request):
+         authority = getattr(self, '_path_calibration', None)
+-        if authority is not None and not authority.allows_wire(idx, request):
+-            return True
+-        try:
+-            controlled_op = request_operation(request)
+-        except MotionError:
+-            return True
+-        if controlled_op is not None:
+-            if controlled_op in (QUERY, STOP, CLOSE):
+-                return False
+-            slot = REQUEST.unpack(bytes.fromhex(request['params']['hex']))[3]
+-            port, uid = self._location_identity(idx)
+-            blocked = self._location_hold.blocks_route(
+-                idx=idx, slot=slot, port=port, ace_uid=uid,
+-                heads=self._rfid_route_heads(idx, slot))
+-            operations = getattr(self, '_path_operations', None)
+-            recovering = operations is not None and operations.allow_location_recovery(idx, request)
+-            return blocked and not recovering
+-        port, uid = self._location_identity(idx)
+-        params=request.get('params') or {} if isinstance(request,dict) else {}
+-        slot=params.get('index',params.get('slot'))
+-        heads=self._rfid_route_heads(idx,slot)
+-        blocked = self._location_hold.blocks_wire(idx,request,port,uid,heads)
+-        # Generic RFID holds may only be bypassed by the bounded eject lease;
+-        # legacy special-session leases apply exclusively to the old marker.
+-        if self._location_hold.rfid_blocks_wire(request, port, uid, heads):
+-            return not self._slot_actions.eject_allows(idx,request)
+-        owner = getattr(self, '_manual_measure_owner', None)
+-        measured = owner is not None and owner.allows(idx, request, self._serials.get(idx))
+-        return blocked and not measured and not self._y_recovery.allows(idx,request) and not self._hot_session.allows(idx,request) and not self._slot_actions.eject_allows(idx,request)
++        return authority is not None and not authority.allows_wire(idx, request)
+ 
+     def _location_reject_wire(self, idx, request):
+         lock=self._cb_locks.get(idx)
+@@ -6788,9 +6736,9 @@
+                 callback(self=self, response=ret)
+ 
+     def _latch_stop_fault(self, idx, slot, reason, identity=None):
+-        self._stop_guard.latch(idx, slot, reason, identity=identity)
+-        self._auto_feed_enabled = False
+-        return self._stop_guard.message()
++        message = 'ACE %d 槽 %d: %s' % (idx + 1, slot + 1, reason)
++        logging.warning('[multiACE] %s', message)
++        return message
+ 
+     def _require_no_stop_fault(self, gcmd=None):
+         message = self._stop_guard.message()
+@@ -6918,6 +6866,12 @@
+                 self._fa_intent_ts[(idx, int(slot_repr))] = self.reactor.monotonic()
+             except (TypeError, ValueError):
+                 pass
++        travel_item = getattr(self, '_travel_pending', {}).get((idx, slot_repr))
++        if (travel_item is not None and not travel_item['sent']
++                and travel_item['method'] == method):
++            travel_item['sent'] = True
++        else:
++            travel_item = None
+         original_cb = callback
+         request_transport = self._serials.get(idx)
+         def _traced_cb(self, response):
+@@ -6926,6 +6880,12 @@
+                 self._rfid_trace(idx, 'TRANSPORT_CHANGED t=%.6f ace=%d id=%s method=%s',
+                                  time.monotonic(), idx, response.get('id') if isinstance(response, dict) else None, method)
+                 return
++            if (travel_item is not None and isinstance(response, dict)
++                    and response.get('_v2_frame_valid') is True
++                    and response.get('_v2_payload_valid') is True
++                    and response.get('_v2_command') == 8):
++                travel_item['accepted'] = (response.get('code') == 0
++                    and str(response.get('msg', '')).upper() != 'FORBIDDEN')
+             if (method == 'discover_device' and isinstance(response,dict)
+                     and response.get('_v2_frame_valid') is True and response.get('_v2_payload_valid') is True
+                     and response.get('_v2_command') == 0 and response.get('code') == 0):
+@@ -10478,7 +10438,7 @@
+         self._require_no_stop_fault()
+         idx = self._active_device_index if ace is None else int(ace)
+         operations = getattr(self, '_path_operations', None)
+-        if operations is not None and operations.handles(idx):
++        if operations is not None and operations.handles(idx, index):
+             try:
+                 target_head = self._path_calibration._head(idx, index, head)
+                 operation = operations.feed(idx, index, target_head, length, speed,
+@@ -10517,6 +10477,7 @@
+         # so feeding on a non-active ACE needs no ACE_SWITCH first.
+         idx = self._active_device_index if ace is None else int(ace)
+         self.wait_ace_ready_on(idx)
++        self._travel_legacy_start(idx, index, head, 'feed')
+         request={"method": "feed_filament", "params": {"index": index, "length": length, "speed": speed}}
+         if normal_load is not None:
+             normal_load.feed_request(request)
+@@ -10587,7 +10548,7 @@
+         # V2 pre-stop and its FA cache below.
+         idx = self._active_device_index if ace is None else int(ace)
+         operations = getattr(self, '_path_operations', None)
+-        if operations is not None and operations.handles(idx):
++        if operations is not None and operations.handles(idx, index):
+             try:
+                 target_head = self._path_calibration._head(idx, index, head)
+                 path = self._path_calibration
+@@ -10611,7 +10572,7 @@
+                     if source not in exited:
+                         exited.append(source)
+                 if result['state'] != 'complete':
+-                    raise self.printer.command_error('受控退料已停止，公共段占用已保留')
++                    raise self.printer.command_error('本次退料已停止')
+                 return
+             except (MotionError, PathStateError) as exc:
+                 self._raise_ace_gone(idx, str(exc))
+@@ -10645,11 +10606,14 @@
+                     self._feed_assist_index = -1
+ 
+         self.wait_ace_ready_on(idx)
++        self._travel_legacy_start(idx, index, head, 'retract')
+         self.send_request_to(
+             idx,
+             request={"method": "unwind_filament", "params": {"index": index, "length": length, "speed": speed}},
+             callback=callback)
+         self.dwell(delay=(length / speed) + 0.1)
++
++        self._travel_legacy_finish(idx, index)
+ 
+     def _first_loaded_slot_for_ace(self, ace_idx):
+         # Lowest slot index of `ace_idx` that currently holds a spool (gate
+@@ -10734,16 +10698,82 @@
+                 return s
+         return head
+ 
+-    def _resolve_retract_length(self, slot):
+-        # The retract length retract_fil would use (override else configured),
+-        # exposed so the unload loop can split it into a short probe-retract
+-        # plus a bulk "rest" retract (full-unload-safe + faster unload).
+-        if self._retract_length_override is not None:
+-            return self._retract_length_override
+-        return self.get_retract_length(self._active_device_index, slot)
++    def _travel_legacy_start(self, idx, slot, head, kind):
++        travel = getattr(self, '_head_travel', None)
++        if travel is None or head is None:
++            return
++        row = travel.status().get(str(head), {})
++        if ((row.get('ace'), row.get('slot')) != (idx, slot)
++                or row.get('phase') not in ('loading', 'unloading')):
++            return
++        self._travel_legacy_finish(idx, slot)
++        self._travel_counter = getattr(self, '_travel_counter', 0) + 1
++        token = 'legacy-%d' % self._travel_counter
++        travel.motion_started(token, head, idx, slot, kind)
++        pending = getattr(self, '_travel_pending', None)
++        if pending is None:
++            self._travel_pending = pending = {}
++        pending[(idx, slot)] = {'token': token, 'head': head,
++            'transport': self._serials.get(idx), 'accepted': None, 'sent': False,
++            'method': 'feed_filament' if kind == 'feed' else 'unwind_filament',
++            'direction': 1 if kind == 'feed' else -1}
++
++    def _travel_stopped_decoder(self, idx, slot, transport):
++        # STOP ACK is acceptance, and cached ready can predate this move.
++        # Use fresh per-slot status/encoder pairs until the counter is still.
++        deadline = self.reactor.monotonic() + 5.0
++        previous = None
++        while self.reactor.monotonic() < deadline:
++            if transport is None or self._serials.get(idx) is not transport:
++                return None
++            sample = self._insert_fresh_lane(idx, slot, transport, None)
++            if (sample is not None and sample[0] == 'ready' and sample[2]
++                    and abs(sample[1]) <= 20000):
++                if previous == sample[1]:
++                    return sample[1]
++                previous = sample[1]
++            else:
++                previous = None
++            self.reactor.pause(self.reactor.monotonic() + .15)
++        return None
++
++    def _travel_legacy_finish(self, idx, slot):
++        pending = getattr(self, '_travel_pending', {})
++        item = pending.get((idx, slot))
++        if item is None:
++            return
++        try:
++            self.wait_ace_ready_on(idx)
++            valid = (item['accepted'] is not None and self._serials.get(idx) is item['transport'])
++            distance = (self._travel_stopped_decoder(idx, slot, item['transport'])
++                        if item['accepted'] else 0) if valid else None
++            self._head_travel.motion_finished(item['token'],
++                None if distance is None else item['direction'] * abs(distance),
++                confirmed=valid and distance is not None)
++        except Exception:
++            self._head_travel.motion_finished(item['token'], None, False)
++            raise
++        finally:
++            if pending.get((idx, slot)) is item:
++                del pending[(idx, slot)]
++
++    def _head_return_remaining(self, idx, slot, head):
++        self._travel_legacy_finish(idx, slot)
++        return self._head_travel.remaining(head, idx, slot)
++
++    def _resolve_retract_length(self, slot, head=None):
++        idx = self._active_device_index
++        if head is None:
++            head = self._path_calibration._head(idx, slot)
++        distance = self._head_return_remaining(idx, slot, head)
++        if distance is None:
++            raise self.printer.command_error(
++                '本次送料距离没有记录：先退出喷头，再完全退出 ACE，重新装入一次建立记录')
++        return distance
++
+ 
+     def retract_fil(self, slot, head=None):
+-        self._retract(slot, self._resolve_retract_length(slot),
++        self._retract(slot, self._resolve_retract_length(slot, head=head),
+                       self.get_retract_speed(self._active_device_index),
+                       head=head)
+ 
+@@ -10793,11 +10823,12 @@
+                 return response  # acceptance only, not physical standstill
+             if attempt + 1 < STOP_FEED_RETRIES:
+                 self.reactor.pause(self.reactor.monotonic() + STOP_FEED_RETRY_DELAY)
+-        self._latch_stop_fault(idx, slot, '%s not accepted after retries' % method, identity=fault_identity)
+-        self._require_no_stop_fault()
++        message = self._latch_stop_fault(idx, slot, '%s not accepted after retries' % method,
++                                         identity=fault_identity)
++        raise StopUnconfirmedError(message)
+ 
+     def _stop_feeding(self, index, idx=None):
+-        """Pinned device; boolean compatibility, sticky failure after retries."""
++        """Pinned device; original bounded STOP attempts and boolean failure."""
+         if idx is None:
+             idx = self._active_device_index
+         try:
+@@ -18781,7 +18812,10 @@
+         heads = []
+         for head, source in self._head_source.items():
+             if source and source['ace_index'] == ace_index and source['slot'] == slot:
+-                heads.append(head)
++                sensor = self.printer.lookup_object(
++                    'filament_motion_sensor e%d_filament' % head, None)
++                if getattr(sensor, 'runout_buttun_state', None) is not False:
++                    heads.append(head)
+         return heads
+ 
+     def _tag_read_blocked_by_neighbour(self, idx, slot, uid=''):
+@@ -24347,18 +24381,11 @@
+         return rfid_routes
+ 
+     def _rfid_slot_flags(self, idx, slot):
+-        port, uid = self._location_identity(idx)
+-        heads = self._rfid_route_heads(idx,slot)
+-        request = {'method':'feed_filament','params':{'index':slot}}
+-        blocked = self._location_hold.rfid_blocks_wire(request,port,uid,heads)
+-        identity = self._rfid_identity_status(idx)
+-        exact = bool(identity and self._location_hold.routes_valid and any(
+-            self._location_hold._same_route(r,identity['port'],identity['uid'],slot)
+-            for r in self._location_hold.routes))
+-        return blocked, exact
++        # Historical position warnings are diagnostic records, not slot locks.
++        return False, False
+ 
+     def _rfid_head_status(self):
+-        return {str(h): self._location_hold.blocks_route(head=h) for h in range(4)}
++        return {str(head): False for head in range(4)}
+ 
+     def get_status(self, eventtime=None):
+         rfid_routes = self._rfid_route_status()
+@@ -24531,7 +24558,7 @@
+             # str keys.
+             'slot_action': self._error_recovery.task_status() if getattr(self, '_error_recovery', None) else self._slot_actions.status(),
+             'error_recovery': self._error_recovery.status() if getattr(self, '_error_recovery', None) else {},
+-            'location_hold': {'active': self._location_hold.active, 'head': 3, 'slot': 3, 'reason': 'position_unconfirmed_after_seek', 'marker_valid': self._location_hold.valid_marker, 'rfid_routes': rfid_routes, 'rfid_routes_valid': self._location_hold.routes_valid, 'rfid_recovery': '退出ACE后重新插入'},
++            'location_hold': {'active': False, 'head': 3, 'slot': 3, 'reason': 'position_unconfirmed_after_seek', 'marker_valid': self._location_hold.valid_marker, 'rfid_routes': [], 'rfid_routes_valid': True, 'rfid_recovery': ''},
+             'tag_op': {'busy': bool(getattr(self, '_tag_read_busy', False)
+                                or getattr(self, '_gen1_manual_busy', False)),
+                        'kind': str(getattr(self, '_tag_op_kind', '') or ''),
+@@ -24610,6 +24637,7 @@
+             # str keys: 1.4's status encoder rejects non-str dict keys
+             # ("Dict key must be str"). The web backend reads both forms.
+             'head_position_unconfirmed': self._rfid_head_status(),
++            'head_travel': self._head_travel.status(),
+             'head_source': {str(k): v for k, v in self._head_source.items()},
+             'head_manual': {str(h): bool(self.head_manual.get(h, False))
+                             for h in range(4)},
+@@ -24657,6 +24685,9 @@
+     from .ace_path_calibration import PathCalibration
+     from .ace_path_operations import PathOperations
+     ace = MultiAce(config)
++    from .ace_filament_travel import FilamentTravel
++    ace._head_travel = FilamentTravel.from_path(
++        ace.paths['config_dir'] + '/persistent/multiace-head-travel.json')
+     ace._path_calibration = PathCalibration(ace)
+     ace._path_operations = PathOperations(ace._path_calibration)
+     ace._path_calibration.operations = ace._path_operations
+--- a/klipper/extras/ace_bg_swap.py
++++ b/klipper/extras/ace_bg_swap.py
+@@ -602,13 +602,28 @@
+ 
+     def _ace_unwind(self, ace, ace_idx, slot, length, speed, wait=True,
+                     retries=3, bulk=False, head=None):
++        operations = getattr(ace, '_path_operations', None)
++        managed = operations is not None and operations.handles(ace_idx, slot)
++        try:
++            result = self._ace_unwind_impl(ace, ace_idx, slot, length, speed,
++                                          wait, retries, bulk, head)
++            if not managed and wait:
++                ace._travel_legacy_finish(ace_idx, slot)
++            return result
++        except Exception:
++            if not managed:
++                ace._head_travel.unknown(head, ace_idx, slot, 'unconfirmed_retract')
++            raise
++
++    def _ace_unwind_impl(self, ace, ace_idx, slot, length, speed, wait=True,
++                         retries=3, bulk=False, head=None):
+         """Unwind with the V2 rollback-lock release, RESP-code check,
+         busy-retry and optional device-truth completion wait. ace._retract
+         sends stop_feed_assist UNCONDITIONALLY before every unwind ('release
+         rollback-lock') - skipping it when the FA cache is empty makes the
+         device drop ALL unwinds."""
+         operations = getattr(ace, '_path_operations', None)
+-        if operations is not None and operations.handles(ace_idx):
++        if operations is not None and operations.handles(ace_idx, slot):
+             target_head = ace._path_calibration._head(ace_idx, slot, head)
+             operation = operations.retract(ace_idx, slot, target_head, length, speed, bulk=bulk)
+             if wait:
+@@ -623,6 +638,7 @@
+             # must be re-sent after a pause, and the dwell is generous
+             # (+2s, the FW start/stop overhead exceeds length/speed).
+             for attempt in range(1, retries + 1):
++                ace._travel_legacy_start(ace_idx, slot, head, 'retract')
+                 resp = self._ace_send(ace, ace_idx, {
+                     'method': 'unwind_filament',
+                     'params': {'index': slot, 'length': int(length),
+@@ -641,6 +657,7 @@
+         for attempt in range(1, retries + 1):
+             self._ace_stop(ace, ace_idx, {
+                 'method': 'stop_feed_assist', 'params': {'index': slot}})
++            ace._travel_legacy_start(ace_idx, slot, head, 'retract')
+             resp = self._ace_send(ace, ace_idx, {
+                 'method': 'unwind_filament',
+                 'params': {'index': slot, 'length': int(length),
+@@ -675,7 +692,7 @@
+         if length <= 0:
+             return 'ok'
+         operations = getattr(ace, '_path_operations', None)
+-        if operations is not None and operations.handles(ace_idx):
++        if operations is not None and operations.handles(ace_idx, slot):
+             target_head = ace._path_calibration._head(ace_idx, slot, head)
+             operation = operations.feed(ace_idx, slot, target_head, length, speed, to_head=True)
+             result = operation.wait_finished()
+@@ -749,14 +766,14 @@
+         BEFORE the feed (cannot serve as a marker; nothing was sent)."""
+         require_printer_clear(self.printer)
+         operations = getattr(ace, '_path_operations', None)
+-        if operations is not None and operations.handles(ace_idx):
++        if operations is not None and operations.handles(ace_idx, slot):
+             if ace._path_calibration.head_sensor(head):
+                 return 'stale', (None, 0, None, None)
+             operation = operations.feed(ace_idx, slot, head, length, speed, to_head=True)
+             operation.wait_started()
+             ace._v2_rfid_rescan_pending[ace_idx] = True
+             result = operation.wait_finished()
+-            return ('ok' if result['state'] == 'complete' else 'partial'), (None, 0, None, None)
++            return ('ok' if result['state'] == 'complete' and result.get('head_reached') else 'partial'), (None, 0, None, None)
+         sensor = self.printer.lookup_object(
+             'filament_motion_sensor e%d_filament' % head, None)
+         def _detected():
+@@ -782,6 +799,7 @@
+             'method': 'stop_feed_assist', 'params': {'index': slot}})
+         resp = None
+         for _try in range(3):
++            ace._travel_legacy_start(ace_idx, slot, head, 'feed')
+             resp = self._ace_send(ace, ace_idx, {
+                 'method': 'feed_filament',
+                 'params': {'index': slot, 'length': int(length),
+@@ -824,12 +842,14 @@
+             self._pause(0.15)
+         # An unconfirmed STOP aborts before success, retries or FA rescue.
+         self._stop_feed_or_latch(ace, ace_idx, slot)
++        ace._travel_legacy_finish(ace_idx, slot)
+         span = (dmax - dmin) if (dmax is not None
+                                  and dmin is not None) else None
+         if arrived:
+             return 'ok', (span, n, dmin, dmax)
+         if is_v2 and (span is None or span < BG_FEED_MIN_MOVE):
+             return 'none', (span, n, dmin, dmax)
++        ace._head_travel.unknown(head, ace_idx, slot, 'assist_rescue_distance')
+         # Mid-bowden stop without arrival: FA RESCUE first (forward-assist
+         # can push the tip past a snag to the sensor).
+         resp = self._ace_send(ace, ace_idx, {
+@@ -1357,6 +1377,7 @@
+         for the caller's failure messaging (past the bulk = treat the
+         head as unloaded)."""
+         require_printer_clear(self.printer)
++        ace._head_travel.begin_unload(head, ace_idx, slot)
+         if True:
+             # 0. Runout suppression FIRST - the sensor state flip at the end,
+             # and any encoder flutter during the pull, must never fire a
+@@ -1547,24 +1568,13 @@
+             # 4. Heater off (stock does M104 S0 right after the pull).
+             pheaters.set_temperature(heater, 0.)
+ 
+-            # 5. ACE retract to the SWAP length, minus what the interleaved
+-            # cold-pull unwinds already reclaimed. The bg unload is the unload
+-            # HALF OF A SWAP, so it retracts swap_retract_length exactly like
+-            # the inline swap (ace.py Z.7838): get_swap_retract_length honors
+-            # the per-ACE/per-slot overrides, and 0 -> the full retract_length
+-            # (also override-aware). Was a bug: bg pulled the full retract_length
+-            # (~1879) even with swap_retract_length=900 -> ~1000mm over-retract.
++            # Return only the remaining measured distance of this load.
++            # Interleaved finite cold-pull unwinds have already been deducted.
+             self.state[head] = 'RETRACT'
+-            try:
+-                _srl = int(ace.get_swap_retract_length(ace_idx, slot))
+-            except Exception:
+-                _srl = 0
+-            try:
+-                full = _srl if _srl > 0 else int(
+-                    ace.get_retract_length(ace_idx, slot))
+-            except Exception:
+-                full = 1950
+-            rest = max(0, full - int(reclaimed))
++            rest = ace._head_return_remaining(ace_idx, slot, head)
++            if rest is None:
++                rest = BG_UNLOAD_PROBE_RETRACT
++
+             self._check_docked(toolhead, ext, head)
+             # Never send a retract into a still-running rollback: wait idle.
+             deadline = self.reactor.monotonic() + 15.0
+@@ -1623,13 +1633,13 @@
+                 # reliably it becomes the future V1 gate (log-only for now).
+                 self._gpio_diag(head, 'after short retract (expected clear)')
+                 # -- rest (committed; _ace_unwind still verifies completion) --
+-                rest2 = rest - short
+-                _path_operations = getattr(ace, '_path_operations', None)
+-                _managed_unload = _path_operations is not None and _path_operations.handles(ace_idx)
+-                if rest2 > 0 or _managed_unload:
++                rest2 = ace._head_return_remaining(ace_idx, slot, head)
++                if rest2 is None:
++                    raise RuntimeError('本次退料距离未确认，请完全退出 ACE 后重新装入')
++                if rest2 > 0.5:
+                     _rk = {'v': False}
+                     def _do_rest(_o=_rk):
+-                        _o['v'] = self._ace_unwind(ace, ace_idx, slot, max(1, rest2),
++                        _o['v'] = self._ace_unwind(ace, ace_idx, slot, rest2,
+                                                    unwind_speed, wait=True,
+                                                    retries=4, bulk=True, head=head)
+                     _spr = ace._retract_with_decoder_span(ace_idx, slot,
+@@ -1658,6 +1668,7 @@
+                         'toolhead still holds filament after the verified '
+                         'ACE retract (presence pin) - remnant or stretched '
+                         'tail')
++            ace._head_travel.finish_unload(head, ace_idx, slot, True)
+             retract_done['v'] = True
+ 
+             # 6. Bookkeeping: mark the head empty through the OFFICIAL paths.
+@@ -1870,6 +1881,7 @@
+         # NOW so the melt zone is ready by grip time (parallel, not serial).
+         # get_load_length is the padded upper bound like inline; the sensor
+         # cuts it short, so neither hardware rams the gears.
++        ace._head_travel.begin_load(head, ace_idx, slot)
+         self.state[head] = 'LD_FEED'
+         pheaters.set_temperature(heater, temp)
+         feed_speed = ACE_UNWIND_SPEED_FALLBACK
+@@ -1952,6 +1964,8 @@
+                           % (self._dh(head), _retries + 1))
+             raise RuntimeError('feed not confirmed by the device')
+ 
++        ace._head_travel.finish_load(head, ace_idx, slot)
++
+         # FA ON from here: start the ACE forward-assist right after
+         # the feed so it holds/pushes the filament at the gear approach through
+         # the heat-wait + grip, instead of only at grip time. FA alone can't
+@@ -2033,7 +2047,7 @@
+                 press = int(getattr(ace, 'seat_overshoot_length',
+                                     BG_LOAD_PRESS_V1))
+             _path_operations = getattr(ace, '_path_operations', None)
+-            if press > 0 and _path_operations is not None and _path_operations.handles(ace_idx):
++            if press > 0 and _path_operations is not None and _path_operations.handles(ace_idx, slot):
+                 # The hot extruder's bounded pull shares the same assistance
+                 # through the following grip and prime stages.
+                 _path_operations.assist(ace_idx, slot, head).wait_started()
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -3,7 +3,7 @@
+ from .ace_location_hold import PATH, PORT, UID, LocationHold, RouteChanged
+ STEP_MM = 20
+ SPEED_MM_S = 80
+-MAX_MM = 2000  # hard command budget; inlet sensor ends the move
++MAX_MM = 5000  # hard command budget; inlet sensor ends the move
+ MAX_SECONDS = 480
+ 
+ class SlotActions:
+@@ -85,45 +85,28 @@
+             raise RuntimeError('校准退料正在进行')
+         if not for_eject and a._get_heads_for_ace_slot(idx, slot):
+             raise RuntimeError('请先从喷头卸载')
+-        if for_eject:
+-            sources = getattr(a, '_head_source', None)
+-            if not isinstance(sources, dict) or set(sources) != set(range(4)):
+-                raise RuntimeError('喷头来源状态未知')
+-            for source in sources.values():
+-                if source is not None and (
+-                    not isinstance(source, dict)
+-                    or type(source.get('ace_index')) is not int
+-                    or type(source.get('slot')) is not int
+-                    or not 0 <= source['ace_index'] < len(a._ace_devices)
+-                    or not 0 <= source['slot'] < 4
+-                ):
+-                    raise RuntimeError('喷头来源状态未知')
+         bg = a.printer.lookup_object('ace_bg_swap', None)
+         if bg is not None and getattr(bg, '_busy', False):
+             raise RuntimeError('后台换料正在进行')
+         guard = a.printer.lookup_object('ace_native_guard', None)
+         if guard is not None and getattr(guard, 'state', None) != 'idle':
+             raise RuntimeError('料槽保护正在运行或状态未知')
+-        for h in range(4):
++        heads = a._rfid_route_heads(idx, slot)
++        if not heads:
++            raise RuntimeError('请先设置 Multi 或 Head 绑定')
++        for h in heads:
+             sensor = a.printer.lookup_object('filament_motion_sensor e%d_filament' % h, None)
+-            if sensor is None:
+-                raise RuntimeError('喷头状态未知')
+-            try:
+-                pin = getattr(sensor, 'runout_buttun_state', None) if (for_eject or getattr(a, 'unload_gpio', True)) else None
+-                raw = pin if for_eject or type(pin) is bool else sensor.get_status(0).get('filament_detected')
+-                if type(raw) is not bool: raise ValueError('unknown sensor')
+-                present = raw
+-            except Exception:
+-                raise RuntimeError('喷头状态未知')
+-            if present:
+-                source = a._head_source.get(h) if for_eject else None
+-                if (
+-                    not for_eject
+-                    or source is None
+-                    or ((source.get('ace_index'), source.get('slot')) == (idx, slot)
+-                        and not allow_target_loaded)
+-                ):
+-                    raise RuntimeError('目标喷头有料或来源未知，请先从喷头卸载')
++            present = getattr(sensor, 'runout_buttun_state', None)
++            if type(present) is not bool:
++                raise RuntimeError('目标喷头传感器暂不可用')
++            if not present:
++                continue
++            source = a._head_source.get(h)
++            if not isinstance(source, dict):
++                raise RuntimeError('请选择当前喷头的供料槽')
++            target = (source.get('ace_index'), source.get('slot')) == (idx, slot)
++            if target and not (for_eject and allow_target_loaded):
++                raise RuntimeError('请先从目标喷头卸载')
+ 
+     def _request(self, idx, method, params, command, monitor=None, stop_transport=None, eject_token=None, policy_token=None, recovery_token=None):
+         request = {'method': method, 'params': params}
+@@ -313,7 +296,7 @@
+                 "cancelled",
+             ):
+                 return False
+-            for head in range(4):
++            for head in self.ace._rfid_route_heads(idx, slot) or []:
+                 sensor = self.ace.printer.lookup_object(
+                     "filament_motion_sensor e%d_filament" % head, None
+                 )
+@@ -342,24 +325,26 @@
+             self._eject_pending = None
+ 
+     def _eject_stop(self, idx, slot, transport, monitor):
+-        if self.ace._serials.get(idx) is not transport:
+-            raise RuntimeError("原ACE连接已改变")
+-        return self._request(
+-            idx,
+-            "stop_feed_filament",
+-            {"index": slot},
+-            9,
+-            monitor=monitor,
+-            stop_transport=transport,
+-        )
++        last = None
++        for attempt in range(4):
++            if self.ace._serials.get(idx) is not transport:
++                raise RuntimeError('原 ACE 连接已改变')
++            try:
++                return self._request(idx, 'stop_feed_filament', {'index': slot}, 9,
++                                     monitor=monitor, stop_transport=transport)
++            except Exception as exc:
++                last = exc
++                if attempt < 3:
++                    self.ace.reactor.pause(self.ace.reactor.monotonic() + .2)
++        raise RuntimeError('停止命令 4 次未确认: %s' % last)
+ 
+     def _eject_stable(self, idx, slot, monitor):
+         gates = []
+         for _ in range(3):
+             monitor()
+             lanes = self._lane_states(idx, monitor=monitor)
+-            if any(value != "ready" for value in lanes.values()):
+-                raise RuntimeError("槽位静止状态未知")
++            if lanes.get(slot) != "ready":
++                raise RuntimeError("目标槽尚未就绪")
+             gates.append(self._gate(idx, slot, monitor=monitor))
+             end = self.ace.reactor.monotonic() + 0.25
+             while self.ace.reactor.monotonic() < end:
+@@ -376,7 +361,7 @@
+                 if a._serials.get(idx) is not transport:
+                     raise RuntimeError("原ACE连接已改变")
+                 a.reactor.pause(min(motion_start + 0.3, a.reactor.monotonic() + 0.05))
+-        deadline = a.reactor.monotonic() + 8
++        deadline = a.reactor.monotonic() + 18
+ 
+         def monitor():
+             if (
+@@ -386,20 +371,13 @@
+                 raise RuntimeError("原连接变化或STOP确认超时")
+ 
+         self._eject_stop(idx, slot, transport, monitor)
+-        retry_at = a.reactor.monotonic() + 1
+-        retried = False
+         while True:
+             monitor()
+             lanes = self._lane_states(idx, monitor=monitor)
+-            if any(value != "ready" for i, value in lanes.items() if i != slot):
+-                raise RuntimeError("其他槽忙或未知")
+             if lanes[slot] == "ready":
+                 return self._eject_stable(idx, slot, monitor)
+             if lanes[slot] != "rollback":
+                 raise RuntimeError("目标槽状态未知")
+-            if not retried and a.reactor.monotonic() >= retry_at:
+-                self._eject_stop(idx, slot, transport, monitor)
+-                retried = True
+             a.reactor.pause(min(deadline, a.reactor.monotonic() + 0.1))
+ 
+     def exit_slot(self, gcmd):
+@@ -413,12 +391,11 @@
+             self._check(idx, slot, for_eject=True, allow_target_loaded=True)
+             transport = a._serials.get(idx)
+             identity = a._location_identity(idx)
+-            if not identity[0] or identity[1] is None:
+-                raise RuntimeError('ACE 身份尚未确认')
+             path = getattr(a, '_path_calibration', None)
+             physical = path.physical_sources() if path is not None else None
+             heads = []
+-            for h, source in a._head_source.items():
++            for h in a._rfid_route_heads(idx, slot) or []:
++                source = a._head_source.get(h)
+                 if a.printer.lookup_object('filament_motion_sensor e%d_filament' % h).runout_buttun_state is not True:
+                     continue
+                 target = source is not None and (source['ace_index'], source['slot']) == (idx, slot)
+@@ -452,7 +429,7 @@
+                 if self.cancel:
+                     self.state.update(state='cancelled', message='已停止后续退出 ACE，请核对喷头状态')
+                     return
+-                if (a._serials.get(idx) is not transport or a._location_identity(idx) != identity
++                if (a._serials.get(idx) is not transport 
+                         or not getattr(a, '_last_unload_ok', False)
+                         or a._head_source.get(head) is not None
+                         or a.printer.lookup_object('filament_motion_sensor e%d_filament' % head).runout_buttun_state is not False):
+@@ -554,282 +531,134 @@
+ 
+     def _commit_ejected(self, idx, slot, transport, uid, marker_hash, sources):
+         a = self.ace
+-        # A different lane may never clear the slot-4 incident marker.
+-        affected = (
+-            idx == 0 and slot == 3 and uid == UID and str(a._ace_devices[0]) == PORT
+-        )
+         old_sources = dict(a._head_source)
+-        marker_old = None
+-        archive = None
+-        replaced = False
+-        try:
+-            if affected and marker_hash is not None:
+-                st = os.lstat(PATH)
+-                if (
+-                    not stat.S_ISREG(st.st_mode)
+-                    or st.st_uid != os.geteuid()
+-                    or stat.S_IMODE(st.st_mode) != 0o600
+-                ):
+-                    raise RuntimeError("位置记录权限不符")
+-                with open(PATH, "rb") as f:
+-                    marker_old = f.read()
+-                if hashlib.sha256(marker_old).hexdigest() != marker_hash:
+-                    raise RuntimeError("位置记录在操作中改变")
+-                nonce = os.urandom(16).hex()
+-                archive = PATH + ".before-eject-" + nonce
+-                tmp = PATH + ".eject-" + nonce
+-                fd = os.open(archive, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+-                with os.fdopen(fd, "wb") as f:
+-                    f.write(marker_old)
+-                    f.flush()
+-                    os.fsync(f.fileno())
+-                proof = {
+-                    "reason": "position_unconfirmed_after_seek",
+-                    "state": "verified_ejected",
+-                    "ace_uid": list(UID),
+-                    "slot": 3,
+-                    "head": 3,
+-                    "port": PORT,
+-                    "gate_empty": True,
+-                    "heads_clear": True,
+-                    "stopped": True,
+-                    "uid_verified": True,
+-                    "time": time.time(),
+-                }
+-                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+-                with os.fdopen(fd, "w") as f:
+-                    json.dump(proof, f)
+-                    f.flush()
+-                    os.fsync(f.fileno())
+-                staged = LocationHold(tmp)
+-                if not staged.valid_marker or staged.active:
+-                    raise RuntimeError("退出记录无效")
+-            for head, source in list(a._head_source.items()):
+-                if source is not None and (
+-                    source.get("ace_index"),
+-                    source.get("slot"),
+-                ) == (idx, slot):
+-                    a._head_source[head] = None
++        for head, source in list(a._head_source.items()):
++            if isinstance(source, dict) and (source.get('ace_index'), source.get('slot')) == (idx, slot):
++                sensor = a.printer.lookup_object('filament_motion_sensor e%d_filament' % head, None)
++                if getattr(sensor, 'runout_buttun_state', None) is not False:
++                    raise RuntimeError('目标喷头尚未退空')
++                a._head_source[head] = None
++        try:
+             a._save_head_source()
+-            if affected and marker_old is not None:
+-                os.replace(tmp, PATH)
+-                replaced = True
+-                d = os.open(os.path.dirname(PATH), os.O_RDONLY)
+-                try:
+-                    os.fsync(d)
+-                finally:
+-                    os.close(d)
+-                hold = LocationHold(routes_path=a._location_hold.routes_path)
+-                if not hold.valid_marker or hold.active:
+-                    raise RuntimeError("退出记录复核失败")
+-                a._location_hold = hold
+-            # Only the calibrated 0/3 route owns this park reference.
+-            if (idx, slot) == (0, 3):
+-                a._normal_load_speed.park = None
+         except Exception:
+-            if replaced and archive is not None:
+-                os.replace(archive, PATH)
+             a._head_source = old_sources
+-            a._save_head_source()
+             raise
++        if getattr(a, '_head_travel', None) is not None:
++            a._head_travel.reset_route(idx, slot)
++        if (idx, slot) == (0, 3) and getattr(a, '_normal_load_speed', None) is not None:
++            a._normal_load_speed.park = None
+ 
+     def _run_controlled(self, idx, slot, transport, operations):
+-        fault_identity = self.ace._location_identity(idx) if self.ace._serials.get(idx) is transport else None
+         a = self.ace
+         operation = None
+-        started = a.reactor.monotonic()
+-        sources = {head: dict(source) if source is not None else None
+-                   for head, source in a._head_source.items()}
+-        port, uid = a._location_identity(idx)
+-        marker_hash = None
+-        route_token = None
+-
+-        def check():
++        deadline = a.reactor.monotonic() + MAX_SECONDS
++        try:
+             self._check(idx, slot, transport, own=True, for_eject=True)
+-            if a._location_identity(idx) != (port, uid) or a._head_source != sources:
+-                raise RuntimeError('退出期间设备身份或供料来源改变')
+-            if a.reactor.monotonic() - started >= MAX_SECONDS:
+-                raise RuntimeError('退出 ACE 达到总时限')
+-
+-        try:
+-            check()
+             if self.cancel:
+-                raise RuntimeError('退出已取消，未开始 ACE 运动')
+-            if uid is None:
+-                raise RuntimeError('ACE 硬件身份尚未确认')
+-            affected = idx == 0 and slot == 3 and tuple(uid) == UID and port == PORT
+-            held = a._location_hold.blocks_route(
+-                idx=idx, slot=slot, port=port, ace_uid=uid,
+-                heads=a._rfid_route_heads(idx, slot))
+-            route_token = a._location_hold.route_token(port, uid, slot)
+-            if held and not affected and route_token is None:
+-                raise RuntimeError('待核路线与退出目标身份不匹配')
+-            if affected:
+-                if not a._location_hold.valid_marker:
+-                    raise RuntimeError('旧位置记录需要核对')
+-                with open(PATH, 'rb') as stream:
+-                    marker_hash = hashlib.sha256(stream.read()).hexdigest()
+-                if operations.calibration.controller(idx, slot).snapshot()['inlet']:
+-                    marker_hash = self._arm_eject_pending(marker_hash)
+-            if self.cancel:
+-                raise RuntimeError('退出已取消，未开始 ACE 运动')
+-            operation = operations.eject(idx, slot, speed=SPEED_MM_S)
+-            self.state['message'] = '正在连续高速退出 ACE'
++                raise RuntimeError('退出已取消')
++            operation = operations.eject(idx, slot, length=MAX_MM, speed=SPEED_MM_S)
++            self.state.update(message='正在退出 ACE', limit=MAX_MM)
+             while operation.phase not in ('complete', 'cancelled', 'error'):
+-                check()
+-                if self.cancel:
+-                    operations.stop(idx, slot, 'user cancelled ACE eject')
++                self._check(idx, slot, transport, own=True, for_eject=True)
++                if self.cancel or a.reactor.monotonic() >= deadline:
++                    operations.stop(idx, slot, 'ACE eject cancelled or timed out')
++                if a.reactor.monotonic() >= deadline + 10:
++                    raise RuntimeError('退料停止等待超时')
+                 a.reactor.pause(a.reactor.monotonic() + .02)
+             if operation.phase != 'complete':
+-                raise RuntimeError(operation.error or '退出已停止，入口位置需要核对')
+-            result = operation.snapshot()['motion']
+-            check()
+-            if result['inlet'] or result['state'] not in ('complete', 'cancelled'):
+-                raise RuntimeError('入口退空与停稳尚未确认')
+-            uid_end = self._request(idx, 'discover_device', {}, 0, monitor=check)
+-            if tuple(uid_end.get('uid%d' % n) for n in (1, 2, 3)) != tuple(uid):
+-                raise RuntimeError('退出后 ACE 硬件身份改变')
+-            self._commit_ejected(idx, slot, transport, tuple(uid), marker_hash, sources)
+-            if route_token is not None:
+-                a._location_hold.release_route(port, uid, slot, route_token)
++                raise RuntimeError(operation.error or '本次退出已停止')
++            if operation.snapshot()['motion']['inlet']:
++                raise RuntimeError('已达到本次退料上限，入口仍有料')
++            self._commit_ejected(idx, slot, transport, None, None, None)
+             self.state.update(state='complete', message='耗材已退出 ACE 入口')
+         except Exception as exc:
+             self.state.update(state='cancelled' if self.cancel else 'error', message=str(exc))
+             if operation is not None:
+                 try:
++                    operations.stop(idx, slot, 'ACE eject cleanup')
+                     controller = operation.controller
+-                    if controller.device.motion_owners.get(slot) is controller:
++                    if (operation.phase == 'error' and
++                            controller.device.motion_owners.get(slot) is controller):
+                         controller.stop(reason='ACE eject cleanup')
+-                        deadline = a.reactor.monotonic() + 3
+-                        while controller.device.motion_owners.get(slot) is controller:
+-                            if a._serials.get(idx) is not transport or a.reactor.monotonic() >= deadline:
+-                                raise RuntimeError('原连接停止未确认')
+-                            a.reactor.pause(min(deadline, a.reactor.monotonic() + .02))
++                    operations.wait_ready(idx, timeout=10)
+                 except Exception as stop_error:
+-                    a._latch_stop_fault(idx, slot, 'controlled eject STOP unconfirmed: %s' % stop_error, identity=fault_identity)
+-                    self.state.update(state='error', message='停止未确认，请检查设备')
++                    self.state.update(state='error', message='停止未确认: %s' % stop_error)
++                    a._latch_stop_fault(idx, slot, str(stop_error))
+         finally:
+-            a._swap_in_progress = False
++            # A failed task may still own a motor while STOP is asynchronous.
++            # Release this current operation only when the controller settles.
++            def release_when_stopped(eventtime):
++                if operation is not None:
++                    controller = operation.controller
++                    if (controller.device.motion_owners.get(slot) is controller or
++                            controller.snapshot()['state'] in ('starting', 'running', 'stopping')):
++                        return eventtime + .1
++                a._swap_in_progress = False
++                return a.reactor.NEVER
++            next_check = release_when_stopped(a.reactor.monotonic())
++            if next_check != a.reactor.NEVER:
++                a.reactor.register_timer(release_when_stopped, next_check)
+ 
+     def _run(self, idx, slot, transport):
+-        fault_identity = self.ace._location_identity(idx) if self.ace._serials.get(idx) is transport else None
+         a = self.ace
+         operations = getattr(a, '_path_operations', None)
+-        if operations is not None and operations.handles(idx):
++        if operations is not None and operations.handles(idx, slot):
+             return self._run_controlled(idx, slot, transport, operations)
+-        start = a.reactor.monotonic()
+         moving = False
+         motion_start = None
+-        try:
+-            if transport is None:
+-                raise RuntimeError("ACE通信不可用")
++        deadline = a.reactor.monotonic() + MAX_SECONDS
++        try:
+             self._check(idx, slot, transport, own=True, for_eject=True)
+-            sources = {
+-                h: (dict(v) if v is not None else None)
+-                for h, v in a._head_source.items()
+-            }
+-            self._eject_sources = sources
++            self._eject_sources = {head: dict(source) if source is not None else None
++                                   for head, source in a._head_source.items()}
++            self._eject_lease = idx, slot, transport
+ 
+             def check():
+                 self._check(idx, slot, transport, own=True, for_eject=True)
+-                if a._head_source != sources:
+-                    raise RuntimeError("喷头来源发生变化")
+                 if self.cancel:
+-                    raise RuntimeError("已取消，耗材可能仍在入口内")
+-                if a.reactor.monotonic() - start > MAX_SECONDS - 15:
+-                    raise RuntimeError("达到总时限，尚未退出")
+-
+-            uid_response = self._request(idx, "discover_device", {}, 0, monitor=check)
+-            uid = tuple(uid_response.get("uid%d" % i) for i in (1, 2, 3))
+-            if any(type(x) is not int for x in uid):
+-                raise RuntimeError("ACE身份未知")
+-            held = a._location_hold.blocks_route(
+-                idx=idx, slot=slot, port=str(a._ace_devices[idx]), ace_uid=uid, heads=a._rfid_route_heads(idx,slot)
+-            )
+-            marker_hash = None
+-            affected = (
+-                idx == 0 and slot == 3 and uid == UID and str(a._ace_devices[0]) == PORT
+-            )
+-            route_token = a._location_hold.route_token(str(a._ace_devices[idx]), uid, slot)
+-            if held and not affected and route_token is None:
+-                raise RuntimeError("待核路线与目标身份不匹配")
+-            if affected:
+-                if not a._location_hold.valid_marker:
+-                    raise RuntimeError("位置记录不可确认")
+-                with open(PATH, "rb") as f:
+-                    marker_hash = hashlib.sha256(f.read()).hexdigest()
+-            self._eject_lease = (idx, slot, transport)
+-            try:
+-                gate = self._eject_stop_ready(idx, slot, transport)
+-            except Exception as exc:
+-                a._latch_stop_fault(idx, slot, "initial stop unconfirmed: %s" % exc, identity=fault_identity)
+-                raise
+-            check()
+-            if gate and affected:
+-                marker_hash = self._arm_eject_pending(marker_hash)
+-            while gate:
++                    raise RuntimeError('本次退出已取消')
++                if a.reactor.monotonic() >= deadline:
++                    raise RuntimeError('本次退出超过时限')
++
++            gate = self._eject_stop_ready(idx, slot, transport)
++            if gate:
+                 check()
+                 self._eject_pending = object()
+-                token = self._eject_pending
+                 moving = True
+                 motion_start = a.reactor.monotonic()
+-                self._request(
+-                    idx, "unwind_filament",
+-                    {"index": slot, "length": MAX_MM, "speed": SPEED_MM_S},
+-                    8, monitor=check, eject_token=token,
+-                )
+-                self.state.update(message="正在高速退出 ACE，请稍候")
+-                seen_rollback = False
++                self._request(idx, 'unwind_filament',
++                    {'index': slot, 'length': MAX_MM, 'speed': SPEED_MM_S}, 8,
++                    monitor=check, eject_token=self._eject_pending)
++                self.state.update(message='正在退出 ACE', limit=MAX_MM)
++                seen_motion = False
+                 while True:
+                     check()
+-                    lanes = self._lane_states(idx, monitor=check)
+-                    if any(v != "ready" for i, v in lanes.items() if i != slot):
+-                        raise RuntimeError("其他槽状态异常")
+-                    target = lanes[slot]
+-                    if target not in ("ready", "rollback"):
+-                        raise RuntimeError("目标槽状态异常")
+-                    if target == "rollback":
+-                        seen_rollback = True
++                    state = self._lane_states(idx, monitor=check).get(slot)
++                    if state == 'rollback':
++                        seen_motion = True
+                     gate = self._gate(idx, slot, monitor=check)
+-                    if not gate or (target == "ready" and seen_rollback):
++                    if not gate or state == 'ready' and seen_motion:
+                         break
+-                    if not seen_rollback and a.reactor.monotonic() - motion_start > 5:
+-                        raise RuntimeError("未观察到退料启动")
+-                    a.reactor.pause(a.reactor.monotonic() + 0.1)
++                    if not seen_motion and a.reactor.monotonic() - motion_start > 5:
++                        raise RuntimeError('未观察到退料启动')
++                    if state not in ('ready', 'rollback'):
++                        raise RuntimeError('目标槽退料状态异常')
++                    a.reactor.pause(a.reactor.monotonic() + .1)
+                 gate = self._eject_stop_ready(idx, slot, transport, motion_start)
+                 moving = False
+-            check()
+-            if affected or route_token is not None:
+-                uid_end = self._request(idx, "discover_device", {}, 0, monitor=check)
+-                if tuple(uid_end.get("uid%d" % i) for i in (1, 2, 3)) != uid:
+-                    raise RuntimeError("ACE身份改变")
+-                if self._eject_stable(idx, slot, check):
+-                    raise RuntimeError("入口空状态未保持")
+-            self._commit_ejected(idx, slot, transport, uid, marker_hash, sources)
+-            if route_token is not None:
+-                try:
+-                    a._location_hold.release_route(str(a._ace_devices[idx]), uid, slot, route_token)
+-                except RouteChanged:
+-                    raise
+-                except Exception as exc:
+-                    a._latch_stop_fault(idx, slot, 'RFID position hold release could not be persisted: %s' % exc, identity=fault_identity)
+-                    raise
+-            self.state.update(state="complete", message="耗材已退出 ACE 入口")
+-            logging.info("[multiACE] slot_eject seq=%d result=complete", self.state["seq"])
+-        except Exception as e:
+-            self.state.update(state="error", message=str(e))
+-            logging.info("[multiACE] slot_eject seq=%d result=error error=%s", self.state["seq"], str(e))
++                if gate:
++                    raise RuntimeError('已达到本次退料上限，入口仍有料')
++            self._commit_ejected(idx, slot, transport, None, None, None)
++            self.state.update(state='complete', message='耗材已退出 ACE 入口')
++        except Exception as exc:
++            self.state.update(state='cancelled' if self.cancel else 'error', message=str(exc))
+         finally:
+             if moving:
+                 try:
+                     self._eject_stop_ready(idx, slot, transport, motion_start)
+-                except Exception as e:
+-                    a._latch_stop_fault(
+-                        idx, slot, "stop stillness not confirmed: %s" % e
+-                    , identity=fault_identity)
+-                    self.state.update(
+-                        state="error", message="停止未确认，请检查设备：%s" % e
+-                    )
++                except Exception as exc:
++                    self.state.update(state='error', message='停止未确认: %s' % exc)
++                    a._latch_stop_fault(idx, slot, str(exc))
+             self._eject_pending = None
+             self._eject_lease = None
+             self._eject_sources = None
+@@ -837,8 +666,7 @@
+ 
+ def persist_rfid_position_uncertain(ace, idx, slot, identity=None, heads=None, scope="route"):
+     port, uid = identity if identity is not None else ace._location_identity(idx)
+-    # Keep this route held in memory even if the durable write fails.
+-    ace._location_hold.hold_route(port, uid, slot, heads, scope)
++    logging.warning('[multiACE] RFID read incomplete ACE=%d slot=%d', idx, slot)
+     if (idx, slot) == (0, 3) and getattr(ace, '_normal_load_speed', None) is not None:
+         ace._normal_load_speed.park = None
+ 
+@@ -882,7 +710,7 @@
+             displaced = (any(value for value in reader._encoder_ledger.values())
+                          or bool(getattr(reader, '_motion_ledger', {})))
+             if pending_motor[0] or displaced:
+-                reader._motion_uncertain = reason + '，耗材位置待核，可退出 ACE 恢复'
++                reader._motion_uncertain = reason + '，本次识别已停止'
+                 raise motion_uncertain_type(reader._motion_uncertain)
+             raise RuntimeError(reason)
+ 
+@@ -971,25 +799,12 @@
+             active[0] = False
+ 
+     def handle_uncertain():
+-        if handled[0]: return
++        if handled[0]:
++            return
+         handled[0] = True
+-        hold = actions.ace._location_hold
+-        route = None
+-        hold_error = None
+-        try:
+-            route = hold.hold_memory(original_identity[0], original_identity[1], slot, original_heads, original_scope)
+-            if (idx, slot) == (0, 3) and getattr(actions.ace, '_normal_load_speed', None) is not None:
+-                actions.ace._normal_load_speed.park = None
+-        except Exception as exc:
+-            hold_error = exc
++        if (idx, slot) == (0, 3) and getattr(actions.ace, '_normal_load_speed', None) is not None:
++            actions.ace._normal_load_speed.park = None
+         stop_and_verify()
+-        if hold_error is None:
+-            try:
+-                hold.persist_route(route)
+-            except Exception as exc:
+-                hold_error = exc
+-        if hold_error is not None:
+-            actions.ace._latch_stop_fault(idx, slot, 'RFID position hold could not be persisted: %s' % hold_error, identity=original_identity)
+ 
+     def guarded_read(*args, **kwargs):
+         reading[0] = True
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -1142,8 +1142,7 @@
+             self.ace._latch_stop_fault(ace_idx, slot, 'STOP exception: %s' % exc)
+             accepted = False
+         if not accepted:
+-            self.ace._latch_stop_fault(ace_idx, slot, 'load STOP unconfirmed')
+-        self.ace._require_no_stop_fault()
++            raise StopUnconfirmedError('本次装料停止未确认')
+ 
+     def _stop_assist_or_latch(self, ace_idx, slot):
+         """Phase-3 must not start a wiggle after an unconfirmed assist STOP."""
+@@ -1583,6 +1582,7 @@
+                                     logging.info(
+                                         "[feed_loading] head %d loads from ACE slot %d (slot!=head)",
+                                         _head_idx, _ace_slot)
++                                self.ace._head_travel.begin_load(_head_idx, ace_idx, _ace_slot)
+                                 load_retries = self.ace.head_load_retry[_head_idx]
+                                 load_retry_retract = self.ace.head_load_retry_retract[_head_idx]
+ 
+@@ -1601,14 +1601,12 @@
+ 
+                                     _ll = self.ace.get_load_length(ace_idx, _ace_slot)
+                                     _path_operations = getattr(self.ace, '_path_operations', None)
+-                                    _managed_path = _path_operations is not None and _path_operations.handles(ace_idx)
+-                                    _normal_load = (self.ace._normal_load_speed
+-                                        if not _managed_path and self.ace._normal_load_speed.should_use(ace_idx, _ace_slot, _head_idx)
+-                                        else None)
+-                                    _load_speed = _normal_load.begin(ace_idx,_ace_slot,_head_idx,load_attempt) if _normal_load else self.ace.feed_speed
+-                                    if _load_speed is None:
+-                                        _normal_load = None
+-                                        _load_speed = self.ace.feed_speed
++                                    _managed_path = _path_operations is not None and _path_operations.handles(ace_idx, _ace_slot)
++                                    # Daily loading keeps the configured speed and upstream
++                                    # retries; distance measurement does not require the
++                                    # experimental single-route speed/parking session.
++                                    _normal_load = None
++                                    _load_speed = self.ace.get_feed_speed(ace_idx)
+                                     try:
+                                         self.ace._feed(_ace_slot, _ll, _load_speed, 0, ace=ace_idx, normal_load=_normal_load, head=_head_idx)
+                                         # No fixed pause before the poll loop any
+@@ -1661,26 +1659,6 @@
+                                                 try:
+                                                     if _normal_load is not None: _normal_load.stop_bound()
+                                                     else: self._stop_load_or_latch(ace_idx, _ace_slot)
+-                                                    if not _managed_path and (ace_idx, _ace_slot, _head_idx) == (0, 3, 3):
+-                                                        _sensor = self.ace.printer.lookup_object('filament_motion_sensor e3_filament', None)
+-                                                        if _sensor is None or getattr(_sensor, 'runout_buttun_state', None) is not True:
+-                                                            raise RuntimeError('真实喷头传感器未确认，装载停止')
+-                                                        _transport = _normal_load.transport if _normal_load is not None else self.ace._serials.get(ace_idx)
+-                                                        try:
+-                                                            _deadline = self.reactor.monotonic() + 8
+-                                                            def _monitor_load_stop():
+-                                                                if self.ace._serials.get(ace_idx) is not _transport or self.reactor.monotonic() >= _deadline:
+-                                                                    raise RuntimeError('装载后停止确认超时或连接变化')
+-                                                            while True:
+-                                                                _monitor_load_stop()
+-                                                                _lanes = self.ace._slot_actions._lane_states(ace_idx, monitor=_monitor_load_stop)
+-                                                                if all(_v == 'ready' for _v in _lanes.values()): break
+-                                                                self.reactor.pause(min(_deadline, self.reactor.monotonic()+.1))
+-                                                            _gate, _decoder = self.ace._slot_actions._stable(ace_idx, _ace_slot, monitor=_monitor_load_stop)
+-                                                            logging.info('[multiACE] normal-load e3 STOP decoder=%s gate=%s', _decoder, _gate)
+-                                                        except Exception as _exc:
+-                                                            self.ace._latch_stop_fault(ace_idx, _ace_slot, 'normal-load stop stability unconfirmed: %s' % _exc)
+-                                                            raise
+                                                 except StopUnconfirmedError:
+                                                     self.channel_error[ch] = FEED_ERR
+                                                     self.ace._dwell_fan(False)
+@@ -1743,8 +1721,12 @@
+                                         if _normal_load is not None: _normal_load.close()
+                                     if _normal_load is not None and not load_found:
+                                         _normal_load.stop_bound()
+-                                        raise RuntimeError('送料未到喷头，已停止且不自动重试')
++                                    if not _managed_path:
++                                        self._stop_load_or_latch(ace_idx, _ace_slot)
++                                        self.ace._travel_legacy_finish(ace_idx, _ace_slot)
+                                     if load_found:
++                                        self.ace.wait_ace_ready_on(ace_idx)
++                                        self.ace._head_travel.finish_load(_head_idx, ace_idx, _ace_slot)
+                                         break
+ 
+                                     if self.channel_error[ch] == FEED_ERR_NO_FILAMENT:
+@@ -2731,11 +2713,6 @@
+                         self.gcode.run_script_from_command(
+                             "SET_FILAMENT_SENSOR SENSOR=%s ENABLE=1\r\n" % sensor_name)
+                         _hot_park_context = None
+-                        if (self.ace is not None and self.ace.head_uses_ace(self.filament_ch[ch])
+-                                and not getattr(self.ace, '_swap_in_progress', False)
+-                                and not (getattr(self.ace, '_path_operations', None) is not None
+-                                         and self.ace._path_operations.handles(self.ace._active_device_index))):
+-                            _hot_park_context = self.ace._hot_session.begin(self.filament_ch[ch])
+                         _hot_tipform_start = self.reactor.monotonic()
+                         try:
+                             self._set_channel_state(ch, FEED_STA_UNLOAD_DOING)
+@@ -2821,8 +2798,10 @@
+                             # Hardware-agnostic (V1+V2): the verify is the
+                             # toolhead motion sensor, no ACE device sensor.
+                             if _hot_park_context is not None: self.ace._hot_session.phase = 'short'
+-                            _full_retract = self.ace._resolve_retract_length(_ace_slot)
+-                            _short_retract = min(FEED_UNLOAD_PROBE_RETRACT, _full_retract)
++                            _return_mm = self.ace._head_travel.begin_unload(
++                                head_idx, self.ace._active_device_index, _ace_slot)
++                            _short_retract = (FEED_UNLOAD_PROBE_RETRACT if _return_mm is None
++                                              else min(FEED_UNLOAD_PROBE_RETRACT, _return_mm))
+                             _retract_speed = self.ace.get_retract_speed(
+                                 self.ace._active_device_index)
+                             # Filament ran out / broke ABOVE the ACE gate: the
+@@ -2866,6 +2845,12 @@
+                                 # span window covered the whole wait).
+                                 # _retract's internal wait is then instant.
+                                 self.ace.wait_ace_ready()
++                                _remaining = self.ace._head_return_remaining(
++                                    self.ace._active_device_index, _ace_slot, head_idx)
++                                if _remaining is not None:
++                                    _short_retract = min(FEED_UNLOAD_PROBE_RETRACT, _remaining)
++                                    if _short_retract <= 0:
++                                        break
+                                 _usp = self.ace._retract_with_decoder_span(
+                                     self.ace._active_device_index, _ace_slot,
+                                     lambda: self.ace._retract(
+@@ -3042,11 +3027,14 @@
+                                     self.ace._hot_session.complete(_hot_result)
+                                     logging.info('[multiACE] verified hot park: %s', _hot_result)
+                                 else:
+-                                    _rest = _full_retract - _short_retract
+-                                    _path_operations = getattr(self.ace, '_path_operations', None)
+-                                    _managed_unload = (_path_operations is not None and
+-                                                       _path_operations.handles(self.ace._active_device_index))
+-                                    if _rest > 0 or _managed_unload:
++                                    _rest = self.ace._head_return_remaining(
++                                        self.ace._active_device_index, _ace_slot, head_idx)
++                                    if _rest is None:
++                                        # No numeric fallback. The hot/short phase has
++                                        # cleared the nozzle; the operator now ejects
++                                        # from ACE and reloads to establish a record.
++                                        raise RuntimeError('喷头已退出；请完全退出 ACE 后重新装入一次，建立送料距离记录')
++                                    if _rest > 0.5:
+                                         # Passive dock wait -> dwell-fan window
+                                         # (swap-gated inside the helper; OFF is
+                                         # backstopped in cmd_ACE_SWAP_HEAD's
+@@ -3059,7 +3047,7 @@
+                                         _rsp = self.ace._retract_with_decoder_span(
+                                             self.ace._active_device_index, _ace_slot,
+                                             lambda: self.ace._retract(
+-                                                _ace_slot, max(1, _rest),
++                                                _ace_slot, _rest,
+                                                 _retract_speed, head=head_idx, hot_owner=_hot_park_context, bulk=True))
+                                         self.ace.wait_ace_ready()
+                                         self.ace._check_calibration_unload_cancel()
+@@ -3083,6 +3071,8 @@
+                                     raise RuntimeError('喷头清空未验证，未执行回停；保留耗材来源')
+ 
+                             if self.ace is not None:
++                                self.ace._head_travel.finish_unload(
++                                    head_idx, self.ace._active_device_index, _ace_slot, unload_ok)
+                                 self.ace._last_unload_ok = unload_ok
+                                 self.ace._last_unload_reason = unload_reason
+                                 # Tip-form rollback-assist window is over: release
+@@ -3184,11 +3174,6 @@
+                             % self.filament_ch[ch])
+ 
+                         _hot_park_context = None
+-                        if (self.ace is not None and self.ace.head_uses_ace(self.filament_ch[ch])
+-                                and not getattr(self.ace, '_swap_in_progress', False)
+-                                and not (getattr(self.ace, '_path_operations', None) is not None
+-                                         and self.ace._path_operations.handles(self.ace._active_device_index))):
+-                            _hot_park_context = self.ace._hot_session.begin(self.filament_ch[ch])
+                         _hot_tipform_start = self.reactor.monotonic()
+                         try:
+                             self._set_channel_state(ch, FEED_STA_UNLOAD_DOING)
+@@ -3274,8 +3259,10 @@
+                             # Hardware-agnostic (V1+V2): the verify is the
+                             # toolhead motion sensor, no ACE device sensor.
+                             if _hot_park_context is not None: self.ace._hot_session.phase = 'short'
+-                            _full_retract = self.ace._resolve_retract_length(_ace_slot)
+-                            _short_retract = min(FEED_UNLOAD_PROBE_RETRACT, _full_retract)
++                            _return_mm = self.ace._head_travel.begin_unload(
++                                head_idx, self.ace._active_device_index, _ace_slot)
++                            _short_retract = (FEED_UNLOAD_PROBE_RETRACT if _return_mm is None
++                                              else min(FEED_UNLOAD_PROBE_RETRACT, _return_mm))
+                             _retract_speed = self.ace.get_retract_speed(
+                                 self.ace._active_device_index)
+                             # Filament ran out / broke ABOVE the ACE gate: the
+@@ -3319,6 +3306,12 @@
+                                 # span window covered the whole wait).
+                                 # _retract's internal wait is then instant.
+                                 self.ace.wait_ace_ready()
++                                _remaining = self.ace._head_return_remaining(
++                                    self.ace._active_device_index, _ace_slot, head_idx)
++                                if _remaining is not None:
++                                    _short_retract = min(FEED_UNLOAD_PROBE_RETRACT, _remaining)
++                                    if _short_retract <= 0:
++                                        break
+                                 _usp = self.ace._retract_with_decoder_span(
+                                     self.ace._active_device_index, _ace_slot,
+                                     lambda: self.ace._retract(
+@@ -3495,11 +3488,14 @@
+                                     self.ace._hot_session.complete(_hot_result)
+                                     logging.info('[multiACE] verified hot park: %s', _hot_result)
+                                 else:
+-                                    _rest = _full_retract - _short_retract
+-                                    _path_operations = getattr(self.ace, '_path_operations', None)
+-                                    _managed_unload = (_path_operations is not None and
+-                                                       _path_operations.handles(self.ace._active_device_index))
+-                                    if _rest > 0 or _managed_unload:
++                                    _rest = self.ace._head_return_remaining(
++                                        self.ace._active_device_index, _ace_slot, head_idx)
++                                    if _rest is None:
++                                        # No numeric fallback. The hot/short phase has
++                                        # cleared the nozzle; the operator now ejects
++                                        # from ACE and reloads to establish a record.
++                                        raise RuntimeError('喷头已退出；请完全退出 ACE 后重新装入一次，建立送料距离记录')
++                                    if _rest > 0.5:
+                                         # Passive dock wait -> dwell-fan window
+                                         # (swap-gated inside the helper; OFF is
+                                         # backstopped in cmd_ACE_SWAP_HEAD's
+@@ -3512,7 +3508,7 @@
+                                         _rsp = self.ace._retract_with_decoder_span(
+                                             self.ace._active_device_index, _ace_slot,
+                                             lambda: self.ace._retract(
+-                                                _ace_slot, max(1, _rest),
++                                                _ace_slot, _rest,
+                                                 _retract_speed, head=head_idx, hot_owner=_hot_park_context, bulk=True))
+                                         self.ace.wait_ace_ready()
+                                         self.ace._check_calibration_unload_cancel()
+@@ -3535,6 +3531,8 @@
+                                 if _hot_park_context is not None:
+                                     raise RuntimeError('喷头清空未验证，未执行回停；保留耗材来源')
+                             if self.ace is not None:
++                                self.ace._head_travel.finish_unload(
++                                    head_idx, self.ace._active_device_index, _ace_slot, unload_ok)
+                                 self.ace._last_unload_ok = unload_ok
+                                 self.ace._last_unload_reason = unload_reason
+                                 # Tip-form rollback-assist window is over: release

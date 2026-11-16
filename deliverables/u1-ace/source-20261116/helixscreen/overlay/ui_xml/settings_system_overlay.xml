@@ -1,0 +1,72 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- System Settings Overlay -->
+<!-- Security, performance, telemetry, log level, restart, factory reset -->
+<component>
+  <view name="settings_system_overlay" extends="overlay_panel" title="系统" bg_color="#screen_bg" title_transform="none" title_color="#text">
+    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" scrollable="true" flex_flow="column" scrollbar_mode="auto" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scroll_dir="ver">
+      <setting_group name="u1_system_native_entries" style_margin_left="0" style_margin_right="0" style_margin_bottom="0">
+        <style name="styles.u1_card"/>
+        <setting_action_row name="row_all_controls" label="全部控制" icon="fine_tune" description="归零、温度、校准与快捷操作" description_min_bp="2" callback="on_u1_controls_all"/>
+        <setting_action_row name="row_native_advanced" label="设备高级功能" icon="tune" description="宏、校准、控制台与诊断" description_min_bp="2" callback="on_native_advanced_clicked"/>
+        <setting_action_row name="row_appearance" label="主题与外观" icon="palette" callback="on_appearance_clicked" bind_description="settings_status_appearance" description_min_bp="2" />
+        <setting_action_row name="row_printing" label="打印偏好" icon="printer_3d" callback="on_printing_clicked" description_min_bp="2" />
+        <setting_action_row name="row_devices" label="硬件设备" icon="sysinfo" callback="on_devices_clicked" bind_description="settings_status_devices" description_min_bp="2" />
+        <setting_action_row name="row_safety" label="安全与提醒" icon="alert_octagon" callback="on_safety_clicked" description_min_bp="2" />
+        <setting_action_row name="row_printer" label="打印机信息" icon="printer" callback="on_printer_clicked" description="名称、图片与机型" description_min_bp="2" />
+        <setting_action_row name="row_touch_input" label="触摸与输入" icon="cursor_move" callback="on_touch_input_clicked" description_min_bp="2" />
+        <setting_action_row name="row_sound" label="声音" icon="volume_high" callback="on_sound_clicked" bind_description="settings_status_sound" description_min_bp="2">
+        <bind_flag_if_eq subject="printer_has_speaker" flag="hidden" ref_value="0" />
+      </setting_action_row>
+        <setting_action_row name="row_language_time" label="语言与时间" icon="translate" callback="on_language_time_clicked" bind_description="settings_status_language_time" description_min_bp="2" />
+        <setting_action_row name="row_local_firmware" label="本地固件升级" icon="folder_upload" callback="on_local_firmware_clicked" description_min_bp="2">
+        <bind_flag_if cond="not local_upgrade_available" flag="hidden" />
+      </setting_action_row>
+        <setting_action_row name="row_updates" label="更新" icon="update" callback="on_updates_clicked" bind_description="settings_status_updates" description_min_bp="2">
+        <bind_flag_if cond="show_update_settings eq 0 and updates_firmware_managed eq 0 and updates_unavailable eq 0" flag="hidden" />
+      </setting_action_row>
+        <setting_action_row name="row_plugins" label="扩展功能" icon="puzzle_outline" callback="on_plugins_clicked" description_min_bp="2">
+        <bind_flag_if_eq subject="settings_plugins_available" flag="hidden" ref_value="0" />
+      </setting_action_row>
+      </setting_group>
+      <setting_group name="group_system" style_margin_left="0" style_margin_right="0" style_margin_bottom="0">
+        <style name="styles.u1_card"/>
+        <!-- ================================================================== -->
+        <!-- SECURITY -->
+        <!-- ================================================================== -->
+        <setting_action_row name="row_security" label="Security" icon="lock" description="Screen lock and PIN settings" callback="on_security_clicked"/>
+        <!-- ================================================================== -->
+        <!-- PERFORMANCE (live host CPU/memory + per-MCU load) -->
+        <!-- ================================================================== -->
+        <lv_obj name="container_performance" width="100%" style_pad_all="0" scrollable="false">
+          <bind_flag_if_eq subject="perf_available" flag="hidden" ref_value="0"/>
+          <setting_action_row name="row_performance" label="Performance" icon="speed" bind_description="perf_about_summary" callback="on_system_performance_clicked"/>
+        </lv_obj>
+        <!-- ================================================================== -->
+        <!-- STORAGE -->
+        <!-- ================================================================== -->
+        <setting_action_row name="row_storage" label="Storage" icon="sd" description="What fills the printer's disk, and cleanup" callback="on_storage_clicked"/>
+        <!-- ================================================================== -->
+        <!-- TELEMETRY -->
+        <!-- ================================================================== -->
+        <setting_toggle_row name="row_telemetry" label="Share Usage Data" icon="chart_line" description="Anonymous data to help improve HelixScreen" subject="settings_telemetry_enabled" callback="on_telemetry_changed"/>
+        <setting_action_row name="row_telemetry_view_data" label="View Telemetry Data" icon="list" description="See exactly what data will be sent" callback="on_telemetry_view_data">
+          <bind_flag_if cond="settings_telemetry_enabled eq 0 or platform_extras_available eq 0" flag="hidden"/>
+        </setting_action_row>
+        <!-- ================================================================== -->
+        <!-- LOG LEVEL -->
+        <!-- ================================================================== -->
+        <setting_dropdown_row name="row_log_level" label="Log Level" icon="console" description="Set logging verbosity for troubleshooting" options="Warn&#10;Info&#10;Debug&#10;Trace" options_tag="Warn&#10;Info&#10;Debug&#10;Trace" bind_selected="settings_log_level" callback="on_log_level_changed"/>
+        <!-- ================================================================== -->
+        <!-- RESTART -->
+        <!-- ================================================================== -->
+        <setting_action_row name="row_restart_helix" label="重启显示界面" icon="restart" description="Restart the display application" callback="on_restart_helix_settings_clicked"/>
+        <!-- ================================================================== -->
+        <!-- FACTORY RESET -->
+        <!-- ================================================================== -->
+        <setting_action_row name="row_factory_reset" label="Factory Reset" icon="refresh" description="Reset all settings and restart wizard" callback="on_factory_reset_clicked"/>
+      </setting_group>
+    </lv_obj>
+  </view>
+</component>

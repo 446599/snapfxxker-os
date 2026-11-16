@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <view name="print_status_detailed_idle" extends="lv_obj" width="100%" height="100%"
+        style_pad_all="0" style_pad_gap="#u1_page_pad" flex_flow="row" scrollable="false" clickable="false" event_bubble="true">
+    <lv_obj name="idle_model_preview" width="80" height="100%" style_pad_all="#space_xs"
+            style_radius="#u1_icon_badge_radius" style_bg_color="#screen_bg" style_bg_opa="255"
+            scrollable="false" clickable="false" event_bubble="true">
+      <bind_flag_if_eq subject="print_status_task_preview_visible" flag="hidden" ref_value="0"/>
+      <lv_image name="idle_thumb" width="100%" height="100%" bind_src="print_status_idle_thumb_path"
+                inner_align="contain" clickable="false" event_bubble="true"/>
+    </lv_obj>
+    <lv_obj name="idle_task_data" width="0" height="100%" flex_grow="1" flex_flow="column"
+            style_pad_all="0" style_pad_gap="2" scrollable="false" clickable="false" event_bubble="true">
+      <text_body text="准备就绪" width="100%" height="34" clickable="false" event_bubble="true" style_text_font="#u1_title_font">
+        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="0"/>
+      </text_body>
+      <text_body text="设备尚未就绪" width="100%" height="34" clickable="false" event_bubble="true" style_text_font="#u1_title_font">
+        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+      </text_body>
+      <text_body text="选择文件，开始下一次打印" width="100%" long_mode="dots" style_text_color="#text_muted" clickable="false" event_bubble="true" style_text_font="#font_small">
+        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="0"/>
+      </text_body>
+      <text_body bind_text="printer_connection_message" width="100%" long_mode="dots" style_text_color="#text_muted" clickable="false" event_bubble="true" style_text_font="#font_small">
+        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+      </text_body>
+      <lv_obj width="100%" height="0" flex_grow="1" style_pad_all="0" scrollable="false" clickable="false" event_bubble="true"/>
+      <text_body name="detailed_idle_filename" width="100%" height="#u1_text_line" bind_text="print_status_idle_filename"
+                 long_mode="dots" style_text_color="#text_muted" clickable="false" event_bubble="true" style_text_font="#font_small">
+        <bind_flag_if_eq subject="print_status_idle_has_last" flag="hidden" ref_value="0"/>
+      </text_body>
+      <lv_obj name="idle_action_row" width="100%" height="#u1_touch_target" style_pad_all="0" flex_flow="row"
+              style_pad_gap="#u1_card_gap" scrollable="false" clickable="false">
+        <ui_button name="idle_files_btn" width="0" flex_grow="1" height="100%" variant="primary" style_text_color="#FFFFFF" text="选择文件" icon="folder"
+                   style_min_width="0" style_pad_hor="#space_xs" event_bubble="false" style_text_font="#u1_body_font">
+          <event_cb trigger="clicked" callback="library_files_cb"/>
+        </ui_button>
+        <ui_button name="idle_reprint_btn" width="0" flex_grow="1" height="100%" variant="ghost" text="重新打印"
+                   style_min_width="0" style_pad_hor="#space_xs" event_bubble="false" style_text_font="#u1_body_font">
+          <bind_state_if_eq subject="print_status_idle_has_last" state="disabled" ref_value="0"/>
+          <event_cb trigger="clicked" callback="library_last_cb"/>
+        </ui_button>
+        <ui_button name="idle_queue_btn" width="#u1_touch_target" height="100%" variant="outline" icon="progress_clock"
+                   style_min_width="0" style_pad_all="0" event_bubble="false" style_text_font="#u1_body_font">
+          <bind_flag_if_eq subject="print_status_queue_hidden" flag="hidden" ref_value="1"/>
+          <event_cb trigger="clicked" callback="library_queue_cb"/>
+        </ui_button>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

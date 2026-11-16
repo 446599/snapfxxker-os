@@ -1,0 +1,1130 @@
+--- a/klipper/extras/ace_rc522.py
++++ b/klipper/extras/ace_rc522.py
+@@ -45,17 +45,17 @@
+ 
+ PARK_STEP_MM = 20        # feed per probe step (Simon-CR: 15-25 works)
+ PARK_SPEED = 40          # mm/s. Faster only shortens the time BETWEEN probe
+-                         # points - the probe is stationary after each step,
+-                         # so speed costs no detection.
+-                         # Simon used 20; the ACE allows up to 100.
++# points - the probe is stationary after each step,
++# so speed costs no detection.
++# Simon used 20; the ACE allows up to 100.
+ MOVE_MAX_MM = 2000       # hard cap on ONE reader move, feed or rollback:
+-                         # nothing this module does legitimately moves a lane
+-                         # further than a full sweep plus a park correction.
+-                         # A corrupted depth once produced a rollback of 80738
+-                         # units that threw the strand out of the unit.
+-                         # Refused, logged.
++# nothing this module does legitimately moves a lane
++# further than a full sweep plus a park correction.
++# A corrupted depth once produced a rollback of 80738
++# units that threw the strand out of the unit.
++# Refused, logged.
+ PARK_MAX_MM = 600        # ~one revolution of a 1 kg spool - allow at least
+-                         # that before concluding there is no tag
++# that before concluding there is no tag
+ REQ_TIMEOUT = 3.0        # per-request reply wait
+ RC_IDEMPOTENT_OPS = (0, 4, 5, 6)   # reg read, rx byte, rx bits, SELECT
+ RC_IDEMPOTENT_RETRIES = 2          # extra asks per lost reply (see _rc)
+@@ -84,37 +84,37 @@
+ # about the field width). SELECT is no probe: it still answers at the edge
+ # where READ already fails.
+ CENTER_MM = 20           # after a sweep brake the tag sits at the FIELD
+-                         # EDGE (detection = field entry) - reads there are
+-                         # unreliable (identify+NDEF fail and even a
+-                         # double-read UID can pass with a flipped byte).
+-                         # Advance this
+-                         # far to center the tag before reading.
++# EDGE (detection = field entry) - reads there are
++# unreliable (identify+NDEF fail and even a
++# double-read UID can pass with a flipped byte).
++# Advance this
++# far to center the tag before reading.
+ START_PROBE_MM = 160     # rotation test for a card answering at sweep
+-                         # start: move this far - a STATIONARY card (still
+-                         # answering, same UID) is the neighbour's; a card
+-                         # that left the field moved WITH us = our own tag.
+-                         # Must exceed the antenna field width (80 did NOT
+-                         # for a flange tag). 160 is twice the
+-                         # widest read window seen (+-40 around the hit,
+-                         # PROBE_OFFSETS) and still one short lane move
+-                         # each way (~8 s round trip).
++# start: move this far - a STATIONARY card (still
++# answering, same UID) is the neighbour's; a card
++# that left the field moved WITH us = our own tag.
++# Must exceed the antenna field width (80 did NOT
++# for a flange tag). 160 is twice the
++# widest read window seen (+-40 around the hit,
++# PROBE_OFFSETS) and still one short lane move
++# each way (~8 s round trip).
+ CLEAR_STEP_MM = 20       # rotate-the-neighbour-away step - the neighbour
+ CLEAR_SILENT_STEPS = 2   # lane is fed forward in these steps until its card
+ CLEAR_MAX_MM = 200       # has stayed silent for CLEAR_SILENT_STEPS, capped.
+-                         # Forward only: a rollback could drop the neighbour
+-                         # out of its gate, forward is harmless far beyond
+-                         # the 390 park depth (the firmware's own pull-in
+-                         # goes to ~1650). Needed by the insert read AND the
+-                         # write: a parked neighbour tag in the shared field
+-                         # is a clean single card, and a write must never
+-                         # land on it.
++# Forward only: a rollback could drop the neighbour
++# out of its gate, forward is harmless far beyond
++# the 390 park depth (the firmware's own pull-in
++# goes to ~1650). Needed by the insert read AND the
++# write: a parked neighbour tag in the shared field
++# is a clean single card, and a write must never
++# land on it.
+ NEIGHBOUR_SETTLE_S = 12  # a neighbour in its OWN firmware insert (identifying
+-                         # / feeding / preloading) drags its tag THROUGH the
+-                         # shared field: neither the rotation test nor a clear
+-                         # can tell whose card answers while both lanes move.
+-                         # Bounded wait for
+-                         # the neighbour to settle before deciding; a held
+-                         # 'preloading' simply runs the clock out.
++# / feeding / preloading) drags its tag THROUGH the
++# shared field: neither the rotation test nor a clear
++# can tell whose card answers while both lanes move.
++# Bounded wait for
++# the neighbour to settle before deciding; a held
++# 'preloading' simply runs the clock out.
+ 
+ # --- Stage 2: raw RC522 passthrough (ACE2-Open firmware only) -------------
+ # The UID passthrough patch only fires on the firmware's READ-FAILED exit
+@@ -149,6 +149,10 @@
+     """Motion may have executed or a known move could not be restored."""
+ 
+ 
++class ScanBudgetExhausted(RuntimeError):
++    """A scan request was refused before any movement was sent."""
++
++
+ class AceTagReader:
+     def __init__(self, ace, debug=False, dump=False):
+         self.ace = ace
+@@ -231,6 +235,10 @@
+                     raise MotionUncertain('insert stop device changed')
+                 request['_insert_stop_transport'] = transport
+                 request['_insert_reject'] = _cb
++            if method in ('feed_or_rollback_raw', 'stop_feed_filament'):
++                fields = {k:(params or {}).get(k) for k in ('index','length','speed','mode')}
++                logging.info('[multiACE] RFID motion intent ace=%s method=%s motion=%s time=%.3f guard=%s',
++                             idx,method,fields,self.ace.reactor.monotonic(),context is not None)
+             self.ace.send_request_to(idx, request, _cb)
+         except Exception as e:
+             logging.info('[multiACE] [rc522] send %s failed: %s'
+@@ -244,10 +252,30 @@
+         deadline = self.ace.reactor.monotonic() + timeout
+         while 'r' not in box and self.ace.reactor.monotonic() < deadline:
+             self._pause(0.005)
+-        return box.get('r')
++        response = box.get('r')
++        if method in ('feed_or_rollback_raw', 'stop_feed_filament'):
++            ack = {k:response.get(k) for k in ('id','code','_v2_command','_v2_frame_valid','_v2_payload_valid')} if isinstance(response,dict) else None
++            logging.info('[multiACE] RFID motion ack ace=%s method=%s ack=%s time=%.3f',
++                         idx, method, ack, self.ace.reactor.monotonic())
++        return response
+ 
+     def _move(self, idx, slot, length, mode, respond, speed=PARK_SPEED):
+         """Move once; retry only an explicit busy rejection, never a timeout."""
++        if ((getattr(self,'_relative_unknown',False) or getattr(self,'_scan_measured',False)) and not getattr(self,'_relative_sweep',False)
++                and not getattr(self,'_relative_measured',False)):
++            return self._move_and_confirm(idx,slot,length,mode,respond)
++        context = getattr(self,'_insert_checked_context',None)
++        tracked = bool(getattr(self,'_scan_measured',False) and context is not None and (idx,slot)==context[:2])
++        if tracked:
++            if self._scan_motor_pending is not None:
++                raise MotionUncertain('previous scan motor movement unconfirmed')
++            if mode == SEARCH_MODE and (self._scan_attempts >= 48 or self._scan_zero_segments >= 2):
++                raise ScanBudgetExhausted('scan movement attempts exhausted')
++            total_limit = self._scan_motor_total_limit - (self._scan_forward_limit if mode == SEARCH_MODE else 0)
++            if self._scan_motor_total + int(length) > total_limit:
++                raise ScanBudgetExhausted('scan total motor budget exhausted')
++            if mode == SEARCH_MODE and self._scan_motor_position + int(length) > self._scan_forward_limit:
++                raise ScanBudgetExhausted('scan forward bound reached')
+         self._insert_guard()
+         if self._motion_uncertain:
+             raise MotionUncertain(self._motion_uncertain)
+@@ -257,6 +285,8 @@
+             return False
+         for attempt in range(MOVE_RETRIES):
+             self._insert_guard()
++            if getattr(self,'_single_auto',False):
++                self._single_pending_stop = (idx,slot)
+             resp = self._req(idx, 'feed_or_rollback_raw',
+                              {'index': slot, 'speed': int(speed),
+                               'length': length, 'mode': mode})
+@@ -278,10 +308,15 @@
+                 raise MotionUncertain(self._motion_uncertain)
+             message = str(resp.get('msg', '')).strip().upper()
+             if code == 0 and message != 'FORBIDDEN':
++                if tracked:
++                    self._scan_motor_pending = (mode,length)
++                    self._scan_attempts += 1
+                 key = (idx, slot)
+                 self._motion_ledger[key] = (self._motion_ledger.get(key, 0)
+                                             + (-length if mode else length))
+                 return True
++            if getattr(self,'_single_auto',False):
++                self._single_pending_stop = None
+             if code != 2 and message != 'FORBIDDEN':
+                 respond('rc522: motor command explicitly rejected (code %s)'
+                         % code)
+@@ -291,6 +326,22 @@
+         respond('rc522: motor command explicitly busy - aborting')
+         return False
+ 
++    def _commit_scan_motor(self, idx, slot, mode, commanded, actual, reset):
++        context = getattr(self,'_insert_checked_context',None)
++        if not getattr(self,'_scan_measured',False) or context is None or (idx,slot)!=context[:2]:
++            return
++        if (self._scan_motor_pending != (mode,commanded) or reset is not True
++                or type(actual) is not int or actual < 0 or actual > commanded):
++            raise MotionUncertain('scan motor position unconfirmed')
++        self._scan_motor_position += actual if mode == SEARCH_MODE else -actual
++        self._scan_motor_total += actual
++        self._scan_zero_segments = self._scan_zero_segments + 1 if actual == 0 else 0
++        self._scan_motor_pending = None
++        if getattr(self,'_single_pending_stop',None) == (idx,slot):
++            self._single_pending_stop = None
++        logging.info('[multiACE] RFID motor ledger ace=%s slot=%s mode=%s actual=%s position=%s total=%s',
++                     idx,slot,mode,actual,self._scan_motor_position,self._scan_motor_total)
++
+     def _wait_motion_ready(self, idx, slot, timeout=15.0):
+         """Fresh device status, not a cached or inferred standstill."""
+         deadline = self.ace.reactor.monotonic() + timeout
+@@ -339,7 +390,13 @@
+     def _neighbour_signature(self, idx, slot):
+         """Fresh ready state plus last move counters for the paired lane."""
+         neighbour = slot ^ 1
+-        state = self._req(idx, 'get_status', {})
++        def readonly(method):
++            response = self._req(idx, method, {})
++            if response is None and not getattr(self,'_single_auto',False):
++                self._insert_guard()
++                response = self._req(idx, method, {})
++            return response
++        state = readonly('get_status')
+         if (not isinstance(state, dict) or state.get('code') != 0 or
+                 state.get('_v2_payload_valid') is not True):
+             return None
+@@ -350,7 +407,7 @@
+                      if x.get('index') == neighbour), None)
+         if not lane or lane.get('slot_status') != 'ready' or lane.get('status') == 'identifying':
+             return None
+-        info = self._req(idx, 'get_feed_info', {})
++        info = readonly('get_feed_info')
+         if (not isinstance(info, dict) or info.get('code') != 0 or
+                 info.get('_v2_payload_valid') is not True):
+             return None
+@@ -377,72 +434,265 @@
+         except Exception:
+             return False
+ 
++    def _remember_encoder_direction(self, idx, slot, direction):
++        """Keep an independently observed direction only for this physical connection."""
++        try:
++            transport = self.ace._serials.get(idx)
++            identity = self.ace._location_identity(idx)
++            if (
++                transport is not None
++                and identity[1] is not None
++                and direction in (-1, 1)
++            ):
++                if not hasattr(self.ace, "_insert_encoder_direction"):
++                    self.ace._insert_encoder_direction = {}
++                self.ace._insert_encoder_direction[(idx, slot)] = (
++                    transport,
++                    identity,
++                    direction,
++                )
++        except Exception:
++            logging.exception("[multiACE] RFID encoder direction cache")
++
+     def _move_and_confirm(self, idx, slot, length, mode, respond):
+         """Manual scan move with fresh completion and encoder feedback."""
+         if not self._target_motion_allowed(idx, slot):
+-            respond('rc522: read failed - slot feeds a loaded head or '
+-                    'printer state is unavailable')
++            respond(
++                "rc522: read failed - slot feeds a loaded head or "
++                "printer state is unavailable"
++            )
+             return False
+-        if not self._move(idx, slot, length, mode, respond):
+-            return False
++        checked = getattr(self, "_insert_checked_guard", None) is not None
++        baseline = self._fresh_encoder(idx, slot) if checked else None
++        baseline_row = (
++            dict((getattr(self, "_encoder_diagnostic", {}) or {}).get("row") or {})
++            if baseline is not None
++            else {}
++        )
++        self._relative_measured = True
++        try:
++            if not self._move(idx, slot, length, mode, respond):
++                return False
++        finally:
++            self._relative_measured = False
++        initial = self._fresh_encoder(idx, slot) if checked else None
++        initial_row = (
++            dict((getattr(self, "_encoder_diagnostic", {}) or {}).get("row") or {})
++            if initial is not None
++            else {}
++        )
+         # An ACK can precede the motion; do not treat an immediate READY as
+         # completion. Then use a fresh status and this move's reset counter.
+         self._pause(length / float(PARK_SPEED) + 0.6)
+         if not self._wait_motion_ready(idx, slot):
+-            self._motion_uncertain = ('ACE %d slot %d: motion completion '
+-                'not confirmed; inspect lane' % (idx, slot))
+-            respond('rc522: WARNING - ' + self._motion_uncertain)
++            self._motion_uncertain = (
++                "ACE %d slot %d: motion completion "
++                "not confirmed; inspect lane" % (idx, slot)
++            )
++            respond("rc522: WARNING - " + self._motion_uncertain)
+             raise MotionUncertain(self._motion_uncertain)
+         raw = self._fresh_encoder(idx, slot)
+         if raw is None or not (length * 0.5 <= abs(raw) <= length * 1.5 + 2):
+-            logging.warning('[multiACE] RFID encoder diagnostic ACE=%s slot=%s requested=%s mode=%s value=%s detail=%s', idx, slot, length, mode, raw, getattr(self, '_encoder_diagnostic', None))
+-            self._motion_uncertain = ('ACE %d slot %d: encoder feedback '
+-                'missing or inconsistent for %d mm; inspect lane'
+-                % (idx, slot, length))
+-            respond('rc522: WARNING - ' + self._motion_uncertain)
++            logging.warning(
++                "[multiACE] RFID encoder diagnostic ACE=%s slot=%s requested=%s mode=%s value=%s detail=%s",
++                idx,
++                slot,
++                length,
++                mode,
++                raw,
++                getattr(self, "_encoder_diagnostic", None),
++            )
++            self._motion_uncertain = (
++                "ACE %d slot %d: encoder feedback "
++                "missing or inconsistent for %d mm; inspect lane" % (idx, slot, length)
++            )
++            respond("rc522: WARNING - " + self._motion_uncertain)
+             raise MotionUncertain(self._motion_uncertain)
+         key = (idx, slot)
+         direction = (1 if raw > 0 else -1) * (-1 if mode else 1)
+         old = self._encoder_direction.get(key)
+-        if old is not None and old != direction:
+-            self._motion_uncertain = ('ACE %d slot %d: encoder direction '
+-                'inconsistent; inspect lane' % (idx, slot))
+-            respond('rc522: WARNING - ' + self._motion_uncertain)
++        reset = (
++                type(baseline_row.get("steps")) is int
++                and type(baseline_row.get("length")) is int
++                and type(initial_row.get("steps")) is int
++                and type(initial_row.get("length")) is int
++                and (
++                    initial_row["steps"] < baseline_row["steps"]
++                    or initial_row["length"] < baseline_row["length"]
++                    or (initial == 0 and baseline != 0)
++                )
++            )
++        if old is None:
++            if not reset and checked:
++                self._motion_uncertain = (
++                    "ACE %d slot %d: encoder reset "
++                    "unconfirmed; inspect lane" % (idx, slot)
++                )
++                raise MotionUncertain(self._motion_uncertain)
++        if old is not None and old != direction:
++            self._motion_uncertain = (
++                "ACE %d slot %d: encoder direction "
++                "inconsistent; inspect lane" % (idx, slot)
++            )
++            respond("rc522: WARNING - " + self._motion_uncertain)
+             raise MotionUncertain(self._motion_uncertain)
++        context = getattr(self,'_insert_checked_context',None)
++        if getattr(self,'_scan_measured',False) and context is not None and (idx,slot)==context[:2]:
++            final_row = dict((getattr(self,'_encoder_diagnostic',{}) or {}).get('row') or {})
++            self._pause(0.3)
++            confirm = self._fresh_encoder(idx,slot)
++            confirm_row = dict((getattr(self,'_encoder_diagnostic',{}) or {}).get('row') or {})
++            if (raw != confirm or final_row.get('_decoder_present') is not True
++                    or confirm_row.get('_decoder_present') is not True
++                    or any(type(final_row.get(k)) is not int or final_row.get(k)!=confirm_row.get(k) for k in ('steps','length'))
++                    or not self._wait_motion_ready(idx,slot)):
++                raise MotionUncertain('scan motor completion telemetry unconfirmed')
++            self._commit_scan_motor(idx,slot,mode,length,final_row['length'],reset)
+         self._encoder_direction[key] = direction
++        if checked and (old is not None or reset):
++            self._remember_encoder_direction(idx, slot, direction)
+         self._encoder_ledger[key] = self._encoder_ledger.get(key, 0) + raw
++        logging.info('[multiACE] RFID measured move ace=%s slot=%s mode=%s command=%s raw=%s normalized=%s baseline=%s initial=%s final=%s ledger=%s',
++                     idx, slot, mode, length, raw, raw*direction, baseline_row, initial_row,
++                     getattr(self,'_encoder_diagnostic',None), self._encoder_ledger[key])
+         return True
+ 
+     def _stop_and_measure(self, idx, slot, leg, respond):
+-        """Stop a transport sweep once and require stable status/encoder."""
+-        resp = self._req(idx, 'stop_feed_filament', {'index': slot})
+-        if (not isinstance(resp, dict) or resp.get('code') != 0 or
+-                resp.get('_v2_payload_valid') is not True or
+-                str(resp.get('msg', '')).strip().upper() == 'FORBIDDEN'):
+-            self._motion_uncertain = ('ACE %d slot %d: sweep stop not '
+-                'confirmed; motor may continue; inspect lane' % (idx, slot))
+-            respond('rc522: WARNING - ' + self._motion_uncertain)
++        """Stop a transport sweep and require stable status and encoder."""
++        resp = self._req(idx, "stop_feed_filament", {"index": slot})
++        if (not isinstance(resp,dict) or resp.get('code')!=0
++                or resp.get('_v2_command')!=9 or resp.get('_v2_frame_valid') is not True
++                or resp.get('_v2_payload_valid') is not True):
++            self._pause(0.3)
++            resp = self._req(idx, "stop_feed_filament", {"index": slot})
++        if (
++            not isinstance(resp, dict)
++            or resp.get("code") != 0
++            or resp.get('_v2_command') != 9
++            or resp.get('_v2_frame_valid') is not True
++            or resp.get("_v2_payload_valid") is not True
++            or str(resp.get("msg", "")).strip().upper() == "FORBIDDEN"
++        ):
++            self._motion_uncertain = (
++                "ACE %d slot %d: sweep stop not "
++                "confirmed; motor may continue; inspect lane" % (idx, slot)
++            )
++            respond("rc522: WARNING - " + self._motion_uncertain)
+             raise MotionUncertain(self._motion_uncertain)
+         # STOP may be acknowledged before the drive has settled. Require
+         # two fresh READY checks and identical valid encoder readings.
+         self._pause(0.6)
+         if not self._wait_motion_ready(idx, slot):
+-            self._motion_uncertain = ('ACE %d slot %d: sweep standstill '
+-                'unconfirmed; inspect lane' % (idx, slot))
+-            respond('rc522: WARNING - ' + self._motion_uncertain)
++            self._motion_uncertain = (
++                "ACE %d slot %d: sweep standstill "
++                "unconfirmed; inspect lane" % (idx, slot)
++            )
++            respond("rc522: WARNING - " + self._motion_uncertain)
+             raise MotionUncertain(self._motion_uncertain)
+         first = self._fresh_encoder(idx, slot)
++        first_row = dict(
++            (getattr(self, "_encoder_diagnostic", {}) or {}).get("row") or {}
++        )
+         self._pause(0.3)
+         second = self._fresh_encoder(idx, slot)
+-        if (not self._wait_motion_ready(idx, slot) or
+-                not isinstance(first, int) or isinstance(first, bool) or
+-                first != second or not 0 < first <= leg):
+-            self._motion_uncertain = ('ACE %d slot %d: sweep encoder or '
+-                'standstill uncertain; no guessed correction; inspect lane'
+-                % (idx, slot))
+-            respond('rc522: WARNING - ' + self._motion_uncertain)
++        diag = getattr(self, "_encoder_diagnostic", {})
++        row = diag.get("row") or {}
++        self._insert_guard()
++        direction = self._encoder_direction.get((idx, slot))
++        baseline = getattr(self, "_sweep_baseline", None)
++        baseline_row = (baseline or {}).get('row') or {}
++        context = getattr(self,'_insert_checked_context',None)
++        subresolution_zero = (
++            getattr(self,'_scan_measured',False) and context is not None and (idx,slot)==context[:2]
++            and self.ace._serials.get(idx) is context[2]
++            and isinstance(getattr(self,'_sweep_identity',None),tuple)
++            and self._sweep_identity == self.ace._location_identity(idx)
++            and self._sweep_identity[1] is not None
++            and isinstance(baseline,dict) and baseline.get('frame') is True
++            and baseline.get('payload') is True and baseline.get('cmd') == 76
++            and baseline.get('code') == 0 and baseline.get('feed_wire') is True
++            and baseline_row.get('_wire_valid') is True and baseline_row.get('_decoder_present') is True
++            and type(baseline_row.get('decoder')) is int and baseline_row.get('decoder') != 0
++            and getattr(self,'_sweep_reset_seen',False) and first == 0 and second == 0
++            and first_row.get('_decoder_present') is False and row.get('_decoder_present') is False
++            and first_row.get('decoder') == 0 and row.get('decoder') == 0
++            and first_row.get('_wire_valid') is True and row.get('_wire_valid') is True
++            and type(row.get('steps')) is int and 0 <= row['steps'] <= 7
++            and first_row.get('steps') == row['steps'] and first_row.get('length') == 0 and row.get('length') == 0
++        )
++        if subresolution_zero:
++            if not self._wait_motion_ready(idx,slot):
++                raise MotionUncertain('short sweep standstill unconfirmed')
++            self._commit_scan_motor(idx,slot,SEARCH_MODE,leg,0,True)
++            logging.info('[multiACE] RFID short sweep ace=%s slot=%s command=%s decoder=0 present=False steps=%s length=0; physical sub-resolution displacement unknown',
++                         idx,slot,leg,row['steps'])
++            return 0
++        if getattr(self, "_relative_unknown", False):
++            samples = getattr(self, "_sweep_values", [])
++            if (
++                not getattr(self, "_sweep_reset_seen", False)
++                or not samples
++                or second in (None, 0)
++                or any(value * second <= 0 for value in samples)
++                or any(abs(b) < abs(a) for a, b in zip(samples, samples[1:]))
++                or abs(second) < abs(samples[-1])
++            ):
++                raise MotionUncertain("relative sweep reset or movement unconfirmed")
++        if direction is None and baseline is not None and second not in (None, 0):
++            old = baseline.get("row") or {}
++            samples = getattr(self, "_sweep_values", [])
++            consistent = [v for v in samples if v * second > 0]
++            progress = (
++                len(consistent) == len(samples)
++                and bool(consistent)
++                and all(abs(b) >= abs(a) for a, b in zip(consistent, consistent[1:]))
++            )
++            if (
++                getattr(self, "_sweep_reset_seen", False)
++                and progress
++                and type(old.get("steps")) is int
++                and type(old.get("length")) is int
++                and type(row.get("steps")) is int
++                and type(row.get("length")) is int
++                and abs(second) >= abs(consistent[-1])
++            ):
++                direction = 1 if second > 0 else -1
++                self._encoder_direction[(idx, slot)] = direction
++                self._remember_encoder_direction(idx, slot, direction)
++        ready_after = self._wait_motion_ready(idx, slot)
++        if (
++            not ready_after
++            or not isinstance(first, int)
++            or isinstance(first, bool)
++            or first != second
++            or first_row.get("_decoder_present") is not True
++            or row.get("_decoder_present") is not True
++            or any(
++                type(first_row.get(k)) is not int or first_row.get(k) != row.get(k)
++                for k in ("steps", "length")
++            )
++            or direction not in (-1, 1)
++            or not 0 < first * direction <= leg
++        ):
++            logging.warning('[multiACE] RFID sweep terminal rejected ace=%s slot=%s leg=%s first=%s first_row=%s second=%s second_row=%s ready=%s direction=%s reset=%s',
++                            idx,slot,leg,first,first_row,second,row,ready_after,direction,
++                            getattr(self,'_sweep_reset_seen',False))
++            self._motion_uncertain = (
++                "ACE %d slot %d: sweep encoder or "
++                "standstill uncertain; no guessed correction; inspect lane"
++                % (idx, slot)
++            )
++            respond("rc522: WARNING - " + self._motion_uncertain)
+             raise MotionUncertain(self._motion_uncertain)
+-        return first
++        if getattr(self, "_relative_unknown", False) or getattr(self,'_scan_measured',False):
++            key = (idx, slot)
++            self._encoder_ledger[key] = self._encoder_ledger.get(key, 0) + first
++        self._commit_scan_motor(idx,slot,SEARCH_MODE,leg,row.get('length'),
++                                getattr(self,'_sweep_reset_seen',False))
++        logging.info('[multiACE] RFID sweep stop ace=%s slot=%s leg=%s raw=%s normalized=%s direction=%s baseline=%s final=%s ledger=%s',
++                     idx,slot,leg,first,first*direction,direction,baseline,diag,
++                     self._encoder_ledger.get((idx,slot)))
++        return first * direction
+ 
+     def _restore_recorded_motion(self, respond):
+         """Reverse only acknowledged manual-read net moves, never a guess."""
+@@ -585,6 +835,20 @@
+         uid, _ = self._rc_stable_uid(idx, slot)
+         return uid or None
+ 
++    def _observed_expected_uid(self, idx, slot, expected):
++        """One fresh SELECT and one BCC-validated UID; callers require repeats."""
++        if not isinstance(expected, str) or len(expected) not in (8,14):
++            return None
++        if not self._rc_select(idx,slot):
++            return None
++        if len(expected) == 8:
++            if not self._is_single_uid(expected):
++                return None
++            value = self._current_single_uid(idx,slot)
++        else:
++            value = self._rc_read_uid(idx,slot)
++        return value if value and len(value)==len(expected) else None
++
+     def _ingest_bambu(self, idx, slot, uid, identity, respond):
+         respond('rc522: authenticated Bambu tag: %s #%02X%02X%02X (UID %s)'
+                 % (identity['type'], *identity['color'], uid))
+@@ -594,7 +858,7 @@
+         self._note_uid(idx, slot, uid)
+         self._bind_uid(idx, slot, uid, respond, unbind=False)
+ 
+-    def _read_bambu_classic(self, idx, slot, uid):
++    def _read_bambu_classic(self, idx, slot, uid, single=False):
+         """Read only a verified Bambu identity; never trust firmware defaults.
+ 
+         Verify the selected 4-byte UID and BCC, authenticate sector 1, and
+@@ -610,12 +874,13 @@
+             self._wait_fw_identify(idx)
+             if self._fw_identify_busy(idx):
+                 return None
+-            if not self._rc_select(idx, slot):
+-                return None
+-            selected = [self._rc(idx, slot, 9, i) for i in range(13, 18)]
+-            if (None in selected or bytes(selected[:4]) != raw_uid
+-                    or selected[4] != (raw_uid[0] ^ raw_uid[1] ^ raw_uid[2] ^ raw_uid[3])):
+-                return None
++            if not single:
++                if not self._rc_select(idx, slot):
++                    return None
++                selected = [self._rc(idx, slot, 9, i) for i in range(13, 18)]
++                if (None in selected or bytes(selected[:4]) != raw_uid
++                        or selected[4] != (raw_uid[0] ^ raw_uid[1] ^ raw_uid[2] ^ raw_uid[3])):
++                    return None
+             seq = [(1, 0), (8, 0), (2, 0xf7), (4, 0x7f), (10, 0x80),
+                    (0x12, 0), (0x13, 0), (0x0d, 0), (0x2a, 0x80)]
+             packet = bytes([0x60, 4]) + self._bambu_key(uid) + raw_uid
+@@ -642,7 +907,7 @@
+                        [(0x12, 0x80), (0x13, 0x80), (0x0d, 0)]):
+                 return None
+             blocks = []
+-            for block in (4, 5, 4, 5):
++            for block in ((4,5) if single else (4,5,4,5)):
+                 # Inline the READ to distinguish a lost reply from zero data.
+                 if (self._rc(idx, slot, 2, 0, 0x30) != 0 or
+                         self._rc(idx, slot, 2, 1, block) != 0):
+@@ -655,7 +920,7 @@
+                 if None in data:
+                     return None
+                 blocks.append(bytes(data))
+-            if blocks[:2] != blocks[2:]:
++            if not single and blocks[:2] != blocks[2:]:
+                 return None
+             material_bytes = blocks[0].split(b'\x00', 1)[0]
+             if not (3 <= len(material_bytes) <= 16 and
+@@ -691,7 +956,7 @@
+         # a lost reply there does not say whether the op ran, and a
+         # doubled FIFO byte corrupts the frame; the bits/CRC check catches
+         # that case and the outer retry re-reads.
+-        tries = 1 + (RC_IDEMPOTENT_RETRIES if op in RC_IDEMPOTENT_OPS else 0)
++        tries = 1 if getattr(self,'_single_auto',False) else 1 + (RC_IDEMPOTENT_RETRIES if op in RC_IDEMPOTENT_OPS else 0)
+         for attempt in range(tries):
+             if attempt:
+                 self._pause(0.01)
+@@ -1248,6 +1513,158 @@
+                 searched += step
+         finally:
+             self._restore_recorded_motion(respond)
++
++    def read_slot_single_checked(self, idx, slot, respond, guard, **kwargs):
++        """One bounded scan and one UID/content read, without attribution guesses."""
++        self._insert_checked_guard = guard
++        self._insert_checked_uid = None
++        self._single_auto = True
++        token = object()
++        sessions = getattr(self.ace,'_insert_reader_sessions',None)
++        if sessions is None:
++            sessions = self.ace._insert_reader_sessions = {}
++        sessions[(idx,slot)] = token
++        moving = False
++        self._single_pending_stop = None
++        def stop_if_active():
++            if not moving and self._single_pending_stop is None:
++                return
++            stop_idx,stop_slot = self._single_pending_stop or (idx,slot)
++            for _ in range(2):
++                try:
++                    response = self._req(stop_idx,'stop_feed_filament',{'index':stop_slot})
++                except Exception:
++                    response = None
++                if (isinstance(response,dict) and response.get('code')==0
++                        and response.get('_v2_command')==9 and response.get('_v2_frame_valid') is True
++                        and response.get('_v2_payload_valid') is True):
++                    return
++                self._pause(.3)
++        try:
++            if not guard() or not self._target_motion_allowed(idx,slot):
++                return {'kind':'transport_changed','parked':False,'uid':None}
++            self._insert_checked_context = (idx,slot,self.ace._serials[idx],
++                self.ace._insert_epochs[(idx,slot)],self.ace.printer.lookup_object('print_stats',None),
++                self.ace._active_device_index,token)
++            self._scan_measured=True
++            self._scan_forward_limit=min(700,int(kwargs.get('sweep_mm',700)))
++            self._scan_motor_position=0;self._scan_motor_total=0;self._scan_motor_total_limit=5600
++            self._scan_motor_pending=None;self._scan_attempts=0;self._scan_zero_segments=0
++            neighbour_before=self._neighbour_signature(idx,slot)
++            status=self._rc(idx,slot,6)
++            if status not in (SELECT_OK,1):
++                return {'kind':'unread','parked':False,'uid':None}
++            found=status == SELECT_OK
++            if not found:
++                baseline=self._fresh_encoder(idx,slot)
++                self._sweep_baseline=getattr(self,'_encoder_diagnostic',None) if baseline is not None else None
++                self._sweep_identity=self.ace._location_identity(idx)
++                self._sweep_values=[];self._sweep_reset_seen=False
++                leg=self._scan_forward_limit
++                self._relative_sweep=True
++                try:
++                    moving=True
++                    if not self._move(idx,slot,leg,SEARCH_MODE,respond):
++                        moving=False
++                        return {'kind':'unread','parked':False,'uid':None}
++                finally:
++                    self._relative_sweep=False
++                deadline=self.ace.reactor.monotonic()+leg/float(PARK_SPEED)+1.5
++                while self.ace.reactor.monotonic()<deadline:
++                    self._pause(.1);self._insert_guard()
++                    value=self._fresh_encoder(idx,slot)
++                    current=(getattr(self,'_encoder_diagnostic',{}) or {}).get('row') or {}
++                    old=(self._sweep_baseline or {}).get('row') or {}
++                    if value is not None and all(type(row.get(k)) is int for row in (old,current) for k in ('steps','length')):
++                        if (current['steps']<old['steps'] or current['length']<old['length']
++                                or (value==0 and old.get('decoder') not in (None,0))):
++                            self._sweep_reset_seen=True
++                        if self._sweep_reset_seen and current.get('_decoder_present') is True and value:
++                            self._sweep_values.append(value)
++                    status=self._rc(idx,slot,6)
++                    if status not in (SELECT_OK,1):
++                        self._stop_and_measure(idx,slot,leg,respond)
++                        moving=False
++                        self._rewind_scan_origin(idx,slot,respond)
++                        return {'kind':'unread','parked':False,'uid':None}
++                    if status == SELECT_OK:
++                        self._stop_and_measure(idx,slot,leg,respond)
++                        moving=False
++                        found=True
++                        break
++                if not found:
++                    enc=self._natural_sweep_terminal(idx,slot,leg)
++                    samples=self._sweep_values
++                    if (not self._sweep_reset_seen or not samples or any(v*enc<=0 for v in samples)
++                            or any(abs(b)<abs(a) for a,b in zip(samples,samples[1:])) or abs(enc)<abs(samples[-1])):
++                        raise MotionUncertain('single scan movement unconfirmed')
++                    direction=self._encoder_direction.get((idx,slot)) or (1 if enc>0 else -1)
++                    if enc*direction<=0:
++                        raise MotionUncertain('single scan direction changed')
++                    self._encoder_direction[(idx,slot)]=direction
++                    row=(getattr(self,'_encoder_diagnostic',{}) or {}).get('row') or {}
++                    self._commit_scan_motor(idx,slot,SEARCH_MODE,leg,row.get('length'),True)
++                    self._encoder_ledger[(idx,slot)]=self._encoder_ledger.get((idx,slot),0)+enc
++                    moving=False
++            uid=''; content=None; single_uid=False
++            if found:
++                self._insert_guard()
++                uid=self._current_single_uid(idx,slot)
++                single_uid=bool(uid)
++                if not uid:
++                    uid=self._rc_read_uid(idx,slot)
++                if uid:
++                    content=(self._read_bambu_classic(idx,slot,uid,single=True) if single_uid
++                             else self._read_openspool(idx,slot,respond))
++            self._rewind_scan_origin(idx,slot,respond)
++            self._insert_guard()
++            # A cached UID alone does not prove which spool is in a shared field.
++            # Only an identity explicitly bound to this connection and slot may authorize a bind.
++            stamp=(getattr(self.ace,'_single_verified_uid',{}) or {}).get((idx,slot))
++            identity=self.ace._location_identity(idx)
++            proven=(uid and stamp == (self.ace._serials.get(idx),identity,
++                                     self.ace._insert_epochs.get((idx,slot)),uid))
++            neighbour=slot^1
++            neighbour_stamp=(getattr(self.ace,'_single_verified_uid',{}) or {}).get((idx,neighbour))
++            if (not proven and uid and neighbour_before is not None and neighbour_stamp
++                    and neighbour_stamp[:3] == (self.ace._serials.get(idx),identity,
++                                               self.ace._insert_epochs.get((idx,neighbour)))
++                    and neighbour_stamp[3] != uid and self._neighbour_signature(idx,slot)==neighbour_before):
++                proven=True
++            if not proven or not content:
++                return {'kind':'unread','parked':False,'uid':None,'candidate_uid':uid or None}
++            if single_uid:
++                self._ingest_bambu(idx,slot,uid,content,respond)
++            else:
++                self._finish_present(idx,slot,uid,content,respond)
++            if not hasattr(self.ace,'_single_verified_uid'):
++                self.ace._single_verified_uid={}
++            self.ace._single_verified_uid[(idx,slot)]=(self.ace._serials.get(idx),identity,
++                                                       self.ace._insert_epochs.get((idx,slot)),uid)
++            parked=kwargs.get('start_depth') is None
++            return {'kind':'success','parked':parked,'uid':uid}
++        except ScanBudgetExhausted:
++            moving=False
++            try:
++                self._rewind_scan_origin(idx,slot,respond)
++                return {'kind':'unread','parked':False,'uid':None}
++            except Exception as exc:
++                self.ace._latch_stop_fault(idx,slot,str(exc))
++                return {'kind':'stop_unconfirmed','parked':False,'uid':None}
++        except MotionUncertain as exc:
++            stop_if_active()
++            self.ace._latch_stop_fault(idx,slot,str(exc))
++            return {'kind':'stop_unconfirmed','parked':False,'uid':None}
++        except Exception:
++            stop_if_active()
++            logging.exception('[multiACE] single insert read failed')
++            self.ace._latch_stop_fault(idx,slot,'single insert read exception; motion unconfirmed')
++            return {'kind':'error','parked':False,'uid':None}
++        finally:
++            if sessions.get((idx,slot)) is token:
++                sessions.pop((idx,slot),None)
++            self._single_auto=False;self._scan_measured=False
++            self._insert_checked_guard=None;self._insert_checked_context=None
+ 
+     def read_slot_transport_checked(self, idx, slot, respond, guard, **kwargs):
+         """Checked insert read. guard() must confirm epoch/transport/route.
+@@ -1271,7 +1688,14 @@
+                 self.ace._insert_epochs[(idx, slot)],
+                 self.ace.printer.lookup_object('print_stats', None),
+                 self.ace._active_device_index, token)
+-            result = self.read_slot_transport(idx, slot, respond, **kwargs)
++            self._scan_measured = True
++            try:
++                result = self.read_slot_transport(idx, slot, respond, **kwargs)
++            except ScanBudgetExhausted:
++                self._rewind_scan_origin(idx,slot,respond)
++                self._insert_guard()
++                respond('rc522: scan bound reached; returned to scan origin')
++                return {'kind':'unread','parked':False,'uid':None}
+             if not guard():
+                 return {'kind': 'transport_changed', 'parked': False, 'uid': None}
+             return result
+@@ -1293,6 +1717,7 @@
+                 sessions.pop((idx, slot), None)
+             self._insert_checked_guard = None
+             self._insert_checked_context = None
++            self._scan_measured = False
+ 
+     def _insert_result(self, kind):
+         if getattr(self, '_insert_checked_guard', None) is None:
+@@ -1307,6 +1732,24 @@
+         if guard is not None and not guard():
+             raise MotionUncertain('insert route or transport changed')
+ 
++    def _natural_sweep_terminal(self, idx, slot, leg):
++        self._insert_guard()
++        if not self._wait_motion_ready(idx,slot):
++            raise MotionUncertain('sweep completion unconfirmed')
++        enc=self._fresh_encoder(idx,slot)
++        first=dict((getattr(self,'_encoder_diagnostic',{}) or {}).get('row') or {})
++        self._pause(0.3)
++        second=self._fresh_encoder(idx,slot)
++        last=dict((getattr(self,'_encoder_diagnostic',{}) or {}).get('row') or {})
++        if (not self._wait_motion_ready(idx,slot) or enc != second
++                or first.get('_decoder_present') is not True or last.get('_decoder_present') is not True
++                or any(type(first.get(k)) is not int or first.get(k)!=last.get(k) for k in ('steps','length'))
++                or first['length'] < leg-5):
++            raise MotionUncertain('sweep terminal stability or commanded length unconfirmed')
++        if not isinstance(enc,int) or isinstance(enc,bool) or not (leg*.5 <= abs(enc) <= leg*1.5+2):
++            raise MotionUncertain('sweep encoder unconfirmed')
++        return enc
++
+     def read_slot_transport(self, idx, slot, respond, start_depth=0,
+                             net_target=390, sweep_mm=700):
+         """The INSERT read: ONE long forward sweep of sweep_mm - that is more than
+@@ -1325,6 +1768,17 @@
+         # sweep start (a parked tag at the field edge flickers).
+         blocking_uid = self._known_neighbour_uid(idx, slot)
+         depth = start_depth if start_depth is not None else net_target
++        origin_depth = depth
++        if getattr(self, '_scan_measured', False):
++            self._scan_origin_depth = origin_depth
++            self._scan_target_depth = net_target
++            self._scan_forward_limit = min(700, int(sweep_mm))
++            self._scan_motor_position = 0
++            self._scan_motor_total = 0
++            self._scan_motor_total_limit = 5600
++            self._scan_motor_pending = None
++            self._scan_attempts = 0
++            self._scan_zero_segments = 0
+         # UIDs the neighbour was rotated away from this sweep: the same
+         # card answering AGAIN later can only have come back with OUR
+         # lane (the neighbour stays parked) - it is ours, no re-test.
+@@ -1387,6 +1841,10 @@
+                 verdict, lane_moved = self._whose_card(idx, slot, uid_a,
+                                                        respond)
+                 if verdict is None:
++                    if getattr(self,'_scan_measured',False):
++                        self._rewind_scan_origin(idx,slot,respond)
++                        self._insert_checked_park_confirmed = False
++                        return self._insert_result('unread')
+                     return self._insert_result('stop_unconfirmed')
+                 if lane_moved:
+                     depth += START_PROBE_MM
+@@ -1416,8 +1874,25 @@
+         slow_pass = False
+         while swept < sweep_mm and not found:
+             leg = sweep_mm - swept
+-            if not self._move(idx, slot, leg, SEARCH_MODE, respond,
+-                              speed=speed):
++            if getattr(self,'_scan_measured',False):
++                if self._scan_motor_pending is not None:
++                    raise MotionUncertain('previous scan motor movement unconfirmed')
++                available=self._scan_forward_limit-self._scan_motor_position
++                if available<=0:
++                    break
++                leg=min(leg,available)
++            _baseline_value = self._fresh_encoder(idx,slot)
++            self._sweep_baseline = (getattr(self, '_encoder_diagnostic', None)
++                                    if _baseline_value is not None else None)
++            self._sweep_identity = self.ace._location_identity(idx)
++            self._sweep_values = []
++            self._sweep_reset_seen = False
++            self._relative_sweep = True
++            try:
++                moved = self._move(idx, slot, leg, SEARCH_MODE, respond, speed=speed)
++            finally:
++                self._relative_sweep = False
++            if not moved:
+                 if getattr(self, '_insert_checked_guard', None) is not None:
+                     raise MotionUncertain('sweep rejected')
+                 break
+@@ -1435,6 +1910,17 @@
+                     # is revoked; a failed stop remains motion-uncertain.
+                     self._stop_and_measure(idx, slot, leg, respond)
+                     raise MotionUncertain('insert ownership changed during sweep')
++                value = self._fresh_encoder(idx,slot)
++                diagnostic = getattr(self,'_encoder_diagnostic',{})
++                current = diagnostic.get('row') or {}
++                old = (self._sweep_baseline or {}).get('row') or {}
++                if (value is not None and type(old.get('steps')) is int and type(old.get('length')) is int
++                        and type(current.get('steps')) is int and type(current.get('length')) is int):
++                    if (current['steps'] < old['steps'] or current['length'] < old['length']
++                            or (value == 0 and old.get('decoder') not in (None,0))):
++                        self._sweep_reset_seen = True
++                    if self._sweep_reset_seen and current.get('_decoder_present') is True and value:
++                        self._sweep_values.append(value)
+                 if not self._rc_select(idx, slot):
+                     continue
+                 if blocking_uid:
+@@ -1519,6 +2005,11 @@
+                         verdict, lane_moved = self._whose_card(
+                             idx, slot, uid_c, respond)
+                         if verdict is None:
++                            if getattr(self,'_scan_measured',False):
++                                self._rewind_scan_origin(idx,slot,respond)
++                                self._insert_checked_park_confirmed = False
++                                respond('rc522: card ownership unresolved; returned to scan origin')
++                                return self._insert_result('unread')
+                             break
+                         probed = lane_moved
+                         if lane_moved:
+@@ -1567,20 +2058,41 @@
+                 break
+             if not stopped:
+                 if getattr(self, '_insert_checked_guard', None) is not None:
+-                    self._insert_guard()
+-                    if not self._wait_motion_ready(idx, slot):
+-                        raise MotionUncertain('sweep completion unconfirmed')
+-                    enc = self._fresh_encoder(idx, slot)
+-                    if not isinstance(enc, int) or isinstance(enc, bool) or not (leg * .5 <= abs(enc) <= leg * 1.5 + 2):
+-                        raise MotionUncertain('sweep encoder unconfirmed')
++                    enc = self._natural_sweep_terminal(idx,slot,leg)
++                    if getattr(self,'_relative_unknown',False) or getattr(self,'_scan_measured',False):
++                        direction=self._encoder_direction.get((idx,slot))
++                        if (not self._sweep_reset_seen or not self._sweep_values
++                                or any(v*enc<=0 for v in self._sweep_values)
++                                or any(abs(b)<abs(a) for a,b in zip(self._sweep_values,self._sweep_values[1:]))
++                                or abs(enc)<abs(self._sweep_values[-1])):
++                            raise MotionUncertain('relative sweep reset or movement unconfirmed')
++                        if direction is None and self._sweep_reset_seen and self._sweep_values:
++                            candidate=1 if enc>0 else -1
++                            samples=self._sweep_values
++                            if (all(v*candidate>0 for v in samples)
++                                    and all(abs(b)>=abs(a) for a,b in zip(samples,samples[1:]))
++                                    and abs(enc)>=abs(samples[-1])):
++                                direction=candidate
++                                self._encoder_direction[(idx,slot)]=candidate
++                                self._remember_encoder_direction(idx,slot,candidate)
++                        if direction not in (-1,1) or enc*direction<=0:
++                            raise MotionUncertain('sweep direction unconfirmed')
++                        row=(getattr(self,'_encoder_diagnostic',{}) or {}).get('row') or {}
++                        self._commit_scan_motor(idx,slot,SEARCH_MODE,leg,row.get('length'),self._sweep_reset_seen)
++                        self._encoder_ledger[(idx,slot)]=self._encoder_ledger.get((idx,slot),0)+enc
++                        logging.info('[multiACE] RFID natural sweep ace=%s slot=%s command=%s raw=%s normalized=%s final=%s ledger=%s',
++                                     idx,slot,leg,enc,enc*direction,getattr(self,'_encoder_diagnostic',None),self._encoder_ledger[(idx,slot)])
+                 swept += leg
+-                depth += leg
++                depth += (enc * direction if getattr(self,'_scan_measured',False) else leg)
+             if swept >= sweep_mm and not found and not slow_pass:
+                 # Second pass at half speed before giving up: costs ~35 s,
+                 # only for a spool whose tag the fast pass missed (or that
+                 # has none).
+                 slow_pass = True
+                 speed = max(10, PARK_SPEED // 2)
++                if getattr(self,'_scan_measured',False):
++                    self._rewind_scan_origin(idx,slot,respond)
++                    depth = origin_depth
+                 swept = 0
+                 respond('rc522: nothing in the fast pass - sweeping again '
+                         'at %d units/s' % speed)
+@@ -1603,30 +2115,138 @@
+             return self._insert_result('success' if getattr(self, '_insert_checked_uid', None) else 'unread')
+         return self._insert_result('unread' if blocking_uid else 'no_tag')
+ 
++    def _rewind_scan_origin(self, idx, slot, respond):
++        """Return measured net motion before starting the second pass."""
++        key = (idx,slot)
++        raw = self._encoder_ledger.get(key,0)
++        direction = self._encoder_direction.get(key)
++        if raw and direction not in (-1,1):
++            raise MotionUncertain('scan origin direction unconfirmed')
++        direction = direction or 1
++        budget = 2 * abs(raw) + 20
++        commanded = 0
++        for _ in range(8):
++            remaining = self._encoder_ledger.get(key,0) * direction
++            if abs(remaining) <= 2:
++                self._insert_guard()
++                if not self._wait_motion_ready(idx,slot):
++                    raise MotionUncertain('scan origin standstill unconfirmed')
++                logging.info('[multiACE] RFID scan origin restored ace=%s slot=%s raw_ledger=%s',idx,slot,self._encoder_ledger.get(key,0))
++                return
++            commanded += abs(remaining)
++            if commanded > budget:
++                raise MotionUncertain('scan origin motor budget exceeded')
++            mode = RESTORE_MODE if remaining > 0 else SEARCH_MODE
++            if not self._move_and_confirm(idx,slot,abs(remaining),mode,respond):
++                raise MotionUncertain('scan origin correction rejected')
++            if abs(self._encoder_ledger.get(key,0) * direction) >= abs(remaining):
++                raise MotionUncertain('scan origin correction made no progress')
++        if abs(self._encoder_ledger.get(key,0)*direction)<=2:
++            self._insert_guard()
++            if self._wait_motion_ready(idx,slot):
++                self._insert_guard()
++                return
++        raise MotionUncertain('scan origin encoder residual unconfirmed')
++
+     def _correct_to(self, idx, slot, delta, respond):
+         """One paced correction move: positive delta feeds forward,
+         negative rolls back. Small offsets (<=20) are left alone."""
++        if getattr(self, "_relative_unknown", False):
++            key = (idx, slot)
++            direction = self._encoder_direction.get(key)
++            initial = self._encoder_ledger.get(key, 0)
++            if direction not in (-1, 1) and initial:
++                raise MotionUncertain("relative direction unconfirmed")
++            direction = direction or 1
++            motor_budget = int(abs(initial) * 2) + 20
++            motor_total = 0
++            for _ in range(8):
++                residual = self._encoder_ledger.get(key, 0) * direction
++                if abs(residual) <= 2:
++                    self._insert_guard()
++                    if not self._wait_motion_ready(idx, slot):
++                        raise MotionUncertain("relative standstill unconfirmed")
++                    self._insert_guard()
++                    self._insert_checked_park_confirmed = True
++                    return
++                motor_total += abs(residual)
++                if motor_total > motor_budget:
++                    raise MotionUncertain("relative correction motor budget exceeded")
++                if not self._move_and_confirm(
++                    idx,
++                    slot,
++                    abs(residual),
++                    RESTORE_MODE if residual > 0 else SEARCH_MODE,
++                    respond,
++                ):
++                    raise MotionUncertain("relative correction rejected")
++                if abs(self._encoder_ledger.get(key,0) * direction) >= abs(residual):
++                    raise MotionUncertain('relative correction made no progress')
++            if abs(self._encoder_ledger.get(key,0)*direction)<=2:
++                self._insert_guard()
++                if self._wait_motion_ready(idx,slot):
++                    self._insert_guard()
++                    self._insert_checked_park_confirmed=True
++                    return
++            raise MotionUncertain("relative encoder residual unconfirmed")
++        if getattr(self, '_scan_measured', False):
++            raw = self._encoder_ledger.get((idx, slot), 0)
++            direction = self._encoder_direction.get((idx, slot))
++            if raw and direction not in (-1, 1):
++                raise MotionUncertain('scan correction direction unconfirmed')
++            direction = direction or 1
++            target_delta = self._scan_target_depth - self._scan_origin_depth
++            initial = target_delta - raw * direction
++            motor_budget = int(abs(initial) * 2) + 20
++            commanded = 0
++            for _ in range(8):
++                remaining = target_delta - self._encoder_ledger.get((idx, slot), 0) * direction
++                if abs(remaining) <= 2:
++                    self._insert_guard()
++                    if not self._wait_motion_ready(idx, slot):
++                        raise MotionUncertain('scan park standstill unconfirmed')
++                    self._insert_guard()
++                    self._insert_checked_park_confirmed = True
++                    return
++                commanded += abs(remaining)
++                if commanded > motor_budget:
++                    raise MotionUncertain('scan park motor budget exceeded')
++                if not self._move_and_confirm(idx, slot, abs(remaining),
++                                              SEARCH_MODE if remaining > 0 else RESTORE_MODE, respond):
++                    raise MotionUncertain('scan park correction rejected')
++                new_remaining=target_delta-self._encoder_ledger.get((idx,slot),0)*direction
++                if abs(new_remaining)>=abs(remaining):
++                    raise MotionUncertain('scan park correction made no progress')
++            if abs(target_delta-self._encoder_ledger.get((idx,slot),0)*direction)<=2:
++                self._insert_guard()
++                if self._wait_motion_ready(idx,slot):
++                    self._insert_guard()
++                    self._insert_checked_park_confirmed=True
++                    return
++            raise MotionUncertain('scan park encoder residual unconfirmed')
+         delta = int(delta)
+         if abs(delta) <= 20:
+-            if getattr(self, '_insert_checked_guard', None) is not None:
++            if getattr(self, "_insert_checked_guard", None) is not None:
+                 self._insert_guard()
+                 if not self._wait_motion_ready(idx, slot):
+-                    raise MotionUncertain('park standstill unconfirmed')
++                    raise MotionUncertain("park standstill unconfirmed")
+                 self._insert_guard()
+                 self._insert_checked_park_confirmed = True
+             return
+         mode = SEARCH_MODE if delta > 0 else RESTORE_MODE
+         length = abs(delta)
+-        if getattr(self, '_insert_checked_guard', None) is not None:
++        if getattr(self, "_insert_checked_guard", None) is not None:
+             if not self._move_and_confirm(idx, slot, length, mode, respond):
+-                raise MotionUncertain('park correction rejected')
++                raise MotionUncertain("park correction rejected")
+             self._insert_guard()
+             self._insert_checked_park_confirmed = True
+             return
+         if self._move(idx, slot, length, mode, respond):
+             self._pause(length / float(PARK_SPEED) + 1.0)
+-            respond('rc522: parked at target depth (%s %d)'
+-                    % ('fed' if delta > 0 else 'rolled back', length))
++            respond(
++                "rc522: parked at target depth (%s %d)"
++                % ("fed" if delta > 0 else "rolled back", length)
++            )
+ 
+     # -- stage 3: write (OpenSpool NTAG only) -----------------------------
+ 
+@@ -2151,6 +2771,12 @@
+         if reg is None:
+             reg = self.ace._rc_last_uid = {}
+         reg[(idx, slot)] = uid
++        if (context is not None and (idx,slot)==context[:2]
++                and getattr(self,'_insert_checked_guard',None) is not None
++                and not getattr(self,'_single_auto',False)):
++            if not hasattr(self.ace,'_single_verified_uid'):
++                self.ace._single_verified_uid={}
++            self.ace._single_verified_uid[(idx,slot)]=(context[2],self.ace._location_identity(idx),context[3],uid)
+         try:
+             self.ace._persist_tag_reads()
+         except Exception:
+@@ -2223,7 +2849,7 @@
+         def stable(stage, cycle, expected, residual=None):
+             # No additional motion: retain existing attribution comparisons.
+             reactor = self.ace.reactor
+-            deadline = reactor.monotonic() + 2.0
++            deadline = reactor.monotonic() + 12.0
+             count = 0
+             original_pause = self._pause
+             class StaticTimeout(Exception):
+@@ -2251,13 +2877,18 @@
+             try:
+                 while True:
+                     check()
++                    neighbour_started = reactor.monotonic()
+                     current = self._neighbour_signature(idx, slot)
++                    neighbour_elapsed = reactor.monotonic() - neighbour_started
+                     check()
+-                    observed = self._observed_uid(idx, slot) if current == expected else None
+-                    check()
++                    started = reactor.monotonic()
++                    observed = self._observed_expected_uid(idx, slot, uid) if current == expected else None
++                    elapsed = reactor.monotonic() - started
+                     trace(stage, cycle=cycle, expected_neighbour=expected, neighbour=current,
+                           expected_uid=uid, observed_uid=observed,
+-                          residual=residual, encoder=self._encoder_ledger.get((idx, slot), 0))
++                          residual=residual, encoder=self._encoder_ledger.get((idx, slot), 0),
++                          neighbour_seconds=neighbour_elapsed, observation_seconds=elapsed)
++                    check()
+                     if current != expected or (observed and observed != uid):
+                         return False
+                     count = count + 1 if observed == uid else 0

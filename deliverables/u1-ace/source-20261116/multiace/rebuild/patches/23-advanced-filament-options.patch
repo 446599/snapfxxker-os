@@ -1,0 +1,132 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -17366,19 +17366,14 @@
+         path = getattr(self, '_path_calibration', None)
+         if path is not None and path.task.get('active'):
+             raise gcmd.error('后台料管校准正在进行，请稍后识别标签')
++        self._insert_policy.options.require('rfid', gcmd.error)
+         self._require_slot_eject_idle(gcmd)
+         _hold_idx = gcmd.get_int('ACE', self._active_device_index, minval=0, maxval=3)
+         _hold_slot = gcmd.get_int('SLOT', 3, minval=0, maxval=3)
+         self._require_location_clear(gcmd,idx=_hold_idx,slot=_hold_slot)
+-        if gcmd.get_int('REVERSE_DOCK', 0, minval=0, maxval=1):
+-            from .ace_reverse_dock import start_reverse_dock_command
+-            return start_reverse_dock_command(self, gcmd)
+-        if gcmd.get_int('EXPLORE', 0, minval=0, maxval=1):
+-            from .ace_exploration import start_exploration_command
+-            return start_exploration_command(self, gcmd)
+-        if gcmd.get_int('GUARDED', 0, minval=0, maxval=1):
+-            from .ace_guarded_scan_entry import start_guarded_command
+-            return start_guarded_command(self, gcmd)
++        if any(gcmd.get_int(name, 0, minval=0, maxval=1)
++               for name in ('REVERSE_DOCK', 'EXPLORE', 'GUARDED')):
++            raise gcmd.error('耗材高级选项仅开放标准 RFID 流程')
+         ace_idx = gcmd.get_int('ACE', self._active_device_index,
+                                minval=0, maxval=3)
+         slot = gcmd.get_int('SLOT', minval=0, maxval=3)
+@@ -17388,7 +17383,7 @@
+             # lane motion - allowed on a printing printer too.
+             self._cmd_ace_tag_read_gen1(gcmd, ace_idx, slot)
+             return
+-        max_mm = gcmd.get_int('MAX_MM', 600, minval=50, maxval=2000)
++        max_mm = gcmd.get_int('MAX_MM', 700, minval=50, maxval=700)
+         debug = gcmd.get_int('DEBUG', 0, minval=0, maxval=1)
+         dump = gcmd.get_int('DUMP', 0, minval=0, maxval=1)
+         ps = self.printer.lookup_object('print_stats', None)
+@@ -17439,6 +17434,11 @@
+                 policy.prepare_manual(ace_idx, slot)
+             except Exception as exc:
+                 raise gcmd.error(str(exc))
++        context = getattr(gcmd, '_short_insert_context', None)
++        if context is not None and context != (self._serials.get(ace_idx),
++                self._location_identity(ace_idx), self._insert_epochs.get((ace_idx, slot))):
++            raise gcmd.error('插料事件已变化，未启动自动 RFID')
++        self._insert_policy.options.require('rfid', gcmd.error)
+         self._slot_actions.cancel = False
+         setattr(self, _busy_flag, True)
+         self._tag_op_kind = 'read'
+@@ -17462,9 +17462,9 @@
+         _epoch = (getattr(self, '_insert_epochs', {}) or {}).get((ace_idx, slot))
+         _observed_uid = {'value': None}
+         _cached_uid = (getattr(self, '_rc_last_uid', {}) or {}).get((ace_idx, slot))
+-        _fast_route = ((ace_idx, slot) == (0, 3) and
++        _fast_route = (policy.options.enabled('remaining') and (ace_idx, slot) == (0, 3) and
+                        self._location_hold.park_verified() and
+-                       str((self._ace_models.get(0) or ('',''))[1]).upper() in ('V1.1.98O', 'V1.2.00O'))
++                       str((self._ace_models.get(0) or ('',''))[1]).upper() in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O'))
+         # The persisted known Blue UID selects this route; None epoch after a
+         # restart is a captured context, never evidence of a fresh insertion.
+         _fast_expected = (_cached_uid if _fast_route and _cached_uid == '55F328E6' and
+@@ -17484,6 +17484,7 @@
+         def _slot_motion_allowed(idx, target):
+             _out.pop('admission_reason', None)
+             try:
++                policy.options.require('rfid')
+                 self._slot_actions._check(idx, target, _transport, allow_tag=True)
+                 self._slot_actions._lanes_ready(idx)
+                 if not _original_motion_allowed(idx, target):
+@@ -17529,6 +17530,7 @@
+ 
+         def _run(eventtime):
+             try:
++                policy.options.require('rfid')
+                 if _fast_expected:
+                     _fast['used'] = True
+                     from .ace_manual_measure import (run_measurement, capture_spool,
+@@ -17620,7 +17622,7 @@
+                             _out['msg'] = _out['msg'] or '未能确认标签与余量'
+                         else:
+                             _out['msg'] = (_out['msg'] or 'RFID识别完成') + '；余量暂未测得'
+-                elif _out['ok']:
++                elif _out['ok'] and policy.options.enabled('remaining'):
+                     try:
+                         from .ace_manual_remaining import refresh
+                         remaining = refresh(self, reader, ace_idx, slot, _transport,
+--- a/klipper/extras/ace_manual_measure.py
++++ b/klipper/extras/ace_manual_measure.py
+@@ -700,7 +700,7 @@
+ 
+     def begin(self):
+         a, actions = self.ace, self.ace._slot_actions
+-        if (str((a._ace_models.get(0) or ('', ''))[1]).upper() not in ('V1.1.98O', 'V1.2.00O') or
++        if (str((a._ace_models.get(0) or ('', ''))[1]).upper() not in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O') or
+             len(a._ace_devices) < 1 or str(a._ace_devices[0]) != PORT):
+             raise MeasurementUnavailable('unverified RF route')
+         a._manual_measure_owner = self.owner
+@@ -765,7 +765,7 @@
+     from .ace_filament_approximation import estimate_remaining
+     a, actions = ace, ace._slot_actions
+     model = (a._ace_models.get(0) or ('', ''))[1]
+-    if (str(model).upper() not in ('V1.1.98O', 'V1.2.00O') or len(a._ace_devices) < 1 or
++    if (str(model).upper() not in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O') or len(a._ace_devices) < 1 or
+         str(a._ace_devices[0]) != PORT):
+         raise MeasurementUnavailable('unverified measurement device')
+     owner = MeasureOwner(a, transport, epoch, uid, seq)
+--- a/klipper/extras/ace_manual_remaining.py
++++ b/klipper/extras/ace_manual_remaining.py
+@@ -27,7 +27,7 @@
+             return False
+     try:
+         fw = (ace._ace_models.get(idx) or ('', ''))[1]
+-        if str(fw or '').strip().upper() not in ('V1.1.97O', 'V1.1.98O', 'V1.2.00O'):
++        if str(fw or '').strip().upper() not in ('V1.1.97O', 'V1.1.98O', 'V1.2.00O', 'V1.2.01O'):
+             result['reason'] = 'unsupported_firmware'; return result
+         if not valid():
+             result['reason'] = 'identity_or_transport_changed'; return result
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -676,11 +676,13 @@
+     reactor = actions.ace.reactor
+     original_identity = actions.ace._location_identity(idx)
+     original_heads = actions.ace._rfid_route_heads(idx, slot)
++    original_epoch = getattr(actions.ace, '_insert_epochs', {}).get((idx, slot))
+     original_scope = "ace" if getattr(actions.ace, "_ace_mode", None) != "multi" else "route"
+     def manual_session_guard():
+         return (transport is not None and actions.ace._serials.get(idx) is transport
+                 and actions.ace._location_identity(idx) == original_identity
+-                and actions.ace._rfid_route_heads(idx, slot) == original_heads)
++                and actions.ace._rfid_route_heads(idx, slot) == original_heads
++                and getattr(actions.ace, '_insert_epochs', {}).get((idx, slot)) == original_epoch)
+     reader._manual_session_guard = manual_session_guard
+     original_pause = reader._pause
+     original_move = reader._move_and_confirm

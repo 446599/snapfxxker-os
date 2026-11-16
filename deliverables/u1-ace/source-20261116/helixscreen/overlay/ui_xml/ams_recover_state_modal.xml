@@ -1,0 +1,32 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <api>
+    <!-- The backend's word for a position ("Gate", "Lane"), translated. -->
+    <prop name="slot_label" type="string" default="Slot"/>
+  </api>
+  <!-- Tell the filament system its true state: which slot is selected and
+       whether filament is at the extruder. Nothing moves; the
+       firmware only re-syncs its tracking. Options and pre-selection come from
+       AmsRecoverStateModal. Backdrop created by the Modal system. -->
+  <view name="ams_recover_state_modal" extends="ui_dialog" width="90%" height="content" style_min_width="320" style_max_width="480" style_max_height="85%" align="center" flex_flow="column" style_flex_main_place="start" style_pad_gap="0" scrollable="false">
+    <modal_header icon_src="refresh" icon_variant="primary" title="Recover State"/>
+    <lv_obj width="100%" height="content" style_max_height="#dialog_content_pinned_max"
+            style_pad_all="#u1_card_pad_roomy" flex_flow="column" style_flex_cross_place="center"
+            style_pad_gap="#u1_card_gap" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+      <text_small width="100%" long_mode="wrap" text="Set what is really selected and loaded. Nothing moves." style_text_color="#text_muted" style_text_align="left"/>
+      <lv_obj width="100%" height="content" style_pad_all="#u1_card_pad" flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center" style_pad_gap="#space_sm" scrollable="false">
+        <style name="styles.u1_card"/>
+        <text_body text="$slot_label" width="0" flex_grow="1" long_mode="wrap"/>
+        <lv_dropdown name="slot_dropdown" width="55%" height="#u1_touch_target" style_radius="#u1_card_radius"/>
+      </lv_obj>
+      <lv_obj width="100%" height="content" style_pad_all="#u1_card_pad" flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center" style_pad_gap="#space_sm" scrollable="false">
+        <style name="styles.u1_card"/>
+        <text_body text="Filament" width="0" flex_grow="1" long_mode="wrap"/>
+        <lv_dropdown name="loaded_dropdown" width="55%" height="#u1_touch_target" style_radius="#u1_card_radius"/>
+      </lv_obj>
+    </lv_obj>
+    <modal_button_row primary_text="Recover" secondary_text="Cancel"/>
+  </view>
+</component>

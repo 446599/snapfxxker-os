@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="editor_max_width" value="680"/>
+    <px name="editor_row_height" value="52"/>
+  </consts>
+  <view name="u1_material_edit" extends="lv_obj" width="100%" height="100%"
+        style_pad_hor="#u1_page_pad" style_pad_top="0" style_pad_bottom="#u1_page_pad" style_pad_gap="#u1_card_gap" flex_flow="column" style_flex_cross_place="center"
+        style_bg_color="#screen_bg" style_bg_opa="255" style_border_width="0"
+        scrollable="false" ignore_layout="true">
+    <bind_flag_if_eq subject="u1_material_edit_visible" flag="hidden" ref_value="0"/>
+    <lv_obj width="100%" height="#u1_header_height" flex_flow="row" style_pad_all="0"
+            style_pad_gap="#u1_card_gap" style_flex_cross_place="center" scrollable="false">
+      <ui_button name="material_edit_back" text="返回" icon="chevron_left" width="#u1_header_back_width"
+                 height="100%" variant="ghost" style_text_font="#u1_aux_font" style_pad_all="0" style_shadow_width="0">
+        <event_cb trigger="clicked" callback="u1_material_edit_cancel"/>
+      </ui_button>
+      <text_heading text="编辑耗材" width="0" flex_grow="1" long_mode="dots"
+                    style_text_font="#u1_heading_font" style_text_color="#text" style_text_align="left"/>
+      <text_small width="30%" bind_text="u1_material_edit_target" long_mode="dots"
+                  style_text_align="right" style_text_color="#text_muted"/>
+    </lv_obj>
+    <lv_obj width="100%" style_max_width="#editor_max_width" height="0" flex_grow="1" flex_flow="column"
+            style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="true" scroll_dir="ver">
+      <lv_obj width="100%" height="#editor_row_height" flex_flow="row"
+              style_flex_cross_place="center" style_pad_hor="#u1_card_pad_roomy" scrollable="false">
+        <style name="styles.u1_card"/>
+        <text_body text="材质" width="0" flex_grow="1"/>
+        <lv_dropdown name="material_edit_dropdown" width="58%" height="#u1_touch_target"
+                     style_text_font="#u1_body_font"/>
+      </lv_obj>
+      <lv_button name="material_edit_open_color" width="100%" height="#editor_row_height"
+                 flex_flow="row" style_flex_cross_place="center" style_pad_hor="#u1_card_pad_roomy"
+                 style_pad_gap="#u1_card_gap" scrollable="false">
+        <style name="styles.u1_card"/>
+        <style name="styles.press_wash" selector="pressed"/>
+        <text_body text="颜色" width="0" flex_grow="1" clickable="false" event_bubble="true"/>
+        <text_body width="58%" bind_text="u1_material_edit_color" long_mode="dots"
+                   style_text_align="right" clickable="false" event_bubble="true"/>
+        <icon src="chevron_right" size="sm" variant="muted" clickable="false" event_bubble="true"/>
+        <event_cb trigger="clicked" callback="u1_material_edit_open_color"/>
+      </lv_button>
+    </lv_obj>
+    <lv_obj width="100%" style_max_width="#editor_max_width" height="#u1_touch_target" flex_flow="row" style_pad_all="0"
+            style_pad_gap="#u1_card_gap" scrollable="false">
+      <ui_button name="material_edit_cancel" text="取消" variant="secondary" width="0"
+                 flex_grow="1" height="100%" style_radius="#u1_card_radius" style_shadow_width="0" style_text_font="#u1_body_font">
+        <event_cb trigger="clicked" callback="u1_material_edit_cancel"/>
+      </ui_button>
+      <lv_button name="material_edit_save" width="0" flex_grow="1" height="100%"
+                 style_bg_color="#primary" style_bg_opa="255" style_radius="#u1_card_radius"
+                 style_pad_all="0" style_border_width="0" style_shadow_width="0"
+                 scrollable="false">
+        <style name="styles.press_wash" selector="pressed"/>
+        <text_body text="保存" align="center" style_text_color="#FFFFFF"
+                   clickable="false" event_bubble="true"/>
+        <event_cb trigger="clicked" callback="u1_material_edit_save"/>
+      </lv_button>
+    </lv_obj>
+  </view>
+</component>

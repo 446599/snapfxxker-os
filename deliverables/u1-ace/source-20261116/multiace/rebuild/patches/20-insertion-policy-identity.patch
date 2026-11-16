@@ -1,0 +1,307 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -3612,6 +3612,10 @@
+         except ValueError:
+             return None
+ 
++    def _skip_legacy_auto_insert(self, idx):
++        policy = getattr(self, '_insert_policy', None)
++        return self._controlled_insertion_device(idx) or (policy is not None and policy.bypass(idx))
++
+     def _controlled_insertion_device(self, idx):
+         operations = getattr(self, '_path_operations', None)
+         return ((operations is not None and operations.handles(idx))
+@@ -3640,7 +3644,7 @@
+ 
+         Only reached on ACE2-Open units (>= INSERT_MIDPRINT_MIN_FW), which
+         all carry the RC522 tunnel, so the read is always queued."""
+-        if self._controlled_insertion_device(idx):
++        if self._skip_legacy_auto_insert(idx):
+             return
+         if not self._is_v2_idx(idx) or not self._insert_bites_while_printing(idx):
+             return
+@@ -3695,7 +3699,7 @@
+             return False
+ 
+     def _insert_read_then_preload(self, idx, slot, depth='auto'):
+-        if self._controlled_insertion_device(idx):
++        if self._skip_legacy_auto_insert(idx):
+             return {'kind': 'controlled_wait', 'parked': False}
+         port, uid = self._location_identity(idx)
+         if self._location_hold.blocks_route(idx=idx,slot=slot,port=port,ace_uid=uid,heads=self._rfid_route_heads(idx,slot)):
+@@ -3743,7 +3747,7 @@
+         return self._insert_checked_preload(idx, slot, guard, epoch, transport)
+ 
+     def _insert_tag_read_safe(self, idx, slot, depth='auto'):
+-        if self._controlled_insertion_device(idx):
++        if self._skip_legacy_auto_insert(idx):
+             return {'kind': 'controlled_wait', 'parked': False}
+         port, uid = self._location_identity(idx)
+         if self._location_hold.blocks_route(idx=idx,slot=slot,port=port,ace_uid=uid,heads=self._rfid_route_heads(idx,slot)):
+@@ -4047,6 +4051,9 @@
+         kept across a failed load or runout on purpose: filament may sit in
+         the path) or a bg-staged strand; empty = the gate reads EMPTY."""
+         try:
++            policy = getattr(self, '_insert_policy', None)
++            if policy is not None and policy.bypass(idx):
++                return 'automatic insertion RFID disabled'
+             if self._get_heads_for_ace_slot(idx, slot):
+                 return 'slot feeds a head'
+         except Exception:
+@@ -6461,7 +6468,7 @@
+         if action.get('ace') != idx:
+             return False
+         kind = action.get('kind')
+-        return ((kind in ('eject', 'measure', 'roundtrip') and (action.get('state') == 'running' or self._swap_in_progress))
++        return ((kind in ('eject', 'insert', 'insert_policy', 'measure', 'roundtrip') and (action.get('state') == 'running' or self._swap_in_progress))
+                 or (kind == 'rfid' and (action.get('state') == 'running' or getattr(self, '_tag_read_busy', False))))
+ 
+     def cmd_ACE_HOT_PARK_RECOVER(self, gcmd):
+@@ -6801,6 +6808,10 @@
+                     self._reject_stop_fault_callback(cb, req))
+ 
+     def _stop_guarded_write(self, idx, request, serial, data):
++        policy = getattr(self, '_insert_policy', None)
++        if policy is not None and not policy.permits_start(idx, request, serial):
++            self._insert_wire_reject(idx, request, request.get('_insert_reject'), 'insert permission changed before wire')
++            return False
+         authority = getattr(self, '_path_calibration', None)
+         if authority is not None and not authority.allows_wire(idx, request, serial):
+             self._insert_wire_reject(idx, request, request.get('_insert_reject'),
+@@ -6810,6 +6821,9 @@
+         if operations is not None and not operations.origin_allows_wire(idx, request, serial):
+             self._insert_wire_reject(idx, request, request.get('_insert_reject'),
+                                      'original motion authorization changed before wire')
++            return False
++        if policy is not None and not policy.before_write(idx, request, serial):
++            self._insert_wire_reject(idx, request, request.get('_insert_reject'), 'insert cancelled before write')
+             return False
+         if self._stop_guard.write(serial, data, request):
+             if operations is not None:
+@@ -6851,7 +6865,8 @@
+         if controlled_op is None and request.get('method') not in (
+                 'get_status', 'get_feed_info', 'get_filament_info',
+                 'filament_identify', 'filament_recognition',
+-                'discover_device'):
++                'discover_device', 'insert_policy_query', 'insert_policy_set',
++                'insert_policy_discard'):
+             info['status'] = 'busy'
+         msg_id = self._next_request_id_for(idx)
+         cb_map = self._callback_maps.setdefault(idx, {})
+@@ -6868,7 +6883,7 @@
+         # logged via the 'V2 cmd13 response' line. To trace them again, remove
+         # the name from this tuple.
+         trace_request = (method not in ('get_status', 'get_filament_info',
+-                                        'get_feed_info')
++                                        'get_feed_info', 'insert_policy_query')
+                          and controlled_op not in (QUERY, RENEW))
+         if trace_request:
+             self._fa_log.info(
+@@ -9514,6 +9529,25 @@
+ 
+         return _tick
+ 
++    def _refresh_location_identity(self, idx, eventtime):
++        # Initial DISCOVER can be dropped during boot or USB reconnect. A
++        # firmware version is not a hardware UID; retry read-only discovery on
++        # the current transport until an exact validated reply is available.
++        if not self._is_v2_idx(idx) or not self._connected_per_ace.get(idx):
++            return
++        transport = self._serials.get(idx)
++        if transport is None or self._location_identity(idx)[1] is not None:
++            return
++        attempts = getattr(self, '_location_discovery_attempts', None)
++        if attempts is None:
++            attempts = self._location_discovery_attempts = {}
++        previous = attempts.get(idx)
++        if previous and previous[0] is transport and eventtime - previous[1] < 3.0:
++            return
++        attempts[idx] = (transport, eventtime)
++        self.send_request_to(idx, {'method': 'discover_device',
++                                  '_insert_stop_transport': transport}, None)
++
+     def _make_heartbeat_tick_for(self, idx):
+         def _tick(eventtime):
+             if self._serial_failed_per_ace.get(idx, False):
+@@ -9543,6 +9577,11 @@
+                                 'ACE %d: %s' % (idx, str(re)))
+                             self._handle_per_ace_failure(idx, 'transport silence >= 8.0s')
+                     return eventtime + 1.0
++
++            try:
++                self._refresh_location_identity(idx, eventtime)
++            except Exception as exc:
++                logging.info('[multiACE] ACE %d identity refresh: %s', idx, exc)
+ 
+             is_active = (idx == self._active_device_index)
+ 
+@@ -10118,7 +10157,7 @@
+         self._handle_per_ace_failure(self._active_device_index, err)
+ 
+     def _pre_load(self, gate):
+-        if self._controlled_insertion_device(self._active_device_index):
++        if self._skip_legacy_auto_insert(self._active_device_index):
+             return
+         feed_length = self.head_feed_length[gate]
+ 
+@@ -10379,7 +10418,7 @@
+         if (self._slot_actions.state.get('state') == 'running'
+                 or (self._slot_actions.state.get('state') == 'preparing'
+                     and gcmd is not getattr(self._slot_actions, '_prepare_command', None))):
+-            raise gcmd.error('料槽退出正在进行，请等待停止确认')
++            raise gcmd.error('料槽操作正在进行，请等待停止确认')
+ 
+     def cmd_ACE_ENABLE_FEED_ASSIST(self, gcmd):
+         self._require_slot_eject_idle(gcmd)
+@@ -17338,6 +17377,12 @@
+         if getattr(self, _busy_flag, False):
+             raise self._ace_error(gcmd, 'a tag read is already running',
+                                   code=200)
++        policy = getattr(self, '_insert_policy', None)
++        if policy is not None:
++            try:
++                policy.prepare_manual(ace_idx, slot)
++            except Exception as exc:
++                raise gcmd.error(str(exc))
+         self._slot_actions.cancel = False
+         setattr(self, _busy_flag, True)
+         self._tag_op_kind = 'read'
+@@ -17362,7 +17407,7 @@
+         _observed_uid = {'value': None}
+         _cached_uid = (getattr(self, '_rc_last_uid', {}) or {}).get((ace_idx, slot))
+         _fast_route = ((ace_idx, slot) == (0, 3) and
+-                       str((self._ace_models.get(0) or ('',''))[1]).upper() == 'V1.1.98O')
++                       str((self._ace_models.get(0) or ('',''))[1]).upper() in ('V1.1.98O', 'V1.2.00O'))
+         # The persisted known Blue UID selects this route; None epoch after a
+         # restart is a captured context, never evidence of a fresh insertion.
+         _fast_expected = (_cached_uid if _fast_route and _cached_uid == '55F328E6' and
+@@ -24422,6 +24467,7 @@
+                             and (self._is_v2(i)
+                                  or i in getattr(self, '_external_rh', {}))]
+         return {
++            'insert_policy': (self._insert_policy.status() if getattr(self, '_insert_policy', None) else {}),
+             'api_version': ACE_API_VERSION,
+             'auto_dry_masters': auto_dry_masters,
+             'status': self._info['status'],
+@@ -24585,4 +24631,6 @@
+     ace._path_calibration = PathCalibration(ace)
+     ace._path_operations = PathOperations(ace._path_calibration)
+     ace._path_calibration.operations = ace._path_operations
++    from .ace_insert_policy import InsertPolicy
++    ace._insert_policy = InsertPolicy(ace, config)
+     return ace
+--- a/klipper/extras/ace_protocol_v2.py
++++ b/klipper/extras/ace_protocol_v2.py
+@@ -546,6 +546,9 @@
+                 + pb_uint32(2, int(params.get('uid2', 0)))
+                 + pb_uint32(3, int(params.get('uid3', 0)))
+                 + pb_uint32(4, int(params.get('device_id', 1))))
++        if method.startswith('insert_policy_'):
++            from .ace_insert_policy import encode
++            return 93, encode(method, params)
+         if method == 'raw':
+             cmd_id = int(params.get('cmd', 0))
+             hex_payload = params.get('hex', '') or ''
+@@ -559,6 +562,16 @@
+         return Cmd.GET_STATUS, b''
+ 
+     def _v2_response_to_v1(self, cmd, seq, payload):
++        if cmd == 93:
++            from .ace_insert_policy import decode
++            ret = {'id': seq, 'code': 99, 'msg': 'invalid insertion reply', 'result': {}, '_v2_payload_valid': False}
++            try:
++                result = decode(bytes(payload))
++            except (ValueError, TypeError):
++                return ret
++            ret.update(code=result['code'], msg='success' if result['code'] == 0 else 'insertion policy rejected',
++                       result={'insert_policy': result}, _v2_payload_valid=True)
++            return ret
+         if cmd == 92:
+             from .ace_controlled_motion import decode_response, MotionError
+             ret = {'id': seq, 'code': 0, 'msg': 'success', 'result': {},
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -29,7 +29,7 @@
+                        and getattr(a, '_tag_op_kind', None) == 'read'
+                        and (a._tag_op_ace, a._tag_op_slot, a._tag_op_seq) == (idx, slot, seq))
+         else:
+-            matches = (kind == 'eject' and self.state.get('kind') == kind
++            matches = (kind in ('eject', 'insert') and self.state.get('kind') == kind
+                        and self.state.get('state') in ('preparing', 'running')
+                        and (self.state.get('ace'), self.state.get('slot'), self.state.get('seq')) == (idx, slot, seq))
+         if not matches:
+@@ -125,9 +125,9 @@
+                 ):
+                     raise RuntimeError('目标喷头有料或来源未知，请先从喷头卸载')
+ 
+-    def _request(self, idx, method, params, command, monitor=None, stop_transport=None, eject_token=None):
++    def _request(self, idx, method, params, command, monitor=None, stop_transport=None, eject_token=None, policy_token=None):
+         request = {'method': method, 'params': params}
+-        if monitor is None and stop_transport is None and eject_token is None:
++        if monitor is None and stop_transport is None and eject_token is None and policy_token is None:
+             r = self.ace._tipform_send(idx, request, timeout=3.0)
+         else:
+             attempts = 2 if method in ('get_status', 'get_key_state', 'get_feed_info') else 1
+@@ -139,6 +139,9 @@
+                     target[0] = response if response is not None else {}
+                 if stop_transport is not None:
+                     request['_insert_stop_transport'] = stop_transport
++                    request['_insert_reject'] = callback
++                if policy_token is not None:
++                    request['_insert_policy_owner'] = policy_token
+                     request['_insert_reject'] = callback
+                 if eject_token is not None:
+                     request['_eject_token'] = eject_token
+--- a/klipper/extras/ace_location_hold.py
++++ b/klipper/extras/ace_location_hold.py
+@@ -12,7 +12,7 @@
+ PORT='/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0'
+ UID=(808780566,17445170,942880330)
+ MOTION=frozenset(('feed_filament','unwind_filament','feed_or_rollback_raw',
+-                  'start_feed_assist','update_feeding_speed'))
++                  'start_feed_assist','update_feeding_speed','insert_policy_start'))
+ READ_STOP=frozenset(('stop_feed_filament','stop_feed_assist','get_status',
+                      'get_info','get_feed_info','get_key_state','discover_device'))
+ 
+--- a/klipper/extras/ace_stop_guard.py
++++ b/klipper/extras/ace_stop_guard.py
+@@ -35,7 +35,7 @@
+     ALLOWED = frozenset((
+         'stop_feed_filament', 'stop_feed_assist',
+         'get_info', 'get_status', 'get_temp', 'get_feed_info',
+-        'get_key_state', 'get_filament_info'))
++        'get_key_state', 'get_filament_info', 'insert_policy_query', 'insert_policy_discard'))
+ 
+     def __init__(self):
+         self._lock = threading.Lock()
+--- a/klipper/extras/ace_manual_remaining.py
++++ b/klipper/extras/ace_manual_remaining.py
+@@ -27,7 +27,7 @@
+             return False
+     try:
+         fw = (ace._ace_models.get(idx) or ('', ''))[1]
+-        if str(fw or '').strip().upper() not in ('V1.1.97O', 'V1.1.98O'):
++        if str(fw or '').strip().upper() not in ('V1.1.97O', 'V1.1.98O', 'V1.2.00O'):
+             result['reason'] = 'unsupported_firmware'; return result
+         if not valid():
+             result['reason'] = 'identity_or_transport_changed'; return result
+--- a/klipper/extras/ace_manual_measure.py
++++ b/klipper/extras/ace_manual_measure.py
+@@ -700,7 +700,7 @@
+ 
+     def begin(self):
+         a, actions = self.ace, self.ace._slot_actions
+-        if (str((a._ace_models.get(0) or ('', ''))[1]).upper() != 'V1.1.98O' or
++        if (str((a._ace_models.get(0) or ('', ''))[1]).upper() not in ('V1.1.98O', 'V1.2.00O') or
+             len(a._ace_devices) < 1 or str(a._ace_devices[0]) != PORT):
+             raise MeasurementUnavailable('unverified RF route')
+         a._manual_measure_owner = self.owner
+@@ -765,7 +765,7 @@
+     from .ace_filament_approximation import estimate_remaining
+     a, actions = ace, ace._slot_actions
+     model = (a._ace_models.get(0) or ('', ''))[1]
+-    if (str(model).upper() != 'V1.1.98O' or len(a._ace_devices) < 1 or
++    if (str(model).upper() not in ('V1.1.98O', 'V1.2.00O') or len(a._ace_devices) < 1 or
+         str(a._ace_devices[0]) != PORT):
+         raise MeasurementUnavailable('unverified measurement device')
+     owner = MeasureOwner(a, transport, epoch, uid, seq)

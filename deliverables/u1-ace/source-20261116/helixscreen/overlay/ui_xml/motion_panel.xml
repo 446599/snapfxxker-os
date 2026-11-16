@@ -1,0 +1,484 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="u1_locate_preset_min_height" value="140"/>
+    <px name="u1_motion_ring_size" value="208"/>
+    <px name="u1_locate_preset_max_height" value="168"/>
+    <px name="u1_motion_coords_height" value="52"/>
+    <px name="u1_motion_value_height" value="26"/>
+    <!-- Portrait Z column width. At tiny (320x480) the coordinate row's 32px
+         touch targets make the pad height-bound, so the column takes the width
+         the pad cannot use rather than leaving a dead band beside it. -->
+    <px name="motion_z_col_w_micro" value="54"/>
+    <px name="motion_z_col_w_tiny" value="64"/>
+    <px name="motion_z_col_w_small" value="64"/>
+    <px name="motion_z_col_w_medium" value="64"/>
+    <px name="motion_z_col_w_large" value="64"/>
+    <!-- Bed tab toolhead marker diameter (components/motion_bed_map.xml). -->
+    <px name="bed_map_marker_size_micro" value="10"/>
+    <px name="bed_map_marker_size_tiny" value="12"/>
+    <px name="bed_map_marker_size_small" value="14"/>
+    <px name="bed_map_marker_size_medium" value="16"/>
+    <px name="bed_map_marker_size_large" value="20"/>
+    <!-- The marker's radius: the plate sits this far inside its surface so a
+         toolhead at the plate's edge draws its whole marker. -->
+    <px name="bed_map_inset_micro" value="5"/>
+    <px name="bed_map_inset_tiny" value="6"/>
+    <px name="bed_map_inset_small" value="7"/>
+    <px name="bed_map_inset_medium" value="8"/>
+    <px name="bed_map_inset_large" value="10"/>
+    <!-- Bed tab unhomed home button, near the jog pad's centre zone. -->
+    <px name="bed_map_home_size_micro" value="44"/>
+    <px name="bed_map_home_size_tiny" value="52"/>
+    <px name="bed_map_home_size_small" value="60"/>
+    <px name="bed_map_home_size_medium" value="72"/>
+    <px name="bed_map_home_size_large" value="88"/>
+    <!-- The landscape jog mode row: button_height, except the compact height on
+         a 480x320 screen, which leaves the jog pad its room. A px value cannot
+         reference another token, so these repeat button_height's ladder; the
+         "motion_mode_row_h follows button_height" test pins the copy. -->
+    <px name="motion_mode_row_h_micro" value="26"/>
+    <px name="motion_mode_row_h_tiny" value="44"/>
+    <px name="motion_mode_row_h_small" value="48"/>
+    <px name="motion_mode_row_h_medium" value="52"/>
+    <px name="motion_mode_row_h_large" value="72"/>
+    <px name="motion_mode_row_h_xlarge" value="80"/>
+    <px name="motion_mode_row_h_xxlarge" value="96"/>
+  </consts>
+  <subjects>
+    <!-- From small up the landscape Z keys stack their arrow over the distance,
+         so a near-square key holds "10mm"; below that a key is too short to
+         stack, and the column widens to fit the label beside the arrow. -->
+    <subject_expr name="motion_z_keys_stacked" expr="ui_breakpoint ge 2"/>
+  </subjects>
+  <!-- Motion Sub-Screen: XYZ Movement & Homing -->
+  <!-- Coordinates live in the header slot on landscape screens and in a slim
+       full-width strip under the header on portrait screens, where the header
+       is too narrow to carry them beside the title. -->
+  <!-- Jog pad colors are loaded from semantic theme tokens in C++ (ui_jog_pad.cpp) -->
+  <!-- Uses shared backdrop from navigation system -->
+  <styles>
+    <style name="motion_body_insets" pad_ver="#u1_page_pad"/>
+    <!-- 192px on 480x320: a 44px readout band, a 4px gap, 140px
+         of controls, and a 4px inset above navigation. -->
+    <style name="locate_body_insets" pad_top="0" pad_bottom="#u1_compact_gap"/>
+    <style name="motion_left_ring" width="#u1_motion_ring_size" flex_grow="0"/>
+    <style name="motion_left_full" width="0" flex_grow="1"/>
+    <style name="motion_left_bed" width="0" flex_grow="1"/>
+    <!-- Coordinate readouts mute an axis that is not homed: its reported
+         position is not trustworthy, and "0.00" must not read as a real 0. -->
+    <style name="axis_letter_homed" text_color="#primary"/>
+    <style name="axis_value_homed" text_color="#text"/>
+    <style name="axis_unhomed" text_color="#text_muted"/>
+    <!-- Commanded/actual toggle: accent while showing actual (live)
+         position, muted while showing the commanded target. -->
+    <style name="coords_swap_actual" text_color="#primary"/>
+    <style name="coords_swap_commanded" text_color="#text_muted"/>
+  </styles>
+  <view name="motion_panel" extends="lv_obj" width="#overlay_width_transient" height="100%" align="right_mid" style_pad_all="0" style_border_width="0" style_bg_opa="255" style_bg_color="#screen_bg" scrollable="false" flex_flow="column" style_pad_gap="0">
+    <!-- Header Bar with the settings cog. The E-stop is on the navbar. -->
+    <if cond="ui_is_portrait eq 1">
+    <header_bar name="overlay_header" title="移动" hide_action_icon="false" action_icon="cog" action_icon_hidden_cond="false" action_icon_callback="on_motion_header_settings_clicked">
+      <!-- Header coordinates: one line, bold tinted axis letter + tabular
+           mono value, no unit suffix. Each letter+value pair is one tap
+           target (opens that axis' keypad); the swap chip at the end
+           names the shown mode (Target / Actual) and flips it. The value
+           labels carry the stable per-axis names (header_pos_x/_y/_z).
+           Hidden in portrait, where the
+           coord_row under the header carries the same three bindings under
+           row_pos_* names (distinct on purpose: this group is outside any
+           <if> branch, so the duplicate-name gate would flag sharing them). -->
+      <header_bar-header_content>
+        <text_small name="motion_lock_notice" text="移动已锁定" style_text_color="#text_muted">
+          <bind_flag_if_eq subject="machine_motion_blocked" flag="hidden" ref_value="0"/>
+        </text_small>
+        <!-- Portrait tabs: icon-only pills beside the title, so the jog pad
+             keeps the height a strip under the coordinates would take. The
+             pills are small at micro sizes; ext_click_area reaches a full
+             touch target inside the header's height. -->
+        <lv_obj name="header_tabs" width="content" height="100%" style_pad_all="0" style_pad_left="#space_sm" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false" flex_flow="row" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_track_place="center">
+          <zone_tab label_subject="motion_tab_label_0" active_subject="motion_tab_active_0" tab_index="0" icon="cursor_move" hide_label="true" ext_click_area="6" callback="on_motion_tab_clicked" selected_style="zone_tab_pill_selected" content_selected_style="zone_tab_on_primary" idle_style="zone_tab_pill_idle"/>
+          <zone_tab label_subject="motion_tab_label_1" active_subject="motion_tab_active_1" tab_index="1" icon="crosshairs_gps" hide_label="true" ext_click_area="6" callback="on_motion_tab_clicked" selected_style="zone_tab_pill_selected" content_selected_style="zone_tab_on_primary" idle_style="zone_tab_pill_idle"/>
+          <!-- The Bed tab is disabled while anything holds the machine (a print). -->
+          <zone_tab name="header_tab_bed" label_subject="motion_tab_label_2" active_subject="motion_tab_active_2" tab_index="2" icon="grid_large" hide_label="true" ext_click_area="6" callback="on_motion_tab_clicked" selected_style="zone_tab_pill_selected" content_selected_style="zone_tab_on_primary" idle_style="zone_tab_pill_idle" moves_machine="true"/>
+        </lv_obj>
+      </header_bar-header_content>
+    </header_bar>
+    <else/>
+    <!-- Landscape U1: leading Back target, heading, and trailing mode controls. -->
+    <lv_obj name="overlay_header" width="100%" height="#u1_header_height" flex_flow="row"
+            style_pad_hor="#u1_page_pad" style_pad_top="0" style_pad_bottom="0" style_pad_gap="#u1_card_gap"
+            style_flex_cross_place="center" style_flex_track_place="center"
+            style_bg_color="#screen_bg" style_bg_opa="255" style_border_width="0"
+            scrollable="false">
+      <lv_obj name="back_button" width="#u1_header_back_width" height="100%" style_pad_all="0" style_pad_gap="#u1_compact_gap" style_radius="#u1_card_radius"
+              style_min_width="#u1_touch_target" flex_flow="row" style_flex_main_place="center"
+              style_flex_cross_place="center" style_flex_track_place="center" clickable="true" scrollable="false">
+        <style name="styles.press_wash" selector="pressed"/>
+        <event_cb trigger="clicked" callback="on_header_back_clicked"/>
+        <icon src="chevron_left" size="sm" variant="text" clickable="false" event_bubble="true"/>
+        <text_body style_text_font="#u1_aux_font" text="返回" clickable="false" event_bubble="true"/>
+      </lv_obj>
+      <text_heading text="移动" style_text_font="#u1_heading_font" style_text_color="#text" clickable="false"/>
+      <lv_obj width="0" flex_grow="1" height="1" style_pad_all="0" style_bg_opa="0" style_border_width="0" clickable="false"/>
+      <lv_obj name="header_tabs" width="content" height="100%" style_pad_all="0" style_pad_left="0"
+              style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false"
+              flex_flow="row" style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" style_flex_track_place="center">
+        <zone_tab label_subject="motion_tab_label_0" active_subject="motion_tab_active_0" tab_index="0"
+                  hide_label="false" ext_click_area="0" callback="on_motion_tab_clicked"
+                  selected_style="zone_tab_pill_selected" content_selected_style="zone_tab_on_primary"
+                  idle_style="zone_tab_pill_idle" pad_ver="0" min_height="#u1_touch_target" radius="#u1_card_radius" height="100%" min_width="#u1_touch_target"/>
+        <zone_tab label_subject="motion_tab_label_1" active_subject="motion_tab_active_1" tab_index="1"
+                  hide_label="false" ext_click_area="0" callback="on_motion_tab_clicked"
+                  selected_style="zone_tab_pill_selected" content_selected_style="zone_tab_on_primary"
+                  idle_style="zone_tab_pill_idle" pad_ver="0" min_height="#u1_touch_target" radius="#u1_card_radius" height="100%" min_width="#u1_touch_target"/>
+        <zone_tab name="header_tab_bed" label_subject="motion_tab_label_2" active_subject="motion_tab_active_2" tab_index="2"
+                  hide_label="false" ext_click_area="0" callback="on_motion_tab_clicked"
+                  selected_style="zone_tab_pill_selected" content_selected_style="zone_tab_on_primary"
+                  idle_style="zone_tab_pill_idle" pad_ver="0" min_height="#u1_touch_target" radius="#u1_card_radius" height="100%" min_width="#u1_touch_target" moves_machine="true"/>
+        <ui_button name="header_tab_settings" width="content" height="100%" text="设置" variant="ghost"
+                   style_radius="#u1_card_radius" style_pad_hor="#u1_card_pad" style_pad_ver="0" style_min_height="#u1_touch_target" style_min_width="#u1_touch_target">
+          <event_cb trigger="clicked" callback="on_motion_header_settings_clicked"/>
+        </ui_button>
+      </lv_obj>
+    </lv_obj>
+    </if>
+
+    <if cond="ui_is_portrait eq 1">
+      <!-- PORTRAIT: header too narrow for coordinates, so a slim full-width
+           strip under the header carries them, spread evenly (the tabs sit
+           in the header). Below it one row pairs the jog pad (largest
+           square the row allows) with a tall Z column, then a single bottom
+           row carries the jog modes plus the capability-gated leveling
+           buttons, icons above labels. -->
+      <lv_obj name="coord_row" width="100%" height="content" style_pad_all="0" style_pad_hor="#space_lg" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false" flex_flow="row" style_flex_main_place="space_evenly" style_flex_cross_place="center" style_flex_track_place="center">
+        <lv_obj name="row_pos_x_group" width="content" height="content" style_min_height="#icon_button_size" clickable="true" style_pad_all="#space_xs" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_track_place="center">
+          <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="x"/>
+          <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+          <bind_state_if_eq subject="motion_x_homed" state="disabled" ref_value="0"/>
+          <lv_label name="row_pos_x_letter" text="X" style_text_font="#font_body_bold">
+            <bind_style name="axis_letter_homed" subject="motion_x_homed" ref_value="1"/>
+            <bind_style name="axis_unhomed" subject="motion_x_homed" ref_value="0"/>
+          </lv_label>
+          <lv_label name="row_pos_x" bind_text="motion_pos_x" style_text_font="#font_mono">
+            <bind_style name="axis_value_homed" subject="motion_x_homed" ref_value="1"/>
+            <bind_style name="axis_unhomed" subject="motion_x_homed" ref_value="0"/>
+          </lv_label>
+        </lv_obj>
+        <lv_obj name="row_pos_y_group" width="content" height="content" style_min_height="#icon_button_size" clickable="true" style_pad_all="#space_xs" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_track_place="center">
+          <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="y"/>
+          <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+          <bind_state_if_eq subject="motion_y_homed" state="disabled" ref_value="0"/>
+          <lv_label name="row_pos_y_letter" text="Y" style_text_font="#font_body_bold">
+            <bind_style name="axis_letter_homed" subject="motion_y_homed" ref_value="1"/>
+            <bind_style name="axis_unhomed" subject="motion_y_homed" ref_value="0"/>
+          </lv_label>
+          <lv_label name="row_pos_y" bind_text="motion_pos_y" style_text_font="#font_mono">
+            <bind_style name="axis_value_homed" subject="motion_y_homed" ref_value="1"/>
+            <bind_style name="axis_unhomed" subject="motion_y_homed" ref_value="0"/>
+          </lv_label>
+        </lv_obj>
+        <lv_obj name="row_pos_z_group" width="content" height="content" style_min_height="#icon_button_size" clickable="true" style_pad_all="#space_xs" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_track_place="center">
+          <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="z"/>
+          <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+          <bind_state_if_eq subject="motion_z_homed" state="disabled" ref_value="0"/>
+          <lv_label name="row_pos_z_letter" text="Z" style_text_font="#font_body_bold">
+            <bind_style name="axis_letter_homed" subject="motion_z_homed" ref_value="1"/>
+            <bind_style name="axis_unhomed" subject="motion_z_homed" ref_value="0"/>
+          </lv_label>
+          <lv_label name="row_pos_z" bind_text="motion_pos_z" style_text_font="#font_mono">
+            <bind_style name="axis_value_homed" subject="motion_z_homed" ref_value="1"/>
+            <bind_style name="axis_unhomed" subject="motion_z_homed" ref_value="0"/>
+          </lv_label>
+        </lv_obj>
+        <lv_obj name="row_pos_swap" width="content" height="#icon_button_size" style_min_width="#icon_button_size" clickable="true" style_pad_all="0" style_pad_gap="#space_xs" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center">
+          <event_cb trigger="clicked" callback="on_motion_swap_coords_clicked"/>
+          <icon src="swap_horizontal" size="xs">
+            <bind_style name="coords_swap_actual" subject="settings_motion_show_actual_position" ref_value="1"/>
+            <bind_style name="coords_swap_commanded" subject="settings_motion_show_actual_position" ref_value="0"/>
+          </icon>
+          <lv_label name="row_pos_swap_target" text="Target" style_text_font="#font_small">
+            <bind_style name="coords_swap_commanded" subject="settings_motion_show_actual_position" ref_value="0"/>
+            <bind_flag_if_eq subject="settings_motion_show_actual_position" flag="hidden" ref_value="1"/>
+          </lv_label>
+          <lv_label name="row_pos_swap_actual" text="Actual" style_text_font="#font_small">
+            <bind_style name="coords_swap_actual" subject="settings_motion_show_actual_position" ref_value="1"/>
+            <bind_flag_if_eq subject="settings_motion_show_actual_position" flag="hidden" ref_value="0"/>
+          </lv_label>
+        </lv_obj>
+      </lv_obj>
+      <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" scrollable="false" style_border_opa="0" flex_flow="column" style_pad_gap="#u1_card_gap" style_pad_hor="#u1_page_pad">
+        <!-- Disable content when printer not connected or klippy not ready -->
+        <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+        <!-- Pad row: jog pad left, Z column right. The row is the only
+             flex-growing child, so the coordinate strip and tab strip above
+             and the bottom row below take their height first and the pad row
+             gets the rest; the pad is the largest square its wrapper allows
+             (clamped in MotionPanel::setup_jog_pad), so a width-bound wrapper
+             leaves no dead band beside the circle. On the Move tab the preset
+             grid, on the Bed tab the plate map, takes the wrapper's slot; the Z
+             column stays on every tab. -->
+        <lv_obj name="pad_row" width="100%" height="0" flex_grow="1" style_pad_all="0" style_border_opa="0" scrollable="false" flex_flow="row" style_pad_gap="#space_sm">
+          <lv_obj name="jog_pad_wrapper" width="0" height="100%" flex_grow="1" style_pad_all="0" style_border_opa="0" scrollable="false">
+            <bind_flag_if_not_eq subject="motion_tab" flag="hidden" ref_value="0"/>
+            <bind_flag_if_not_eq subject="settings_motion_layout" flag="hidden" ref_value="0"/>
+            <lv_obj name="jog_pad_container" width="content" height="content" style_pad_all="0" style_border_opa="0" scrollable="false" clickable="true" align="left_mid"/>
+          </lv_obj>
+          <lv_obj name="move_tab" width="0" height="100%" flex_grow="3" style_pad_all="0" style_border_opa="0" scrollable="false">
+            <bind_flag_if_not_eq subject="motion_tab" flag="hidden" ref_value="1"/>
+            <move_preset_grid actions="false"/>
+          </lv_obj>
+          <lv_obj name="bed_tab" width="0" height="100%" flex_grow="3" style_pad_all="0" style_border_opa="0" scrollable="false">
+            <bind_flag_if_not_eq subject="motion_tab" flag="hidden" ref_value="2"/>
+            <motion_bed_map/>
+          </lv_obj>
+          <!-- The other Jog-tab layouts take the pad's slot and bring their
+               own Z, home and leveling buttons. -->
+          <lv_obj name="jog_layout_slot" width="0" height="100%" flex_grow="3" style_pad_all="0" style_border_opa="0" scrollable="false">
+            <bind_flag_if_not_eq subject="motion_tab" flag="hidden" ref_value="0"/>
+            <bind_flag_if_eq subject="settings_motion_layout" flag="hidden" ref_value="0"/>
+            <motion_jog_layout/>
+          </lv_obj>
+          <!-- The landscape Z column stood on its side: same bindings (arrow
+               icons, mm step labels, the kinematics-aware axis label),
+               buttons stacked tall to fill the row height. The column grows
+               into whatever width the height-bound pad leaves (the wrapper is
+               clamped to the pad square in MotionPanel::setup_jog_pad), with
+               the const as its floor. -->
+          <lv_obj name="z_column" height="100%" style_min_width="#motion_z_col_w" flex_grow="1" style_pad_all="0" style_border_opa="0" scrollable="false" flex_flow="column" style_pad_gap="#space_xs">
+            <bind_flag_if cond="motion_tab eq 0 and settings_motion_layout ne 0" flag="hidden"/>
+            <motion_jog_button name="z_up_large" width="100%" jog="z_up_large" flex_grow="1" icon_position="top" style_pad_hor="#space_xxs" icon="arrow_up" bind_icon="motion_z_up_icon" label="motion_z_up_outer_label">
+              <bind_state_if_eq subject="motion_z_up_blocked" state="disabled" ref_value="1"/>
+            </motion_jog_button>
+            <motion_jog_button name="z_up_small" width="100%" jog="z_up_small" flex_grow="1" icon_position="top" style_pad_hor="#space_xxs" icon="arrow_up" bind_icon="motion_z_up_icon" label="motion_z_up_inner_label">
+              <bind_state_if_eq subject="motion_z_up_blocked" state="disabled" ref_value="1"/>
+            </motion_jog_button>
+            <!-- Same widget and binding as the landscape column between the
+                 up and down buttons: "Print Head" or "Bed" by kinematics. -->
+            <text_small name="z_axis_label" width="100%" bind_text="motion_z_axis_label" style_text_align="center"/>
+            <motion_jog_button name="z_down_small" width="100%" jog="z_down_small" flex_grow="1" icon_position="top" style_pad_hor="#space_xxs" icon="arrow_down" bind_icon="motion_z_down_icon" label="motion_z_down_inner_label">
+              <bind_state_if_eq subject="motion_z_down_blocked" state="disabled" ref_value="1"/>
+            </motion_jog_button>
+            <motion_jog_button name="z_down_large" width="100%" jog="z_down_large" flex_grow="1" icon_position="top" style_pad_hor="#space_xxs" icon="arrow_down" bind_icon="motion_z_down_icon" label="motion_z_down_outer_label">
+              <bind_state_if_eq subject="motion_z_down_blocked" state="disabled" ref_value="1"/>
+            </motion_jog_button>
+          </lv_obj>
+        </lv_obj>
+        <!-- Bottom row: jog modes plus leveling in one row, icon above the
+             word. The leveling buttons are capability-gated, so the row
+             carries three to five buttons depending on the printer; the jog
+             modes are Jog-tab-only. -->
+        <lv_obj name="bottom_row" width="100%" height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#space_xs" scrollable="false">
+          <motion_jog_modes fine_text="Z 精细" coarse_text="Z 标准" turbo_text="Z 快速" name="jog_modes" width="0" flex_grow="3" fine_callback="on_jog_mode_fine" coarse_callback="on_jog_mode_coarse" turbo_callback="on_jog_mode_turbo" text_font="#font_small">
+            <bind_flag_if_not_eq subject="motion_tab" flag="hidden" ref_value="0"/>
+            <bind_flag_if_not_eq subject="settings_motion_layout" flag="hidden" ref_value="0"/>
+          </motion_jog_modes>
+          <!-- Move-tab actions live here rather than under the grid: the grid
+               fills the height the separate action row used to claim, and the
+               two buttons sit beside QGL in the row the jog modes occupy on
+               the Jog tab. Landscape keeps them inside the grid. -->
+          <ui_button name="move_park" text="Park" variant="outline" flex_grow="1" moves_machine="true">
+            <bind_flag_if_not_eq subject="motion_tab" flag="hidden" ref_value="1"/>
+            <bind_state_if_eq subject="nav_buttons_enabled" state="disabled" ref_value="0"/>
+            <bind_state_if_eq subject="idle_timeout_printing" state="disabled" ref_value="1"/>
+            <bind_state_if cond="motion_x_homed eq 0 or motion_y_homed eq 0 or motion_z_homed eq 0" state="disabled"/>
+            <event_cb trigger="clicked" callback="on_motion_park_clicked"/>
+          </ui_button>
+          <ui_button name="move_motors_off" text="Motors Off" icon="power" variant="outline" flex_grow="1" moves_machine="true">
+            <bind_flag_if_not_eq subject="motion_tab" flag="hidden" ref_value="1"/>
+            <bind_state_if_eq subject="nav_buttons_enabled" state="disabled" ref_value="0"/>
+            <event_cb trigger="clicked" callback="on_motion_motors_off_clicked"/>
+          </ui_button>
+          <ui_button name="btn_qgl" flex_grow="1" icon="spirit_level" icon_position="top" text="QGL" variant="secondary" hidden="true" moves_machine="true">
+            <bind_flag_if_eq subject="printer_has_qgl" flag="hidden" ref_value="0"/>
+            <bind_flag_if cond="motion_tab eq 0 and settings_motion_layout ne 0" flag="hidden"/>
+            <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
+            <event_cb trigger="clicked" callback="on_motion_qgl"/>
+          </ui_button>
+          <ui_button name="btn_z_tilt" flex_grow="1" icon="spirit_level" icon_position="top" text="Z-Tilt" variant="secondary" hidden="true" moves_machine="true">
+            <bind_flag_if_eq subject="printer_has_z_tilt" flag="hidden" ref_value="0"/>
+            <bind_flag_if cond="motion_tab eq 0 and settings_motion_layout ne 0" flag="hidden"/>
+            <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
+            <event_cb trigger="clicked" callback="on_motion_z_tilt"/>
+          </ui_button>
+        </lv_obj>
+      </lv_obj>
+      <else/>
+      <!-- LANDSCAPE: 208px XY ring with compact coordinates and Z controls. -->
+      <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_hor="#u1_page_pad" style_pad_gap="#u1_card_gap" scrollable="false" flex_flow="row" style_flex_cross_place="center">
+        <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+        <bind_style_if name="motion_body_insets" cond="motion_tab ne 1"/>
+        <bind_style_if name="locate_body_insets" cond="motion_tab eq 1"/>
+        <lv_obj name="move_tab" width="100%" height="100%" style_pad_all="0" style_pad_gap="#u1_compact_gap" style_flex_main_place="center" scrollable="true" scroll_dir="ver" scrollbar_mode="auto" flex_flow="column">
+          <bind_flag_if_not_eq subject="motion_tab" flag="hidden" ref_value="1"/>
+          <lv_obj name="locate_coords" width="100%" height="#u1_touch_target" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false" flex_flow="row" style_pad_gap="#u1_card_gap" style_flex_cross_place="center" style_flex_main_place="space_between">
+            <lv_obj name="locate_pos_x_group" width="0" height="100%" clickable="true" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#u1_card_gap" style_flex_cross_place="center" flex_grow="1" style_flex_main_place="center">
+              <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="x"/>
+              <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="motion_x_homed" state="disabled" ref_value="0"/>
+              <text_small style_text_font="#u1_aux_font" text="X" clickable="false" event_bubble="true">
+                <bind_style name="axis_letter_homed" subject="motion_x_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_x_homed" ref_value="0"/>
+              </text_small>
+              <text_body style_text_font="#u1_body_font" bind_text="motion_pos_x" clickable="false" event_bubble="true">
+                <bind_style name="axis_value_homed" subject="motion_x_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_x_homed" ref_value="0"/>
+              </text_body>
+            </lv_obj>
+            <lv_obj name="locate_pos_y_group" width="0" height="100%" clickable="true" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#u1_card_gap" style_flex_cross_place="center" flex_grow="1" style_flex_main_place="center">
+              <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="y"/>
+              <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="motion_y_homed" state="disabled" ref_value="0"/>
+              <text_small style_text_font="#u1_aux_font" text="Y" clickable="false" event_bubble="true">
+                <bind_style name="axis_letter_homed" subject="motion_y_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_y_homed" ref_value="0"/>
+              </text_small>
+              <text_body style_text_font="#u1_body_font" bind_text="motion_pos_y" clickable="false" event_bubble="true">
+                <bind_style name="axis_value_homed" subject="motion_y_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_y_homed" ref_value="0"/>
+              </text_body>
+            </lv_obj>
+            <lv_obj name="locate_pos_z_group" width="0" height="100%" clickable="true" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="row" style_pad_gap="#u1_card_gap" style_flex_cross_place="center" flex_grow="1" style_flex_main_place="center">
+              <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="z"/>
+              <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="motion_z_homed" state="disabled" ref_value="0"/>
+              <text_small style_text_font="#u1_aux_font" text="Z" clickable="false" event_bubble="true">
+                <bind_style name="axis_letter_homed" subject="motion_z_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_z_homed" ref_value="0"/>
+              </text_small>
+              <text_body style_text_font="#u1_body_font" bind_text="motion_pos_z" clickable="false" event_bubble="true">
+                <bind_style name="axis_value_homed" subject="motion_z_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_z_homed" ref_value="0"/>
+              </text_body>
+            </lv_obj>
+            <ui_button name="locate_pos_swap" style_radius="#u1_card_radius" width="#u1_touch_target" height="#u1_touch_target" icon="swap_horizontal" variant="secondary" style_pad_all="0">
+              <event_cb trigger="clicked" callback="on_motion_swap_coords_clicked"/>
+            </ui_button>
+          </lv_obj>
+          <move_preset_grid height="0" flex_grow="1" style_min_height="#u1_locate_preset_min_height" style_max_height="#u1_locate_preset_max_height"/>
+        </lv_obj>
+        <lv_obj name="left_column" height="100%" style_pad_all="0" scrollable="false" flex_flow="column">
+          <bind_flag_if_eq subject="motion_tab" flag="hidden" ref_value="1"/>
+          <bind_style_if name="motion_left_ring" cond="motion_tab eq 0 and settings_motion_layout eq 0"/>
+          <bind_style_if name="motion_left_full" cond="motion_tab eq 0 and settings_motion_layout ne 0"/>
+          <bind_style_if name="motion_left_bed" cond="motion_tab eq 2"/>
+          <lv_obj name="jog_row" width="100%" height="100%" style_pad_all="0" scrollable="false">
+            <bind_flag_if cond="motion_tab ne 0 or settings_motion_layout ne 0" flag="hidden"/>
+            <lv_obj name="jog_pad_wrapper" width="100%" height="100%" style_pad_all="0" scrollable="false">
+              <lv_obj name="jog_pad_container" width="content" height="content" style_pad_all="0" scrollable="false" clickable="true" align="center"/>
+            </lv_obj>
+          </lv_obj>
+          <lv_obj name="bed_tab" width="100%" height="100%" style_pad_all="0" scrollable="false">
+            <bind_flag_if_not_eq subject="motion_tab" flag="hidden" ref_value="2"/>
+            <motion_bed_map/>
+          </lv_obj>
+          <lv_obj name="jog_layout_slot" width="100%" height="100%" style_pad_all="0" scrollable="false">
+            <bind_flag_if cond="motion_tab ne 0 or settings_motion_layout eq 0" flag="hidden"/>
+            <motion_jog_layout/>
+          </lv_obj>
+        </lv_obj>
+        <lv_obj name="right_column" width="0" height="100%" flex_grow="1" style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="#u1_card_gap" style_flex_main_place="space_evenly">
+          <bind_flag_if cond="(motion_tab eq 0 and settings_motion_layout ne 0) or motion_tab eq 1" flag="hidden"/>
+          <lv_obj name="header_coords" width="100%" height="#u1_motion_coords_height" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false" flex_flow="row" style_pad_gap="#u1_card_gap" style_flex_cross_place="center" style_flex_track_place="center" style_flex_main_place="space_between">
+            <lv_obj name="header_pos_x_group" width="0" height="100%" clickable="true" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="column" style_pad_gap="0" style_flex_cross_place="center" style_flex_track_place="center" flex_grow="1" style_flex_main_place="center">
+              <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="x"/>
+              <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="motion_x_homed" state="disabled" ref_value="0"/>
+              <text_body name="header_pos_x_letter" text="X" height="#u1_text_line" clickable="false" event_bubble="true">
+                <bind_style name="axis_letter_homed" subject="motion_x_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_x_homed" ref_value="0"/>
+              </text_body>
+              <text_heading name="header_pos_x" style_text_font="#u1_aux_font" bind_text="motion_pos_x" height="#u1_motion_value_height" clickable="false" event_bubble="true">
+                <bind_style name="axis_value_homed" subject="motion_x_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_x_homed" ref_value="0"/>
+              </text_heading>
+            </lv_obj>
+            <lv_obj name="header_pos_y_group" width="0" height="100%" clickable="true" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="column" style_pad_gap="0" style_flex_cross_place="center" style_flex_track_place="center" flex_grow="1" style_flex_main_place="center">
+              <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="y"/>
+              <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="motion_y_homed" state="disabled" ref_value="0"/>
+              <text_body name="header_pos_y_letter" text="Y" height="#u1_text_line" clickable="false" event_bubble="true">
+                <bind_style name="axis_letter_homed" subject="motion_y_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_y_homed" ref_value="0"/>
+              </text_body>
+              <text_heading name="header_pos_y" style_text_font="#u1_aux_font" bind_text="motion_pos_y" height="#u1_motion_value_height" clickable="false" event_bubble="true">
+                <bind_style name="axis_value_homed" subject="motion_y_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_y_homed" ref_value="0"/>
+              </text_heading>
+            </lv_obj>
+            <lv_obj name="header_pos_z_group" width="0" height="100%" clickable="true" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" flex_flow="column" style_pad_gap="0" style_flex_cross_place="center" style_flex_track_place="center" flex_grow="1" style_flex_main_place="center">
+              <event_cb trigger="clicked" callback="on_motion_pos_clicked" user_data="z"/>
+              <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="machine_motion_blocked" state="disabled" ref_value="1"/>
+              <bind_state_if_eq subject="motion_z_homed" state="disabled" ref_value="0"/>
+              <text_body name="header_pos_z_letter" text="Z" height="#u1_text_line" clickable="false" event_bubble="true">
+                <bind_style name="axis_letter_homed" subject="motion_z_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_z_homed" ref_value="0"/>
+              </text_body>
+              <text_heading name="header_pos_z" style_text_font="#u1_aux_font" bind_text="motion_pos_z" height="#u1_motion_value_height" clickable="false" event_bubble="true">
+                <bind_style name="axis_value_homed" subject="motion_z_homed" ref_value="1"/>
+                <bind_style name="axis_unhomed" subject="motion_z_homed" ref_value="0"/>
+              </text_heading>
+            </lv_obj>
+
+          </lv_obj>
+            <ui_button name="header_pos_swap_coords" style_radius="#u1_card_radius" width="100%" height="#u1_touch_target" icon="swap_horizontal" text="目标 / 实际" variant="secondary" style_pad_all="0">
+              <event_cb trigger="clicked" callback="on_motion_swap_coords_clicked"/>
+            </ui_button>
+          <text_small name="bed_map_unhomed_hint" width="100%" long_mode="wrap" text="请先归位所有轴以使用地图" style_text_color="#text_muted" style_text_align="center">
+            <bind_flag_if cond="motion_tab ne 2 or (motion_x_homed eq 1 and motion_y_homed eq 1 and motion_z_homed eq 1)" flag="hidden"/>
+          </text_small>
+
+          <lv_obj name="z_controls" width="100%" height="#u1_touch_target" style_pad_all="0" scrollable="false" flex_flow="row" style_pad_gap="#u1_card_gap">
+            <bind_flag_if_eq subject="motion_tab" flag="hidden" ref_value="2"/>
+            <motion_jog_button name="z_up_small" width="0" flex_grow="1" height="100%" jog="z_up_fixed" style_radius="#u1_card_radius" icon="arrow_up" bind_icon="motion_z_up_icon" label="motion_z_up_tag" variant="secondary" moves_machine="true">
+              <bind_state_if_eq subject="motion_z_up_blocked" state="disabled" ref_value="1"/>
+            </motion_jog_button>
+            <motion_jog_button name="z_down_small" width="0" flex_grow="1" height="100%" jog="z_down_fixed" style_radius="#u1_card_radius" icon="arrow_down" bind_icon="motion_z_down_icon" label="motion_z_down_tag" variant="secondary" moves_machine="true">
+              <bind_state_if_eq subject="motion_z_down_blocked" state="disabled" ref_value="1"/>
+            </motion_jog_button>
+          </lv_obj>
+          <lv_obj name="jog_modes" width="100%" height="#u1_touch_target" style_pad_all="0" scrollable="false" flex_flow="row" style_pad_gap="#u1_nav_icon_gap">
+            <bind_flag_if_eq subject="motion_tab" flag="hidden" ref_value="2"/>
+            <ui_button name="jog_mode_fine" style_radius="#u1_card_radius" width="0" flex_grow="1" height="100%" text="0.1 mm" style_pad_hor="0" variant="secondary" style_pad_top="#u1_card_pad" style_pad_bottom="#u1_card_pad">
+              <bind_style_if_eq name="styles.choice_selected" subject="motion_z_fixed_step" ref_value="1"/>
+              <bind_style_if_not_eq name="styles.choice_idle" subject="motion_z_fixed_step" ref_value="1"/>
+              <event_cb trigger="clicked" callback="on_motion_fixed_z_step" user_data="1"/>
+            </ui_button>
+            <ui_button name="jog_mode_coarse" style_radius="#u1_card_radius" width="0" flex_grow="1" height="100%" text="1 mm" style_pad_hor="0" variant="secondary" style_pad_top="#u1_card_pad" style_pad_bottom="#u1_card_pad">
+              <bind_style_if_eq name="styles.choice_selected" subject="motion_z_fixed_step" ref_value="10"/>
+              <bind_style_if_not_eq name="styles.choice_idle" subject="motion_z_fixed_step" ref_value="10"/>
+              <event_cb trigger="clicked" callback="on_motion_fixed_z_step" user_data="10"/>
+            </ui_button>
+            <ui_button name="jog_mode_turbo" style_radius="#u1_card_radius" width="0" flex_grow="1" height="100%" text="10 mm" style_pad_hor="0" variant="secondary" style_pad_top="#u1_card_pad" style_pad_bottom="#u1_card_pad">
+              <bind_style_if_eq name="styles.choice_selected" subject="motion_z_fixed_step" ref_value="100"/>
+              <bind_style_if_not_eq name="styles.choice_idle" subject="motion_z_fixed_step" ref_value="100"/>
+              <event_cb trigger="clicked" callback="on_motion_fixed_z_step" user_data="100"/>
+            </ui_button>
+          </lv_obj>
+          <lv_obj name="motion_actions" width="100%" height="#u1_touch_target" style_pad_all="0" scrollable="false" flex_flow="row" style_pad_gap="#u1_card_gap">
+            <bind_flag_if cond="motion_tab eq 0 or motion_tab eq 2" flag="hidden"/>
+            <ui_button name="motion_home_all" width="0" flex_grow="1" height="100%" text="回零" icon="home" variant="primary" moves_machine="true">
+              <event_cb trigger="clicked" callback="on_motion_home" user_data="all"/>
+            </ui_button>
+            <ui_button name="header_pos_swap" width="#u1_touch_target" height="100%" icon="swap_horizontal" variant="secondary" style_pad_all="0">
+              <event_cb trigger="clicked" callback="on_motion_swap_coords_clicked"/>
+            </ui_button>
+          </lv_obj>
+        </lv_obj>
+      </lv_obj>
+    </if>
+  </view>
+</component>

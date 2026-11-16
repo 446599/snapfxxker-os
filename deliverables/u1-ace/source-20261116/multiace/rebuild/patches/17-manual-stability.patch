@@ -1,0 +1,81 @@
+--- a/klipper/extras/ace_rc522.py
++++ b/klipper/extras/ace_rc522.py
+@@ -469,6 +469,46 @@
+         result = self._fresh_encoder(idx, slot)
+         self._manual_guard()
+         return result
++
++    def _manual_stable_terminal(self, idx, slot, length, first):
++        """Require two consecutive fresh matching ready samples within a bound."""
++        previous = None
++        raw = first
++        deadline = self.ace.reactor.monotonic() + 6.0
++        for attempt in range(12):
++            remaining = deadline - self.ace.reactor.monotonic()
++            if remaining <= 0:
++                break
++            diag = dict(getattr(self, '_encoder_diagnostic', {}) or {})
++            row = dict(diag.get('row') or {})
++            sample = (raw, row.get('steps'), row.get('length'))
++            # The decoder helper already validates frame, command and payload.
++            valid = (raw is not None and row.get('_decoder_present') is True
++                     and type(row.get('steps')) is int and type(row.get('length')) is int)
++            self._manual_guard()
++            ready = self._wait_motion_ready(idx, slot, min(0.5, remaining)) if valid else False
++            self._manual_guard()
++            if self.ace.reactor.monotonic() >= deadline:
++                raise MotionUncertain('manual move completion telemetry timeout')
++            logging.info('[multiACE] RFID manual terminal ace=%s slot=%s requested=%s attempt=%s sample=%s diag=%s ready=%s',
++                         idx, slot, length, attempt, sample, diag, ready)
++            if not valid or not ready:
++                raise MotionUncertain('manual move completion telemetry unconfirmed')
++            if previous == sample and row['length'] >= max(1, length - 5):
++                return raw, row
++            previous = sample
++            if attempt == 11:
++                break
++            remaining = deadline - self.ace.reactor.monotonic()
++            if remaining <= 0:
++                break
++            self._pause(min(0.3, remaining))
++            if self.ace.reactor.monotonic() >= deadline:
++                break
++            raw = self._manual_sample(idx, slot)
++            if self.ace.reactor.monotonic() >= deadline:
++                raise MotionUncertain('manual move completion telemetry timeout')
++        raise MotionUncertain('manual move completion telemetry unconfirmed')
+ 
+     def _move_and_confirm(self, idx, slot, length, mode, respond):
+         """Manual scan move with fresh completion and encoder feedback."""
+@@ -524,6 +564,12 @@
+             respond("rc522: WARNING - " + self._motion_uncertain)
+             raise MotionUncertain(self._motion_uncertain)
+         raw = self._manual_sample(idx, slot) if manual else self._fresh_encoder(idx, slot)
++        if manual:
++            try:
++                raw, final_row = self._manual_stable_terminal(idx, slot, length, raw)
++            except MotionUncertain as exc:
++                self._motion_uncertain = str(exc)
++                raise
+         if raw is None or not (length * 0.5 <= abs(raw) <= length * 1.5 + 2):
+             logging.warning(
+                 "[multiACE] RFID encoder diagnostic ACE=%s slot=%s requested=%s mode=%s value=%s detail=%s",
+@@ -580,18 +626,6 @@
+             respond("rc522: WARNING - " + self._motion_uncertain)
+             raise MotionUncertain(self._motion_uncertain)
+         if manual:
+-            final_row = dict((getattr(self, '_encoder_diagnostic', {}) or {}).get('row') or {})
+-            self._pause(0.3)
+-            confirm = self._manual_sample(idx, slot)
+-            confirm_row = dict((getattr(self, '_encoder_diagnostic', {}) or {}).get('row') or {})
+-            if (raw != confirm or final_row.get('_decoder_present') is not True
+-                    or confirm_row.get('_decoder_present') is not True
+-                    or any(type(final_row.get(k)) is not int or final_row.get(k) != confirm_row.get(k)
+-                           for k in ('steps', 'length'))
+-                    or final_row['length'] < max(1, length - 5)
+-                    or not self._wait_motion_ready(idx, slot)):
+-                self._motion_uncertain = 'manual move completion telemetry unconfirmed'
+-                raise MotionUncertain(self._motion_uncertain)
+             self._manual_guard()
+         context = getattr(self,'_insert_checked_context',None)
+         if getattr(self,'_scan_measured',False) and context is not None and (idx,slot)==context[:2]:

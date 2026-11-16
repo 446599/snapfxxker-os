@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <view name="panel_widget_speed_flow"
+        extends="lv_obj" width="100%" height="100%" scrollable="false" clickable="true">
+    <style name="styles.overview_tile"/>
+    <style name="styles.press_wash" selector="pressed"/>
+    <bind_state_if_not_eq subject="printer_connection_state" state="disabled" ref_value="2"/>
+    <event_cb trigger="clicked" callback="speed_flow_clicked_cb"/>
+    <text_body text="打印速度" width="100%" height="#u1_text_line" style_text_align="left" style_text_color="#text_muted"
+               clickable="false" event_bubble="true"/>
+    <pass_through name="speed_flow_body" width="100%" height="#u1_emphasis_line">
+      <style name="styles.overview_value_row"/>
+      <!-- Read the reported override directly, including its percent unit. -->
+      <pass_through width="content" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="0">
+        <text_heading bind_text="speed_factor" clickable="false" event_bubble="true"/>
+        <text_heading text="%" clickable="false" event_bubble="true"/>
+      </pass_through>
+      <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
+    </pass_through>
+  </view>
+</component>

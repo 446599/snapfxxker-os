@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- The printer's camera bed check stopped the print before it started. -->
+<!-- NOTE: Backdrop is created programmatically by the Modal class in C++. -->
+<!-- Buttons are wired programmatically in BedCheckModal::on_show(). -->
+<component>
+  <view name="bed_check_modal" extends="ui_dialog" width="94%" height="94%" style_max_height="94%" align="center" flex_flow="column" style_flex_main_place="start" style_pad_gap="0" style_pad_all="0" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#border_radius" style_border_width="#u1_border" style_border_color="#border">
+    <modal_header icon_src="alert" icon_variant="warning" title="Something on the bed?"/>
+    <lv_obj width="100%" height="0" style_pad_left="#space_lg" style_pad_right="#space_lg" style_pad_top="#space_sm" style_pad_bottom="#space_lg" flex_flow="column" style_pad_gap="#space_md" flex_grow="1" scrollable="true" scrollbar_mode="active" style_pad_all="#space_md">
+      <text_body name="bed_check_text" width="100%" long_mode="wrap" text="The camera thought it saw something on the bed, so the printer stopped before printing. If the bed is clear, it was a false alarm." style_text_align="left"/>
+      <text_muted name="bed_check_hint" width="100%" long_mode="wrap" text="This print can't be resumed. Restart it, or turn off the bed check if it keeps happening."/>
+    </lv_obj>
+    <!-- Left to right: Cancel print (btn_quaternary), Turn off bed check (btn_tertiary,
+         shown while the check is on), Restart print (btn_primary). Cancel print is not the
+         Modal cancel role, which ESC also reaches: dismissing must not cancel a print. -->
+    <modal_button_row hide_quaternary="false" quaternary_name="btn_quaternary" quaternary_variant="danger" quaternary_text="取消打印" hide_tertiary="false" tertiary_name="btn_tertiary" tertiary_variant="secondary" tertiary_text="关闭检测" tertiary_show_subject="detection_bed_check_enabled" hide_secondary="true" primary_text="重新开始"/>
+  </view>
+</component>

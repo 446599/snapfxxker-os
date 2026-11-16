@@ -1,0 +1,23 @@
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -3947,10 +3947,16 @@
+         if channel < 0 or channel >= FEED_CHANNEL_NUMS:
+             raise gcmd.error('[feed] channel[%d] is out of range[0,%d]\n' % (channel, FEED_CHANNEL_NUMS - 1))
+ 
+-        if channel == FEED_CHANNEL_1:
+-            self.motor.run_one_cycle(FEED_MOTOR_DIR_A, value, time)
+-        else:
+-            self.motor.run_one_cycle(FEED_MOTOR_DIR_B, value, time)
++        if max(0, min(self.motor.max_value, value)) > 0:
++            require_printer_clear(self.printer, gcmd)
++        try:
++            if channel == FEED_CHANNEL_1:
++                self.motor.run_one_cycle(FEED_MOTOR_DIR_A, value, time)
++            else:
++                self.motor.run_one_cycle(FEED_MOTOR_DIR_B, value, time)
++        except StopUnconfirmedError as exc:
++            raise gcmd.error(message=str(exc), action='pause', id=525,
++                             code=210, oneshot=1, level=2)
+ 
+     def cmd_FEED_MOTOR_TACH(self, gcmd):
+         msg = ( "rpm: %d\n"

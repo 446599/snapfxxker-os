@@ -1,0 +1,93 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- About Settings Overlay Panel -->
+<!-- Shows branding, version info, and system details -->
+<component>
+  <view name="about_settings_overlay" extends="overlay_panel" title="关于 U1 多色" bg_color="#screen_bg" title_transform="none" title_color="#text">
+    <!-- Content Area -->
+    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" scrollable="true" flex_flow="column" scrollbar_mode="auto" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scroll_dir="ver">
+      <lv_obj name="u1_about_identity" width="100%" height="content" flex_flow="row" style_pad_hor="#u1_card_pad_roomy" style_pad_ver="#u1_card_pad" style_pad_gap="#u1_card_gap" style_flex_cross_place="center" style_flex_track_place="center" scrollable="false">
+        <style name="styles.u1_card"/>
+        <text_body text="U1 多色控制" style_text_font="noto_sans_bold_18"/>
+        <text_small text="四喷头 · 多 ACE" style_text_font="#u1_aux_font"/>
+      </lv_obj>
+      <setting_group name="group_about" style_margin_left="0" style_margin_right="0" style_margin_bottom="0">
+        <style name="styles.u1_card"/>
+        <!-- Printer Name (7-tap easter egg trigger) -->
+        <ui_button name="row_printer" width="100%" height="content" variant="ghost" style_radius="0" style_border_width="0" style_pad_all="0">
+          <lv_obj width="100%" height="content" flex_flow="row" style_flex_main_place="start" style_flex_cross_place="center" style_pad_hor="#u1_card_pad_roomy" style_pad_ver="0" style_pad_gap="#u1_card_gap" scrollable="false" clickable="false" event_bubble="true" style_flex_track_place="center">
+            <lv_obj width="#u1_icon_badge" height="#u1_icon_badge" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false" event_bubble="true">
+              <icon name="row_icon" src="printer_3d" size="sm" variant="secondary" clickable="false" event_bubble="true" align="center"/>
+            </lv_obj>
+            <text_body name="label" text="设备" style_text_color="#text" style_text_font="#font_body_bold" width="36%" long_mode="wrap" clickable="false" event_bubble="true"/>
+            <text_muted name="value" width="0" flex_grow="1" style_text_align="right" style_text_font="#u1_aux_font" long_mode="wrap" bind_text="printer_value" clickable="false" event_bubble="true"/>
+            <lv_obj width="0" height="#u1_touch_target" style_pad_all="0" style_bg_opa="0" style_border_width="0" clickable="false" scrollable="false"/>
+          </lv_obj>
+          <event_cb trigger="clicked" callback="on_about_printer_name_clicked"/>
+        </ui_button>
+        <!-- Current Version - ui_button for native press feedback (7-tap secret to toggle beta features) -->
+        <ui_button name="row_version" width="100%" height="content" variant="ghost" style_radius="0" style_border_width="0" style_pad_all="0">
+          <lv_obj width="100%" height="content" flex_flow="row" style_flex_main_place="start" style_flex_cross_place="center" style_pad_hor="#u1_card_pad_roomy" style_pad_ver="0" style_pad_gap="#u1_card_gap" scrollable="false" clickable="false" event_bubble="true" style_flex_track_place="center">
+            <lv_obj width="#u1_icon_badge" height="#u1_icon_badge" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false" event_bubble="true">
+              <icon name="row_icon" src="info" size="sm" variant="secondary" clickable="false" event_bubble="true" align="center"/>
+            </lv_obj>
+            <text_body name="label" text="显示组件版本" style_text_color="#text" style_text_font="#font_body_bold" width="36%" long_mode="wrap" clickable="false" event_bubble="true"/>
+            <text_muted name="value" width="0" flex_grow="1" style_text_align="right" style_text_font="#u1_aux_font" long_mode="wrap" bind_text="version_value" clickable="false" event_bubble="true"/>
+            <lv_obj width="0" height="#u1_touch_target" style_pad_all="0" style_bg_opa="0" style_border_width="0" clickable="false" scrollable="false"/>
+          </lv_obj>
+          <event_cb trigger="clicked" callback="on_about_version_clicked"/>
+        </ui_button>
+        <!-- Klipper Version -->
+        <setting_info_row name="row_klipper" label="Klipper" icon="toy_brick_outline" bind_value="klipper_version"/>
+        <!-- Moonraker Version -->
+        <setting_info_row name="row_moonraker" label="Moonraker" icon="toy_brick_outline" bind_value="moonraker_version"/>
+        <!-- OS Version -->
+        <setting_info_row name="row_os" label="OS" icon="console" bind_value="os_version"/>
+        <!-- Host (kernel arch · userspace bitness). Hidden on Android — irrelevant
+             when the OS row already reads "Android". -->
+        <lv_obj name="container_host_arch" width="100%" style_pad_all="0" scrollable="false">
+          <bind_flag_if_eq subject="settings_is_android" flag="hidden" ref_value="1"/>
+          <setting_info_row name="row_host_arch" label="Host" icon="sysinfo" bind_value="host_arch_value"/>
+        </lv_obj>
+        <!-- Install Root (hidden on Android — SDL-sandboxed paths are not user-meaningful) -->
+        <lv_obj name="container_install_root" width="100%" style_pad_all="0" scrollable="false" hidden="true">
+          <setting_info_row name="row_install_root" label="Install Root" icon="folder_home" bind_value="install_root_value"/>
+        </lv_obj>
+        <!-- Config Dir (hidden on Android) -->
+        <lv_obj name="container_config_dir" width="100%" style_pad_all="0" scrollable="false" hidden="true">
+          <setting_info_row name="row_config_dir" label="Config Dir" icon="cog" bind_value="config_dir_value"/>
+        </lv_obj>
+        <!-- Logs (active spdlog destination — journal/syslog/file path/console/logcat) -->
+        <setting_info_row name="row_log_dest" label="Logs" icon="script_text" bind_value="log_dest_value" hidden="true"/>
+        <!-- Cache Dir (hidden on Android) -->
+        <lv_obj name="container_cache_dir" width="100%" style_pad_all="0" scrollable="false" hidden="true">
+          <setting_info_row name="row_cache_dir" label="Cache Dir" icon="database" bind_value="cache_dir_value"/>
+        </lv_obj>
+        <!-- Total Print Hours (opens history dashboard) -->
+        <setting_action_row name="row_print_hours" label="Print Hours" icon="clock" bind_description="print_hours_value" callback="on_about_print_hours_clicked"/>
+      </setting_group>
+      <lv_obj width="100%" height="content" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_pad_top="0" style_pad_bottom="#space_md" style_pad_left="0" style_pad_right="0" style_pad_gap="#space_xs" scrollable="false">
+        <text_body width="100%" text="HelixScreen · Preston Brown" style_text_align="center" style_text_font="#font_small"/>
+        <text_small name="copyright_text" width="100%" bind_text="about_copyright" style_text_color="#text_muted" style_text_align="center"/>
+        <!-- Scrolling contributor marquee (populated by C++) -->
+        <!-- Max width ensures the text always overflows and triggers scroll animation,
+             even on wide screens (1024px+) where the full text might fit at 100%. -->
+        <lv_obj name="contributor_marquee" width="80%" height="content" style_pad_all="0" style_pad_gap="0" style_bg_opa="0" style_border_width="0" scrollable="false" style_clip_corner="true" hidden="true"/>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- OPEN SOURCE LICENSES -->
+      <!-- ================================================================== -->
+      <lv_obj width="100%" height="content" flex_flow="column" style_pad_top="#space_lg" style_pad_bottom="0" style_pad_left="0" style_pad_right="0" style_pad_gap="#space_xs" scrollable="false">
+        <text_small width="100%" text="Open Source Licenses" style_text_color="#text_muted" style_text_align="center"/>
+        <lv_obj width="100%" height="content" style_pad_all="#space_md" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#border_radius" scrollable="false">
+          <text_tiny name="licenses_text" width="100%" style_text_color="#text_muted" style_text_line_space="4" text="HelixScreen — GPL-3.0&#10;LVGL — MIT License&#10;helix-xml — MIT License (our fork of LVGL's XML engine)&#10;libhv — BSD 3-Clause License&#10;spdlog — MIT License&#10;nlohmann/json — MIT License&#10;SDL2 — zlib License&#10;Expat — MIT License&#10;md4c — MIT License&#10;ThorVG — MIT License&#10;GLM — Happy Bunny or MIT License&#10;quirc — ISC License&#10;lv_i18n — MIT License&#10;lv_markdown — MIT License&#10;stb — MIT License / Public Domain&#10;mdns — Public Domain&#10;linenoise — BSD 2-Clause License&#10;libnl — LGPL 2.1&#10;minilzo — GPL 2.0&#10;cpp-terminal — MIT License&#10;wpa_supplicant — BSD 3-Clause License&#10;freeglut teapot data — MIT License&#10;Spoolman logo — MIT License"/>
+        </lv_obj>
+      </lv_obj>
+      <!-- Credits -->
+      <text_tiny width="100%" text="Space Debris mod by Markus 'Captain' Kaarlonen" style_text_color="#text_muted" style_text_align="center" style_pad_top="#space_sm"/>
+      <!-- Bottom padding for scroll -->
+      <lv_obj width="100%" height="#space_lg" scrollable="false"/>
+    </lv_obj>
+  </view>
+</component>

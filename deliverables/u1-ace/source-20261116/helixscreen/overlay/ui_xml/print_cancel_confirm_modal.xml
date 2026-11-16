@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <!-- Print Cancel Confirmation Modal -->
+  <!-- Note: Backdrop is created programmatically by Modal class in C++ -->
+  <view name="print_cancel_confirm_modal" extends="ui_dialog" width="90%" height="content" align="center" flex_flow="column" style_flex_main_place="start" style_pad_gap="#u1_card_gap">
+    <modal_header icon_src="alert_octagon" icon_variant="danger" title="停止当前打印？"/>
+    <lv_obj width="100%" height="content" style_pad_hor="#u1_card_pad_roomy" style_pad_ver="0"
+            style_bg_opa="0" style_border_width="0" scrollable="false">
+      <text_muted width="100%" text="停止后将无法从当前位置继续。请确认后再结束任务。" long_mode="wrap" style_text_align="left"/>
+    </lv_obj>
+    <!-- Button row -->
+    <!-- Buttons are wired in PrintCancelModal::on_show() via wire_ok_button()/
+         wire_cancel_button(); no XML callback names to resolve. -->
+    <modal_button_row secondary_text="Keep Printing" primary_text="Stop" primary_variant="danger"/>
+  </view>
+</component>

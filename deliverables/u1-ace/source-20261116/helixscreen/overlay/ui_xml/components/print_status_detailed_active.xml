@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <view name="print_status_detailed_active" extends="lv_obj" width="100%" flex_grow="1"
+        style_pad_all="0" style_pad_gap="#u1_page_pad" flex_flow="row"
+        scrollable="false" clickable="false" event_bubble="true">
+    <lv_obj name="detailed_model_preview" width="#u1_model_width" height="100%"
+            style_pad_all="#space_xs" style_radius="#u1_icon_badge_radius"
+            style_bg_color="#screen_bg" style_bg_opa="255" scrollable="false" clickable="false" event_bubble="true">
+      <bind_flag_if_eq subject="print_status_task_preview_visible" flag="hidden" ref_value="0"/>
+      <lv_image name="detailed_thumb" width="100%" height="100%" bind_src="print_thumbnail_path"
+                inner_align="contain" clickable="false" event_bubble="true">
+        <bind_flag_if_eq subject="print_has_thumbnail" flag="hidden" ref_value="0"/>
+      </lv_image>
+      <icon name="detailed_model_placeholder" src="cube_outline" size="xl" align="center"
+            variant="muted" clickable="false" event_bubble="true">
+        <bind_flag_if_eq subject="print_has_thumbnail" flag="hidden" ref_value="1"/>
+      </icon>
+    </lv_obj>
+    <lv_obj name="detailed_task_data" width="0" height="100%" flex_grow="1" flex_flow="column"
+            style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false" clickable="false" event_bubble="true">
+      <text_body name="detailed_filename" width="100%" height="#u1_text_line" bind_text="print_display_filename"
+                 long_mode="dots" clickable="false" event_bubble="true">
+        <bind_flag_if_eq subject="display_message_visible" flag="hidden" ref_value="1"/>
+      </text_body>
+      <text_body name="detailed_display_message" width="100%" height="#u1_text_line" bind_text="display_message"
+                 long_mode="dots" clickable="false" event_bubble="true">
+        <bind_flag_if_eq subject="display_message_visible" flag="hidden" ref_value="0"/>
+      </text_body>
+      <print_start_preparing_info name="detailed_preparing_info" width="100%" flex_grow="1"
+                                  hide_title="true" status_flow="row_wrap"/>
+      <lv_obj name="detailed_metrics" width="100%" height="0" flex_grow="1" flex_flow="column"
+              style_pad_all="0" style_pad_gap="0" style_flex_main_place="end"
+              clickable="false" event_bubble="true" scrollable="false">
+        <bind_flag_if_not_eq subject="print_start_phase" flag="hidden" ref_value="0"/>
+        <text_body text="剩余" width="100%" height="#u1_text_line" style_text_align="right"
+                   style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+        <lv_obj name="detailed_main_row" width="100%" height="#u1_progress_line" flex_flow="row"
+                style_pad_all="0" style_pad_gap="#space_xs" style_flex_cross_place="center"
+                style_flex_main_place="space_between" clickable="false" event_bubble="true" scrollable="false">
+          <text_body name="detailed_progress_pct" bind_text="print_progress_text"
+                     style_text_font="#font_progress" clickable="false" event_bubble="true"/>
+          <text_body name="detailed_time_remaining" width="0" flex_grow="1" bind_text="print_status_remaining_text"
+                     long_mode="dots" style_text_align="right" style_text_font="#font_progress"
+                     clickable="false" event_bubble="true"/>
+        </lv_obj>
+      </lv_obj>
+      <lv_bar name="detailed_progress_bar" width="100%" height="#u1_progress_track" min_value="0" max_value="100"
+              bind_value="print_progress_display" style_radius="#u1_brand_radius"
+              style_bg_color="#elevated_bg" style_bg_opa="255" style_border_width="0"
+              style_bg_color-indicator="#primary" style_bg_opa-indicator="255"
+              style_radius-indicator="#u1_brand_radius" clickable="false" event_bubble="true">
+        <bind_flag_if_not_eq subject="print_start_phase" flag="hidden" ref_value="0"/>
+      </lv_bar>
+      <!-- The shared controller owns confirmation, pending state and device acknowledgement. -->
+      <lv_obj name="home_print_actions" width="100%" height="#u1_touch_target" flex_flow="row"
+              style_pad_all="0" style_pad_gap="#u1_card_gap" style_flex_cross_place="center" scrollable="false" clickable="false">
+        <icon src="layers" size="xs" variant="muted" clickable="false" event_bubble="true"/>
+        <text_body name="detailed_layer_count" width="0" flex_grow="1" bind_text="print_status_layer_text"
+                   long_mode="dots" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+        <ui_button name="home_print_primary" width="#u1_touch_target" height="#u1_touch_target" variant="primary"
+                   bind_text="print_control_primary_label" bind_icon="print_control_primary_icon"
+                   label_hidden_cond="print_status_view eq 4" style_min_width="0" style_pad_all="0" event_bubble="false">
+          <bind_state_if_eq subject="print_control_primary_enabled" state="disabled" ref_value="0"/>
+          <event_cb trigger="clicked" callback="on_print_control_primary"/>
+        </ui_button>
+        <ui_button name="home_print_stop" width="#u1_touch_target" height="#u1_touch_target" text="停止" icon="stop" variant="secondary"
+                   label_hidden_cond="print_status_view eq 4" style_min_width="0" style_pad_all="0" event_bubble="false">
+          <bind_state_if_eq subject="print_control_stop_enabled" state="disabled" ref_value="0"/>
+          <event_cb trigger="clicked" callback="on_print_control_stop"/>
+        </ui_button>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

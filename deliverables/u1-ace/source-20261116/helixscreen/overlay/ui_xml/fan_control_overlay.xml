@@ -1,0 +1,59 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Fan Control Overlay: Full-width overlay panel displaying all fans -->
+<!-- Controllable fans occupy equal-width cells in the scrollable body. -->
+<component>
+  <consts>
+    <!-- Leave 108px for the U1's six-character fan names beside a switch. -->
+    <px name="u1_fan_min_col_width" value="190"/>
+  </consts>
+  <api>
+    <prop name="title" type="string" default="风扇"/>
+  </api>
+  <view name="fan_control_overlay" extends="overlay_panel" title="$title" bg_color="#screen_bg">
+    <!-- Main Content Area - minimal padding for maximum card space -->
+    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" scrollable="true" scroll_dir="ver" scrollbar_mode="auto" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="center" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap">
+      <text_body name="fan_connection_status" text="等待设备连接" width="100%" style_text_align="center">
+        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+      </text_body>
+      <!-- Population clears this grid; the chamber modes remain outside it. -->
+      <responsive_grid name="fans_container" min_col_width="#u1_fan_min_col_width" max_cols="4" fit_items="false"
+                       style_pad_column="#u1_card_gap" style_pad_row="#u1_card_gap">
+        <bind_flag_if_not_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+      </responsive_grid>
+      <!-- Chamber air modes (helix::chamber_air): each button sends its mode.
+           Hidden unless the printer offers at least one mode and any accessory
+           the modes need is fitted (chamber_air_available). A printer that
+           reports its active mode highlights it (chamber_air_mode: 0
+           Recirculate, 1 Exhaust, 2 Off, -1 not reported); on one that does
+           not, the buttons are plain actions. -->
+      <lv_obj name="chamber_air_row" width="100%" height="content" style_pad_all="#u1_card_pad" style_pad_gap="#u1_card_gap" scrollable="false" flex_flow="row_wrap" style_flex_main_place="start" style_flex_cross_place="center">
+        <bind_flag_if cond="chamber_air_available eq 0 or (printer_has_chamber_air_recirculate eq 0 and printer_has_chamber_air_exhaust eq 0 and printer_has_chamber_air_off eq 0)" flag="hidden"/>
+        <style name="styles.u1_card"/>
+        <text_body text="Chamber air" style_text_font="#u1_aux_font"/>
+        <!-- One choice of three, so one segmented control. -->
+        <button_group name="chamber_air_modes" height="#u1_touch_target">
+          <button_group_item name="btn_chamber_air_recirculate" icon="sync" text="循环" variant="secondary" style_border_width="0">
+            <bind_flag_if_eq subject="printer_has_chamber_air_recirculate" flag="hidden" ref_value="0"/>
+            <bind_style_if_eq name="styles.choice_selected" subject="chamber_air_mode" ref_value="0"/>
+            <bind_style_if name="styles.choice_idle" cond="chamber_air_mode ge 0 and chamber_air_mode ne 0"/>
+            <event_cb trigger="clicked" callback="on_chamber_air_mode_clicked" user_data="recirculate"/>
+          </button_group_item>
+          <button_group_item name="btn_chamber_air_exhaust" icon="fan" text="排风" variant="secondary">
+            <bind_flag_if_eq subject="printer_has_chamber_air_exhaust" flag="hidden" ref_value="0"/>
+            <bind_style_if_eq name="styles.choice_selected" subject="chamber_air_mode" ref_value="1"/>
+            <bind_style_if name="styles.choice_idle" cond="chamber_air_mode ge 0 and chamber_air_mode ne 1"/>
+            <event_cb trigger="clicked" callback="on_chamber_air_mode_clicked" user_data="exhaust"/>
+          </button_group_item>
+          <button_group_item name="btn_chamber_air_off" icon="fan_off" text="关闭" variant="secondary">
+            <bind_flag_if_eq subject="printer_has_chamber_air_off" flag="hidden" ref_value="0"/>
+            <bind_style_if_eq name="styles.choice_selected" subject="chamber_air_mode" ref_value="2"/>
+            <bind_style_if name="styles.choice_idle" cond="chamber_air_mode ge 0 and chamber_air_mode ne 2"/>
+            <event_cb trigger="clicked" callback="on_chamber_air_mode_clicked" user_data="off"/>
+          </button_group_item>
+        </button_group>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>
