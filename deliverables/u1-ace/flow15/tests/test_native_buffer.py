@@ -2,10 +2,12 @@
 import ast
 import importlib
 import logging
+import os
 from pathlib import Path
 import sys
 import types
 import time
+import threading
 import unittest
 
 
@@ -183,7 +185,8 @@ def actual_methods(*names):
                 for node in cls.body if isinstance(node, ast.FunctionDef) and node.name in names]
     if len(selected) != len(names):
         raise AssertionError('actual ACE methods not found')
-    namespace = {'logging': logging, 'time': time, 'FA_EXTRUDE_IDLE_GRACE': 2,
+    namespace = {'logging': logging, 'time': time, 'os': os, 'threading': threading,
+                 'GATE_AVAILABLE': 1, 'FA_EXTRUDE_IDLE_GRACE': 2,
                  'FA_STICK_CONFIRM_TIME': 15,
                  'source_route': flow_guard.source_route,
                  'source_conflict': flow_guard.source_conflict,
@@ -197,7 +200,10 @@ def actual_methods(*names):
 METHODS = actual_methods('_arm_fa_for', '_native_assist_is_armed',
                          '_make_v2_velocity_tick_for', '_v2_schedule_fa_rearm',
                          '_rearm_fa_after_reconnect', '_native_reconnect_block_reason',
-                         '_v2_arm_fa_for_unload')
+                         '_v2_arm_fa_for_unload', '_source_insertion_matches',
+                         '_capture_source_origin', '_rfid_identity_status',
+                         '_inherit_prev_capture', '_restore_head_source',
+                         'notify_external_load', '_retire_transport', 'cmd_ACE_LOAD_HEAD')
 
 
 class ActualAssistIntegrationTest(unittest.TestCase):
@@ -211,6 +217,11 @@ class ActualAssistIntegrationTest(unittest.TestCase):
         self.a = types.SimpleNamespace(
             _stop_guard=types.SimpleNamespace(snapshot=lambda: None),
             _native_buffer=self.c, _serials={0: self.transport},
+            _connected_per_ace={0: True},
+            _insert_session='this-process', _insert_epochs={(0, 0): 3},
+            _head_source={0: {'ace_index': 0, 'slot': 0, 'insert_epoch': 3,
+                             'insert_session': 'this-process',
+                             'connection_identity': {'port': '/dev/ace0', 'uid': [1, 2, 3]}}},
             _location_identity=lambda idx: ('/dev/ace0', (1, 2, 3)),
             reactor=types.SimpleNamespace(monotonic=lambda: 20, NEVER=1e30),
             _fa_trace=lambda msg: None, _auto_feed_enabled=True, _fa_context='print',
@@ -222,6 +233,8 @@ class ActualAssistIntegrationTest(unittest.TestCase):
             _fa_log=logging.getLogger('test-buffer'),
         )
         self.a._native_assist_is_armed = types.MethodType(METHODS._native_assist_is_armed, self.a)
+        self.a._rfid_identity_status = types.MethodType(METHODS._rfid_identity_status, self.a)
+        self.a._source_insertion_matches = types.MethodType(METHODS._source_insertion_matches, self.a)
 
     def test_actual_arm_method_does_not_resend_accepted_ready(self):
         for _ in range(25):
@@ -232,10 +245,26 @@ class ActualAssistIntegrationTest(unittest.TestCase):
         self.assertFalse(METHODS._v2_schedule_fa_rearm(self.a, 0, 0, 'post-load-verify'))
         self.assertEqual(self.sent, [])
 
+    def test_print_start_does_not_arm_a_persisted_source_without_scope(self):
+        self.c.invalidate(0, 0)
+        self.a._feed_assist_per_ace[0] = -1
+        self.a._head_source[0]['insert_session'] = 'previous-process'
+        warnings = []
+        self.a.log_warn = warnings.append
+        self.a._maybe_pause_fa_exhausted = lambda *args: None
+        self.assertIsNone(self.c.hold_reason(0, 0))
+        self.assertFalse(METHODS._arm_fa_for(self.a, 0, 0))
+        self.assertEqual(self.sent, [])
+        self.assertTrue(self.c.hold_reason(0, 0))
+        self.assertTrue(warnings)
+
     def test_expired_same_slot_arm_is_stopped_before_retry(self):
         request = {'method': 'start_feed_assist', 'params': {'index': 0}}
         self.c.begin_request(0, request, self.transport, (1, 2, 3), 0)
         self.a._fa_context = 'load'
+        # The supervised load retains failure ownership until grip/prime
+        # finishes. Its current origin still permits buffer assistance.
+        self.a._head_source[0]['load_failed'] = True
         self.a._active_device_index = 0
         self.a._v2_velocity_state = {}
         self.a._fa_start_retries = 2
@@ -313,6 +342,9 @@ class ActualAssistIntegrationTest(unittest.TestCase):
 
     def reconnect_fake(self, source, head_state=True):
         self.a._head_source = {0: source}
+        self.a._insert_session = 'this-process'
+        self.a._insert_epochs = {(0, 0): 3}
+        self.a._source_insertion_matches = types.MethodType(METHODS._source_insertion_matches, self.a)
         self.a.toolhead = types.SimpleNamespace(get_extruder=lambda: types.SimpleNamespace(extruder_index=0))
         sensor = types.SimpleNamespace(runout_buttun_state=head_state)
         self.a.printer = types.SimpleNamespace(lookup_object=lambda *args: sensor)
@@ -333,6 +365,7 @@ class ActualAssistIntegrationTest(unittest.TestCase):
 
     def test_reconnect_matching_uid_and_loaded_head_restores_only_assist(self):
         self.reconnect_fake({'ace_index': 0, 'slot': 0,
+                             'insert_session': 'this-process', 'insert_epoch': 3,
                              'connection_identity': {'port': '/dev/ace0', 'uid': [1, 2, 3]}})
         METHODS._rearm_fa_after_reconnect(self.a, 0)
         self.assertEqual(self.sent, [('arm', 0, 0)])
@@ -343,10 +376,154 @@ class ActualAssistIntegrationTest(unittest.TestCase):
             with self.subTest(state=state):
                 self.sent.clear()
                 self.reconnect_fake({'ace_index': 0, 'slot': 0,
+                                     'insert_session': 'this-process', 'insert_epoch': 3,
                                      'connection_identity': {'port': '/dev/ace0', 'uid': [1, 2, 3]}}, state)
                 METHODS._rearm_fa_after_reconnect(self.a, 0)
                 self.assertEqual(self.sent, [])
                 self.assertTrue(self.pauses)
+
+    def test_matching_counter_after_restart_does_not_rearm(self):
+        self.reconnect_fake({'ace_index': 0, 'slot': 0,
+                             'insert_session': 'previous-process', 'insert_epoch': 3,
+                             'connection_identity': {'port': '/dev/ace0', 'uid': [1, 2, 3]}})
+        METHODS._rearm_fa_after_reconnect(self.a, 0)
+        self.assertEqual(self.sent, [])
+        self.assertTrue(self.pauses)
+
+    def test_same_uid_moved_to_different_port_requires_confirmation(self):
+        self.reconnect_fake({'ace_index': 0, 'slot': 0,
+                             'insert_session': 'this-process', 'insert_epoch': 3,
+                             'connection_identity': {'port': '/dev/old-port', 'uid': [1, 2, 3]}})
+        METHODS._rearm_fa_after_reconnect(self.a, 0)
+        self.assertEqual(self.sent, [])
+        self.assertTrue(self.pauses)
+
+
+class ActualSourceScopeTest(unittest.TestCase):
+    def setUp(self):
+        self.transport = types.SimpleNamespace(close=lambda: None)
+        self.saved = []
+        sensor = types.SimpleNamespace(runout_buttun_state=True)
+        self.a = types.SimpleNamespace(
+            _head_source={}, _serials={0: self.transport}, _connected_per_ace={0: True},
+            _is_v2_idx=lambda idx: idx == 0,
+            _location_identity=lambda idx: ('/dev/ace0', (1, 2, 3)),
+            _gate_status_per_ace={0: [1, 1, 1, 1]}, _insert_epochs={(0, 0): 4},
+            _insert_session='this-process', _active_device_index=0,
+            _in_internal_load_head=False, head_uses_ace=lambda head: True,
+            _ace_slot_for_head=lambda head: 0,
+            printer=types.SimpleNamespace(lookup_object=lambda *args: sensor),
+            _save_head_source=lambda: self.saved.append(True),
+        )
+        for name in ('_capture_source_origin', '_source_insertion_matches',
+                     '_rfid_identity_status', '_inherit_prev_capture'):
+            setattr(self.a, name, types.MethodType(getattr(METHODS, name), self.a))
+
+    def source(self, **extra):
+        return dict(ace_index=0, slot=0, type='PLA',
+                    **self.a._capture_source_origin(0, 0), **extra)
+
+    def test_capture_is_read_only_and_session_does_not_change(self):
+        del self.a._insert_session
+        first = self.a._capture_source_origin(0, 0)
+        second = self.a._capture_source_origin(0, 0)
+        self.assertEqual(first, second)
+        self.assertEqual(len(first['insert_session']), 32)
+        self.assertEqual(self.a._insert_epochs, {(0, 0): 4})
+        self.assertEqual(self.saved, [])
+
+    def test_capture_refuses_unverified_uid_and_gate(self):
+        for uid, gate, connected in ((None, 1, True), ((), 1, True),
+                                     ((0, 0, 0), 1, True), ((1, 2, 3), -1, True),
+                                     ((1, 2, 3), 0, True), ((1, 2, 3), 1, False)):
+            with self.subTest(uid=uid, gate=gate, connected=connected):
+                self.a._location_identity = lambda idx, uid=uid: ('/dev/ace0', uid)
+                self.a._gate_status_per_ace[0][0] = gate
+                self.a._connected_per_ace[0] = connected
+                with self.assertRaises(RuntimeError):
+                    self.a._capture_source_origin(0, 0)
+        self.assertEqual(self.saved, [])
+
+    def test_successful_material_refresh_preserves_all_origin_fields(self):
+        previous = self.source(load_failed=True)
+        self.a._head_source[0] = previous
+        # Material is already populated, exercising the early return too.
+        result = self.a._inherit_prev_capture(0, 0, 0,
+                    dict(ace_index=0, slot=0, type='PETG', load_failed=False))
+        self.assertFalse(result['load_failed'])
+        self.assertEqual(result['type'], 'PETG')
+        for key in ('connection_identity', 'insert_epoch', 'insert_session'):
+            self.assertEqual(result[key], previous[key])
+        self.assertTrue(self.a._source_insertion_matches(result, 0, 0))
+
+    def test_origin_is_never_inherited_to_a_different_slot(self):
+        self.a._head_source[0] = self.source()
+        result = self.a._inherit_prev_capture(0, 0, 1, {'ace_index': 0, 'slot': 1, 'type': 'PLA'})
+        self.assertNotIn('insert_session', result)
+        self.assertNotIn('connection_identity', result)
+
+    def test_restore_does_not_refresh_a_persisted_scope(self):
+        previous = self.source()
+        previous['insert_session'] = 'previous-process'
+        self.a.VARS_ACE_HEAD_SOURCE = 'sources'
+        self.a.save_variables = types.SimpleNamespace(allVariables={'sources': {'0': previous}})
+        METHODS._restore_head_source(self.a)
+        restored = self.a._head_source[0]
+        self.assertEqual(restored, previous)
+        self.assertIsNot(restored, previous)
+        self.assertFalse(self.a._source_insertion_matches(restored, 0, 0))
+        self.assertEqual(self.saved, [])
+
+    def test_retire_invalidates_all_four_slots_once_and_keeps_other_ace(self):
+        self.a._insert_epochs[(0, 1)] = None
+        self.a._insert_epochs[(1, 0)] = 9
+        sources = [self.a._capture_source_origin(0, slot) for slot in range(4)]
+        for name in ('_transport_retiring', '_thread_stop_flags', '_writer_queues',
+                     '_ace_dev_fds', '_reader_threads', '_writer_threads', '_cb_locks'):
+            setattr(self.a, name, {})
+        done = METHODS._retire_transport(self.a, 0)
+        self.assertTrue(done.wait(.5))
+        epochs = dict(self.a._insert_epochs)
+        for slot in range(4):
+            self.assertFalse(self.a._source_insertion_matches(sources[slot], 0, slot))
+        self.assertEqual(epochs[(1, 0)], 9)
+        self.assertTrue(METHODS._retire_transport(self.a, 0).is_set())
+        self.assertEqual(self.a._insert_epochs, epochs)
+        self.assertEqual(self.a._insert_session, 'this-process')
+
+    def test_ui_success_notification_cannot_create_origin_or_clear_failure(self):
+        METHODS.notify_external_load(self.a, 'feed0', 0, 0)
+        self.assertEqual(self.a._head_source, {})
+        previous = self.source(load_failed=True)
+        self.a._head_source[0] = previous
+        METHODS.notify_external_load(self.a, 'feed0', 0, 0)
+        self.assertTrue(previous['load_failed'])
+        self.assertEqual(self.saved, [])
+
+    def test_ui_success_preserves_supervised_origin(self):
+        previous = self.source(load_failed=False)
+        self.a._head_source[0] = previous
+        METHODS.notify_external_load(self.a, 'feed0', 0, 0)
+        self.assertIs(self.a._head_source[0], previous)
+        self.assertTrue(self.a._source_insertion_matches(previous, 0, 0))
+        self.assertEqual(self.saved, [])
+
+    def test_command_does_not_refresh_old_scope_before_occupied_head_return(self):
+        previous = self.source()
+        previous['insert_session'] = 'previous-process'
+        self.a._head_source[0] = previous
+        for name in ('_require_slot_eject_idle', '_require_no_stop_fault',
+                     '_require_location_clear', '_refuse_during_manual_load', '_wait_bg_op'):
+            setattr(self.a, name, lambda *args, **kwargs: None)
+        self.a._ensure_ace_available = lambda idx: True
+        self.a._toolhead_filament_present = lambda *args, **kwargs: True
+        self.a._ace_error = lambda gcmd, message, **kwargs: RuntimeError(message)
+        gcmd = types.SimpleNamespace(get_int=lambda name, default=None:
+                                     {'HEAD': 0, 'ACE': 0, 'SLOT': 0}.get(name, default))
+        with self.assertRaisesRegex(RuntimeError, '原料路尚未确认'):
+            METHODS.cmd_ACE_LOAD_HEAD(self.a, gcmd)
+        self.assertIs(self.a._head_source[0], previous)
+        self.assertEqual(self.saved, [])
 
 
 if __name__ == '__main__':

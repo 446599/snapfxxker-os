@@ -1172,19 +1172,21 @@ class FilamentFeed:
         if (not isinstance(source, dict) or
                 (source.get('ace_index'), source.get('slot')) != (idx, slot)):
             raise FeedSupervisionError('source_conflict', '喷头保留来源与当前送料路线不一致')
-        if 'connection_identity' not in source or 'insert_epoch' not in source:
+        if source.get('load_failed') is True:
+            raise FeedSupervisionError('recovery_required', '上次进料失败的料路尚未恢复，请先恢复或退出原槽')
+        if not ace._is_v2_idx(idx):
+            return
+        if any(key not in source for key in ('connection_identity', 'insert_epoch', 'insert_session')):
             raise FeedSupervisionError('source_confirmation_required',
-                '旧料路尚未记录原设备身份，请先在原槽选择“确认原来源”')
+                '原料路尚未确认当前连接，请先在原槽选择“确认原来源”')
         if 'connection_identity' in source:
             port, uid = ace._location_identity(idx)
             current = {'port': port, 'uid': list(uid) if uid is not None else None}
             if source['connection_identity'] != current:
                 raise FeedSupervisionError('source_identity_changed', '原料路属于先前的设备连接，不能由当前设备接管')
-        if ('insert_epoch' in source and source['insert_epoch'] !=
-                getattr(ace, '_insert_epochs', {}).get((idx, slot))):
-            raise FeedSupervisionError('source_identity_changed', '保留料路的插料代次改变，请先核对原料路')
-        if source.get('load_failed') is True:
-            raise FeedSupervisionError('recovery_required', '上次进料失败的料路尚未恢复，请先恢复或退出原槽')
+        if not ace._source_insertion_matches(source, idx, slot):
+            raise FeedSupervisionError('source_confirmation_required',
+                '重连或插料状态已改变，请在原槽选择“确认原来源”')
 
     def _forget_unconfirmed_load_travel(self, ace_idx, slot):
         pending = getattr(self.ace, '_travel_pending', {})
@@ -1240,23 +1242,26 @@ class FilamentFeed:
                         (previous_source.get('ace_index'), previous_source.get('slot')) != (ace_idx, slot)):
                     raise FeedSupervisionError('source_conflict', '喷头保留的送料来源与本次路线不一致')
                 if (previous_source is not None and
-                        ('connection_identity' not in previous_source or 'insert_epoch' not in previous_source)):
+                        any(key not in previous_source for key in
+                            ('connection_identity', 'insert_epoch', 'insert_session'))):
                     raise FeedSupervisionError('source_confirmation_required',
-                        '旧料路缺少设备身份，请先在原槽选择“确认原来源”')
+                        '原料路尚未确认当前连接，请先在原槽选择“确认原来源”')
                 port, uid = supervisor.identity
                 connection_identity = {'port': port, 'uid': list(uid)}
+                source_origin = self.ace._capture_source_origin(ace_idx, slot)
+                if (source_origin.get('connection_identity') != connection_identity or
+                        source_origin.get('insert_epoch') != supervisor.insertion_epoch):
+                    raise FeedSupervisionError('source_identity_changed', '装料预检时原设备或插料状态改变')
                 if (previous_source is not None and
                         (('connection_identity' in previous_source and
                           previous_source['connection_identity'] != connection_identity) or
-                         ('insert_epoch' in previous_source and
-                          previous_source['insert_epoch'] != supervisor.insertion_epoch))):
+                         not self.ace._source_insertion_matches(previous_source, ace_idx, slot))):
                     raise FeedSupervisionError('source_identity_changed', '保留的失败来源与当前设备或插料代次不一致')
                 if previous_source is not None and previous_source.get('load_failed') is True:
                     raise FeedSupervisionError('recovery_required', '上次进料失败的料路尚未恢复，请先恢复或退出原槽')
                 attempted_source = dict(previous_source or {}, ace_index=ace_idx,
                                      slot=slot, load_failed=True,
-                                     connection_identity=connection_identity,
-                                     insert_epoch=supervisor.insertion_epoch)
+                                     **source_origin)
                 sources[head] = attempted_source
                 try:
                     self.ace._save_head_source()
@@ -2809,7 +2814,7 @@ class FilamentFeed:
                         if _inh is not None:
                             _ident = _inh(head_idx, ace_idx, ace_slot, _ident)
                         if isinstance(_src, dict):
-                            for _scope_key in ('connection_identity', 'insert_epoch'):
+                            for _scope_key in ('connection_identity', 'insert_epoch', 'insert_session'):
                                 if _scope_key in _src:
                                     _ident[_scope_key] = copy.deepcopy(_src[_scope_key])
                         _ident['load_failed'] = False

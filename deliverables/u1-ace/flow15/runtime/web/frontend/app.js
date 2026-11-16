@@ -3571,7 +3571,7 @@ createApp({
     }
     function slotRecoveryMessage(ace, slot) {
       const row = slotRecoveryRow(ace, slot);
-      return row?.automatic?.message || row?.prompt || "自动检查停止状态；原料路仍保留";
+      return row?.connection_review_message || row?.source_confirmation_prompt || row?.automatic?.message || row?.prompt || "自动检查停止状态；原料路仍保留";
     }
     function bufferControlText(ace) {
       const buffer = ace?.buffer_control;
@@ -3777,17 +3777,22 @@ createApp({
         setMacroLog(slotOperationMessages[key].message, true);
       } finally { slotActionPending.value = false; void reloadState(); }
     }
+    function retainedSourceConfirmationText(ace, slot, row) {
+      const reason = [row.source_confirmation_prompt, row.connection_review_message].filter(Boolean).join('\n') || '原来源需要重新核对。';
+      return `${reason}\n请沿料管确认：喷头 ${dispIdx(row.source_head)} 管内保留的耗材仍连续来自同一台 ACE ${dispIdx(ace.idx)} 的原槽 ${dispIdx(slot.idx)}。如果已换料盘、换料或无法确认，请取消并先处理原料路。\n确认仅更新原来源的连接和插料记录；保留堵料及管内占用记录，不会自动继续打印。`;
+    }
     async function confirmRetainedSource(ace, slot) {
       const row = slotRecoveryRow(ace, slot);
       if (!row || row.can_confirm_source !== true || !Number.isInteger(row.source_head) || slotActionPending.value) return;
-      if (!window.confirm(`请沿料管确认：喷头 ${dispIdx(row.source_head)} 管内保留的耗材确实来自 ACE ${dispIdx(ace.idx)} 的槽 ${dispIdx(slot.idx)}。确认只补充原来源身份，未确认管道已退空，也不会自动继续打印。`)) return;
+      if (!window.confirm(retainedSourceConfirmationText(ace, slot, row))) return;
       slotActionPending.value = true;
       const key = slotOperationKey(ace.idx, slot.idx);
       try {
-        await slotHttp('/head-source', {ace: ace.idx, slot: slot.idx, head: row.source_head,
+        const result = await slotHttp('/head-source', {ace: ace.idx, slot: slot.idx, head: row.source_head,
           retained: 1, confirmed: 1, ticket: row.ticket}, 'saved');
-        slotOperationMessages[key] = {message: '已补充原来源身份；原料路仍保留，可以重新检查或退出原槽'};
-        setMacroLog(slotOperationMessages[key].message);
+        slotOperationMessages[key] = {error: result.connection_review_required === true,
+          message: result.message || '原来源记录已保存；原料路和占用记录仍保留，请重新检查停止状态。'};
+        setMacroLog(slotOperationMessages[key].message, slotOperationMessages[key].error);
       } catch (error) {
         slotOperationMessages[key] = {error: true, message: String(error.message || error)};
         setMacroLog(slotOperationMessages[key].message, true);

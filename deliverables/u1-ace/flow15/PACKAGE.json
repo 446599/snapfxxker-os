@@ -84,7 +84,7 @@
   "device_service_path": "device-service/",
   "is_printer_firmware": false,
   "mode": "update",
-  "overlay_manifest_sha256": "c9313860c2d54983d6c2586ec11a4ea49601297e1daffe81080974c4f8b1f5d0",
+  "overlay_manifest_sha256": "f0743f93122e6886ca07d495a650db1686eb614d9702bcac8e6e31ba103dd66b",
   "package_kind": "module-update",
   "runtime_path": "runtime/",
   "schema_version": 1,

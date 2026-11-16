@@ -500,12 +500,8 @@ class SlotActions:
                     raise RuntimeError('旧来源没有设备 UID 记录，请先确认原来源；喷头为空不代表管内无料')
                 if bound != {'port': identity[0], 'uid': list(identity[1])}:
                     raise RuntimeError('原料路属于先前的设备或端口，不能由当前 ACE 接管')
-                epoch = (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot))
-                if 'insert_epoch' not in source:
-                    raise RuntimeError('旧来源缺少插料代次，请先确认原来源')
-                if (type(source['insert_epoch']) is not type(epoch)
-                        or source['insert_epoch'] != epoch):
-                    raise RuntimeError('原来源的插料代次已变化，请核对管内耗材，未开始退出')
+                if not a._source_insertion_matches(source, idx, slot):
+                    raise RuntimeError('原来源的会话或插料代次已变化，请先确认原来源并核对管内耗材，未开始退出')
             travel = getattr(getattr(a, '_head_travel', None), 'records', {}).get(str(head))
             if isinstance(travel, dict) and (travel.get('ace'), travel.get('slot')) != (idx, slot):
                 raise RuntimeError('共用管保留另一料槽的计距记录，需先核对占用')

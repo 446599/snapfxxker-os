@@ -4,6 +4,7 @@ import logging
 import secrets
 from .ace_stop_guard import controlled_cleanup
 from .ace_recovery_policy import RecoveryBudget
+from .ace_flow_guard import raw_head_state
 
 
 FAULT_STATES = frozenset(('feed_error', 'rollback_error', 'assist_error',
@@ -64,6 +65,7 @@ class ErrorRecovery:
         a = self.ace
         return (id(a._serials.get(idx)), copy.deepcopy(a._location_identity(idx)),
                 (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot)),
+                getattr(a, '_insert_session', None),
                 getattr(a, '_ace_mode', None), tuple(a._rfid_route_heads(idx, slot) or ()),
                 tuple(sorted((head, repr(source)) for head, source in a._head_source.items())))
 
@@ -109,6 +111,9 @@ class ErrorRecovery:
             raise RuntimeError('原 ACE 身份尚未确认，请等待连接恢复后重新检查')
         for fault in self._faults_for(idx, slot):
             if fault.get('port') != identity['port'] or fault.get('uid') != identity['uid']:
+                review = self._connection_review_message(idx, slot)
+                if review and fault.get('uid') == identity['uid']:
+                    raise RecoveryContextChanged(review)
                 raise RecoveryContextChanged('停止故障属于另一原设备，不能替换原料路')
         for head in a._rfid_route_heads(idx, slot) or ():
             source = a._head_source.get(head)
@@ -116,13 +121,12 @@ class ErrorRecovery:
                 continue
             if (source.get('ace_index'), source.get('slot')) != (idx, slot):
                 raise RecoveryContextChanged('共用管仍由另一来源占用，请重新检查原料路')
-            if not isinstance(source.get('connection_identity'), dict) or 'insert_epoch' not in source:
-                raise RecoveryContextChanged('旧来源缺少设备身份或插料代次，请先确认原来源')
+            if not isinstance(source.get('connection_identity'), dict):
+                raise RecoveryContextChanged('旧来源缺少设备身份，请先确认原来源')
             if source['connection_identity'] != identity:
-                raise RecoveryContextChanged('原送料设备或端口已变化，保留原来源，请重新检查')
-            epoch = getattr(a, '_insert_epochs', {}).get((idx, slot))
-            if type(source['insert_epoch']) is not type(epoch) or source['insert_epoch'] != epoch:
-                raise RecoveryContextChanged('原来源的插料代次已变化，请检查管内耗材')
+                raise RecoveryContextChanged('原送料设备或端口已变化，保留原来源，请先核对原来源')
+            if not a._source_insertion_matches(source, idx, slot):
+                raise RecoveryContextChanged('原来源的会话或插料代次已变化，请先确认原来源并核对管内耗材')
 
     def _automatic_tick(self, eventtime):
         """Only schedule STOP/read reconciliation; never execute motion in a timer."""
@@ -207,10 +211,14 @@ class ErrorRecovery:
     def _fingerprint(self, idx, slot):
         a = self.ace
         generation, _faults = a._stop_guard.recovery_snapshot()
+        heads = tuple(a._rfid_route_heads(idx, slot) or ())
+        gates = (getattr(a, '_gate_status_per_ace', {}) or {}).get(idx) or []
         return (id(a._serials.get(idx)), a._location_identity(idx),
                 (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot)),
+                getattr(a, '_insert_session', None),
                 generation, a._slot_actions.seq, getattr(a, '_ace_mode', None),
-                tuple(a._rfid_route_heads(idx, slot) or ()),
+                heads, tuple((head, raw_head_state(a, head)) for head in heads),
+                gates[slot] if slot < len(gates) else None,
                 tuple(sorted((head, repr(source)) for head, source in a._head_source.items())))
 
     def _ticket(self, idx, slot):
@@ -225,25 +233,73 @@ class ErrorRecovery:
     def task_status(self):
         return self.ace._slot_actions.status()
 
+    @staticmethod
+    def _source_device_confirmable(source, identity):
+        """Only a missing legacy identity or the same physical UID can be confirmed."""
+        bound = source.get('connection_identity')
+        if bound is None:
+            return True
+        if not isinstance(bound, dict):
+            return False
+        uid = bound.get('uid')
+        return (isinstance(uid, (tuple, list)) and len(uid) == 3
+                and all(type(part) is int for part in uid)
+                and list(uid) == identity['uid'])
+
     def _retained_confirmation_head(self, idx, slot):
         a = self.ace
         identity = a._rfid_identity_status(idx)
-        if identity is None:
+        if identity is None or not a._is_v2_idx(idx):
             return None
-        epoch = getattr(a, '_insert_epochs', {}).get((idx, slot))
         candidates = []
         for head in a._rfid_route_heads(idx, slot) or ():
             source = a._head_source.get(head)
             if not isinstance(source, dict) or (source.get('ace_index'), source.get('slot')) != (idx, slot):
                 continue
-            if source.get('connection_identity') is not None and source['connection_identity'] != identity:
+            if not self._source_device_confirmable(source, identity):
                 continue
-            if 'insert_epoch' in source and (type(source['insert_epoch']) is not type(epoch)
-                                             or source['insert_epoch'] != epoch):
-                continue
-            if source.get('connection_identity') is None or 'insert_epoch' not in source:
+            if (source.get('connection_identity') != identity
+                    or not a._source_insertion_matches(source, idx, slot)):
                 candidates.append(head)
         return candidates[0] if len(candidates) == 1 else None
+
+    def _source_confirmation_prompt(self, idx, slot, head):
+        if head is None:
+            return ''
+        a = self.ace
+        source = a._head_source[head]
+        if source.get('connection_identity') is None:
+            return '旧来源缺少设备身份，请先核对原来的 ACE 和管内耗材。'
+        if source.get('insert_session') != getattr(a, '_insert_session', None):
+            return '重启或旧记录中断了本次插料证据，请重新核对原设备和原料路。'
+        epoch = (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot))
+        if ('insert_epoch' not in source or type(source['insert_epoch']) is not type(epoch)
+                or source['insert_epoch'] != epoch):
+            return '检测到插拔记录变化，可能已更换耗材；只有确认仍是原来的连续耗材才可继续。'
+        return '同一台 ACE 的连接端口记录已变化，请核对原设备和原料管连接。'
+
+    def _connection_review_message(self, idx, slot):
+        """Report retained old-port records; this does not migrate or release them."""
+        a = self.ace
+        identity = a._rfid_identity_status(idx)
+        if identity is None:
+            return ''
+        def old_connection(record):
+            return (isinstance(record, dict) and record.get('uid') == identity['uid']
+                    and isinstance(record.get('port'), str) and bool(record['port'])
+                    and record['port'] != identity['port'])
+        stop = any(old_connection(fault) for fault in self._faults_for(idx, slot))
+        heads = set(a._rfid_route_heads(idx, slot) or ())
+        holder = getattr(a, '_location_hold', None)
+        held = any(old_connection(route) and (
+            route.get('slot') == slot or route.get('scope', 'ace') == 'ace'
+            or route.get('heads') is None or heads.intersection(route.get('heads') or ()))
+            for route in getattr(holder, 'routes', ()) or ())
+        if not stop and not held:
+            return ''
+        records = '停止故障和管内占用' if stop and held else '停止故障' if stop else '管内占用'
+        return ('原连接路径仍保留%s；请恢复原 USB 连接后重新核对。'
+                '此次来源确认不会迁移这些记录，也未解锁退料。' % records)
 
     def status(self):
         a = self.ace
@@ -260,11 +316,15 @@ class ErrorRecovery:
                 available = online and not busy and idle
                 automatic = self._automatic.snapshot((idx, slot))
                 source_head = self._retained_confirmation_head(idx, slot)
+                connection_review = self._connection_review_message(idx, slot)
                 rows.append({'ace': idx, 'slot': slot,
                              'can_check': available, 'can_clear': available,
                              'can_auto': available and source_head is None,
                              'can_probe': available and actual == 'feed_error',
                              'source_head': source_head,
+                             'source_confirmation_prompt': self._source_confirmation_prompt(idx, slot, source_head),
+                             'connection_review_required': bool(connection_review),
+                             'connection_review_message': connection_review,
                              'needs_source_confirmation': source_head is not None,
                              'can_confirm_source': available and source_head is not None,
                              'needs_clear': needs, 'detail': actual,
@@ -407,46 +467,52 @@ class ErrorRecovery:
         if retained and (not isinstance(existing, dict)
                          or (existing.get('ace_index'), existing.get('slot')) != (idx, slot)):
             raise RuntimeError('只能补充原有来源的身份，不能创建或替换管内来源')
-        if isinstance(existing, dict) and not existing.get('load_failed'):
-            if (existing.get('ace_index'), existing.get('slot')) != (idx, slot):
-                raise RuntimeError('已有当前供料记录，请先核对所选料槽')
+        if isinstance(existing, dict) and (existing.get('ace_index'), existing.get('slot')) != (idx, slot):
+            raise RuntimeError('已有另一原料槽的供料记录，不能替换原来源')
         identity = a._rfid_identity_status(idx)
-        if a._is_v2_idx(idx) and identity is None:
+        is_v2 = a._is_v2_idx(idx)
+        if is_v2 and identity is None:
             raise RuntimeError('ACE 原设备 UID 尚未确认，不能确认供料来源')
-        if (isinstance(existing, dict)
-                and (existing.get('ace_index'), existing.get('slot')) == (idx, slot)
-                and existing.get('connection_identity') is not None
-                and existing['connection_identity'] != identity):
-            raise RuntimeError('原送料设备的身份或物理端口已变化；不能改写原来源')
-        current_epoch = getattr(a, '_insert_epochs', {}).get((idx, slot))
-        if (isinstance(existing, dict) and 'insert_epoch' in existing
-                and (type(existing['insert_epoch']) is not type(current_epoch)
-                     or existing['insert_epoch'] != current_epoch)):
-            raise RuntimeError('原来源的插料代次已变化，不能用来源确认覆盖')
+        if is_v2 and isinstance(existing, dict):
+            if not self._source_device_confirmable(existing, identity):
+                raise RuntimeError('原送料设备 UID 与当前设备不同，不能改写原来源')
+            if not retained and (existing.get('connection_identity') != identity
+                                 or not a._source_insertion_matches(existing, idx, slot)):
+                raise RuntimeError('原来源的会话或插料记录需核对，请使用带当前票据的确认原来源入口')
+        origin = a._capture_source_origin(idx, slot) if is_v2 else None
+        if not is_v2 and identity is not None:
+            origin = {'connection_identity': identity,
+                      'insert_epoch': getattr(a, '_insert_epochs', {}).get((idx, slot))}
+        if retained and self._tickets.get((idx, slot)) != (self._fingerprint(idx, slot), ticket):
+            raise RuntimeError('设备、插料或传感器状态在确认期间改变，请重新核对')
         old_sources = copy.deepcopy(a._head_source)
         rows = a._info_per_ace.get(idx, {}).get('slots') or []
         material = next((row for n, row in enumerate(rows)
                          if isinstance(row, dict) and row.get('index', n) == slot), {})
-        source = copy.deepcopy(existing) if retained else {'ace_index': idx, 'slot': slot, 'type': material.get('type', ''),
+        preserve_source = isinstance(existing, dict)
+        source = copy.deepcopy(existing) if preserve_source else {'ace_index': idx, 'slot': slot, 'type': material.get('type', ''),
                   'brand': material.get('brand', ''), 'color': a._device_color_hex(material),
                   'load_failed': False}
-        if not retained:
+        if not preserve_source:
             source = a._overlay_override(idx, slot, source)
-        if identity is not None:
-            source['connection_identity'] = copy.deepcopy(identity)
-            source['insert_epoch'] = current_epoch
+        if origin is not None:
+            source.update(copy.deepcopy(origin))
         a._head_source[head] = source
         try:
             a._save_head_source()
         except Exception:
             a._head_source = old_sources
             raise
-        if not retained:
+        if not preserve_source:
             a._ghost_heads.discard(head)
         self._tickets.pop((idx, slot), None)
         self._automatic.episodes.pop((idx, slot), None)
+        connection_review = self._connection_review_message(idx, slot)
         return {'saved': True, 'head': head, 'ace': idx, 'slot': slot,
-                'source_retained': retained, 'load_failed': source.get('load_failed') is True}
+                'source_retained': retained, 'load_failed': source.get('load_failed') is True,
+                'connection_review_required': bool(connection_review),
+                'message': ('原来源记录已保存；' + connection_review if connection_review else
+                            '原来源记录已保存；原料路和占用记录仍保留，请重新检查停止状态。')}
 
     def source_endpoint(self, request):
         try:

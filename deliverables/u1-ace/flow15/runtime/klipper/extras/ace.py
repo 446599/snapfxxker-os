@@ -818,6 +818,12 @@ class MultiAce:
         self._startup_connecting = False
         self._ace_disconnected = False
         self._transport_epoch = 0
+        # Insertion counters are observations within this Klipper process,
+        # not persistent spool identities. Saved sources retain this token;
+        # restarting must never authorize them through a coincidental counter
+        # match. Only a new load or explicit source confirmation refreshes it.
+        self._insert_session = os.urandom(16).hex()
+        self._insert_epochs = {}
         self.baud = config.getint('baud', 0, minval=0)
         self._ace_devices = []
         self._active_device_index = 0
@@ -5840,6 +5846,18 @@ class MultiAce:
         if fd is not None:
             self.reactor.unregister_fd(fd)
         ser = self._serials.pop(idx, None)
+        if ser is not None:
+            # An offline gap can hide removal/reinsertion of any of the four
+            # spools. Advance once for the actual retired transport, including
+            # slots that had no counter yet; repeated failed probes do not
+            # change it and other ACEs keep their observation continuity.
+            epochs = getattr(self, '_insert_epochs', None)
+            if epochs is None:
+                epochs = self._insert_epochs = {}
+            for slot in range(4):
+                previous_epoch = epochs.get((idx, slot))
+                epochs[(idx, slot)] = (previous_epoch
+                    if type(previous_epoch) is int else 0) + 1
         threads = [d.pop(idx, None) for d in
                    (self._reader_threads, self._writer_threads)]
         self._cb_locks.pop(idx, None)
@@ -7524,7 +7542,8 @@ class MultiAce:
         if int(source.get('ace_index', -1)) != idx:
             return
         slot = source.get('slot')
-        reason = self._native_reconnect_block_reason(head_index, idx, slot)
+        reason = (self._native_reconnect_block_reason(head_index, idx, slot)
+                  if self._is_v2_idx(idx) else None)
         if reason:
             self._clear_fa_cache_for(idx, slot)
             self._native_buffer.hold(idx, slot, reason)
@@ -7561,6 +7580,8 @@ class MultiAce:
         reason = source_conflict(self, head, idx, slot)
         if reason:
             return reason
+        if not self._source_insertion_matches(source, idx, slot):
+            return '重启、重连或插料状态已改变；请在原槽确认原来源后再启用助送'
         if source.get('load_failed'):
             return '原装料尚未成功，未自动重新送料'
         if raw_head_state(self, head) is not True:
@@ -7687,6 +7708,25 @@ class MultiAce:
         # before asking head_is_manual. Multi: byte-identical (fa_head==slot).
         _fa_head = (self._head_for_ace(idx)
                     if getattr(self, '_ace_mode', 'multi') == 'head' else slot)
+        if self._is_v2_idx(idx):
+            # Print-start and an ordinary tool pick can reach this method
+            # without reconnect's hold. Persisted routing alone must not arm
+            # a spool whose insertion was not continuously observed.
+            owners = [(head, source) for head, source in self._head_source.items()
+                      if source_route(source) == (idx, slot)]
+            source = owners[0][1] if len(owners) == 1 else None
+            if source is not None:
+                _fa_head = owners[0][0]
+            identity = self._rfid_identity_status(idx)
+            if (source is None or identity is None
+                    or source.get('connection_identity') != identity
+                    or not self._source_insertion_matches(source, idx, slot)
+                    or (self._fa_context == 'print' and source.get('load_failed'))):
+                reason = '缓冲助送等待原槽来源确认；原设备、插料会话或装料状态尚未确认'
+                self._native_buffer.hold(idx, slot, reason)
+                self.log_warn('[multiACE] %s' % reason)
+                self._maybe_pause_fa_exhausted(idx, slot, 0)
+                return False
         if _fa_head is not None and self.head_is_manual(_fa_head):
             self._fa_trace(
                 'FA suppressed: head %d is manual (TPU bypass)' % _fa_head)
@@ -14473,7 +14513,7 @@ class MultiAce:
         try:
             previous = self._head_source.get(head)
             if source_route(previous) == (ace_index, slot):
-                for key in ('connection_identity', 'insert_epoch'):
+                for key in ('connection_identity', 'insert_epoch', 'insert_session'):
                     if key in previous and key not in ident:
                         ident[key] = previous[key]
             own_t = (ident.get('type') or '').strip()
@@ -19079,7 +19119,9 @@ class MultiAce:
             for head in range(4):
                 key = str(head)
                 if key in saved and saved[key]:
-                    self._head_source[head] = saved[key]
+                    # Preserve the old observation scope. Restoring a routing
+                    # record is not proof of the currently inserted spool.
+                    self._head_source[head] = dict(saved[key])
                     logging.info('[multiACE] Restored head %d -> ACE %d / Slot %d' % (
                         head, saved[key]['ace_index'], saved[key]['slot']))
 
@@ -19110,7 +19152,24 @@ class MultiAce:
         # load); an ACE_LOAD_HEAD already set head_source and returns early below.
         ace_index = self._active_device_index
         src = self._head_source.get(head)
+        target_slot = self._ace_slot_for_head(head)
+        if self._is_v2_idx(ace_index):
+            # The supervised feed path owns its source and clears load_failed
+            # only after confirmed completion. This generic UI notification
+            # (also used by MANUAL FINISH) is not a motion receipt and must not
+            # create identity evidence or turn an old failure into success.
+            if (source_route(src) != (ace_index, target_slot)
+                    or src.get('load_failed')
+                    or src.get('connection_identity') != self._rfid_identity_status(ace_index)
+                    or not self._source_insertion_matches(src, ace_index, target_slot)
+                    or raw_head_state(self, head) is not True):
+                logging.warning('[multiACE] external load notification has no '
+                                'confirmed current source for head %d; source '
+                                'and failure evidence retained', head)
+            return
         if src is not None and src.get('load_failed'):
+            if source_route(src) != (ace_index, target_slot):
+                return
             src['load_failed'] = False
             try:
                 self._save_head_source()
@@ -19129,7 +19188,6 @@ class MultiAce:
         # combiner head (slots 1/2/3 all carry spools) a load of slot 3 stamped
         # head_source = slot 1, so the later unload went to the wrong slot.
         # slot==head setups are unchanged (fallback == head index).
-        target_slot = self._ace_slot_for_head(head)
         info = self._info_per_ace.get(ace_index) or {}
         slots = info.get('slots') or []
         slot_info = (slots[target_slot]
@@ -21162,6 +21220,13 @@ class MultiAce:
             raise self._ace_error(gcmd, '喷头原始到料状态未知，未开始送料', code=206, head=head)
         if self.head_uses_ace(head):
             old_source = self._head_source.get(head)
+            if old_source is not None and load_identity is not None:
+                if (source_route(old_source) != (ace_index, slot)
+                        or old_source.get('connection_identity') != load_identity
+                        or not self._source_insertion_matches(old_source, ace_index, slot)):
+                    raise self._ace_error(gcmd,
+                        '原料路尚未确认当前设备或插料状态；请在原槽确认原来源后再装料',
+                        code=206, head=head)
             if isinstance(old_source, dict) and old_source.get('load_failed') and head_present is False:
                 raise self._ace_error(gcmd,
                     '上次送料失败的耗材仍占用原料路；请先恢复并退出原槽，再重新进料',
@@ -21282,14 +21347,23 @@ class MultiAce:
         # restart, blocks the feeder toggle and would route a later display
         # unload to the wrong slot (source ace_index wins).
         if self.head_uses_ace(head):
+            load_origin = (self._capture_source_origin(ace_index, slot)
+                           if load_identity is not None else {})
+            if load_identity is not None:
+                current_source = self._head_source.get(head)
+                if (load_origin['connection_identity'] != load_identity
+                        or (current_source is not None and
+                            (source_route(current_source) != (ace_index, slot)
+                             or not self._source_insertion_matches(current_source, ace_index, slot)))):
+                    raise self._ace_error(gcmd,
+                        '装料准备期间原设备或插料状态改变，请复核原槽后重试',
+                        code=206, head=head)
             self._head_source[head] = self._inherit_prev_capture(
                 head, ace_index, slot, self._overlay_override(
                     ace_index, slot, {
                         'ace_index': ace_index,
                         'slot': slot,
-                        **({'connection_identity': load_identity,
-                            'insert_epoch': getattr(self, '_insert_epochs', {}).get((ace_index, slot))}
-                           if load_identity is not None else {}),
+                        **load_origin,
                         'type': '',
                         # '' = unknown; a literal 000000 would be a DECLARED
                         # black and must not come from a placeholder stamp.
@@ -24603,6 +24677,43 @@ class MultiAce:
             self._telemetry_log.info('%s %s', event, json.dumps(data, default=str))
         except Exception as e:
             logging.info('[multiACE] telemetry %s failed: %s' % (event, e))
+
+    def _capture_source_origin(self, idx, slot):
+        """Read current V2 origin evidence; never move or change an epoch.
+
+        Callers still own the proof that a load completed or that the user
+        confirmed this exact route. An available gate and MCU UID allow that
+        proof to be bound to the current observation session, not fabricated.
+        """
+        if (type(idx) is not int or type(slot) is not int or not 0 <= slot < 4
+                or not self._is_v2_idx(idx)):
+            raise RuntimeError('ACE V2 原来源尚未确认')
+        identity = self._rfid_identity_status(idx)
+        gates = getattr(self, '_gate_status_per_ace', {}).get(idx) or []
+        if (identity is None or not any(identity.get('uid') or [])
+                or slot >= len(gates) or type(gates[slot]) is not int
+                or gates[slot] != GATE_AVAILABLE):
+            raise RuntimeError('ACE 原设备 UID 或原槽入口信号尚未确认')
+        session = getattr(self, '_insert_session', None)
+        if not isinstance(session, str) or not session:
+            session = self._insert_session = os.urandom(16).hex()
+        return {'connection_identity': identity,
+                'insert_epoch': getattr(self, '_insert_epochs', {}).get((idx, slot)),
+                'insert_session': session}
+
+    def _source_insertion_matches(self, source, idx, slot):
+        """Compare process scope and this slot's continuous observation epoch."""
+        if not isinstance(source, dict):
+            return False
+        session = getattr(self, '_insert_session', None)
+        if not isinstance(session, str) or not session:
+            session = self._insert_session = os.urandom(16).hex()
+        if (source.get('insert_session') != session
+                or 'insert_epoch' not in source):
+            return False
+        current = getattr(self, '_insert_epochs', {}).get((idx, slot))
+        return (type(source['insert_epoch']) is type(current)
+                and source['insert_epoch'] == current)
 
     def _rfid_identity_status(self, idx):
         transport = self._serials.get(idx)

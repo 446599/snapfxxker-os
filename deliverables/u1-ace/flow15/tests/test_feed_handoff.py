@@ -40,6 +40,7 @@ class Wire:
         self._reconnecting_per_ace = {}
         self._gate_status_per_ace = {0: [1, 1, 1, 1]}
         self._insert_epochs = {(0, 0): 7}
+        self._insert_session = 'current-session'
         self.uid = (1, 2, 3)
         self.calls = []
         self.faults = []
@@ -58,6 +59,17 @@ class Wire:
 
     def _location_identity(self, idx):
         return '/dev/ace0', self.uid
+
+    def _capture_source_origin(self, idx, slot):
+        port, uid = self._location_identity(idx)
+        return dict(connection_identity=dict(port=port, uid=list(uid)),
+                    insert_epoch=self._insert_epochs.get((idx, slot)),
+                    insert_session=self._insert_session)
+
+    def _source_insertion_matches(self, source, idx, slot):
+        return (source.get('insert_session') == self._insert_session and
+                'insert_epoch' in source and
+                source['insert_epoch'] == self._insert_epochs.get((idx, slot)))
 
     def _latch_stop_fault(self, idx, slot, reason, identity=None):
         self.faults.append((idx, slot, reason, identity))
@@ -346,8 +358,53 @@ class IntegrationTests(unittest.TestCase):
         h, a = self.load_failure(True)
         self.assertTrue(a._head_source[0]['load_failed'])
         self.assertEqual(a._head_source[0]['connection_identity']['uid'], [1, 2, 3])
+        self.assertEqual(a._head_source[0]['insert_session'], a._insert_session)
         self.assertEqual(a.stops, 2)
         self.assertFalse(h._active_load_supervisors)
+
+    def source_validation(self):
+        h = self.harness({'_validate_ace_load_source'})
+        a = Wire()
+        a._active_device_index = 0
+        a.head_uses_ace = lambda head: True
+        a._ace_slot_for_head = lambda head: 0
+        a._is_v2_idx = lambda idx: True
+        a._head_source = {0: dict(ace_index=0, slot=0,
+                                 **a._capture_source_origin(0, 0))}
+        h.ace = a
+        h.filament_ch = [0]
+        h._toolhead_filament_present = lambda channel: True
+        return h, a
+
+    def test_same_insertion_source_continues_without_confirmation(self):
+        h, a = self.source_validation()
+        h._validate_ace_load_source(0)
+        self.assertFalse(a.calls)
+
+    def test_restart_epoch_collision_cannot_authorize_loaded_head(self):
+        h, a = self.source_validation()
+        a._head_source[0]['insert_session'] = 'previous-process'
+        with self.assertRaises(feed.FeedSupervisionError) as caught:
+            h._validate_ace_load_source(0)
+        self.assertEqual(caught.exception.code, 'source_confirmation_required')
+        self.assertFalse(a.calls)
+
+    def test_legacy_loaded_source_has_an_explicit_confirmation_path(self):
+        h, a = self.source_validation()
+        del a._head_source[0]['insert_session']
+        with self.assertRaises(feed.FeedSupervisionError) as caught:
+            h._validate_ace_load_source(0)
+        self.assertEqual(caught.exception.code, 'source_confirmation_required')
+
+    def test_non_v2_source_keeps_original_load_and_failure_rules(self):
+        h, a = self.source_validation()
+        a._is_v2_idx = lambda idx: False
+        a._head_source[0] = dict(ace_index=0, slot=0)
+        h._validate_ace_load_source(0)
+        a._head_source[0]['load_failed'] = True
+        with self.assertRaises(feed.FeedSupervisionError) as caught:
+            h._validate_ace_load_source(0)
+        self.assertEqual(caught.exception.code, 'recovery_required')
 
     def test_load_cleanup_preserves_other_head_buffer_and_print_context(self):
         h = self.harness({'_finish_load_cleanup'})

@@ -28,18 +28,18 @@
         "bytes": 1288907,
         "sha256": "31abd9c63fdea37d9d6d2cfba82dcd8cccacb530faf8a9bdaa63041210deb401"
       },
-      "bytes": 1300804,
+      "bytes": 1307608,
       "mode": 420,
-      "sha256": "94682ac4383d3899a3fd7a42641970495c7fd68ff2e4e6693f7e8583885bacf5"
+      "sha256": "82be109d7dcafcc44216631b1180521f220719c218a3a53968a731c1f5012bc9"
     },
     "runtime/klipper/extras/ace_error_recovery.py": {
       "baseline": {
         "bytes": 4163,
         "sha256": "06fa7340c880ffe8875eefb71a42e0b781aaaec0219ff5d140d4107e88717905"
       },
-      "bytes": 25625,
+      "bytes": 29633,
       "mode": 420,
-      "sha256": "a0b94e5ded25eba9b1ca64b40255d1b54caa9615ed0e3f88bd586bb1bd957bc5"
+      "sha256": "eb8d8431299831b3e45bc4ccfd6062cb30950e3a73000d57af2ab4ad755d4466"
     },
     "runtime/klipper/extras/ace_feed_supervisor.py": {
       "baseline": null,
@@ -136,9 +136,9 @@
         "bytes": 42697,
         "sha256": "bc7f6fb0c87faa666e4514fa07e5712848aaf114748040572fe90e1ec3b371ef"
       },
-      "bytes": 72117,
+      "bytes": 71864,
       "mode": 420,
-      "sha256": "5c6178d7fb7912d98d3f6932711b1274a22d248e9614a40bb8947fb493a99a9c"
+      "sha256": "d6c2995fa550a8ddebeeb39bf4f34c5f03bb160d45aba5801b713d7c16372bc7"
     },
     "runtime/klipper/extras/ace_stop_guard.py": {
       "baseline": {
@@ -160,9 +160,9 @@
         "bytes": 266484,
         "sha256": "b67f957a47651c0ef6d342a6637fd3abcec2e7768cc058db2938596f15bbe7e4"
       },
-      "bytes": 285734,
+      "bytes": 286059,
       "mode": 420,
-      "sha256": "3bdc290d934c987e50102b490fc8dab132beb51baed49ac4d10cb85de01064eb"
+      "sha256": "55a5cc6babd23fefa60404dc941d63d822f1591b979fdd9ad95cd7a4d83fde70"
     },
     "runtime/web/backend/main.py": {
       "baseline": {
@@ -178,9 +178,9 @@
         "bytes": 354210,
         "sha256": "cd2a25eee524b988fac46cba9fa5d154c45aa63cf0f19f668575c258e6a06a45"
       },
-      "bytes": 376258,
+      "bytes": 376875,
       "mode": 420,
-      "sha256": "ec5bbda9721946de6688b7c6193e63636149bee13ad5b06fedb499da75006dd6"
+      "sha256": "d89354bb219bcc99be3fdd297cadc3f439bb2f1263b0794c243cd4cef90c5bd2"
     },
     "runtime/web/frontend/index.html": {
       "baseline": {

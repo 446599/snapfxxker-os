@@ -22,11 +22,12 @@ const ctx = {
   hideSplash: () => {}, loadError: {value: ''}, rebootNeeded: {value: true},
   KLIPPY_DISCONNECTED_MESSAGE: '控制器暂时离线，正在等待重新连接；连接恢复后会重新检查料路。',
   t: key => key,
+  dispIdx: value => value + 1,
   REMAINING_PROFILE_FIELDS: ['core_radius_mm', 'wound_width_mm', 'packing_fraction',
     'density_g_cm3', 'filament_diameter_mm', 'circumference_mm'].map(key => ({key, label: key})),
 };
 vm.createContext(ctx);
-for (const name of ['slotRecoveryDisabled', 'slotActionDisabled', 'slotCancelDisabled', 'applyState', 'bufferControlText', 'remainingProfilePayload'])
+for (const name of ['slotRecoveryDisabled', 'slotActionDisabled', 'slotCancelDisabled', 'applyState', 'bufferControlText', 'remainingProfilePayload', 'retainedSourceConfirmationText', 'slotRecoveryMessage'])
   vm.runInContext(actualFunction(name), ctx);
 const ace = {idx: 0, connected: true, protocol: 'v2'};
 const slot = {idx: 0, state: 'error', slot_status: 'feed_error'};
@@ -83,4 +84,16 @@ assert.throws(() => ctx.remainingProfilePayload(form), /实测下限和上限/);
 form.fields.core_radius_mm = ['40', '41'];
 form.fields.packing_fraction = ['0.8', '1.2'];
 assert.throws(() => ctx.remainingProfilePayload(form), /范围无效/);
+const confirmation = ctx.retainedSourceConfirmationText(ace, slot,
+  {source_head: 0, source_confirmation_prompt: '检测到插拔记录变化，可能已更换耗材。',
+   connection_review_message: '旧连接仍保留停止故障和占用，请恢复原 USB 连接，未解锁退料。'});
+assert.ok(confirmation.includes('检测到插拔记录变化'));
+assert.ok(confirmation.includes('同一台 ACE 1 的原槽 1'));
+assert.ok(confirmation.includes('已换料盘、换料或无法确认，请取消'));
+assert.ok(confirmation.includes('保留堵料及管内占用记录'));
+assert.ok(confirmation.includes('不会自动继续打印'));
+assert.ok(confirmation.includes('恢复原 USB 连接，未解锁退料'));
+row.connection_review_message = '原连接仍待核，未解锁退料';
+row.source_confirmation_prompt = '来源记录已补充';
+assert.equal(ctx.slotRecoveryMessage(ace, slot), row.connection_review_message);
 console.log('Recovery UI behavioral checks passed');

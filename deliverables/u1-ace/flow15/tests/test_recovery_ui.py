@@ -3,9 +3,11 @@ import ast
 import copy
 import importlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import types
 import unittest
 
@@ -19,6 +21,15 @@ sys.modules[PACKAGE] = pkg
 RecoveryBudget = importlib.import_module(PACKAGE + '.ace_recovery_policy').RecoveryBudget
 ErrorRecovery = importlib.import_module(PACKAGE + '.ace_error_recovery').ErrorRecovery
 SlotActions = importlib.import_module(PACKAGE + '.ace_slot_actions').SlotActions
+
+# Exercise the real process-scope helpers without importing ACE's full Klipper
+# plugin (which requires the printer process and hardware modules).
+_ace_tree = ast.parse((ROOT / 'runtime/klipper/extras/ace.py').read_text())
+_origin_methods = [method for node in _ace_tree.body if isinstance(node, ast.ClassDef)
+                   for method in node.body if isinstance(method, ast.FunctionDef)
+                   and method.name in ('_capture_source_origin', '_source_insertion_matches')]
+_origin_env = {'os': os, 'GATE_AVAILABLE': 1}
+exec(compile(ast.Module(body=_origin_methods, type_ignores=[]), '<actual ACE origin helpers>', 'exec'), _origin_env)
 
 
 class Reactor:
@@ -99,12 +110,17 @@ def fixture():
     a._serials = {0: object()}
     a._connected_per_ace = {0: True}
     a._insert_epochs = {(0, 0): 4}
+    a._insert_session = '1' * 32
     a._ace_mode = 'multi'
     a._info_per_ace = {0: {'slots': [dict(index=slot, slot_status='ready') for slot in range(4)]}}
     a._location_identity = lambda idx: ('/dev/ace0', (1, 2, 3))
     a._rfid_identity_status = lambda idx: {'port': '/dev/ace0', 'uid': [1, 2, 3]}
+    a._is_v2_idx = lambda idx: True
+    a._capture_source_origin = types.MethodType(_origin_env['_capture_source_origin'], a)
+    a._source_insertion_matches = types.MethodType(_origin_env['_source_insertion_matches'], a)
     a._rfid_route_heads = lambda idx, slot: [slot]
     a._head_source = {0: {'ace_index': 0, 'slot': 0, 'load_failed': True, 'insert_epoch': 4,
+                         'insert_session': a._insert_session,
                          'connection_identity': {'port': '/dev/ace0', 'uid': [1, 2, 3]}}}
     a._swap_in_progress = a._unload_all_active = False
     a._feed_supervisors = {}
@@ -377,12 +393,13 @@ class RetainedRouteIdentityTests(unittest.TestCase):
         a, recovery, ps = fixture()
         original_lookup = a.printer.lookup_object
         sensor = types.SimpleNamespace(runout_buttun_state=False)
+        a._test_head_sensor = sensor
         a.printer.lookup_object = lambda name, default=None: (
             sensor if name == 'filament_motion_sensor e0_filament'
             else original_lookup(name, default))
         a._head_travel = types.SimpleNamespace(records={})
         a._path_calibration = types.SimpleNamespace(task={'active': False},
-            head_sensor=lambda head: False, _head=lambda idx, slot, head: head)
+            head_sensor=lambda head: sensor.runout_buttun_state, _head=lambda idx, slot, head: head)
         a._path_operations = types.SimpleNamespace(status=lambda: [])
         a._location_hold = types.SimpleNamespace(refresh_routes=lambda: True, routes=[])
         a._ace_devices = ['ace0']
@@ -436,6 +453,206 @@ class RetainedRouteIdentityTests(unittest.TestCase):
         self.assertEqual(actions._eject_lease, (0, 0, a._serials[0]))
         self.assertTrue(a._head_source[0]['load_failed'])
         self.assertEqual(commands, ['discover_device', 'discover_device'])
+
+    def test_restart_requires_confirmation_even_if_numeric_epoch_matches(self):
+        for current_epoch in (4, None):
+            with self.subTest(current_epoch=current_epoch):
+                a, recovery, actions, commands = self.setup_route()
+                original = copy.deepcopy(a._head_source[0])
+                original['pathhold'] = {'reason': 'material retained in tube'}
+                a._head_source[0] = copy.deepcopy(original)
+                a._insert_session = '2' * 32
+                if current_epoch is None:
+                    a._insert_epochs.clear()
+                a._path_calibration.store = types.SimpleNamespace(state={
+                    'occupied_heads': {'0': {'route_id': 'original'}},
+                    'routes': {'original': {'ace': 0, 'slot': 0}}})
+                held_path = copy.deepcopy(a._path_calibration.store.state)
+                recovery._automatic_tick(0)
+                self.assertFalse(a.reactor.pending)
+                self.assertEqual(recovery._automatic.snapshot((0, 0))['state'], 'blocked')
+                with self.assertRaisesRegex(RuntimeError, '会话或插料代次'):
+                    actions._bind_legacy_route(0, 0, a._serials[0])
+                row = recovery.status()['slots'][0]
+                self.assertTrue(row['can_confirm_source'])
+                self.assertIn('重启', row['source_confirmation_prompt'])
+                request = Request(head=0, ace=0, slot=0, retained=1,
+                                  confirmed=1, ticket=row['ticket'])
+                recovery.source_endpoint(request)
+                self.assertTrue(request.result['saved'])
+                expected = dict(original, insert_session=a._insert_session,
+                                insert_epoch=current_epoch)
+                self.assertEqual(a._head_source[0], expected)
+                self.assertEqual(a._path_calibration.store.state, held_path)
+                self.assertFalse(a.reactor.pending)
+                self.assertFalse(a._slot_actions.calls)
+                self.assertEqual(a.printer.lookup_object('print_stats').state, 'error')
+                recovery._original_source(0, 0)
+                actions._bind_legacy_route(0, 0, a._serials[0])
+                self.assertEqual(actions._eject_lease, (0, 0, a._serials[0]))
+                self.assertEqual(commands, ['discover_device', 'discover_device'])
+
+    def test_same_uid_port_change_needs_explicit_retained_confirmation(self):
+        a, recovery, actions, commands = self.setup_route()
+        a._head_source[0]['connection_identity']['port'] = '/dev/previous-ace-port'
+        before = copy.deepcopy(a._head_source)
+        with self.assertRaisesRegex(RuntimeError, '设备或端口'):
+            recovery._original_source(0, 0)
+        a._test_head_sensor.runout_buttun_state = True
+        with self.assertRaisesRegex(RuntimeError, '当前票据'):
+            recovery.confirm_source(0, 0, 0)
+        a._test_head_sensor.runout_buttun_state = False
+        self.assertEqual(a._head_source, before)
+        row = recovery.status()['slots'][0]
+        self.assertIn('端口', row['source_confirmation_prompt'])
+        recovery.confirm_source(0, 0, 0, retained=True, ticket=row['ticket'])
+        self.assertTrue(a._head_source[0]['load_failed'])
+        self.assertEqual(a._head_source[0]['connection_identity'],
+                         {'port': '/dev/ace0', 'uid': [1, 2, 3]})
+        actions._bind_legacy_route(0, 0, a._serials[0])
+        self.assertEqual(commands, ['discover_device'])
+
+    def test_new_insertion_never_automatically_rebinds_previous_spool(self):
+        a, recovery, _, commands = self.setup_route()
+        old_ticket = recovery._ticket(0, 0)
+        a._insert_epochs[(0, 0)] += 2  # removal and a new insertion
+        before = copy.deepcopy(a._head_source)
+        recovery._automatic_tick(0)
+        self.assertFalse(a.reactor.pending)
+        self.assertEqual(a._head_source, before)
+        stale = Request(head=0, ace=0, slot=0, retained=1, confirmed=1, ticket=old_ticket)
+        recovery.source_endpoint(stale)
+        self.assertFalse(stale.result['saved'])
+        row = recovery.status()['slots'][0]
+        self.assertIn('插拔', row['source_confirmation_prompt'])
+        self.assertIn('更换耗材', row['source_confirmation_prompt'])
+        unconfirmed = Request(head=0, ace=0, slot=0, retained=1, confirmed=0, ticket=row['ticket'])
+        recovery.source_endpoint(unconfirmed)
+        self.assertFalse(unconfirmed.result['saved'])
+        self.assertEqual(a._head_source, before)
+        confirmed = Request(head=0, ace=0, slot=0, retained=1, confirmed=1, ticket=row['ticket'])
+        recovery.source_endpoint(confirmed)
+        self.assertTrue(confirmed.result['saved'])
+        self.assertEqual(a._head_source[0]['insert_epoch'], 6)
+        self.assertTrue(a._head_source[0]['load_failed'])
+        self.assertFalse(commands)
+        self.assertFalse(a.reactor.pending)
+
+    def test_confirmation_never_overwrites_known_other_device_or_slot(self):
+        for mismatch in ('uid', 'slot', 'ace'):
+            with self.subTest(mismatch=mismatch):
+                a, recovery, _, commands = self.setup_route()
+                if mismatch == 'uid':
+                    a._head_source[0]['connection_identity']['uid'] = [9, 9, 9]
+                else:
+                    a._head_source[0]['slot' if mismatch == 'slot' else 'ace_index'] = 1
+                a._insert_session = '2' * 32
+                before = copy.deepcopy(a._head_source)
+                row = recovery.status()['slots'][0]
+                self.assertFalse(row['can_confirm_source'])
+                with self.assertRaises(RuntimeError):
+                    recovery.confirm_source(0, 0, 0, retained=True, ticket=row['ticket'])
+                a._test_head_sensor.runout_buttun_state = True
+                with self.assertRaises(RuntimeError):
+                    recovery.confirm_source(0, 0, 0)
+                self.assertEqual(a._head_source, before)
+                self.assertFalse(commands)
+
+    def test_confirmation_ticket_is_invalidated_by_sensor_changes(self):
+        for changed in ('head', 'gate', 'unknown'):
+            with self.subTest(changed=changed):
+                a, recovery, _, commands = self.setup_route()
+                a._insert_session = '2' * 32
+                ticket = recovery._ticket(0, 0)
+                before = copy.deepcopy(a._head_source)
+                if changed == 'head':
+                    a._test_head_sensor.runout_buttun_state = True
+                elif changed == 'gate':
+                    a._gate_status_per_ace[0][0] = 0
+                else:
+                    a._test_head_sensor.runout_buttun_state = None
+                with self.assertRaisesRegex(RuntimeError, '已变化'):
+                    recovery.confirm_source(0, 0, 0, retained=True, ticket=ticket)
+                if changed != 'head':
+                    with self.assertRaises(RuntimeError):
+                        recovery.confirm_source(0, 0, 0, retained=True, ticket=recovery._ticket(0, 0))
+                self.assertEqual(a._head_source, before)
+                self.assertFalse(commands)
+
+    def test_same_live_origin_does_not_ask_for_reconfirmation(self):
+        a, recovery, actions, commands = self.setup_route()
+        row = recovery.status()['slots'][0]
+        self.assertFalse(row['needs_source_confirmation'])
+        self.assertFalse(row['can_confirm_source'])
+        recovery._original_source(0, 0)
+        actions._bind_legacy_route(0, 0, a._serials[0])
+        self.assertEqual(commands, ['discover_device'])
+
+    def test_failed_confirmation_save_restores_original_session_and_hold(self):
+        a, recovery, _, commands = self.setup_route()
+        a._insert_session = '2' * 32
+        a._head_source[0]['pathhold'] = {'reason': 'retained material'}
+        before = copy.deepcopy(a._head_source)
+        def fail_save():
+            raise RuntimeError('storage unavailable')
+        a._save_head_source = fail_save
+        with self.assertRaisesRegex(RuntimeError, 'storage unavailable'):
+            recovery.confirm_source(0, 0, 0, retained=True, ticket=recovery._ticket(0, 0))
+        self.assertEqual(a._head_source, before)
+        self.assertFalse(commands)
+
+    def test_v1_confirmation_does_not_call_v2_origin_helpers(self):
+        a, recovery, _, commands = self.setup_route()
+        a._is_v2_idx = lambda idx: False
+        a._test_head_sensor.runout_buttun_state = True
+        del a._head_source[0]['insert_session']
+        def v2_only(*args):
+            raise AssertionError('V2 origin helper called for V1')
+        a._capture_source_origin = a._source_insertion_matches = v2_only
+        self.assertIsNone(recovery._retained_confirmation_head(0, 0))
+        result = recovery.confirm_source(0, 0, 0)
+        self.assertTrue(result['saved'])
+        self.assertTrue(a._head_source[0]['load_failed'])
+        self.assertNotIn('insert_session', a._head_source[0])
+        self.assertFalse(commands)
+
+    def test_port_confirmation_reports_retained_real_stop_fault_and_path_hold(self):
+        StopFaultLatch = importlib.import_module(PACKAGE + '.ace_stop_guard').StopFaultLatch
+        LocationHold = importlib.import_module(PACKAGE + '.ace_location_hold').LocationHold
+        with tempfile.TemporaryDirectory() as tmp:
+            a, recovery, actions, commands = self.setup_route()
+            old_port = '/dev/original-ace-port'
+            a._head_source[0]['connection_identity']['port'] = old_port
+            a._stop_guard = StopFaultLatch(str(Path(tmp) / 'stop.json'))
+            a._stop_guard.latch(0, 0, 'STOP response lost', (old_port, (1, 2, 3)))
+            a._location_hold = LocationHold(path=str(Path(tmp) / 'marker.json'),
+                                            routes_path=str(Path(tmp) / 'holds.json'))
+            a._location_hold.hold_route(old_port, (1, 2, 3), 0, [0], scope='route')
+            faults_before = a._stop_guard.recovery_snapshot()
+            holds_before = copy.deepcopy(a._location_hold.routes)
+            request = Request(head=0, ace=0, slot=0, retained=1, confirmed=1,
+                              ticket=recovery._ticket(0, 0))
+            recovery.source_endpoint(request)
+            self.assertTrue(request.result['saved'])
+            self.assertTrue(request.result['connection_review_required'])
+            self.assertIn('原 USB 连接', request.result['message'])
+            self.assertIn('未解锁退料', request.result['message'])
+            row = recovery.status()['slots'][0]
+            self.assertTrue(row['connection_review_required'])
+            self.assertIn('停止故障和管内占用', row['connection_review_message'])
+            with self.assertRaisesRegex(RuntimeError, '原 USB 连接'):
+                recovery._original_source(0, 0)
+            with self.assertRaisesRegex(RuntimeError, '另一原槽的位置异常'):
+                actions._bind_legacy_route(0, 0, a._serials[0], allow_loaded=True)
+            generation, _ = a._stop_guard.recovery_snapshot()
+            self.assertFalse(a._stop_guard.clear_verified(generation, 0, 0, a._location_identity(0)))
+            recovery._automatic_tick(0)
+            self.assertFalse(a.reactor.pending)
+            self.assertEqual(recovery._automatic.snapshot((0, 0))['attempts'], 0)
+            self.assertEqual(recovery._automatic.snapshot((0, 0))['state'], 'blocked')
+            self.assertEqual(a._stop_guard.recovery_snapshot(), faults_before)
+            self.assertEqual(a._location_hold.routes, holds_before)
+            self.assertEqual(commands, ['discover_device'])
 
 
 if __name__ == '__main__':
