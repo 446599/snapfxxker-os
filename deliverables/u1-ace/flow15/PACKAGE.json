@@ -1,0 +1,94 @@
+{
+  "base": {
+    "archive_sha256": "a39fce7d180bbf26b9ee4b032dc4c22389e85a117e953abcdcc748e3429e46cd",
+    "manifest_sha256": "ca0cccdbbf7037f82e6aeddb353640d560e582a67d3f36898d6267fd5317eee2",
+    "version": "1.27b-233.20261116-flow.13"
+  },
+  "base_runtime_file_count": 883,
+  "base_runtime_verified": false,
+  "baseline_requirements": {
+    "device-service/insert_rfid_settings.py": {
+      "bytes": 8556,
+      "sha256": "8089485422cdddc8dcadfa58ef7b3971712b4e6481b2b772e829d1aad8579a94"
+    },
+    "runtime/VERSION": {
+      "bytes": 27,
+      "sha256": "a258f4028866f21cc2682777bf292e20883566fdf27e88ae8290d4b3905b72f2"
+    },
+    "runtime/klipper/extras/ace.py": {
+      "bytes": 1288907,
+      "sha256": "31abd9c63fdea37d9d6d2cfba82dcd8cccacb530faf8a9bdaa63041210deb401"
+    },
+    "runtime/klipper/extras/ace_error_recovery.py": {
+      "bytes": 4163,
+      "sha256": "06fa7340c880ffe8875eefb71a42e0b781aaaec0219ff5d140d4107e88717905"
+    },
+    "runtime/klipper/extras/ace_feed_supervisor.py": null,
+    "runtime/klipper/extras/ace_filament_options.py": {
+      "bytes": 7073,
+      "sha256": "b36729a1360f6560eaf1151e75f5dfec47df3340ee11a0de39702f8efc3d6d15"
+    },
+    "runtime/klipper/extras/ace_filament_travel.py": {
+      "bytes": 9596,
+      "sha256": "183db469a63888332962acda30091d4ab7474ebdde73939aeb06e7f491042859"
+    },
+    "runtime/klipper/extras/ace_flow_guard.py": null,
+    "runtime/klipper/extras/ace_insert_policy.py": {
+      "bytes": 27168,
+      "sha256": "b9840995d2b6adff54bdd649d5fec9a62a9f7f92f2515858fe7b842f0431a50b"
+    },
+    "runtime/klipper/extras/ace_manual_remaining.py": {
+      "bytes": 4187,
+      "sha256": "0eb8b8f81fa04190bb413b8e9d70d0e0b4eb2ba0888bee7f38db5788075a647c"
+    },
+    "runtime/klipper/extras/ace_native_buffer.py": null,
+    "runtime/klipper/extras/ace_protocol_v2.py": {
+      "bytes": 32300,
+      "sha256": "fd97691d45fa02b422863a890f5794cb6c73ba1f870dbd00b2b1b38e1c10f9c0"
+    },
+    "runtime/klipper/extras/ace_rc522.py": {
+      "bytes": 179856,
+      "sha256": "e866db7db2d09b74cdd635eaddb582f4eb4e28e1ead8b2912adc957f40c6959f"
+    },
+    "runtime/klipper/extras/ace_ready_wait.py": null,
+    "runtime/klipper/extras/ace_recovery_policy.py": null,
+    "runtime/klipper/extras/ace_rfid_evidence.py": null,
+    "runtime/klipper/extras/ace_slot_actions.py": {
+      "bytes": 42697,
+      "sha256": "bc7f6fb0c87faa666e4514fa07e5712848aaf114748040572fe90e1ec3b371ef"
+    },
+    "runtime/klipper/extras/ace_stop_guard.py": {
+      "bytes": 10325,
+      "sha256": "5448a8fcf2f1eabc27e3fa69047435b01d213364c030208ca85b5f8f8a704a98"
+    },
+    "runtime/klipper/extras/ace_v2_standstill.py": null,
+    "runtime/klipper/extras/filament_feed_ace.py": {
+      "bytes": 266484,
+      "sha256": "b67f957a47651c0ef6d342a6637fd3abcec2e7768cc058db2938596f15bbe7e4"
+    },
+    "runtime/web/backend/main.py": {
+      "bytes": 239795,
+      "sha256": "18abcaa1c97ce2c3d258580c290818c1d7fcb24e3a8c34aeb680685d8a5e665e"
+    },
+    "runtime/web/frontend/app.js": {
+      "bytes": 354210,
+      "sha256": "cd2a25eee524b988fac46cba9fa5d154c45aa63cf0f19f668575c258e6a06a45"
+    },
+    "runtime/web/frontend/index.html": {
+      "bytes": 228284,
+      "sha256": "0cbf6e48ceb23b0a507daa5fd9a0b25b53e9fa43adc8c4bf0276678ffb41b985"
+    }
+  },
+  "baseline_requirements_verified": true,
+  "complete_runtime": false,
+  "device_service_path": "device-service/",
+  "is_printer_firmware": false,
+  "mode": "update",
+  "overlay_manifest_sha256": "c9313860c2d54983d6c2586ec11a4ea49601297e1daffe81080974c4f8b1f5d0",
+  "package_kind": "module-update",
+  "runtime_path": "runtime/",
+  "schema_version": 1,
+  "source_commit": "adb1dda5935c227ab1ba40d5bd842763ea0921ba",
+  "validation_scope": "Offline behavioral tests and replaced-baseline hash verification; no hardware validation or installation",
+  "version": "1.27b-233.20261117-flow.15"
+}

@@ -1,0 +1,56 @@
+{
+  "version": "1.27b-233.20261117-flow.15",
+  "date": "2026-11-17",
+  "source_baseline": "446599/snapfxxker-os@adb1dda5935c227ab1ba40d5bd842763ea0921ba",
+  "tests": {
+    "python_unittest": 102,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "includes_frontend_node_behavior": true
+  },
+  "syntax": {
+    "python_files": 25,
+    "javascript_files": 2
+  },
+  "hardware_tested": false,
+  "deployed": false,
+  "ace_mcu_flashed": false,
+  "tested_files_sha256": {
+    "runtime/VERSION": "93302baad72242d2b0d2685e93da8c23ec86a43fd61f81bd2b9576036d240549",
+    "runtime/klipper/extras/ace_feed_supervisor.py": "35a786d15fc1038df74b47d58dc6d244e76f38e4afb4faf2b9faf30136ff4c46",
+    "runtime/klipper/extras/filament_feed_ace.py": "3bdc290d934c987e50102b490fc8dab132beb51baed49ac4d10cb85de01064eb",
+    "runtime/klipper/extras/ace_v2_standstill.py": "bf1373a27b48e92ade9ef91c6abdd5c519a7dc867914785940621e3f7bf9878a",
+    "runtime/klipper/extras/ace_error_recovery.py": "a0b94e5ded25eba9b1ca64b40255d1b54caa9615ed0e3f88bd586bb1bd957bc5",
+    "runtime/klipper/extras/ace_recovery_policy.py": "218f7d556432b331594f6fc5ef92f37484c2ee3e943ef37620e2d070145e5a50",
+    "runtime/klipper/extras/ace_ready_wait.py": "b24e574a5daa9f0558b6c3149781ad92d596b557351797e865a1e98ed8f3f7a1",
+    "runtime/klipper/extras/ace_rfid_evidence.py": "44418f5165a6a5c6d2c0d05bba17a43d73d4672c51d18a4abf8dbe0b877cb924",
+    "runtime/klipper/extras/ace_protocol_v2.py": "49324048ae713b8104a8a706c6d0c37b6cb565a37bc8afb1593cfb41cecf97fe",
+    "runtime/klipper/extras/ace_rc522.py": "9368a223a9795ad834dd030504560e447d1fa21cf2402bc66a5811991590d65f",
+    "runtime/klipper/extras/ace_flow_guard.py": "71b79bcb4a161ea7ede7da07ee90d1122c9bd0f7890a54eb34a8176bd2d4f4a8",
+    "runtime/klipper/extras/ace.py": "94682ac4383d3899a3fd7a42641970495c7fd68ff2e4e6693f7e8583885bacf5",
+    "runtime/klipper/extras/ace_native_buffer.py": "800cea87d96830dd85da34cf2772f548444b74ea012cb39e6058ff65c66a9f0a",
+    "runtime/klipper/extras/ace_manual_remaining.py": "5b8108e263b6e43265f9776d9280ac8cf668243b8c08cf6c88809cda6387a0ec",
+    "runtime/klipper/extras/ace_stop_guard.py": "b6a812cee26e4c3c20b86b87b906d0a92ec96a6af0212da0dc5cb2233c7c7a93",
+    "runtime/klipper/extras/ace_filament_travel.py": "7c724f582b1c4f51b3708bd38d46e1fc0c80da8b2f825dde0acef180cf0c8fd5",
+    "runtime/klipper/extras/ace_insert_policy.py": "3ca4750c288dc19ac77b461f0b93c3628f48f78cb51847344dda7db50f9a1199",
+    "runtime/klipper/extras/ace_slot_actions.py": "5c6178d7fb7912d98d3f6932711b1274a22d248e9614a40bb8947fb493a99a9c",
+    "runtime/klipper/extras/ace_filament_options.py": "8db552a2b4601006b6926be06aedbab0731ddeb3e1d67aa5b31ed10da6edff32",
+    "runtime/web/frontend/app.js": "ec5bbda9721946de6688b7c6193e63636149bee13ad5b06fedb499da75006dd6",
+    "runtime/web/frontend/index.html": "a251518488b0e74de55ce542deccc3766d803271e369016dc0665f84c2f4206d",
+    "runtime/web/backend/main.py": "aaeb981d63f343598bf3ce0f9737ab4d588439911018d999499f8fc482f696d2",
+    "device-service/insert_rfid_settings.py": "9818affb0a16093feccff175204c49d584d5f7dd3634bc9f47eb74421d1854a5"
+  },
+  "commands": [
+    "python3 -m unittest discover -s deliverables/u1-ace/flow15/tests -v",
+    "node --check deliverables/u1-ace/flow15/runtime/web/frontend/app.js",
+    "python3 deliverables/u1-ace/flow15/build.py --output /tmp/multiace-flow15.tar.gz"
+  ],
+  "remaining_checks": [
+    "ACE native buffer Hall and assist behavior on each connected unit",
+    "Same-head swap and repeated hot load/unload on physical routes",
+    "USB disconnect/cancel/late replies under actual serial timing",
+    "RFID return accuracy and measured spool-profile calibration",
+    "Reverse-assist direction-switch timing in original tip-forming process"
+  ]
+}
