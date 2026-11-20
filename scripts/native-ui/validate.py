@@ -19,7 +19,6 @@ PROVIDER = {
     "sha256": "93ff99aebcee86fa5d1057864f4761d1d826afa41debeb783c0672328030bca6",
 }
 SUBMODULES = {
-    "providers/multiACE": "a1a7b91b1fd297c1486a13ea22c61e01499a196d",
     "deps/screen-apps": "4a81b50d9b6ef7a2c253b45dd00fe6f732c9d203",
 }
 
@@ -50,6 +49,12 @@ def validate_source(manifest, partial_tree):
             actual = subprocess.check_output(["git", "-C", str(REPO), "ls-tree", "HEAD", path], text=True)
             require(len(actual.split()) >= 3 and actual.split()[2] == expected,
                     "Existing submodule pin changed: " + path)
+        # multiACE is vendored source now; its upstream commit is provenance,
+        # while the separately pinned managed archive remains the runtime.
+        actual = subprocess.check_output(
+            ["git", "-C", str(REPO), "ls-tree", "HEAD", "providers/multiACE"], text=True)
+        require(actual.split()[:2] == ["040000", "tree"],
+                "Vendored multiACE must be tracked as a source directory")
     plan = subprocess.check_output(["bash", str(REPO / "build-233.sh"), "--plan"], text=True)
     require(plan.index("overlays/233-dev.2-perms.1") < plan.index("overlays/233-native-ui"),
             "Native overlay must follow the verified multiACE overlay")

@@ -1,0 +1,26 @@
+{
+  "status": "offline-candidate",
+  "hardware_tested": false,
+  "multiace_kind": "code-only-update",
+  "multiace_requires_existing_dependencies": true,
+  "screen_kind": "source-only",
+  "source_base_commit": "629555c33ecd569f68bfd8e87d31d28b437df892",
+  "files": {
+    "multiace-code-1.27b-233.20261120-flow.16.tar.gz": {
+      "bytes": 1205060,
+      "sha256": "effd007cfa25dc23280c6dd281a35fe7a4bf67722d74ab1d036d23514c2a9dd9"
+    },
+    "multiace-code-1.27b-233.20261120-flow.16.tar.gz.sha256": {
+      "bytes": 114,
+      "sha256": "27bf99035af5a0da81f77322af1a9905523f5058412b3519f61460185cc4644d"
+    },
+    "snapfxxker-screen-source-20261120.tar.gz": {
+      "bytes": 1932127,
+      "sha256": "9504a40af165ef32ebce24154e2f55a8ec66cc62600159beaa8fddad170f6751"
+    },
+    "snapfxxker-screen-source-20261120.tar.gz.manifest.json": {
+      "bytes": 20030,
+      "sha256": "f6301112fa9b2daad59760940c54c04d8b6b265519c74433eaf154fe512c58ca"
+    }
+  }
+}

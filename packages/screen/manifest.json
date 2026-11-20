@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "id": "snapfxxker-screen-20261120",
+  "layer": "screen",
+  "target": "Snapmaker U1 / AArch64 / 480x320",
+  "role": "Native display, status presentation, and user-action adapters",
+  "motion_state_machine": "packages/multiace/runtime/klipper/extras",
+  "source_manifest": "bundles/native-ui/manifest.json",
+  "source_reconstruction": "bundles/native-ui/reconstruction/series.json",
+  "build_entry": "scripts/native-ui/build.sh",
+  "runtime_packager": "scripts/native-ui/package_runtime.py",
+  "companion_overlay": "overlays/233-native-ui",
+  "artifacts": {
+    "source": "snapfxxker-screen-source-20261120.tar.gz",
+    "arm64": "snapfxxker-screen-arm64-20261120.tar.gz",
+    "inner_runtime": "helixscreen-233-native-ui.tar.gz"
+  },
+  "source_roots": [
+    "packages/screen/build.py",
+    "packages/screen/manifest.json",
+    "packages/screen/README.md",
+    "packages/screen/reference",
+    "scripts/native-ui",
+    "bundles/native-ui",
+    "overlays/233-native-ui",
+    "LICENSE"
+  ],
+  "generated_inputs_excluded": [
+    "bundles/native-ui/runtime-files.json",
+    "overlays/233-native-ui/root/etc/FULLVERSION",
+    "overlays/233-native-ui/root/usr/local/share/extended-pkg/helixscreen",
+    "overlays/233-native-ui/root/usr/local/share/233-firmware"
+  ],
+  "external_build_inputs": [
+    "Pinned HelixScreen source and Git submodules",
+    "Pinned CJK source fonts",
+    "Debian packages in bundles/native-ui/cross-packages.json",
+    "npm packages in bundles/native-ui/font-tools/package-lock.json"
+  ],
+  "inactive_reference": {
+    "path": "packages/screen/reference/insert_rfid_settings.py",
+    "active": false,
+    "installed_by_this_package": false,
+    "provenance": "packages/screen/reference/provenance.json"
+  },
+  "installation": {
+    "directly_flashable": false,
+    "firmware_image": false,
+    "ace_mcu_image": false,
+    "requires_existing_paxx_base_services": true,
+    "pin_entry": "scripts/native-ui/pin_runtime.py"
+  }
+}

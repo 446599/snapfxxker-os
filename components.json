@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "project": "snapfxxker-os",
+  "source_base_commit": "629555c33ecd569f68bfd8e87d31d28b437df892",
+  "components": {
+    "stock": {
+      "label": "1. 原厂固件",
+      "path": "firmware/stock",
+      "manifest": "firmware/stock/manifest.json",
+      "entry": "firmware/stock/build.py",
+      "role": "原厂系统基线与原始镜像校验；不改写原厂镜像"
+    },
+    "screen": {
+      "label": "2. 屏幕显示包",
+      "path": "packages/screen",
+      "manifest": "packages/screen/manifest.json",
+      "entry": "packages/screen/build.py",
+      "role": "界面、字体、显示服务和用户操作适配；不维护进退料状态机"
+    },
+    "multiace": {
+      "label": "3. multiACE 包",
+      "path": "packages/multiace",
+      "manifest": "packages/multiace/manifest.json",
+      "entry": "packages/multiace/build.py",
+      "role": "U1 主机侧 ACE 通信、进退料、RFID、余量和故障恢复"
+    },
+    "ace": {
+      "label": "4. ACE 自定义固件",
+      "path": "firmware/ace",
+      "manifest": "firmware/ace/manifest.json",
+      "entry": "firmware/ace/build.py",
+      "role": "ACE 盒内 MCU 镜像与补丁；独立构建，主机升级不自动刷写"
+    }
+  },
+  "legacy_integration": {
+    "entry": "build-233.sh",
+    "manifest": "233-firmware.json",
+    "status": "historical-integrated-snapshot",
+    "note": "保留 UI.8/single.5 历史整包复现；不会自动包含本轮 Flow.16 修复。"
+  }
+}

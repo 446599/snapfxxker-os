@@ -39,7 +39,8 @@ pkg_post_install() {
     done
 
     local vendor="$staging/web/backend/vendor"
-    PYTHONPATH="$vendor" /usr/bin/python3 -c \
+    # Import checks must not add root-owned bytecode to the installed payload.
+    PYTHONPATH="$vendor" /usr/bin/python3 -B -c \
         'import fastapi, uvicorn, httpx, pydantic, websockets, multipart, serial' || return 1
     printf '%s\n' 'multiACE bundled web dependencies verified' > "$vendor/.paxx-dependencies-ready" || return 1
     chmod 755 "$vendor/.paxx-dependencies-ready" || return 1

@@ -1,4 +1,11 @@
-/firmware/
+/firmware/*
+!/firmware/stock/
+!/firmware/ace/
+/firmware/stock/*.bin
+/firmware/stock/*.swu
+/firmware/ace/*.bin
+/firmware/ace/*.swu
+/dist/
 tmp/
 *.o
 *.so

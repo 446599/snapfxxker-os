@@ -1,0 +1,18 @@
+{
+  "component": "stock",
+  "name": "Snapmaker U1 原厂固件",
+  "version": "2.1.0.157",
+  "filename": "U1_2.1.0.157_20261028045538_upgrade.bin",
+  "sha256": "fbe8e4fd23d81cae51c09ae8787967d398071fa739ea475116e2f0de84f5a7a5",
+  "url": "https://public.resource.snapmaker.com/firmware/U1/U1_2.1.0.157_20261028045538_upgrade.bin",
+  "pin_source": "vars.mk at 629555c33ecd569f68bfd8e87d31d28b437df892",
+  "feed_logic_reference": {
+    "repository": "https://github.com/Snapmaker/u1-klipper",
+    "commit": "7ac453b50fe6779b2ec0b759038a17da5e6d671d",
+    "paths": ["klippy/extras/filament_feed.py", "klippy/gcode.py"],
+    "scope": "官方 2.1.0 源码行为参照；不是从当前设备提取的二进制比对"
+  },
+  "contains_custom_code": false,
+  "binary_in_repository": false,
+  "stock_image_altered": false
+}

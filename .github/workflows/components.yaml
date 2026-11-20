@@ -1,0 +1,67 @@
+name: U1 independent components
+
+on:
+  push:
+    branches: [main, 'codex/u1-modular-recovery-*']
+    paths:
+      - 'packages/**'
+      - 'firmware/stock/**'
+      - 'firmware/ace/**'
+      - 'components.json'
+      - 'build.py'
+      - '.github/workflows/components.yaml'
+  pull_request:
+    paths:
+      - 'packages/**'
+      - 'firmware/stock/**'
+      - 'firmware/ace/**'
+      - 'components.json'
+      - 'build.py'
+      - '.github/workflows/components.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: u1-components-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  multiace-and-source-packages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run behavioral regressions
+        run: |
+          python3 -m unittest discover -s packages/multiace/tests -p 'test_*.py'
+          python3 -m unittest discover -s tests/native-ui -p 'test_provider_layout.py'
+          python3 -m unittest discover -s tests/managed-rfid -p 'test_install_permissions.py'
+          node --check packages/multiace/runtime/web/frontend/app.js
+      - name: Build the complete multiACE application and screen source package
+        run: |
+          python3 build.py multiace
+          python3 build.py screen --source-only --output-dir dist/screen-source
+          python3 build.py stock --plan
+          python3 build.py ace --plan
+      - name: Upload independently identified packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: u1-components-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            dist/multiace-managed-*.tar.gz
+            dist/multiace-managed-*.tar.gz.sha256
+            dist/screen-source/
+      - name: Record scope
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          Built the complete multiACE host application with pinned dependencies
+          and a separate screen source package. The screen source package is not
+          an ARM executable. No stock image, ACE MCU image, device installation,
+          physical motion or hardware validation is performed by this workflow.
+          EOF
