@@ -1,0 +1,9 @@
+{
+  "active": false,
+  "installed": false,
+  "source_repository": "446599/snapfxxker-os",
+  "source_commit": "a887123946320767db44e8848602651f3f60b37a",
+  "source_path": "deliverables/u1-ace/flow15/device-service/insert_rfid_settings.py",
+  "sha256": "9818affb0a16093feccff175204c49d584d5f7dd3634bc9f47eb74421d1854a5",
+  "role": "Archived screen settings adapter from the device handoff; not imported by the current overlay service."
+}

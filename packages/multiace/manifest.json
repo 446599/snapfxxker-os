@@ -1,0 +1,27 @@
+{
+  "component": "multiace",
+  "name": "U1 multiACE 主机应用",
+  "version_file": "runtime/VERSION",
+  "runtime_source": "runtime",
+  "entry": "build.py",
+  "source_base_commit": "629555c33ecd569f68bfd8e87d31d28b437df892",
+  "source_snapshot": "deliverables/u1-ace/source-20261116/multiace/runtime",
+  "integrated_flow15_commit": "a887123946320767db44e8848602651f3f60b37a",
+  "dependency_source": "deliverables/u1-ace/source-20261116/multiace/runtime/web/backend/vendor",
+  "dependency_manifest": "deliverables/u1-ace/source-20261116/multiace/manifest.json",
+  "stock_behavior_reference": "https://github.com/Snapmaker/u1-klipper/tree/7ac453b50fe6779b2ec0b759038a17da5e6d671d",
+  "changes": [
+    "自动模式切换保留已装料成功状态",
+    "完整退料成功后结束 AUTO_UNLOAD/PRINT_AUTO_UNLOADING",
+    "普通来源预检失败使用 gcmd.error，避免整机内部错误 shutdown",
+    "已实际装料的重复 LOAD 无动作返回",
+    "热端压料 STOP 未确认直接结束当前操作，不继续挤出",
+    "恢复 NTAG 读卡、修正 NDEF 长记录和读卡结果分类"
+  ],
+  "hardware_tested": false,
+  "status": "offline-validated-candidate",
+  "legacy_provider": {
+    "path": "providers/multiACE",
+    "role": "上游参考与11月7日旧候选，非当前构建输入"
+  }
+}

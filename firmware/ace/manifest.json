@@ -1,0 +1,14 @@
+{
+  "component": "ace",
+  "name": "ACE 2 Pro 自定义 MCU 固件",
+  "target": "1.1.60O",
+  "base_version": "1.1.31",
+  "patch_source": "patches/ace2_open_60_patch.json",
+  "patch_origin": "仓库已跟踪的 Simon-CR ACE2-Open 补丁；本轮不改变补丁字节",
+  "upstream": "https://github.com/Simon-CR/ace2-pro-firmware-research",
+  "image_library": "packages/multiace/runtime/web/backend/ace2_ota.py",
+  "output_kind": "ACE MCU application binary",
+  "contains_stock_image": false,
+  "auto_flash": false,
+  "hardware_tested_this_change": false
+}

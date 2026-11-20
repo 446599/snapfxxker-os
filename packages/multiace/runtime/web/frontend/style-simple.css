@@ -1,0 +1,707 @@
+/*
+ * Simple UI layer for multiACE.
+ *
+ * This file is loaded after the upstream styles and only changes layout,
+ * spacing, sizing and visual hierarchy. Control behaviour and data flow stay
+ * in the existing Vue application.
+ */
+
+html[data-theme="new"] {
+  --simple-radius-lg: 18px;
+  --simple-radius-md: 12px;
+  --simple-radius-sm: 8px;
+  --simple-shadow: 0 18px 55px rgba(0, 0, 0, .22);
+  --simple-shadow-soft: 0 8px 28px rgba(0, 0, 0, .16);
+}
+
+html[data-theme="new"][data-shade="light"] {
+  --simple-shadow: 0 18px 55px rgba(37, 51, 56, .10);
+  --simple-shadow-soft: 0 8px 28px rgba(37, 51, 56, .07);
+}
+
+html[data-theme="new"] body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% -10%, rgba(var(--accent-rgb), .10), transparent 34rem),
+    radial-gradient(circle at 90% 15%, rgba(var(--accent-rgb), .04), transparent 26rem),
+    var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+html[data-theme="new"] button,
+html[data-theme="new"] input,
+html[data-theme="new"] select,
+html[data-theme="new"] textarea {
+  border-radius: var(--simple-radius-sm);
+}
+
+html[data-theme="new"] button {
+  transition: color .15s ease, background-color .15s ease, border-color .15s ease,
+              transform .15s ease, box-shadow .15s ease;
+}
+
+html[data-theme="new"] button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+html[data-theme="new"] button:focus-visible,
+html[data-theme="new"] input:focus-visible,
+html[data-theme="new"] select:focus-visible,
+html[data-theme="new"] textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Header and navigation */
+html[data-theme="new"] header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  min-height: 58px;
+  background: rgba(var(--nt-card-rgb), .92);
+  box-shadow: 0 1px 0 var(--border), 0 10px 28px rgba(0, 0, 0, .08);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+html[data-theme="new"] header h1 {
+  padding: 0 20px;
+  font-size: 17px;
+  letter-spacing: -.02em;
+}
+
+html[data-theme="new"] header h1 small {
+  margin-left: 10px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--nt-bg2);
+  font-size: 11px;
+}
+
+html[data-theme="new"] nav {
+  align-self: center;
+  gap: 3px;
+  padding: 0 8px;
+}
+
+html[data-theme="new"] nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  margin: 7px 0;
+  padding: 0 13px;
+  border-radius: 10px;
+  box-shadow: none;
+  font-size: 13px;
+}
+
+html[data-theme="new"] nav button:hover {
+  background: var(--nt-well);
+}
+
+html[data-theme="new"] nav button.active {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), .12);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .24);
+}
+
+html[data-theme="new"] nav .nav-ico {
+  width: 1.15em;
+  color: currentColor;
+  font-size: 14px;
+  line-height: 1;
+  text-align: center;
+}
+
+html[data-theme="new"] header .upload-btn {
+  min-width: 92px;
+  margin: 8px 7px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: 0 7px 18px rgba(var(--accent-rgb), .16);
+}
+
+html[data-theme="new"] header .lang-select {
+  height: 38px;
+  margin: 10px 5px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+html[data-theme="new"] header .screen-btn {
+  min-height: 38px;
+  margin: 10px 5px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+html[data-theme="new"] header .conn {
+  min-height: 58px;
+  padding: 0 18px;
+}
+
+html[data-theme="new"] header .conn::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Page frame */
+html[data-theme="new"] main {
+  width: min(1180px, 100%);
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px clamp(12px, 2.4vw, 28px) 34px;
+}
+
+html[data-theme="new"] main > section {
+  animation: simple-page-in .18s ease-out;
+}
+
+@keyframes simple-page-in {
+  from { opacity: .5; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Status cards */
+html[data-theme="new"] .status-row {
+  gap: 10px;
+  margin: 2px 0 20px;
+  border: 0;
+}
+
+html[data-theme="new"] .status-row .pill {
+  min-height: 70px;
+  justify-content: center;
+  padding: 11px 15px;
+  border: 1px solid var(--border);
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .status-row .pill strong {
+  margin-top: 2px;
+  font-size: clamp(15px, 1.45vw, 19px);
+}
+
+html[data-theme="new"] .status-row .pill-btn {
+  width: auto;
+  height: auto;
+  margin: 0;
+  color: var(--accent);
+  font-weight: 650;
+}
+
+html[data-theme="new"] .status-row .pill-btn:hover {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), .08);
+  transform: translateY(-1px);
+}
+
+/* ACE and slot cards */
+html[data-theme="new"] .ace-grid {
+  gap: 16px;
+}
+
+html[data-theme="new"] .ace-grid > .ace-card:only-child {
+  width: min(760px, 100%);
+}
+
+html[data-theme="new"] .ace-card {
+  overflow: hidden;
+  border-radius: var(--simple-radius-lg);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .ace-card:hover {
+  border-color: var(--nt-ctl);
+}
+
+html[data-theme="new"] .ace-card.primary {
+  border-color: rgba(var(--accent-rgb), .62);
+  box-shadow: 0 12px 34px rgba(var(--accent-rgb), .09);
+}
+
+html[data-theme="new"] .ace-card h2 {
+  min-height: 48px;
+  background: linear-gradient(180deg, rgba(var(--nt-tint), .025), transparent);
+}
+
+html[data-theme="new"] .ace-card h2 .ace-name {
+  padding: 12px 16px;
+}
+
+html[data-theme="new"] .ace-card h2 .ace-status > span,
+html[data-theme="new"] .ace-card h2 .ace-dry-btn,
+html[data-theme="new"] .ace-card h2 .ace-load-all {
+  min-width: 48px;
+  padding: 0 13px;
+}
+
+html[data-theme="new"] .slot-row {
+  gap: 10px;
+  padding: 12px;
+  background: var(--nt-bg2);
+}
+
+html[data-theme="new"] .slot-cell {
+  overflow: hidden;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+
+html[data-theme="new"] .slot-cell:hover {
+  border-color: var(--nt-ctl-hi) !important;
+  box-shadow: var(--simple-shadow-soft);
+  transform: translateY(-1px);
+}
+
+html[data-theme="new"] button.slot {
+  min-height: 188px;
+}
+
+html[data-theme="new"] .nt-slot-img {
+  height: 108px;
+}
+
+html[data-theme="new"] .slot-load-btn {
+  height: 38px;
+  margin: 0 10px 10px;
+  border: 1px solid var(--nt-ctl);
+  border-radius: var(--simple-radius-sm);
+  background: var(--nt-input);
+  font-weight: 600;
+}
+
+html[data-theme="new"] .slot-load-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+/* Toolheads */
+html[data-theme="new"] .th-section-head {
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .toolhead-grid {
+  gap: 12px;
+  margin-top: 12px;
+}
+
+html[data-theme="new"] .toolhead-card {
+  overflow: hidden;
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .toolhead-card .toolhead-actions button {
+  height: 38px;
+}
+
+html[data-theme="new"] .toolhead-card .toolhead-actions .nt-th-gear {
+  flex: 0 0 auto;
+  min-width: 52px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Snapshot bar */
+html[data-theme="new"] .snapshot-row {
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .snapshot-row select,
+html[data-theme="new"] .snapshot-row button {
+  height: 38px;
+  border-radius: var(--simple-radius-sm);
+}
+
+/* Config surface */
+html[data-theme="new"] .nt-config-tab > h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 26px 0 11px;
+  padding-top: 0;
+  border-top: 0;
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+html[data-theme="new"] .nt-config-tab > h3::before {
+  content: "";
+  width: 4px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--accent);
+}
+
+html[data-theme="new"] .nt-cfg-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+html[data-theme="new"] .nt-cfg-top > div {
+  max-width: none;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .nt-cfg-top .nt-cfg-mode {
+  order: 0;
+}
+
+html[data-theme="new"] .nt-cfg-top .nt-cfg-theme {
+  order: 1;
+}
+
+html[data-theme="new"] .nt-cfg-top h3 {
+  margin: 0 0 12px;
+}
+
+html[data-theme="new"] .nt-config-tab .mode-row {
+  gap: 6px;
+  max-width: none;
+  margin-bottom: 10px;
+}
+
+html[data-theme="new"] .nt-config-tab .mode-row > button {
+  height: 42px;
+  margin: 0;
+  border-radius: 9px;
+}
+
+html[data-theme="new"] .nt-config-tab .mode-row > button.active {
+  box-shadow: 0 7px 18px rgba(var(--accent-rgb), .16);
+}
+
+html[data-theme="new"] .nt-behave {
+  gap: 12px;
+  margin-top: 18px;
+  border: 0;
+}
+
+html[data-theme="new"] .nt-tile {
+  overflow: hidden;
+  padding: 16px;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .nt-behave + h3 {
+  margin-top: 30px;
+}
+
+html[data-theme="new"] .row {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .row button {
+  min-height: 38px;
+  border-radius: var(--simple-radius-sm);
+}
+
+html[data-theme="new"] .nt-config-tab > .config-form {
+  overflow: hidden;
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .nt-config-tab > .config-form .config-row > input,
+html[data-theme="new"] .nt-config-tab > .config-form .config-row > select,
+html[data-theme="new"] .nt-config-tab .spool-picker-row input {
+  border-radius: var(--simple-radius-sm);
+}
+
+html[data-theme="new"] .nt-config-tab .per-ace-card,
+html[data-theme="new"] .nt-config-tab .update-card,
+html[data-theme="new"] .nt-config-tab .display-card {
+  overflow: hidden;
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .nt-config-tab .nt-cfg-save {
+  bottom: 8px;
+  margin: 18px 0 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--simple-radius-md);
+  background: rgba(var(--nt-card-rgb), .94);
+  box-shadow: var(--simple-shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+html[data-theme="new"] .nt-config-tab details {
+  border-radius: var(--simple-radius-sm);
+}
+
+html[data-theme="new"] .nt-config-tab details > summary {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+}
+
+/* Spool management */
+html[data-theme="new"] .nt-spools-tab .spool-table {
+  overflow: hidden;
+  border-radius: var(--simple-radius-md);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .nt-spools-tab .spool-toolbar,
+html[data-theme="new"] .nt-spools-tab .spool-io {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--simple-radius-md);
+  background: var(--card);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+html[data-theme="new"] .nt-spools-tab .spool-add {
+  border-radius: var(--simple-radius-md);
+  box-shadow: var(--simple-shadow-soft);
+}
+
+/* Dialogs, notices and transient surfaces */
+html[data-theme="new"] .modal-card,
+html[data-theme="new"] .modal-content,
+html[data-theme="new"] .confirm-card,
+html[data-theme="new"] .nt-dialog {
+  border-radius: var(--simple-radius-lg);
+  box-shadow: var(--simple-shadow);
+}
+
+/* Narrow screens: larger slots and touch targets */
+@media (max-width: 700px) {
+  html[data-theme="new"] header h1 {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 50px;
+  }
+
+  html[data-theme="new"] header h1 .printer-tag {
+    display: none;
+  }
+
+  html[data-theme="new"] nav {
+    gap: 4px;
+    padding: 6px 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  html[data-theme="new"] nav button {
+    min-height: 42px;
+    margin: 0;
+    padding: 0 13px;
+    border: 1px solid transparent;
+  }
+
+  html[data-theme="new"] nav button.active {
+    border-color: rgba(var(--accent-rgb), .24);
+  }
+
+  html[data-theme="new"] header .upload-btn,
+  html[data-theme="new"] header .lang-select,
+  html[data-theme="new"] header .screen-btn {
+    min-height: 40px;
+    margin: 5px 4px;
+  }
+
+  html[data-theme="new"] header .upload-btn {
+    order: 2;
+    flex: 0 0 42px;
+    width: 42px;
+    min-width: 42px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  html[data-theme="new"] header .upload-btn span {
+    display: none;
+  }
+
+  html[data-theme="new"] header .upload-btn::after {
+    content: "⇧";
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  html[data-theme="new"] header .screen-btn {
+    order: 3;
+    flex: 0 0 42px;
+    width: 42px;
+    min-width: 42px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  html[data-theme="new"] header .screen-btn::after {
+    content: "";
+    display: block;
+    width: 16px;
+    height: 11px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    box-shadow: inset 0 -2px 0 currentColor;
+  }
+
+  html[data-theme="new"] header .conn {
+    order: 4;
+    flex: 0 0 auto;
+    padding: 0 10px;
+  }
+
+  html[data-theme="new"] header .lang-select {
+    order: 5;
+    flex: 0 0 70px;
+    width: 70px;
+    min-width: 70px;
+    padding: 0 6px;
+  }
+
+  html[data-theme="new"] main {
+    padding: 12px 12px 24px;
+  }
+
+  html[data-theme="new"] .status-row {
+    gap: 8px;
+  }
+
+  html[data-theme="new"] .status-row .pill {
+    min-height: 62px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border) !important;
+  }
+
+  html[data-theme="new"] .status-row .pill:nth-child(even) {
+    border-right: 0;
+  }
+
+  html[data-theme="new"] .status-row .pill-btn {
+    margin: 0;
+    color: var(--accent);
+  }
+
+  html[data-theme="new"] .slot-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  html[data-theme="new"] .slot-cell {
+    border-right: 1px solid var(--border) !important;
+  }
+
+  html[data-theme="new"] button.slot {
+    min-height: 170px;
+  }
+
+  html[data-theme="new"] .slot-load-btn {
+    min-height: 40px;
+  }
+
+  html[data-theme="new"] .ace-card h2 {
+    min-height: 54px;
+  }
+
+  html[data-theme="new"] .ace-card h2 .ace-name {
+    padding: 11px 14px;
+  }
+
+  html[data-theme="new"] .ace-card h2 .ace-status > span,
+  html[data-theme="new"] .ace-card h2 .ace-dry-btn,
+  html[data-theme="new"] .ace-card h2 .ace-load-all {
+    min-height: 42px;
+  }
+
+  html[data-theme="new"] .nt-cfg-top {
+    grid-template-columns: 1fr;
+  }
+
+  html[data-theme="new"] .nt-cfg-top > div {
+    padding: 14px;
+  }
+
+  html[data-theme="new"] .nt-behave {
+    gap: 10px;
+  }
+
+  html[data-theme="new"] .snapshot-row {
+    padding: 10px;
+  }
+
+  html[data-theme="new"] .nt-config-tab .nt-cfg-save {
+    bottom: 4px;
+  }
+
+  html[data-theme="new"] .nt-config-tab .nt-cfg-save button {
+    min-height: 42px;
+  }
+}
+
+@media (max-width: 430px) {
+  html[data-theme="new"] header h1 small:not(.printer-tag) {
+    display: none;
+  }
+
+  html[data-theme="new"] nav button {
+    padding: 0 11px;
+  }
+
+  html[data-theme="new"] .slot-row {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  html[data-theme="new"] button.slot {
+    min-height: 158px;
+  }
+
+  html[data-theme="new"] .nt-slot-img {
+    height: 92px;
+  }
+
+  html[data-theme="new"] .nt-slot-img .nt-spool {
+    height: 54px;
+    margin-top: 20px;
+  }
+
+  html[data-theme="new"] .nt-slot-img .nt-core {
+    width: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="new"] main > section,
+  html[data-theme="new"] button {
+    animation: none !important;
+    transition: none !important;
+  }
+}

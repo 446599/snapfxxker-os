@@ -1,0 +1,507 @@
+{
+  "archive": "snapfxxker-screen-source-20261120.tar.gz",
+  "arm64_runtime_built": false,
+  "bytes": 1932127,
+  "companion_overlay": "overlays/233-native-ui",
+  "directly_flashable": false,
+  "external_build_inputs": [
+    "Pinned HelixScreen source and Git submodules",
+    "Pinned CJK source fonts",
+    "Debian packages in bundles/native-ui/cross-packages.json",
+    "npm packages in bundles/native-ui/font-tools/package-lock.json"
+  ],
+  "files": {
+    "LICENSE": {
+      "bytes": 35149,
+      "mode": "0o644",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    "bundles/native-ui/cross-deps.mk": {
+      "bytes": 581,
+      "mode": "0o644",
+      "sha256": "3b8a2925a00381d711f4a849fc1a0f601685363e2d902ff3102f675c8570b344"
+    },
+    "bundles/native-ui/cross-packages.json": {
+      "bytes": 23917,
+      "mode": "0o644",
+      "sha256": "35901b14163ce6ff5a82795a019b076b837c33ccebec03264f2cc1787da8e955"
+    },
+    "bundles/native-ui/font-tools/package-lock.json": {
+      "bytes": 2938,
+      "mode": "0o644",
+      "sha256": "605ad796a105801de1607cb9657c6b31caff399b5b6bce63672bef61d7c48a11"
+    },
+    "bundles/native-ui/font-tools/package.json": {
+      "bytes": 56,
+      "mode": "0o644",
+      "sha256": "05cd458fd0a7a3e9ad4679da0ba4b9aabfecf3a327c621ed790ce19a562833c4"
+    },
+    "bundles/native-ui/licenses/Apache-2.0.txt": {
+      "bytes": 11358,
+      "mode": "0o644",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "bundles/native-ui/licenses/FONT-COPYRIGHTS.txt": {
+      "bytes": 5047,
+      "mode": "0o644",
+      "sha256": "94c8b7d4e881c36d7acc5cfcb36bb6c18926c190c5b2f01ecf11e6a1c72eabb0"
+    },
+    "bundles/native-ui/licenses/GPL-2.0.txt": {
+      "bytes": 17984,
+      "mode": "0o644",
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
+    },
+    "bundles/native-ui/licenses/GPL-3.0.txt": {
+      "bytes": 35149,
+      "mode": "0o644",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    "bundles/native-ui/licenses/LGPL-2.1.txt": {
+      "bytes": 26419,
+      "mode": "0o644",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95"
+    },
+    "bundles/native-ui/licenses/MDI-LICENSE.txt": {
+      "bytes": 993,
+      "mode": "0o644",
+      "sha256": "3ae96c9a26d3dff8e09eee34a5c868897b0c654ed923c24c73c49db4895d92a6"
+    },
+    "bundles/native-ui/licenses/OFL-1.1.txt": {
+      "bytes": 4301,
+      "mode": "0o644",
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+    },
+    "bundles/native-ui/licenses/README.md": {
+      "bytes": 1562,
+      "mode": "0o644",
+      "sha256": "dfbbab13630354015de3c3f955c737bd8ba97ba602d1c410156feb7f0031dcb0"
+    },
+    "bundles/native-ui/licenses/Spoolman-MIT.txt": {
+      "bytes": 1363,
+      "mode": "0o644",
+      "sha256": "db212ff6cc19f7225f32a02d382581f6ac853d3f5839bc6f4427929645804fe7"
+    },
+    "bundles/native-ui/licenses/debian/libc6-dev-arm64-cross/copyright": {
+      "bytes": 51200,
+      "mode": "0o644",
+      "sha256": "f5788886720a2605a946e81d571e6c8162b09f58d2e2ceb8d36e5768fccd850d"
+    },
+    "bundles/native-ui/licenses/debian/libdrm-dev/copyright": {
+      "bytes": 15612,
+      "mode": "0o644",
+      "sha256": "512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    },
+    "bundles/native-ui/licenses/debian/libevdev-dev/copyright": {
+      "bytes": 5459,
+      "mode": "0o644",
+      "sha256": "588d64c855381c4f1638f91840c5cbf0a7e771cab4e6298e5b4cf6a909ea1ac7"
+    },
+    "bundles/native-ui/licenses/debian/libgcc-14-dev-arm64-cross/copyright": {
+      "bytes": 69004,
+      "mode": "0o644",
+      "sha256": "20390f8a6f3b1e4d7cb45dd8652dabb259bbef688cbad839bcdb0b9ba7252f79"
+    },
+    "bundles/native-ui/licenses/debian/libnl-3-dev/copyright": {
+      "bytes": 5034,
+      "mode": "0o644",
+      "sha256": "9a3730df4bb18c8be5fdce05b9223f9b152b6bf40f7e45319529830ecd413eb2"
+    },
+    "bundles/native-ui/licenses/debian/libnl-genl-3-dev/copyright": {
+      "bytes": 5034,
+      "mode": "0o644",
+      "sha256": "9a3730df4bb18c8be5fdce05b9223f9b152b6bf40f7e45319529830ecd413eb2"
+    },
+    "bundles/native-ui/licenses/debian/libssl-dev/copyright": {
+      "bytes": 2543,
+      "mode": "0o644",
+      "sha256": "6a7da622fe0637a334d2a8fc470852d2ffb77d9a2b2f930f854e32a41ad6ef35"
+    },
+    "bundles/native-ui/licenses/debian/libstdc++-14-dev-arm64-cross/copyright": {
+      "bytes": 69004,
+      "mode": "0o644",
+      "sha256": "20390f8a6f3b1e4d7cb45dd8652dabb259bbef688cbad839bcdb0b9ba7252f79"
+    },
+    "bundles/native-ui/licenses/debian/libudev-dev/copyright": {
+      "bytes": 12521,
+      "mode": "0o644",
+      "sha256": "a79e4b379cabbd960bb44f6cc1a069081a3778c59a25ee529b68df5a2cb7d27d"
+    },
+    "bundles/native-ui/licenses/debian/libzstd-dev/copyright": {
+      "bytes": 5332,
+      "mode": "0o644",
+      "sha256": "5cec9fef4d3fa7e0371fbef4ec3fc416e0105dc2a9922117f84e825cb11f50f8"
+    },
+    "bundles/native-ui/licenses/debian/zlib1g-dev/copyright": {
+      "bytes": 2927,
+      "mode": "0o644",
+      "sha256": "9e5b96d63773a5d177ba264254390f792be07e41748ebd94730981c6cac31cc6"
+    },
+    "bundles/native-ui/licenses/native-third-party-manifest.json": {
+      "bytes": 15774,
+      "mode": "0o644",
+      "sha256": "48f0ab0ed2ba23fce96ce7e178b09f1ba141e0be2741d22a80525e890a572a6b"
+    },
+    "bundles/native-ui/manifest.json": {
+      "bytes": 5103,
+      "mode": "0o644",
+      "sha256": "3aa8427833170f7eec1b045e38357f19cd84014611cc847ec2d1c11643fa98f1"
+    },
+    "bundles/native-ui/patches/0001-native-ui-v2.patch": {
+      "bytes": 500456,
+      "mode": "0o644",
+      "sha256": "57aa8b67378a0cd2612fa4f57fc0115544bf107b4d845022931bf43b04d8640d"
+    },
+    "bundles/native-ui/patches/0002-native-ui-v3.patch": {
+      "bytes": 136227,
+      "mode": "0o644",
+      "sha256": "d2f55a24f1ad1e48060b959706a9150b57fc0928881ce98f73a9177aa8b0a80a"
+    },
+    "bundles/native-ui/patches/0003-advanced-yellow-white.patch": {
+      "bytes": 17252,
+      "mode": "0o644",
+      "sha256": "5b88ee18ae7e0df846a370763c4d7b61643ec61ce66768484286feca42a9c345"
+    },
+    "bundles/native-ui/patches/0004-confirmed-controls.patch": {
+      "bytes": 694320,
+      "mode": "0o644",
+      "sha256": "4ba9900683117467867746af22df08d463ed1d6373c7f3562cc13720a73e90f8"
+    },
+    "bundles/native-ui/patches/0005-upgrade-scope.patch": {
+      "bytes": 233634,
+      "mode": "0o644",
+      "sha256": "4744c6d49812c5356fcea5b5912c459a581828c668345cf1d418714b66835913"
+    },
+    "bundles/native-ui/patches/0006-u1-full-interface.patch": {
+      "bytes": 3000348,
+      "mode": "0o644",
+      "sha256": "c703289246481379c1ed9a9c7d02188c7275d634f6c0b7ff75b40a92b2ced441"
+    },
+    "bundles/native-ui/reconstruction/0001-palette-spacing.patch": {
+      "bytes": 3927,
+      "mode": "0o644",
+      "sha256": "4000f1bc274046bc57883ced340ba117323b04f7302c11af3b5656c56bb335de"
+    },
+    "bundles/native-ui/reconstruction/0002-bottom-navigation.patch": {
+      "bytes": 37265,
+      "mode": "0o644",
+      "sha256": "60cc5861497d8e188c2d4e00b1d5e0c30b0d590102d7da14860631a7e4728ec8"
+    },
+    "bundles/native-ui/reconstruction/0003-motion-lock.patch": {
+      "bytes": 10740,
+      "mode": "0o644",
+      "sha256": "de86a1f89149aa684e4a8b26041ed14b67630c2968489a8b97da8c5742d03ca5"
+    },
+    "bundles/native-ui/reconstruction/0004-settings-menu.patch": {
+      "bytes": 17695,
+      "mode": "0o644",
+      "sha256": "eec21ace625b6b16f7eec72f317621c2712c9a565e5eda556b1e6448259dbdb1"
+    },
+    "bundles/native-ui/reconstruction/0005-fan-cards.patch": {
+      "bytes": 8294,
+      "mode": "0o644",
+      "sha256": "132606e9419461be215e6c583acd56dd1f4291a998dddecd92e8621d18056b0d"
+    },
+    "bundles/native-ui/reconstruction/0006-overlay-height.patch": {
+      "bytes": 2102,
+      "mode": "0o644",
+      "sha256": "2750cc99742c5c095e39ac48c77a26dafa4955617a812deff6c901e366f4980a"
+    },
+    "bundles/native-ui/reconstruction/0007-speed-presets.patch": {
+      "bytes": 13297,
+      "mode": "0o644",
+      "sha256": "cf12f993b614f1f1eeb1fb1ecc18d65a0d9b1c4d5a7f831b94ef97fdede5e2f6"
+    },
+    "bundles/native-ui/reconstruction/0008-controls-menu.patch": {
+      "bytes": 63702,
+      "mode": "0o644",
+      "sha256": "7798b3c822ad7b54db1021764c73e6f5a70cd2719f9045121bacd6d021b2d587"
+    },
+    "bundles/native-ui/reconstruction/0009-bed-draft.patch": {
+      "bytes": 16395,
+      "mode": "0o644",
+      "sha256": "c1635baf5c53a7ec483aff9448ee1f5814b783485c310dcb3502087d561f0daa"
+    },
+    "bundles/native-ui/reconstruction/0010-home-task-card.patch": {
+      "bytes": 18079,
+      "mode": "0o644",
+      "sha256": "1796fd7f644089a5de4a6a329c1dc57dd3e937c8f6ba7d8888280a7235852cd6"
+    },
+    "bundles/native-ui/reconstruction/0011-temperature-overview.patch": {
+      "bytes": 18883,
+      "mode": "0o644",
+      "sha256": "4f212eab79d4ccef23c9538e2efa96e4e48bcfe3d2eccbf684479f496f76b951"
+    },
+    "bundles/native-ui/reconstruction/0012-motion-layout.patch": {
+      "bytes": 49132,
+      "mode": "0o644",
+      "sha256": "9c65481844b89cbf5a17b7fa5ab726df2bcf88e69d53b1df9c7b5cbdf99119f8"
+    },
+    "bundles/native-ui/reconstruction/0013-home-status-strip.patch": {
+      "bytes": 29861,
+      "mode": "0o644",
+      "sha256": "1e96cad536d6c812411848f48b84965efdecb771db787e642b07eabb7e847b23"
+    },
+    "bundles/native-ui/reconstruction/0014-material-main.patch": {
+      "bytes": 30252,
+      "mode": "0o644",
+      "sha256": "cbaf8e20829727a2e9fa02d8689239663737f72b21de8b667d7af8bf59b52c89"
+    },
+    "bundles/native-ui/reconstruction/0015-bed-draft-tests.patch": {
+      "bytes": 7031,
+      "mode": "0o644",
+      "sha256": "40dd15395333b790b025af2cda3f224ea8e93857c9fa03b79aa29aa62ff4bb0f"
+    },
+    "bundles/native-ui/reconstruction/0016-nozzle-editor.patch": {
+      "bytes": 42246,
+      "mode": "0o644",
+      "sha256": "edf19a91b7c1875909ec22920100576d29a0f752538eef1b2b29563d959a9158"
+    },
+    "bundles/native-ui/reconstruction/0017-narrow-task-card.patch": {
+      "bytes": 6992,
+      "mode": "0o644",
+      "sha256": "2f26b883dd86468d8226904662a1831cb0ec98970df6ef5e13a32a1780295ee4"
+    },
+    "bundles/native-ui/reconstruction/0018-material-subject-const.patch": {
+      "bytes": 1237,
+      "mode": "0o644",
+      "sha256": "9a53732bfa0732ea5ea51734aea54586ee63604e2f904d97635ab18eeb0a7c63"
+    },
+    "bundles/native-ui/reconstruction/0019-material-label-height.patch": {
+      "bytes": 2053,
+      "mode": "0o644",
+      "sha256": "6d687afda4bb4706ab542dbac295ae186ba34610317d193bed9a9fc79187acca"
+    },
+    "bundles/native-ui/reconstruction/0020-overlay-header-fit.patch": {
+      "bytes": 1626,
+      "mode": "0o644",
+      "sha256": "e629cdc8da8084267298f817f2eaa912ad7e11106d17eeeda78f063125cfa44e"
+    },
+    "bundles/native-ui/reconstruction/0021-secondary-icon-fit.patch": {
+      "bytes": 2850,
+      "mode": "0o644",
+      "sha256": "50d7c09e135a33829b16391621774c2a869d087d96dc26874157a38f92b8f548"
+    },
+    "bundles/native-ui/reconstruction/0022-nozzle-label-fit.patch": {
+      "bytes": 943,
+      "mode": "0o644",
+      "sha256": "38890805a684ff683df39bed5f20eb1b0e5482b8382e3714a3636c819abe6151"
+    },
+    "bundles/native-ui/reconstruction/0023-overlay-root-gap.patch": {
+      "bytes": 985,
+      "mode": "0o644",
+      "sha256": "ab0ab33c689e2d62f49eb07d81a9860757cb222c7c839ddbbd5ea5a9f5da5e28"
+    },
+    "bundles/native-ui/reconstruction/0024-bed-status-baseline.patch": {
+      "bytes": 983,
+      "mode": "0o644",
+      "sha256": "1aeaf3702a2a304bc219a6beb4042dcf5bf7bd4d658d95651a14ab6ce521d219"
+    },
+    "bundles/native-ui/reconstruction/0025-bottom-nav-backdrop.patch": {
+      "bytes": 2610,
+      "mode": "0o644",
+      "sha256": "fb93b3035c4adcdd99db8c0ec78d30e5b8751b50d94966f11f9ff04907b42375"
+    },
+    "bundles/native-ui/reconstruction/0026-reference-header.patch": {
+      "bytes": 4994,
+      "mode": "0o644",
+      "sha256": "1b4dfc5dd48170f8250dbda3d65bb4e94a73a56fdde43d26ed3adaa9f44a92d1"
+    },
+    "bundles/native-ui/reconstruction/0027-fan-controls-order.patch": {
+      "bytes": 3528,
+      "mode": "0o644",
+      "sha256": "036ea8cc432cc820f8a9776018da10607362d140bfdc8685fa76f382941c448d"
+    },
+    "bundles/native-ui/reconstruction/0028-ui5-xml-schema.patch": {
+      "bytes": 3405,
+      "mode": "0o644",
+      "sha256": "5f6894ff313a7f168aa6adcf42b84a4363553cc6524a0bbf4954270f3fd8d8d5"
+    },
+    "bundles/native-ui/reconstruction/README.md": {
+      "bytes": 1172,
+      "mode": "0o644",
+      "sha256": "7a6f0343829b768a5e81090d58628f97bb1628274adf373bffc659a0e177da73"
+    },
+    "bundles/native-ui/reconstruction/series.json": {
+      "bytes": 11134,
+      "mode": "0o644",
+      "sha256": "044ab47672486b02ccb7385490c6aef241c9ecc138aa3d589917fb7f7ff53453"
+    },
+    "overlays/233-native-ui/pre-scripts/10-check-base.sh": {
+      "bytes": 694,
+      "mode": "0o755",
+      "sha256": "bb2d7f62a84fa591af3b448922b37a801203b3d12fde5bcf2f6187be25a1f8e4"
+    },
+    "overlays/233-native-ui/root/etc/hooks/klipper.d/30-u1-native-upgrade.sh": {
+      "bytes": 600,
+      "mode": "0o644",
+      "sha256": "769e5c355016b00ee6436a9a13a5cbd9f31fb2a521c108153c6f212d9958bad5"
+    },
+    "overlays/233-native-ui/root/etc/hooks/lmd.d/30-helixscreen.sh": {
+      "bytes": 2891,
+      "mode": "0o644",
+      "sha256": "5346582105ced61de412d87e9678c452bd067068163203590c859640f569cf66"
+    },
+    "overlays/233-native-ui/root/etc/hooks/moonraker.d/30-u1-native-upgrade.sh": {
+      "bytes": 424,
+      "mode": "0o644",
+      "sha256": "cb53974801c8d2dddb87abb0044863f685ead51d406a05cf87f73f2d212e6f52"
+    },
+    "overlays/233-native-ui/root/etc/init.d/S57u1-native-ui": {
+      "bytes": 353,
+      "mode": "0o755",
+      "sha256": "9d9a990a50c04a7c769ba562ae0eae0016cf2aadf1a07654083b21bf5cd02468"
+    },
+    "overlays/233-native-ui/root/etc/init.d/S58u1-device-service": {
+      "bytes": 943,
+      "mode": "0o755",
+      "sha256": "1d27947e568695386d8adfe57f636672b17f443061a2474b2520f5ba09e490d0"
+    },
+    "overlays/233-native-ui/root/home/lava/klipper/klippy/extras/u1_native_upgrade.py": {
+      "bytes": 5181,
+      "mode": "0o644",
+      "sha256": "9cd6d12be19d4977e00a8fad817d1386456316f3fee4741b802f9c815fb33a62"
+    },
+    "overlays/233-native-ui/root/usr/local/bin/u1-native-ui-setup.py": {
+      "bytes": 10311,
+      "mode": "0o755",
+      "sha256": "2e4e1feb5229796c30bf86f72b2819be4c4891de919aa5f9903fe8c4ffddd8dc"
+    },
+    "overlays/233-native-ui/root/usr/local/lib/u1-device-service/README.md": {
+      "bytes": 11603,
+      "mode": "0o644",
+      "sha256": "21219a08c22054bf660bd68ed1670792daeaa701aac74c636f19eff80c5ed32f"
+    },
+    "overlays/233-native-ui/root/usr/local/lib/u1-device-service/device_service.py": {
+      "bytes": 40540,
+      "mode": "0o644",
+      "sha256": "8882147c11a88329ad68332780c72d80a1056c284d3773dd5bd632b47c7c3bbf"
+    },
+    "overlays/233-native-ui/root/usr/local/lib/u1-device-service/idle_checks.py": {
+      "bytes": 7387,
+      "mode": "0o644",
+      "sha256": "56035af1b0799aaaac4fbf299c7b55c73f09fc0c7754d2c628cafdeadabb405d"
+    },
+    "overlays/233-native-ui/root/usr/local/lib/u1-device-service/launch.py": {
+      "bytes": 969,
+      "mode": "0o644",
+      "sha256": "3aefd32c18a4106e11aadbb5ce46527a660d9601d8173fc4c8826dbfb1174cdb"
+    },
+    "overlays/233-native-ui/root/usr/local/lib/u1-device-service/slot_config.py": {
+      "bytes": 5404,
+      "mode": "0o644",
+      "sha256": "db81c73279cd4b7bce870612063df66d2a95b25a4f06a420ee7e9cea771e8ad3"
+    },
+    "overlays/233-native-ui/root/usr/local/lib/u1-device-service/test_device_service.py": {
+      "bytes": 19388,
+      "mode": "0o644",
+      "sha256": "9c5fa895481dbd05df8a9457cab0b56c3308717c6254fe0087eb4663ee44ae4c"
+    },
+    "overlays/233-native-ui/root/usr/local/lib/u1-device-service/test_loopback_proxy.py": {
+      "bytes": 5041,
+      "mode": "0o644",
+      "sha256": "1a07389ef3e37dd67193c2ce59b36e2ffd3ae681a2936c1d46c3af6b937a2f40"
+    },
+    "overlays/233-native-ui/root/usr/local/lib/u1-device-service/test_upgrade_guard.py": {
+      "bytes": 19302,
+      "mode": "0o644",
+      "sha256": "5fcd2e979e09d704ee5a8bce9c91b721a99795221da6aa9277ce298012a8901a"
+    },
+    "overlays/233-native-ui/root/usr/local/share/firmware-config/functions/26_actions_helixscreen.yaml": {
+      "bytes": 710,
+      "mode": "0o644",
+      "sha256": "e29424ab7f97272bfa40d550afbfbffa2362268fda67826a6596971fa6cf0c29"
+    },
+    "overlays/233-native-ui/root/usr/local/share/firmware-config/functions/26_settings_snapmaker_components_gui.yaml": {
+      "bytes": 1732,
+      "mode": "0o644",
+      "sha256": "0eba3ef0c9a8dde82135bec06db0f852122cd3ba09ad579c277ff9705667fd2d"
+    },
+    "overlays/233-native-ui/root/usr/local/share/u1-native-upgrade/klipper.cfg": {
+      "bytes": 136,
+      "mode": "0o644",
+      "sha256": "31a960eab0fd69d7973a9264e09496aab530b8d490a9b461a7cb7367dfeb9498"
+    },
+    "packages/screen/README.md": {
+      "bytes": 5464,
+      "mode": "0o644",
+      "sha256": "e4b70a5a0f2dc56041b9e7f094d46452aab5c5e0c322692cc4cc4d97e07534b9"
+    },
+    "packages/screen/build.py": {
+      "bytes": 6770,
+      "mode": "0o644",
+      "sha256": "1203748e1f13d20e87296f2252b4580fae89d2ba854dd6acbd4b191cabd4d14b"
+    },
+    "packages/screen/manifest.json": {
+      "bytes": 1971,
+      "mode": "0o644",
+      "sha256": "04f00daaff6670b82384dc30e08356f3d14d2e47ebab114cb4be638d14b9e088"
+    },
+    "packages/screen/reference/insert_rfid_settings.py": {
+      "bytes": 8701,
+      "mode": "0o644",
+      "sha256": "9818affb0a16093feccff175204c49d584d5f7dd3634bc9f47eb74421d1854a5"
+    },
+    "packages/screen/reference/provenance.json": {
+      "bytes": 436,
+      "mode": "0o644",
+      "sha256": "ec937fe6c482d33028868f9e019734a3160ace29acbd1bc1ae17990aa563311e"
+    },
+    "scripts/native-ui/build.sh": {
+      "bytes": 2350,
+      "mode": "0o755",
+      "sha256": "5137c7ba283df1002a9196c95facb676aa2ddaaea30d07efb2d17422852052a9"
+    },
+    "scripts/native-ui/build_inputs.py": {
+      "bytes": 7011,
+      "mode": "0o644",
+      "sha256": "c3bc6a98fb1d5cb86d8842277b66092714a424d912749e674363b608ad197787"
+    },
+    "scripts/native-ui/make-recorded.sh": {
+      "bytes": 382,
+      "mode": "0o755",
+      "sha256": "a7a98337d724ee895a2f431060bbbe992394965c01ab19df1101b7fe098c9617"
+    },
+    "scripts/native-ui/package_runtime.py": {
+      "bytes": 7386,
+      "mode": "0o755",
+      "sha256": "6277393c9a7b35e8a690f098ffcc2bf7d295d3d83d03c7eb86c43d6d45945e17"
+    },
+    "scripts/native-ui/pin_runtime.py": {
+      "bytes": 2464,
+      "mode": "0o644",
+      "sha256": "9ba7a7a3de87c6897069d445083901423a09a10532a63744e5c40b0d3190f471"
+    },
+    "scripts/native-ui/prepare_source.py": {
+      "bytes": 5252,
+      "mode": "0o755",
+      "sha256": "29fb760ce6e95dcf87e15a4ad1e15b6fe152127f02d0050a35d29664cd743039"
+    },
+    "scripts/native-ui/prepare_toolchain.py": {
+      "bytes": 2885,
+      "mode": "0o755",
+      "sha256": "3521c36d90ecfa77e543a22f4dc59284794dd85b95041c15f8fbeacfa9f44643"
+    },
+    "scripts/native-ui/prepare_ui5_reconstruction.py": {
+      "bytes": 2424,
+      "mode": "0o755",
+      "sha256": "fa575a940cfc9488f3761732d106354a9de72e8bdb672728f832fcdb55782222"
+    },
+    "scripts/native-ui/validate.py": {
+      "bytes": 9417,
+      "mode": "0o644",
+      "sha256": "713c33de1c43f5ffe0c3ad52abe42482987297f349d0718980fb2b39f842f688"
+    }
+  },
+  "id": "snapfxxker-screen-20261120",
+  "inactive_reference": {
+    "active": false,
+    "installed_by_this_package": false,
+    "path": "packages/screen/reference/insert_rfid_settings.py",
+    "provenance": "packages/screen/reference/provenance.json"
+  },
+  "input_fingerprint": "b118223c4fe7b5345c9ff22477020e2e8a4ecbef203ffa0512aae6952dd665e8",
+  "kind": "source-only",
+  "layer": "screen",
+  "sha256": "9504a40af165ef32ebce24154e2f55a8ec66cc62600159beaa8fddad170f6751",
+  "upstream_source_tree_included": false
+}
