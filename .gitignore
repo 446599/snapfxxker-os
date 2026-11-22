@@ -1,0 +1,10 @@
+# Keep independent repositories and local archives outside the root index.
+/*
+!/.gitignore
+!/README.md
+!/01-原厂固件/
+!/02-屏幕层/
+!/03-MultiACE层/
+!/04-自定义ACE固件/
+.DS_Store
+__pycache__/
