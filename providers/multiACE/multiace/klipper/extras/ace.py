@@ -441,6 +441,8 @@ AUTO_DRY_INTERVAL = 60.0
 # this only bounds the case where we stop asking (restart, unplugged unit),
 # so the ACE cannot keep heating on its own forever.
 AUTO_DRY_MAX_MINUTES = 600
+PRINT_DRYING_ARM_TIMEOUT = 600.
+PRINT_DRYING_REFRESH_SECONDS = (AUTO_DRY_MAX_MINUTES - 10) * 60.
 # Soft start. Starting the ACE 2 dryer straight at a high
 # target can trip a ptc_error inside the ACE firmware; the heater then stays
 # blocked until the unit is power cycled. The threshold is unit-specific -
@@ -1238,6 +1240,10 @@ class MultiAce:
         # a Pro's SKU rides in its normal status (_v1_tag_bind_from_status).
         self._v2_rfid_rescan_pending = {}
         self._auto_dry_started = set()
+        self._print_dry_requested = False
+        self._print_dry_arm_timer = None
+        self._print_dry_aces = set()
+        self._print_dry_refresh_timer = None
         # idx -> {'target': C, 'current': C, 'next': reactor time}. Memory
         # only: after a restart a still-running unit has no entry and is
         # re-seeded at the soft start, which costs a little drying time but
@@ -1997,6 +2003,9 @@ class MultiAce:
         self.gcode.register_command(
             'ACE_STOP_DRYING', self.cmd_ACE_STOP_DRYING,
             desc=self.cmd_ACE_STOP_DRYING_help)
+        self.gcode.register_command(
+            'ACE_PRINT_DRYING_CONTROL', self.cmd_ACE_PRINT_DRYING_CONTROL,
+            desc=self.cmd_ACE_PRINT_DRYING_CONTROL_help)
         self.gcode.register_command(
             'ACE_ENABLE_FEED_ASSIST', self.cmd_ACE_ENABLE_FEED_ASSIST,
             desc=self.cmd_ACE_ENABLE_FEED_ASSIST_help)
@@ -4511,6 +4520,8 @@ class MultiAce:
                     'print_duration', 0.) > 30.
         except Exception:
             _is_resume = False
+        if not _is_resume:
+            self._start_print_drying()
         _src_head = getattr(self, '_resistance_pause_source_head', None)
         if not _is_resume:
             self._resistance_strikes.clear()
@@ -4605,6 +4616,7 @@ class MultiAce:
             })
 
     def _on_print_end(self, *args):
+        self._stop_print_drying()
         self._auto_feed_enabled = False
         self._fa_context = 'idle'
         self._runout_suppress_heads = set()
@@ -9259,6 +9271,125 @@ class MultiAce:
         return pos[3]
 
     cmd_ACE_START_DRYING_help = 'Starts ACE Pro dryer'
+
+    cmd_ACE_PRINT_DRYING_CONTROL_help = (
+        'Arm 55C ACE drying for the next print. Usage: '
+        'ACE_PRINT_DRYING_CONTROL ENABLE=0|1')
+
+    def cmd_ACE_PRINT_DRYING_CONTROL(self, gcmd):
+        self._print_dry_requested = bool(
+            gcmd.get_int('ENABLE', 0, minval=0, maxval=1))
+        self._cancel_print_dry_arm_timer()
+        if self._print_dry_requested:
+            self._print_dry_arm_timer = self.reactor.register_timer(
+                self._expire_print_dry_arm,
+                self.reactor.monotonic() + PRINT_DRYING_ARM_TIMEOUT)
+
+    def _cancel_print_dry_arm_timer(self):
+        timer = getattr(self, '_print_dry_arm_timer', None)
+        if timer is not None:
+            self.reactor.unregister_timer(timer)
+            self._print_dry_arm_timer = None
+
+    def _expire_print_dry_arm(self, eventtime):
+        self._print_dry_requested = False
+        self._print_dry_arm_timer = None
+        logging.info('[multiACE] print-drying request expired before print start')
+        return self.reactor.NEVER
+
+    def _print_drying_targets(self):
+        targets = set()
+        for head in range(4):
+            source = self._head_source.get(head)
+            if not source or not self.head_uses_ace(head):
+                continue
+            try:
+                ace_idx = int(source.get('ace_index', -1))
+            except (TypeError, ValueError):
+                continue
+            if (0 <= ace_idx < len(self._ace_devices)
+                    and self._connected_per_ace.get(ace_idx, False)):
+                targets.add(ace_idx)
+        return sorted(targets)
+
+    def _start_print_drying(self):
+        if not getattr(self, '_print_dry_requested', False):
+            return
+        self._print_dry_requested = False
+        self._cancel_print_dry_arm_timer()
+        self._print_dry_aces = set()
+
+        def _started(self, response, ace_idx):
+            if ace_idx not in self._print_dry_aces or response is None:
+                return
+            if response.get('code', 0) != 0:
+                self._print_dry_aces.discard(ace_idx)
+                logging.info('[multiACE] print-drying start on ACE %d failed: %s',
+                             ace_idx, response.get('msg'))
+                return
+            self._schedule_dry_exhaust_open(ace_idx, 'print drying')
+
+        for idx in self._print_drying_targets():
+            # A user-started or humidity-controlled cycle belongs to its owner.
+            if (self._ace_is_drying(idx)
+                    or idx in getattr(self, '_auto_dry_started', ())):
+                continue
+            self._print_dry_aces.add(idx)
+            self.send_request_to(
+                idx,
+                {'method': 'drying', 'params': {
+                    'temp': 55, 'fan_speed': 7000,
+                    'duration': AUTO_DRY_MAX_MINUTES,
+                    'auto_roll': self.dry_auto_roll}},
+                lambda _self, response, ace_idx=idx: _started(
+                    self, response, ace_idx))
+
+        if self._print_dry_aces:
+            self._print_dry_refresh_timer = self.reactor.register_timer(
+                self._refresh_print_drying,
+                self.reactor.monotonic() + PRINT_DRYING_REFRESH_SECONDS)
+
+    def _refresh_print_drying(self, eventtime):
+        if not self._print_dry_aces:
+            self._print_dry_refresh_timer = None
+            return self.reactor.NEVER
+        stats = self.printer.lookup_object('print_stats', None)
+        if stats is None or getattr(stats, 'state', None) not in ('printing', 'paused'):
+            self._stop_print_drying()
+            return self.reactor.NEVER
+        for idx in sorted(self._print_dry_aces):
+            if not self._connected_per_ace.get(idx, False):
+                continue
+            self.send_request_to(idx, {'method': 'drying', 'params': {
+                'temp': 55, 'fan_speed': 7000,
+                'duration': AUTO_DRY_MAX_MINUTES,
+                'auto_roll': self.dry_auto_roll}})
+        return eventtime + PRINT_DRYING_REFRESH_SECONDS
+
+    def _stop_print_drying(self):
+        self._print_dry_requested = False
+        self._cancel_print_dry_arm_timer()
+        timer = getattr(self, '_print_dry_refresh_timer', None)
+        self._print_dry_refresh_timer = None
+        if timer is not None:
+            self.reactor.unregister_timer(timer)
+        targets = sorted(getattr(self, '_print_dry_aces', ()))
+        self._print_dry_aces = set()
+        for idx in targets:
+            self._close_dry_exhaust(idx, 'print ended')
+
+            def _stopped(self, response, ace_idx):
+                if response is None:
+                    logging.info('[multiACE] print-drying stop on ACE %d had no response',
+                                 ace_idx)
+                elif response.get('code', 0) != 0:
+                    logging.info('[multiACE] print-drying stop on ACE %d failed: %s',
+                                 ace_idx, response.get('msg'))
+
+            self.send_request_to(
+                idx, {'method': 'drying_stop'},
+                lambda _self, response, ace_idx=idx: _stopped(
+                    self, response, ace_idx))
 
     def cmd_ACE_START_DRYING(self, gcmd):
         temperature = gcmd.get_int('TEMP')
