@@ -3953,19 +3953,22 @@ async def update_config(payload: ConfigUpdate) -> dict:
     p = Path(_resolve_cfg_path())
     if not p.exists():
         raise HTTPException(404, f"config file not found: {_resolve_cfg_path()}")
+    cur = p.read_text(encoding="utf-8")
+    cur_sha1 = _cfg_sha1(cur)
     if payload.base_sha1:
         # Lost-update guard (see ConfigUpdate.base_sha1): the file changed
         # since the browser loaded it, so the payload is built on a stale
         # base. Refuse with the CURRENT content so the client can re-apply
         # its form values on top and retry - never silently overwrite.
-        cur = p.read_text(encoding="utf-8")
-        cur_sha1 = _cfg_sha1(cur)
         if cur_sha1 != payload.base_sha1:
             raise HTTPException(409, json.dumps({
                 "error": "config changed on disk since it was loaded",
                 "sha1": cur_sha1,
                 "content": cur,
             }))
+    if payload.content == cur and not payload.restart_klipper:
+        return {"path": str(p), "backup": None, "restart": None,
+                "sha1": cur_sha1, "changed": False}
     backup = p.with_suffix(p.suffix + ".bak")
     _write_cfg_atomic(backup, p.read_text(encoding="utf-8"))
     _write_cfg_atomic(p, payload.content)

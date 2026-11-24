@@ -2690,10 +2690,16 @@ reboot</pre>
         </div>
       </div>
       <template v-if="preflight.report">
-        <div class="preflight-prefs">
-          <label><input type="checkbox" v-model="preflight.bedMesh"> {{ t('ui.preflight.pref_bed_mesh') }}</label>
-          <label><input type="checkbox" v-model="preflight.camera"> {{ t('ui.preflight.pref_camera') }}</label>
-          <label :title="t('ui.preflight.pref_flow_cal_title')"><input type="checkbox" v-model="preflight.flowCal"> {{ t('ui.preflight.pref_flow_cal') }}</label>
+        <div class="preflight-start-options">
+          <div class="preflight-prefs">
+            <label><input type="checkbox" v-model="preflight.bedMesh"> {{ t('ui.preflight.pref_bed_mesh') }}</label>
+            <label><input type="checkbox" v-model="preflight.camera"> {{ t('ui.preflight.pref_camera') }}</label>
+            <label :title="t('ui.preflight.pref_flow_cal_title')"><input type="checkbox" v-model="preflight.flowCal"> {{ t('ui.preflight.pref_flow_cal') }}</label>
+          </div>
+          <img v-if="preflight.report.thumbnail" class="preflight-thumbnail"
+               :key="preflight.report.thumbnail.b64"
+               :src="'data:' + preflight.report.thumbnail.mime + ';base64,' + preflight.report.thumbnail.b64"
+               :alt="t('ui.preflight.thumbnail_alt')" @error="$event.target.hidden = true">
         </div>
         <!-- FOrca banner: shown for every FOrcaSlicer file, also uniform ones -->
         <div v-if="preflight.report.forca" class="forca-banner"

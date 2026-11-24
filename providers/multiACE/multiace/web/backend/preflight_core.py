@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import re
 from collections import deque
 
@@ -49,6 +51,57 @@ _PLAN_KEEP_RE = re.compile(
 # M73 kept for the bg-unload window look-ahead (parse_toolchanges_with_times
 # reads the remaining-minutes R off the plan proxy); the toolchange/layer
 # parsers ignore M73 lines, so keeping them is side-effect-free.
+
+_THUMB_BEGIN_RE = re.compile(
+    r'^;\s*thumbnail(?P<format>_jpg|_png)?\s+begin\s+'
+    r'(\d{1,4})x(\d{1,4})\s+(\d{1,8})\s*$', re.IGNORECASE)
+_THUMB_END_RE = re.compile(r'^;\s*thumbnail(?:_jpg|_png)?\s+end\s*$', re.IGNORECASE)
+_THUMB_DATA_RE = re.compile(r'[A-Za-z0-9+/]+={0,2}\Z')
+_THUMB_SIGNATURES = {'image/png': b'\x89PNG\r\n\x1a\n', 'image/jpeg': b'\xff\xd8\xff'}
+_THUMB_SCAN_LINES = 6000
+_THUMB_MAX_B64 = 300_000
+
+
+class _ThumbnailReader:
+    """Keep only one partial image and the best completed header preview."""
+
+    def __init__(self):
+        self.preview = None
+        self.parts = None
+
+    def read_line(self, line):
+        if begin := _THUMB_BEGIN_RE.match(line):
+            width, height, declared = map(int, begin.groups()[1:])
+            self.parts = None
+            if (0 < width <= 2048 and 0 < height <= 2048
+                    and 0 < declared <= _THUMB_MAX_B64):
+                self.parts = []
+                self.size = 0
+                self.width, self.height = width, height
+                self.mime = ('image/jpeg' if (begin['format'] or '').lower() == '_jpg'
+                             else 'image/png')
+        elif self.parts is not None and _THUMB_END_RE.match(line):
+            self.finish()
+            self.parts = None
+        elif self.parts is not None:
+            data = line[1:].strip() if line.startswith(';') else ''
+            self.size += len(data)
+            if self.size > _THUMB_MAX_B64 or not _THUMB_DATA_RE.fullmatch(data):
+                self.parts = None
+            else:
+                self.parts.append(data)
+
+    def finish(self):
+        best = self.preview
+        if not self.parts or (best and self.width * self.height <= best['w'] * best['h']):
+            return
+        encoded = ''.join(self.parts)
+        try:
+            image = base64.b64decode(encoded, validate=True)
+        except binascii.Error:
+            return
+        if image.startswith(_THUMB_SIGNATURES[self.mime]):
+            self.preview = {'mime': self.mime, 'w': self.width, 'h': self.height, 'b64': encoded}
 
 
 class PreflightRejected(ValueError):
@@ -79,17 +132,20 @@ def parse_meta(pp, line_iter):
     gate): parse_meta has four call sites - two here in the backend and two
     in the browser's Pyodide worker - and a positional 6th element would
     have to be threaded through all of them again on the next addition.
-    Keys: 'slicer' (banner text), 'forca' (bool), 'nozzles' ({T: mm}).
+    Keys: 'slicer', 'forca', 'nozzles', and an optional 'thumbnail'.
     """
     head_lines: list = []
     tail_lines: deque = deque(maxlen=2000)
     plan_lines: list = []
+    thumbnail = _ThumbnailReader()
     used: set = set()
     for i, line in enumerate(line_iter):
         if i < 300:
             head_lines.append(line)
         else:
             tail_lines.append(line)
+        if i < _THUMB_SCAN_LINES:
+            thumbnail.read_line(line)
         m = _TOOLCHANGE_RE.match(line)
         if m:
             used.add(int(m.group(1)))
@@ -122,6 +178,7 @@ def parse_meta(pp, line_iter):
         'forca':   bool(slicer_name) and pp.is_forca_slicer(slicer_name)
                    if hasattr(pp, 'is_forca_slicer') else False,
         'nozzles': nozzles,
+        'thumbnail': thumbnail.preview,
     }
     return slicer_colors, slicer_types, num_aces, used, plan_proxy, meta
 
@@ -892,6 +949,7 @@ def head_mode_preview(pp, token, safe_name, upload_size, slicer_colors,
         # these - so it has to carry the display fields itself, or the UI
         # would never see a nozzle table in head mode.
         "slicer": (meta or {}).get("slicer") or "",
+        "thumbnail": (meta or {}).get("thumbnail"),
         "forca": bool((meta or {}).get("forca")),
         "nozzles": {str(t): d
                     for t, d in ((meta or {}).get("nozzles") or {}).items()},
@@ -1019,6 +1077,7 @@ def build_report(pp, *, slicer_colors, slicer_types, num_aces, plan_proxy,
     }
     nz_groups, nz_mixed = nozzle_context(pp, meta, head_ctx)
     out["slicer"] = (meta or {}).get("slicer") or ""
+    out["thumbnail"] = (meta or {}).get("thumbnail")
     out["forca"] = bool((meta or {}).get("forca"))
     out["nozzles"] = {str(t): d
                       for t, d in ((meta or {}).get("nozzles") or {}).items()}

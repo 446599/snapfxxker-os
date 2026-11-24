@@ -33,6 +33,7 @@
       "list": "列表",
       "status": "状态",
       "saving": "保存中…",
+      "no_config_changes": "设置没有变化。",
       "error": "错误",
       "unknown_source": "来源未知",
       "source_rfid": "RFID",
@@ -195,6 +196,7 @@
     },
     "preflight": {
       "title": "G-code 预检",
+      "thumbnail_alt": "模型预览",
       "manual_disabled": "当某个喷头设为手动 时，预检已禁用。请将喷头切回自动，或直接通过 Fluidd 上传文件。",
       "loading": "正在分析 G-code...",
       "printer_loadout": "打印机当前装载",

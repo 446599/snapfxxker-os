@@ -955,6 +955,11 @@ body { padding-bottom: 64px; }
                    margin: .2rem 0 .6rem 0; font-size: .85rem; color: var(--muted); }
 .preflight-prefs label { display: flex; align-items: center; gap: .35rem; cursor: pointer; }
 .preflight-prefs input { accent-color: var(--accent); cursor: pointer; }
+.preflight-start-options { display: flex; align-items: center; gap: .75rem; }
+.preflight-start-options .preflight-prefs { flex: 1; min-width: 0; }
+.preflight-thumbnail { width: clamp(64px, 22vw, 120px); aspect-ratio: 1;
+  flex: none; object-fit: contain; border-radius: .5rem;
+  border: 1px solid var(--border); }
 .preflight-progress { margin: 1rem 0 .4rem 0; }
 .preflight-progress-sticky {
     position: sticky; top: 0; z-index: 10;

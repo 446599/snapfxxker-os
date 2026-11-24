@@ -5262,6 +5262,7 @@ createApp({
         },
       });
     }
+    let savedConfigForm = null;
     async function loadConfig() {
       configLoadError.value = "";
       try {
@@ -5274,11 +5275,17 @@ createApp({
         // Revision token for the lost-update guard (see saveConfigForm).
         config.sha1 = j.sha1 || "";
         paramsToForm(j.params, j.per_ace_params || {});
+        savedConfigForm = JSON.stringify(configForm);
       } catch (e) {
         configLoadError.value = t("ui.log.config_load_failed", {error: e});
       }
     }
     async function saveConfigForm() {
+      let submittedForm = JSON.stringify(configForm);
+      if (submittedForm === savedConfigForm) {
+        configLog.value = t("ui.common.no_config_changes");
+        return;
+      }
       configLog.value = t("ui.common.saving");
       try {
         // LOST-UPDATE GUARD: the form PATCHES the browser's cached copy of
@@ -5310,6 +5317,7 @@ createApp({
           }
           base = fresh.content;
           sha1 = fresh.sha1 || "";
+          submittedForm = JSON.stringify(configForm);
           newContent = formToCfgContent(base);
           r = await fetch(`${API}/config`, {
             method: "PUT",
@@ -5323,6 +5331,11 @@ createApp({
         const j = await r.json();
         config.content = newContent;
         config.sha1 = j.sha1 || "";
+        savedConfigForm = submittedForm;
+        if (j.changed === false) {
+          configLog.value = t("ui.common.no_config_changes");
+          return;
+        }
         rebootNeeded.value = true;
         configLog.value = `✓ ${j.path}\nBackup: ${j.backup}\n${t("ui.common.please_restart")}`;
       } catch (e) { configLog.value = `${t("ui.common.error")}: ${e}`; }
@@ -5352,6 +5365,11 @@ createApp({
         if (!r.ok) throw new Error(`HTTP ${r.status} ${await r.text()}`);
         const j = await r.json();
         config.sha1 = j.sha1 || "";
+        if (j.changed === false) {
+          configLog.value = t("ui.common.no_config_changes");
+          return;
+        }
+        savedConfigForm = null;
         rebootNeeded.value = true;
         configLog.value = `✓ ${j.path}\nBackup: ${j.backup}\n${t("ui.common.please_restart")}`;
       } catch (e) { configLog.value = `${t("ui.common.error")}: ${e}`; }
