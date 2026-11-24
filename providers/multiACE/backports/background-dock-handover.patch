@@ -1,0 +1,59 @@
+Hold the U1 tool pickup until a running background swap hands over.
+
+Applies to the managed 233 runtime. Existing G-code also benefits:
+the guard runs at the stock T command, while the target is docked.
+
+Upstream: https://github.com/decay71/multiACE/pull/235
+
+diff --git a/klipper/extras/ace_bg_swap.py b/klipper/extras/ace_bg_swap.py
+--- a/klipper/extras/ace_bg_swap.py
++++ b/klipper/extras/ace_bg_swap.py
+@@ -223,4 +223,6 @@
+         self.state = {}
+         self._busy = set()
++        self._pick_requested = set()
++        self._pick_wait_installed = False
+         # {head: previous fan value 0..1} while the bg dwell fan runs
+         # (_dwell_fan) - per head, the engine is serialized but the OFF
+@@ -245,4 +247,30 @@
+         self.gcode.register_command('ACE_BG_SWAP', self.cmd_ACE_BG_SWAP,
+                                     desc=self.cmd_ACE_BG_SWAP_help)
++        self.printer.register_event_handler('klippy:ready', self._install_pick_wait)
++
++    def _install_pick_wait(self):
++        if self._pick_wait_installed:
++            return
++        self._pick_wait_installed = True
++        for head in range(4):
++            command = 'T%d' % head
++            previous = self.gcode.register_command(command, None)
++            if previous is not None:
++                self.gcode.register_command(command, self._wrap_pick(head, previous))
++
++    def _wrap_pick(self, head, previous):
++        def wrapped(gcmd):
++            if self.is_busy(head):
++                ace = self.printer.lookup_object('ace')
++                self._pick_requested.add(head)
++                try:
++                    # Wait before the stock T can lift the head out of its dock.
++                    # The normal foreground wait already checks stop faults and
++                    # has a bounded timeout. It releases only after bookkeeping.
++                    ace._wait_bg_op(head, gcmd)
++                finally:
++                    self._pick_requested.discard(head)
++            return previous(gcmd)
++        return wrapped
+-
++
+     def get_status(self, eventtime):
+@@ -2060,4 +2088,9 @@
+             while primed < prime_target - 1e-6:
+                 self._check_docked(toolhead, ext, head)
++                if head in self._pick_requested:
++                    # The gears have finished gripping. Use the existing
++                    # loaded-head handover to stop assist and record the
++                    # missing purge, while the head is still in the dock.
++                    raise RuntimeError('toolchange requested at a dock-prime boundary')
+                 seg = min(BG_LOAD_PRIME_CHUNK, prime_target - primed)
+                 _s, end, _en = self.queue_move(ext, seg,
