@@ -4,7 +4,11 @@ import sys, re, os, json
 import urllib.request, urllib.error
 from collections import defaultdict
 
-def rewrite(gcode):
+START_TOOL_MARK = '; multiACE start tool: HEAD=%d ACE=%d SLOT=%d'
+START_TOOL_RE = re.compile(r'^; multiACE start tool: HEAD=([0-3]) ACE=([0-3]) SLOT=([0-3])$')
+START_PRIME_RE = re.compile(r'^SM_PRINT_PREEXTRUDE_FILAMENT\b[^;]*?\bINDEX=([0-3])(?=\s|;|$)')
+
+def rewrite(gcode, *, auto_load=False):
 
     def _fix_m104(m):
         return re.sub(r'T([4-9]|1[0-5])',
@@ -12,11 +16,6 @@ def rewrite(gcode):
                       m.group(0))
     gcode = re.sub(r'^M10[49][^\n]*',
                    _fix_m104, gcode, flags=re.MULTILINE)
-
-    gcode = re.sub(
-        r'SM_PRINT_PREEXTRUDE_FILAMENT INDEX=([4-9]|1[0-5])\n?',
-        '',
-        gcode)
 
     split_re = re.compile(r'^;\s*Change Tool\s*\d+\s*->\s*Tool\s*\d+',
                           re.MULTILINE)
@@ -26,9 +25,24 @@ def rewrite(gcode):
     else:
         pre, body = gcode[:m.start()], gcode[m.start():]
 
-    pre = re.sub(r'^T([4-9]|1[0-5])\s*$',
-                 lambda x: 'T' + str(int(x.group(1)) % 4),
-                 pre, flags=re.MULTILINE)
+    drop_virtual_prime = r'SM_PRINT_PREEXTRUDE_FILAMENT INDEX=([4-9]|1[0-5])\n?'
+    if auto_load:
+        def _start_tool(m):
+            tool = int(m.group(1))
+            head = tool % 4
+            return 'T%d\n%s' % (head, START_TOOL_MARK % (head, tool // 4, head))
+
+        pre = re.sub(r'^T([0-9]|1[0-5])[^\S\r\n]*$', _start_tool,
+                     pre, flags=re.MULTILINE)
+        pre = re.sub(r'^(SM_PRINT_PREEXTRUDE_FILAMENT\s+INDEX=)([4-9]|1[0-5])\b',
+                     lambda m: m.group(1) + str(int(m.group(2)) % 4),
+                     pre, flags=re.MULTILINE)
+    else:
+        pre = re.sub(drop_virtual_prime, '', pre)
+        pre = re.sub(r'^T([4-9]|1[0-5])\s*$',
+                     lambda m: 'T%d' % (int(m.group(1)) % 4),
+                     pre, flags=re.MULTILINE)
+    body = re.sub(drop_virtual_prime, '', body)
 
     def _expand_swap(m):
         n = int(m.group(1))
@@ -1449,7 +1463,8 @@ BG_INITIAL_LOAD = True
 # 2: standby temperatures that would cool the printing head are dropped
 # instead of remapped (see scan_cooling_standbys). 3: purge stamps sized
 # from the RAW flush matrix. 4: flush_multiplier inherited upward only.
-PP_FORMAT_VERSION = 4
+# 5: retain the start tool's slot and run start priming after auto-load.
+PP_FORMAT_VERSION = 5
 
 def detect_processed(text):
     """(processed: bool, fmt: int|None) for a gcode HEAD chunk or plan
@@ -2052,6 +2067,7 @@ def rewrite_head_mode_to_file(in_path, out_path, assignment, ace_head=None,
                     # primed so the first swap BACK to it doesn't prime again.
                     if ae is not None:
                         primed_ace.add(ae[0])
+                        fout.write((START_TOOL_MARK + '\n') % ae)
                 elif ae is not None:
                     head, a, s = ae
                     if cur.get(head) == (a, s):
@@ -3380,24 +3396,29 @@ def inject_auto_load(gcode):
     # variant's scan (see inject_auto_load_to_file): a swap
     # the rewrite emitted BEFORE the anchor is the start selection; last
     # one per head wins, lines inside an old auto-load block are skipped
-    # (this twin never had block stripping, so a stale INITIAL=1 line
-    # would otherwise seed itself). No-op for standard exports.
-    _in_old_block = False
+    # so a stale INITIAL=1 line cannot seed itself.
+    start_tools = {}
+    last_start_head = None
+    prime_heads = {}
+    prime_routes = {}
     for i in range(0, body_start):
         ls_pre = lines[i].strip()
-        if _in_old_block:
-            if ls_pre.startswith('; multiACE auto-load: end'):
-                _in_old_block = False
-            continue
-        if ls_pre.startswith('; multiACE auto-load: load'):
-            _in_old_block = True
-            continue
+        if start := START_TOOL_RE.match(ls_pre):
+            last_start_head, ace, slot = map(int, start.groups())
+            start_tools[last_start_head] = (ace, slot)
+        if prime := START_PRIME_RE.match(ls_pre):
+            head = int(prime.group(1))
+            prime_heads[i] = head
+            if head in start_tools:
+                prime_routes.setdefault(head, start_tools[head])
         m_pre = re.match(
             r'^ACE_SWAP_HEAD HEAD=(\d+) ACE=(\d+) SLOT=(\d+)'
             r'(?:\s+\S+=\S+)*\s*$', ls_pre)
         if m_pre:
             initial[int(m_pre.group(1))] = (int(m_pre.group(2)),
                                             int(m_pre.group(3)))
+    for head, route in prime_routes.items():
+        initial.setdefault(head, route)
     for i in range(body_start, len(lines)):
         line = lines[i]
         ls = line.strip()
@@ -3423,6 +3444,10 @@ def inject_auto_load(gcode):
                     break
                 ace_m = None
                 if j < len(lines):
+                    start = START_TOOL_RE.match(lines[j].strip())
+                    if start and int(start.group(1)) == head:
+                        initial[head] = tuple(map(int, start.groups()[1:]))
+                        continue
                     ace_m = re.match(
                         r'^ACE_SWAP_HEAD HEAD=(\d+) ACE=(\d+) SLOT=(\d+)'
                         r'(?:\s+\S+=\S+)*\s*$',
@@ -3444,6 +3469,8 @@ def inject_auto_load(gcode):
     for head in used_heads:
         if head not in initial:
             initial[head] = (0, head)
+    if not initial and last_start_head is not None:
+        initial[last_start_head] = start_tools[last_start_head]
     if inject_idx is None or not initial:
         return gcode, 0
     inject = ['', '; multiACE auto-load: load initial filaments']
@@ -3455,8 +3482,11 @@ def inject_auto_load(gcode):
         inject.append('ACE_SWAP_HEAD HEAD=%d ACE=%d SLOT=%d INITIAL=1'
                       % (head, ace, slot))
     inject.append('; multiACE auto-load: end')
+    moved = {i for i, head in prime_heads.items() if head in initial}
+    inject.extend(lines[i] for i in sorted(moved))
     inject.append('')
-    new_lines = lines[:inject_idx] + inject + lines[inject_idx:]
+    new_lines = ([line for i, line in enumerate(lines[:inject_idx]) if i not in moved]
+                 + inject + lines[inject_idx:])
     return '\n'.join(new_lines), len(initial)
 
 def rewrite_for_mode(gcode, result, mode='optimize', num_aces=None):
@@ -3798,9 +3828,15 @@ def rewrite_to_file(in_path, out_path, progress=None, pickup_cleaning=False):
                     flush_pending_unmatched(fout)
                 m = bare_hi.match(stripped)
                 if m:
-                    fout.write('T%d\n' % (int(m.group(1)) % 4))
+                    tool = int(m.group(1))
+                    head = tool % 4
+                    fout.write('T%d\n' % head)
+                    fout.write((START_TOOL_MARK + '\n') % (head, tool // 4, head))
                 else:
                     fout.write(line)
+                    if low := bare_lo.match(stripped):
+                        head = int(low.group(1))
+                        fout.write((START_TOOL_MARK + '\n') % (head, 0, head))
                 last_pr = _emit_progress(progress, seen, total, last_pr)
                 continue
 
@@ -4014,6 +4050,10 @@ def inject_auto_load_to_file(in_path, out_path, progress=None, only_heads=None,
     used_heads: set[int] = set()
     pending_t_head: int | None = None
     first_seen_head: int | None = None  # first tool used after the anchor
+    start_tools: dict[int, tuple[int, int]] = {}
+    last_start_head: int | None = None
+    start_primes: dict[int, tuple[int, str]] = {}
+    prime_routes: dict[int, tuple[int, int]] = {}
 
     if anchor_line_no is not None:
         # Pre-anchor start-selection scan (head mode): a MODIFIED start
@@ -4040,10 +4080,24 @@ def inject_auto_load_to_file(in_path, out_path, progress=None, only_heads=None,
                     break
                 if line_no in in_block_set:
                     continue
-                m_s = swap_re.match(line.strip())
+                stripped = line.strip()
+                m_s = swap_re.match(stripped)
                 if m_s:
                     initial[int(m_s.group(1))] = (int(m_s.group(2)),
                                                   int(m_s.group(3)))
+                if bare_t_re.match(stripped):
+                    last_start_head = None  # a manual tool has no slot mark
+                if start := START_TOOL_RE.match(stripped):
+                    last_start_head, ace, slot = map(int, start.groups())
+                    start_tools[last_start_head] = (ace, slot)
+                if only_heads is None:
+                    if prime := START_PRIME_RE.match(stripped):
+                        head = int(prime.group(1))
+                        start_primes[line_no] = (head, line)
+                        if head in start_tools:
+                            prime_routes.setdefault(head, start_tools[head])
+        for head, route in prime_routes.items():
+            initial.setdefault(head, route)
         with open(in_path, 'r', encoding='utf-8', errors='replace') as fin:
             for line_no, line in enumerate(fin):
                 if line_no < anchor_line_no:
@@ -4053,6 +4107,11 @@ def inject_auto_load_to_file(in_path, out_path, progress=None, only_heads=None,
                 stripped = line.strip()
 
                 if pending_t_head is not None:
+                    start = START_TOOL_RE.match(stripped)
+                    if start and int(start.group(1)) == pending_t_head:
+                        initial[pending_t_head] = tuple(map(int, start.groups()[1:]))
+                        pending_t_head = None
+                        continue
                     # Skip blank/comment lines AND the head-mode background-swap
                     # stamps (ACE_BG_SWAP/ACE_BG_UNLOAD for the RELEASED head)
                     # that sit between the bare T and the arriving head's
@@ -4105,6 +4164,9 @@ def inject_auto_load_to_file(in_path, out_path, progress=None, only_heads=None,
     for head in used_heads:
         if head not in initial:
             initial[head] = (0, head)
+    if not initial and last_start_head is not None:
+        initial[last_start_head] = start_tools[last_start_head]
+        first_seen_head = last_start_head
 
     # Head mode: only the ACE-driven (swap) head is auto-loaded via ACE_SWAP_HEAD;
     # feeder/pinned heads are loaded natively (side feeder) before the print, not
@@ -4169,14 +4231,18 @@ def inject_auto_load_to_file(in_path, out_path, progress=None, only_heads=None,
         # Prime it here, after all loads - it never got one otherwise (the
         # never-primed-initial-head bug). Inside the
         # block markers so a re-process strips + re-adds it (idempotent).
-        # only_heads gate keeps multi byte-identical (multi keeps the slicer's
-        # own start-gcode preextrude line instead).
+        # Multi mode keeps the slicer's own start prime, moved after loading.
         if (only_heads is not None and first_seen_head is not None
                 and first_seen_head in initial):
             inject_block.append('SM_PRINT_PREEXTRUDE_FILAMENT INDEX=%d '
                                 'FORCE=1\n' % first_seen_head)
         inject_block.append('; multiACE auto-load: end\n')
 
+    # Keep moved lines outside the generated block so reinjection does not
+    # strip the slicer's priming commands with the previous loads.
+    moved_primes = {i: line for i, (head, line) in start_primes.items()
+                    if head in initial}
+    inject_block.extend(moved_primes.values())
     seen = 0
     last_pr = 0
     injected = False
@@ -4184,7 +4250,7 @@ def inject_auto_load_to_file(in_path, out_path, progress=None, only_heads=None,
          open(out_path, 'w', encoding='utf-8') as fout:
         for line_no, line in enumerate(fin):
             seen += len(line.encode('utf-8', errors='ignore'))
-            if line_no in in_block_set:
+            if line_no in in_block_set or line_no in moved_primes:
                 last_pr = _emit_progress(progress, seen, total, last_pr)
                 continue
             if (not injected and anchor_line_no is not None
@@ -4551,7 +4617,8 @@ def main():
             print('T remap (old -> new): %s' % ', '.join(
                 'T%d->T%d' % (k, v) for k, v in sorted(remap.items())))
 
-    gcode, active_swaps, skipped_swaps, swapback_count = rewrite(gcode)
+    gcode, active_swaps, skipped_swaps, swapback_count = rewrite(
+        gcode, auto_load=auto_load)
     if active_swaps + skipped_swaps + swapback_count > 0:
         print('Rewrite: %d active ACE_SWAP_HEAD, %d skipped, %d swap-backs inserted' % (
             active_swaps, skipped_swaps, swapback_count))
