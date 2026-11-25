@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapfxxker-os（233 固件）— 为 Snapmaker U1 打造的多色原生触屏体验</title>
+  <meta name="description" content="面向 Snapmaker U1 + Anycubic ACE 的集成固件：PAXX 12 底座 + MultiACE .15.112 + 自制 480×320 原生触屏界面，把 4 喷头 × 16 槽位多色打印做到 1~2 步直达。" />
+  <style>
+    :root {
+      --bg: #FAF7F2;
+      --bg-soft: #F3ECE2;
+      --card: #FFFFFF;
+      --ink: #241F1C;
+      --ink-muted: #665B54;
+      --line: #E8DFD4;
+      --amber: #F59E2D;
+      --amber-deep: #D97706;
+      --amber-soft: #FFF3DF;
+      --terra: #B4532A;
+      --terra-soft: #FBECE5;
+      --ok: #1F7A4C;
+      --ok-soft: #E9F7EF;
+      --shadow-sm: 0 2px 10px rgba(36, 31, 28, 0.05);
+      --shadow-md: 0 12px 32px rgba(36, 31, 28, 0.09);
+      --shadow-lg: 0 24px 60px rgba(36, 31, 28, 0.14);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --max: 1140px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 420px at 85% -80px, rgba(245, 158, 45, 0.14), transparent 65%),
+        radial-gradient(700px 380px at 10% 10%, rgba(180, 83, 42, 0.07), transparent 60%),
+        var(--bg);
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+
+    .wrap {
+      width: min(100% - 32px, var(--max));
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: saturate(180%) blur(14px);
+      -webkit-backdrop-filter: saturate(180%) blur(14px);
+      background: rgba(250, 247, 242, 0.86);
+      border-bottom: 1px solid rgba(232, 223, 212, 0.8);
+    }
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      height: 66px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 17px;
+      letter-spacing: -0.02em;
+    }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--amber), var(--terra));
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 900;
+      box-shadow: 0 6px 14px rgba(180, 83, 42, 0.25);
+    }
+    .brand small {
+      color: var(--ink-muted);
+      font-weight: 600;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+    }
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink-muted);
+    }
+    .nav a:hover { color: var(--ink); }
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: linear-gradient(135deg, #F59E2D, #E07B1E);
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(224, 123, 30, 0.28);
+    }
+    .btn-primary:hover { box-shadow: 0 12px 26px rgba(224, 123, 30, 0.36); }
+    .btn-ghost {
+      background: var(--card);
+      color: var(--ink);
+      border-color: var(--line);
+      box-shadow: var(--shadow-sm);
+    }
+    .btn-ghost:hover { border-color: #D2C3B2; background: #FFFDF9; }
+    .btn-lg { padding: 13px 24px; font-size: 15px; border-radius: 14px; }
+
+    /* Hero */
+    .hero {
+      padding: 58px 0 48px;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.04fr 1fr;
+      gap: 44px;
+      align-items: center;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: var(--amber-soft);
+      border: 1px solid rgba(245, 158, 45, 0.35);
+      color: #9A5208;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 18px;
+    }
+    .eyebrow-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 0 4px rgba(245, 158, 45, 0.22);
+    }
+    h1 {
+      margin: 0 0 18px;
+      font-size: clamp(32px, 4.4vw, 48px);
+      line-height: 1.16;
+      letter-spacing: -0.03em;
+      font-weight: 850;
+    }
+    .gradient-text {
+      background: linear-gradient(120deg, #D97706, #B4532A);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero-desc {
+      margin: 0 0 26px;
+      font-size: 16.5px;
+      color: var(--ink-muted);
+      max-width: 540px;
+    }
+    .hero-cta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .stat {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 12px 11px;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat strong {
+      display: block;
+      font-size: 18px;
+      line-height: 1.2;
+      color: var(--ink);
+    }
+    .stat span {
+      display: block;
+      margin-top: 3px;
+      font-size: 12px;
+      color: var(--ink-muted);
+    }
+
+    /* Interactive U1 Bezel Simulator */
+    .bezel-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: var(--shadow-lg);
+    }
+    .bezel-shell {
+      background: linear-gradient(180deg, #272320, #1A1715);
+      border-radius: 18px;
+      padding: 14px 14px 12px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 28px rgba(0,0,0,0.22);
+    }
+    .bezel-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #B4A99E;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+      padding: 0 4px;
+      text-transform: uppercase;
+    }
+    .bezel-led {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .bezel-led::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #4ADE80;
+      box-shadow: 0 0 8px rgba(74, 222, 128, 0.8);
+    }
+    .screen-viewport {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #FAF7F2;
+      aspect-ratio: 480 / 320;
+      cursor: zoom-in;
+    }
+    .screen-viewport img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: opacity 0.18s ease;
+    }
+    .screen-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .screen-tab {
+      flex: 1 1 auto;
+      min-width: 74px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--ink-muted);
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .screen-tab:hover { border-color: var(--amber); color: var(--ink); }
+    .screen-tab.active {
+      background: var(--amber-soft);
+      border-color: var(--amber);
+      color: #8E4A06;
+    }
+    .screen-caption {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      font-size: 13.5px;
+      color: var(--ink-muted);
+    }
+    .screen-caption strong { color: var(--ink); }
+
+    /* Sections */
+    section { padding: 54px 0; }
+    .section-head {
+      max-width: 720px;
+      margin-bottom: 30px;
+    }
+    .section-kicker {
+      display: inline-block;
+      font-size: 12.5px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--terra);
+      margin-bottom: 8px;
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.24;
+      letter-spacing: -0.02em;
+    }
+    .section-sub {
+      margin: 0;
+      font-size: 15.5px;
+      color: var(--ink-muted);
+    }
+
+    /* Ease of Use 4 Pillars */
+    .pillars {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .pillar {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .pillar-icon {
+      flex: 0 0 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--amber-soft);
+      border: 1px solid rgba(245, 158, 45, 0.35);
+      color: var(--terra);
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      font-weight: 800;
+    }
+    .pillar h3 {
+      margin: 0 0 6px;
+      font-size: 17px;
+      line-height: 1.3;
+    }
+    .pillar p {
+      margin: 0;
+      font-size: 14.5px;
+      color: var(--ink-muted);
+    }
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--bg-soft);
+      color: var(--ink);
+    }
+    .chip-ok { background: var(--ok-soft); color: var(--ok); }
+
+    /* Daily workflow strip */
+    .workflow-strip {
+      margin-top: 22px;
+      background: linear-gradient(135deg, #FFFDF9, #FFF4E3);
+      border: 1px solid rgba(245, 158, 45, 0.35);
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .wf-item strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+    .wf-item .steps-pill {
+      display: inline-block;
+      margin-bottom: 6px;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: var(--amber);
+      color: #fff;
+      font-size: 11.5px;
+      font-weight: 800;
+    }
+    .wf-item p {
+      margin: 0;
+      font-size: 13.5px;
+      color: var(--ink-muted);
+    }
+
+    /* Comparison Table */
+    .table-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+    .table-scroll { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+      font-size: 14px;
+    }
+    thead th {
+      text-align: left;
+      padding: 15px 18px;
+      background: var(--bg-soft);
+      color: var(--ink);
+      font-weight: 800;
+      border-bottom: 1px solid var(--line);
+    }
+    thead th.col-new {
+      background: var(--amber-soft);
+      color: #8E4A06;
+    }
+    tbody td {
+      padding: 15px 18px;
+      border-bottom: 1px solid #F0E8DE;
+      vertical-align: top;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody td:first-child {
+      font-weight: 800;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    td.col-stock { color: var(--ink-muted); }
+    td.col-new {
+      background: rgba(255, 243, 223, 0.32);
+      color: var(--ink);
+    }
+    .badge-new {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      background: var(--ok-soft);
+      color: var(--ok);
+      margin-right: 6px;
+      vertical-align: 1px;
+    }
+
+    /* Gallery */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .shot-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      cursor: zoom-in;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .shot-card:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-md);
+      border-color: var(--amber);
+    }
+    .shot-thumb {
+      background: #EFE7DC;
+      padding: 10px 10px 0;
+    }
+    .shot-thumb img {
+      border-radius: 8px 8px 0 0;
+      border: 1px solid rgba(36,31,28,0.08);
+      border-bottom: none;
+      aspect-ratio: 480 / 320;
+      width: 100%;
+      object-fit: cover;
+    }
+    .shot-body {
+      padding: 13px 14px 15px;
+    }
+    .shot-body h3 {
+      margin: 0 0 4px;
+      font-size: 14.5px;
+    }
+    .shot-body p {
+      margin: 0;
+      font-size: 12.5px;
+      color: var(--ink-muted);
+      line-height: 1.5;
+    }
+
+    /* Ecosystem cards */
+    .eco-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .eco-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: var(--shadow-sm);
+    }
+    .eco-card h3 { margin: 0 0 8px; font-size: 17px; }
+    .eco-card p { margin: 0 0 12px; font-size: 14px; color: var(--ink-muted); }
+    .eco-list {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13.5px;
+      color: var(--ink);
+    }
+    .eco-list li { margin-bottom: 5px; }
+
+    /* Download Box */
+    .download-box {
+      background: linear-gradient(135deg, #27221E, #3B2D24);
+      color: #FFF9F2;
+      border-radius: 24px;
+      padding: 36px;
+      box-shadow: var(--shadow-lg);
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 32px;
+      align-items: center;
+    }
+    .download-box h2 { color: #FFF9F2; }
+    .download-box .section-sub { color: #D7C8B9; }
+    .sha-bar {
+      margin-top: 18px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: #FDE7C3;
+      word-break: break-all;
+    }
+    .copy-btn {
+      flex: 0 0 auto;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .copy-btn:hover { background: rgba(255, 255, 255, 0.22); }
+    .download-links {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .dl-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.09);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transition: background 0.16s ease, transform 0.16s ease;
+    }
+    .dl-item:hover {
+      background: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+    .dl-item strong { display: block; font-size: 14.5px; color: #fff; }
+    .dl-item small { color: #D7C8B9; font-size: 12px; }
+    .dl-arrow {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--amber);
+    }
+
+    /* Footer */
+    footer {
+      padding: 36px 0 54px;
+      color: var(--ink-muted);
+      font-size: 13px;
+      border-top: 1px solid var(--line);
+      margin-top: 28px;
+    }
+    .footer-inner {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: center;
+    }
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      font-weight: 600;
+    }
+    .footer-links a:hover { color: var(--ink); }
+
+    /* Lightbox */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(24, 20, 17, 0.84);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .lightbox.open { display: flex; }
+    .lightbox-box {
+      max-width: 780px;
+      width: 100%;
+      background: var(--card);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: var(--shadow-lg);
+    }
+    .lightbox-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      gap: 12px;
+    }
+    .lightbox-top strong { font-size: 16px; }
+    .lightbox-close {
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--ink);
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    .lightbox-img {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      image-rendering: auto;
+    }
+    .lightbox-desc {
+      margin: 12px 0 0;
+      font-size: 14px;
+      color: var(--ink-muted);
+    }
+
+    /* Responsive */
+    @media (max-width: 960px) {
+      .hero-grid, .download-box { grid-template-columns: 1fr; }
+      .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .eco-grid, .workflow-strip { grid-template-columns: 1fr; }
+      .nav { display: none; }
+    }
+    @media (max-width: 640px) {
+      .hero { padding-top: 34px; }
+      .pillars { grid-template-columns: 1fr; }
+      .hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .gallery-grid { grid-template-columns: 1fr; }
+      .download-box { padding: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#top">
+        <span class="brand-mark">233</span>
+        <span>snapfxxker-os</span>
+        <small>U1 · PAXX 12</small>
+      </a>
+      <nav class="nav" aria-label="主导航">
+        <a href="#ease">易用性设计</a>
+        <a href="#compare">原厂对比</a>
+        <a href="#gallery">实机界面</a>
+        <a href="#ecosystem">多色与混插</a>
+        <a href="#download">固件下载</a>
+      </nav>
+      <div class="nav-actions">
+        <a class="btn btn-ghost" href="https://github.com/446599/snapfxxker-os" target="_blank" rel="noopener">GitHub</a>
+        <a class="btn btn-primary" href="#download">获取 v2.1.2</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- Hero Section -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <div class="eyebrow">
+            <span class="eyebrow-dot"></span>
+            PAXX 12 + MultiACE .15.112 + 自制 480×320 原生屏
+          </div>
+          <h1>
+            把 Snapmaker U1 的多色体验，<br />
+            做到 <span class="gradient-text">一抬手就能用顺</span>
+          </h1>
+          <p class="hero-desc">
+            不再为 4 喷头 × 16 槽位的多盒路由发懵，也不用为了改个耗材颜色或退一卷料到处翻电脑网页。
+            <strong>snapfxxker-os（233 固件）</strong>在 PAXX 12 底座上重做了整套 480×320 原生触屏界面，并整合多固件 ACE 混插与防呆恢复机制——一切高频操作，在机身上 <strong>1~2 步直达</strong>。
+          </p>
+          <div class="hero-cta">
+            <a class="btn btn-primary btn-lg" href="https://github.com/446599/snapfxxker-os/releases/tag/v2.1.2-233-paxx8d8af0d.2" target="_blank" rel="noopener">
+              下载最新固件（v2.1.2-233-paxx8d8af0d.2）
+            </a>
+            <a class="btn btn-ghost btn-lg" href="#compare">查看原厂对比</a>
+          </div>
+          <div class="hero-stats">
+            <div class="stat">
+              <strong>4 头 × 16 槽</strong>
+              <span>多盒自动路由</span>
+            </div>
+            <div class="stat">
+              <strong>1~2 步</strong>
+              <span>高频操作直达</span>
+            </div>
+            <div class="stat">
+              <strong>3 种固件</strong>
+              <span>ACE 混插共存</span>
+            </div>
+            <div class="stat">
+              <strong>1080p 30fps</strong>
+              <span>WebRTC 完整保留</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive U1 Screen Simulator -->
+        <div class="bezel-card">
+          <div class="bezel-shell">
+            <div class="bezel-bar">
+              <span class="bezel-led">SNAPMAKER U1 · 480×320 LIVE UI</span>
+              <span>点击画面放大</span>
+            </div>
+            <div class="screen-viewport" id="heroScreenBox" title="点击放大查看实机截图">
+              <img id="heroScreenImg" src="assets/screen-home.png" alt="Snapmaker U1 自制原生屏首页总览" />
+            </div>
+          </div>
+          <div class="screen-tabs" role="tablist" aria-label="切换实机界面预览">
+            <button class="screen-tab active" data-src="assets/screen-home.png" data-title="首页总览" data-desc="四喷头实时温度与实际耗材色点同屏显示；选择文件、重新打印、速度/风扇/灯光一键直达，看一眼就知道机器状态。">首页总览</button>
+            <button class="screen-tab" data-src="assets/screen-materials-ace.png" data-title="16 槽耗材（按 ACE）" data-desc="支持 ACE 1 ~ ACE 4 共 16 槽清晰展示；每张卡片直接标明「槽1→头1」路由与色块，底部进料/从喷头退出/退出 ACE/烘干 4 大刚需零折叠。">按 ACE 视图</button>
+            <button class="screen-tab" data-src="assets/screen-materials-head.png" data-title="16 槽耗材（按喷头）" data-desc="想给某号喷头换料？切到「按喷头」直接列出连接到该喷头的全部 ACE 候选槽位，不用再心算盒号和管路。">按喷头视图</button>
+            <button class="screen-tab" data-src="assets/screen-color-picker.png" data-title="可视化选色器" data-desc="左侧 24 种常用耗材色块一键点选，右侧连续 HSV 取色板精细微调；无 RFID 第三方耗材 3 秒配好颜色并同步切片与打印页。">可视化选色</button>
+            <button class="screen-tab" data-src="assets/screen-control-overview.png" data-title="四头控制总览" data-desc="四路喷嘴温度 + 热床温度、回零移动状态、4 路模型风扇与打印速度倍率平铺呈现，无多余嵌套。">控制总览</button>
+            <button class="screen-tab" data-src="assets/screen-control-motion.png" data-title="环形点动控制" data-desc="内外双环 1mm / 10mm 防误触方向盘 + 中心一键回零 + 右侧 Z 轴与步进快切，小屏单手也能稳稳微调。">环形移动</button>
+          </div>
+          <div class="screen-caption" id="heroScreenCaption">
+            <strong>首页总览：</strong>四喷头实时温度与实际耗材色点同屏显示；选择文件、重新打印、速度/风扇/灯光一键直达，看一眼就知道机器状态。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ease of Use Pillars -->
+    <section id="ease">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="section-kicker">Design for Effortless Use</span>
+          <h2>不是堆满参数的极客面板，而是每天都会顺手用的好界面</h2>
+          <p class="section-sub">
+            U1 的机身屏幕只有 480×320。我们把每一像素都花在「减少思考、减少点按、减少出错」上。
+          </p>
+        </div>
+
+        <div class="pillars">
+          <article class="pillar">
+            <div class="pillar-icon">⇄</div>
+            <div>
+              <h3>首创「按 ACE / 按喷头」双视角切换</h3>
+              <p>多台 ACE 接满 16 卷料时，最头疼的是“哪盒几号槽连着几号喷头”。在耗材页顶部一键切换视角：装料看「按 ACE」，选料看「按喷头」，管路归属直接写在卡片上。</p>
+              <div class="tag-row">
+                <span class="chip chip-ok">心智负担归零</span>
+                <span class="chip">槽1→头1 直观路由</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="pillar">
+            <div class="pillar-icon">⚡</div>
+            <div>
+              <h3>高频动作 0 折叠，底部一排直接点</h3>
+              <p>耗材页底部常驻 <strong>进料 / 从喷头退出 / 退出 ACE / 烘干</strong> 四个大按钮；单槽编辑角标弹出 <strong>识别（RFID）/ 编辑</strong> 快捷菜单；首页直接展示四头温度与当前供料色点，不用来回切页确认。</p>
+              <div class="tag-row">
+                <span class="chip chip-ok">1~2 步完成</span>
+                <span class="chip">大触控热区</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="pillar">
+            <div class="pillar-icon">🎨</div>
+            <div>
+              <h3>第三方无芯片耗材，3 秒配齐颜色与材质</h3>
+              <p>兼容 Bambu Lab MIFARE 1K 与 Anycubic NTAG RFID 自动识别；就算用无标签第三方耗材，也能通过 24 色快捷色块 + HSV 调色板直接在屏上设好材质和颜色，自动同步给切片与 Web。</p>
+              <div class="tag-row">
+                <span class="chip chip-ok">不挑耗材品牌</span>
+                <span class="chip">全链路色值同步</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="pillar">
+            <div class="pillar-icon">🛡</div>
+            <div>
+              <h3>防呆保护 + 异常不死锁 + 升级可回滚</h3>
+              <p>内置 <code>u1-device-service</code> 升级空闲检查与互斥锁，升级失败不砖机且保留旧版目录可回滚；彻底修复原厂 V2 <code>NO FLOW</code> 后 <code>ACE_UNLOAD_HEAD</code> 卸料死锁，卡料时退料重装一气呵成。</p>
+              <div class="tag-row">
+                <span class="chip chip-ok">已实机验证</span>
+                <span class="chip">旧版自动保留</span>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="workflow-strip">
+          <div class="wf-item">
+            <span class="steps-pill">插料 → 自动停泊</span>
+            <strong>插进去就不用管了</strong>
+            <p><code>ace2k</code> 检测到插料自动推进停泊并尝试读取 RFID，省去手动点进丝和来回试探。</p>
+          </div>
+          <div class="wf-item">
+            <span class="steps-pill">2 次点按</span>
+            <strong>跨盒换料不再翻网页</strong>
+            <p>耗材页点「按喷头」→ 选中目标槽 → 点「进料」，自动完成原槽退料与新槽上料校验。</p>
+          </div>
+          <div class="wf-item">
+            <span class="steps-pill">1 次点按</span>
+            <strong>屏幕一键启动烘干</strong>
+            <p>无需切到电脑端，机身直接控制各台 ACE 烘干启停；国内 220V 用户可选配调优版 <code>ace2k-0.16.0-233b</code>。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stock vs 233 Comparison -->
+    <section id="compare">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="section-kicker">Stock U1 vs snapfxxker-os</span>
+          <h2>对比 Snapmaker U1 原厂固件，新增了什么、优化了什么？</h2>
+          <p class="section-sub">
+            以官方 2.1.2（2.1.2.159）为参照，从屏幕交互、多色能力、硬件兼容到日常运维逐项拆解。
+          </p>
+        </div>
+
+        <div class="table-card">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 15%">对比维度</th>
+                  <th style="width: 27%">Snapmaker U1 原厂固件</th>
+                  <th class="col-new" style="width: 34%">snapfxxker-os（233 固件）</th>
+                  <th style="width: 24%">日常易用性提升</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>多色供料能力</td>
+                  <td class="col-stock">原生仅支持 4 个独立外置料盘（最多 4 色），不支持多盒切换。</td>
+                  <td class="col-new"><span class="badge-new">新增</span>集成 MultiACE <code>.15.112</code>，支持最多 <strong>4 台 ACE 共 16 槽</strong>自动换料与路由映射。</td>
+                  <td>四头并行 + 多盒扩展，复杂多色件无需半夜守着手动换卷。</td>
+                </tr>
+                <tr>
+                  <td>ACE 固件生态</td>
+                  <td class="col-stock">无原生 ACE 支持。</td>
+                  <td class="col-new"><span class="badge-new">新增</span>同时兼容 <strong>ACE 1</strong>、<strong>ACE 2 Pro 原厂 / OpenACE (V1.2.04O)</strong> 与 <strong><code>ace2k</code> Klipper-MCU 固件</strong>同机混插。</td>
+                  <td>手里新旧盒子混着插就能用，不必全套强刷同一固件。</td>
+                </tr>
+                <tr>
+                  <td>480×320 触屏交互</td>
+                  <td class="col-stock">原厂 UI 仅围绕 4 卷供料设计，无多盒槽位视图，中文字体与信息密度受限。</td>
+                  <td class="col-new"><span class="badge-new">重构</span>自制黄白高对比原生屏（HelixScreen 233），提供 <strong>按 ACE / 按喷头双视角</strong>、首页四头色点与温度、环形双步进点动盘、完整中文字体。</td>
+                  <td>信息一眼看清，高频动作全在首页/首屏，小屏不误触、不截字。</td>
+                </tr>
+                <tr>
+                  <td>RFID 与第三方耗材</td>
+                  <td class="col-stock">主要依赖官方耗材标签，非官方料卷颜色与材质管理繁琐。</td>
+                  <td class="col-new"><span class="badge-new">增强</span>支持 <strong>Bambu Lab MIFARE 1K</strong> 与 <strong>Anycubic NTAG</strong> 标签读取；内置 24 色快捷块 + 连续 HSV 取色器。</td>
+                  <td>拓竹 / 纵维 / 第三方杂牌卷都能准确标色，屏幕改完同步 Web。</td>
+                </tr>
+                <tr>
+                  <td>送丝 / 回抽精准度</td>
+                  <td class="col-stock">外置手动进退料，无长管行程闭环。</td>
+                  <td class="col-new"><span class="badge-new">优化</span><code>ace2k</code> 插料自动进丝停泊（<code>tag_read_load</code>）+ <strong>实时编码器行程追踪回抽</strong>（实测 1526.7mm 精准回位）。</td>
+                  <td>消除过量回抽把料拉出进料口的问题，换料成功率大幅提升。</td>
+                </tr>
+                <tr>
+                  <td>烘干与 220V 适配</td>
+                  <td class="col-stock">无法在打印机屏幕或统一界面控制料盒烘干。</td>
+                  <td class="col-new"><span class="badge-new">优化</span>屏幕与 Web 直接启停烘干；附带 220V/50Hz 升温曲线调优版 <code>ace2k-0.16.0-233b</code> 固件（消除 31 秒误报停机）。</td>
+                  <td>国内 220V 电网直接稳跑烘干，不再反复掉线或报错。</td>
+                </tr>
+                <tr>
+                  <td>异常处理与换料效率</td>
+                  <td class="col-stock">异常中断后恢复流程零散，缺乏细粒度恢复引导。</td>
+                  <td class="col-new"><span class="badge-new">修复</span>修复 V2 <code>phase3 NO FLOW</code> 后 <code>ACE_UNLOAD_HEAD</code> 卸料死锁；支持可选 <strong>Multi 模式后台换料（<code>ace_bg_swap</code>）</strong>。</td>
+                  <td>偶发未咬合时一键退料重装不卡死，后台换料进一步省时间。</td>
+                </tr>
+                <tr>
+                  <td>摄像头与扩展能力</td>
+                  <td class="col-stock">封闭生态，缺少开源 Web 生态集成。</td>
+                  <td class="col-new"><span class="badge-new">保留+整合</span>基于 PAXX 12 完整保留 <strong>1080p/30fps WebRTC / MPP 摄像头</strong>、Fluidd、MultiACE Web 与旧版自动回滚升级器。</td>
+                  <td>远程看监控、切片直传、升级可回滚，兼顾稳定与可玩性。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Full Real Hardware Gallery -->
+    <section id="gallery">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="section-kicker">Real Hardware Captures</span>
+          <h2>实机 480×320 界面全览（全部为真实机器截屏）</h2>
+          <p class="section-sub">
+            点击任意卡片可放大查看细节。这套视觉风格专为高辨识度与单手触控打磨。
+          </p>
+        </div>
+
+        <div class="gallery-grid">
+          <article class="shot-card" data-src="assets/screen-home.png" data-title="首页总览" data-desc="四头实时温度 + 实际耗材颜色圆点一目了然，右侧大按钮直达「选择文件」与「重新打印」，底部快速开关灯光与风扇。">
+            <div class="shot-thumb"><img src="assets/screen-home.png" alt="首页总览" loading="lazy" /></div>
+            <div class="shot-body">
+              <h3>首页总览</h3>
+              <p>四头温度与供料色点、选文件/重打、速度风扇灯光一屏掌握。</p>
+            </div>
+          </article>
+
+          <article class="shot-card" data-src="assets/screen-materials-ace.png" data-title="耗材管理 · 按 ACE 视角" data-desc="顶部支持 ACE 1~4 快速切换，每槽明确标注「槽→头」对应关系与耗材色块，底部 4 个高频操作按钮零折叠直达。">
+            <div class="shot-thumb"><img src="assets/screen-materials-ace.png" alt="按 ACE 视角" loading="lazy" /></div>
+            <div class="shot-body">
+              <h3>按 ACE 视角（16 槽）</h3>
+              <p>4 台料盒快速切换，路由直标，进料/退料/烘干触手可及。</p>
+            </div>
+          </article>
+
+          <article class="shot-card" data-src="assets/screen-materials-head.png" data-title="耗材管理 · 按喷头视角" data-desc="直接按「喷头 1~4」反向汇总连到该喷头的全部 ACE 候选槽位，换料时不再需要记忆每个料盒的接线顺序。">
+            <div class="shot-thumb"><img src="assets/screen-materials-head.png" alt="按喷头视角" loading="lazy" /></div>
+            <div class="shot-body">
+              <h3>按喷头视角</h3>
+              <p>按喷头反向聚合候选料槽，跨盒选料直觉化、零换算。</p>
+            </div>
+          </article>
+
+          <article class="shot-card" data-src="assets/screen-slot-menu.png" data-title="单槽快捷浮层" data-desc="点按任意料槽右上角编辑按钮即可就地弹出「识别（RFID）/ 编辑」菜单，操作路径极短。">
+            <div class="shot-thumb"><img src="assets/screen-slot-menu.png" alt="单槽快捷菜单" loading="lazy" /></div>
+            <div class="shot-body">
+              <h3>单槽快捷菜单</h3>
+              <p>就地触发 RFID 识别或手动编辑，拒绝层层跳转。</p>
+            </div>
+          </article>
+
+          <article class="shot-card" data-src="assets/screen-color-picker.png" data-title="可视化调色板" data-desc="左侧 24 种常见耗材标准色块一键选中，右侧支持连续 HSV 自由取色，右上角实时预览槽位颜色。">
+            <div class="shot-thumb"><img src="assets/screen-color-picker.png" alt="可视化调色板" loading="lazy" /></div>
+            <div class="shot-body">
+              <h3>24 色块 + HSV 调色</h3>
+              <p>第三方无芯片耗材也能 3 秒精准标色，全端同步显示。</p>
+            </div>
+          </article>
+
+          <article class="shot-card" data-src="assets/screen-control-overview.png" data-title="控制总览" data-desc="四喷嘴 + 热床温度、运动回零状态、4 路模型风扇与打印速度倍率四宫格大卡片，触控容错率高。">
+            <div class="shot-thumb"><img src="assets/screen-control-overview.png" alt="控制总览" loading="lazy" /></div>
+            <div class="shot-body">
+              <h3>四头控制总览</h3>
+              <p>温度、移动、4 路风扇、打印倍率清晰分区，绝不拥挤。</p>
+            </div>
+          </article>
+
+          <article class="shot-card" data-src="assets/screen-control-motion.png" data-title="环形点动与坐标控制" data-desc="内外双环区分 1mm 与 10mm 移动步进，中心大圆形回零键，右侧配合 Z 轴与 0.1/1/10mm 步进快切。">
+            <div class="shot-thumb"><img src="assets/screen-control-motion.png" alt="环形点动控制" loading="lazy" /></div>
+            <div class="shot-body">
+              <h3>双环防误触点动</h3>
+              <p>1mm / 10mm 双环操作盘 + 中心回零 + Z 轴独立大按键。</p>
+            </div>
+          </article>
+
+          <article class="shot-card" data-src="assets/screen-display-settings.png" data-title="屏幕与显示设置" data-desc="支持屏幕旋转、界面缩放、无级亮度调节以及变暗/休眠时间配置，每项自带内联说明图标。">
+            <div class="shot-thumb"><img src="assets/screen-display-settings.png" alt="屏幕显示设置" loading="lazy" /></div>
+            <div class="shot-body">
+              <h3>显示与休眠定制</h3>
+              <p>亮度滑块、旋转、变暗与休眠策略直观可调，夜间不刺眼。</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Multi-ACE & Firmware Ecosystem -->
+    <section id="ecosystem">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="section-kicker">Architecture & Reliability</span>
+          <h2>不止好看好点，底层同样经过实机千锤百炼</h2>
+          <p class="section-sub">
+            每一项底层改进都来自真实的 4× ACE 多色换料场景与硬件实测。
+          </p>
+        </div>
+
+        <div class="eco-grid">
+          <div class="eco-card">
+            <h3>三类 ACE 固件同机混插</h3>
+            <p>不再被单一盒子固件绑定，按需升级、逐步替换。</p>
+            <ul class="eco-list">
+              <li>ACE 1（V1 JSON 协议）完整兼容</li>
+              <li>ACE 2 Pro 原厂 / OpenACE（<code>V1.2.04O</code>）</li>
+              <li><code>ace2k</code> Klipper-MCU 原生驱动，含 RFID / 自动进丝 / 精准编码器回抽</li>
+            </ul>
+          </div>
+
+          <div class="eco-card">
+            <h3>220V 烘干调优（<code>ace2k-0.16.0-233b</code>）</h3>
+            <p>针对国内 220V/50Hz 电网实测调校，告别 31 秒升温率误报。</p>
+            <ul class="eco-list">
+              <li>开启并行通道（<code>ACE2K_LANES_CONCURRENT=1</code>）</li>
+              <li>通过 1,224 项 C 单元测试，堵风道超温保护完整保留</li>
+              <li>实机连续 45°C 烘干零故障、正常升温与停机</li>
+            </ul>
+          </div>
+
+          <div class="eco-card">
+            <h3>安全升级与严苛校验</h3>
+            <p>打包即做全链路自动化校验，把翻车风险拦在刷机前。</p>
+            <ul class="eco-list">
+              <li>37/37 MultiACE 回归单测 + 解包回读分区 SHA-256 校验</li>
+              <li>ARM64 chroot 全套冒烟测试（UI、权限 0755、摄像头、回滚）</li>
+              <li>修复 V2 <code>load_failed</code> 卸料死锁，异常恢复畅通无阻</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download">
+      <div class="wrap">
+        <div class="download-box">
+          <div>
+            <span class="section-kicker" style="color: #F59E2D;">Latest Pre-release · 2.1.2-233-paxx8d8af0d.2</span>
+            <h2>立即体验 snapfxxker-os</h2>
+            <p class="section-sub">
+              刷写前请先校验 SHA-256 并备份 <code>printer_data/config</code>。Multi 模式后台换料（<code>ace_bg_swap</code>）默认关闭，确认普通换料顺畅后再按需开启。
+            </p>
+            <div class="sha-bar">
+              <span id="shaText">SHA-256: 0d7b4039696a0a3b98df093b58a333fb0de5b5372ab665bf4d6a9d3165b942bf</span>
+              <button class="copy-btn" id="copyShaBtn" type="button">复制校验和</button>
+            </div>
+          </div>
+
+          <div class="download-links">
+            <a class="dl-item" href="https://github.com/446599/snapfxxker-os/releases/download/v2.1.2-233-paxx8d8af0d.2/U1_233_2.1.2-233-paxx8d8af0d.2_upgrade.bin" target="_blank" rel="noopener">
+              <div>
+                <strong>U1 完整升级固件包（推荐）</strong>
+                <small>PAXX 12 + MultiACE .15.112 + 自制屏 · 289 MiB</small>
+              </div>
+              <span class="dl-arrow">↓</span>
+            </a>
+
+            <a class="dl-item" href="https://github.com/446599/snapfxxker-os/releases/download/v2.1.2-233-paxx8d8af0d.2/ace2k-0.16.0-233b.bin" target="_blank" rel="noopener">
+              <div>
+                <strong>ace2k-0.16.0-233b.bin（可选）</strong>
+                <small>ACE 2 Pro 220V 调优并行通道固件 · 73 KiB</small>
+              </div>
+              <span class="dl-arrow">↓</span>
+            </a>
+
+            <a class="dl-item" href="https://github.com/446599/snapfxxker-os/releases/tag/v2.1.2-233-paxx8d8af0d.2" target="_blank" rel="noopener">
+              <div>
+                <strong>查看完整 Release 说明与校验清单</strong>
+                <small>含 SHA256SUMS.txt、composition.json 与验证记录</small>
+              </div>
+              <span class="dl-arrow">→</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="wrap footer-inner">
+      <div>
+        <strong>snapfxxker-os（233 固件）</strong> · 基于 GPL-3.0 开源发布 · 致谢 PAXX Extended Firmware、decay71/multiACE、HelixScreen、tobecwb/ace2k 与 Filament-approximation。
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/446599/snapfxxker-os" target="_blank" rel="noopener">GitHub 仓库</a>
+        <a href="https://github.com/446599/snapfxxker-os/releases" target="_blank" rel="noopener">全部版本</a>
+        <a href="https://github.com/446599/snapfxxker-os/blob/main/README.md" target="_blank" rel="noopener">README 文档</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Lightbox Modal -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-labelledby="lbTitle">
+    <div class="lightbox-box">
+      <div class="lightbox-top">
+        <strong id="lbTitle">界面预览</strong>
+        <button class="lightbox-close" id="lbClose" type="button" aria-label="关闭预览">×</button>
+      </div>
+      <img class="lightbox-img" id="lbImg" src="" alt="" />
+      <p class="lightbox-desc" id="lbDesc"></p>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const tabs = document.querySelectorAll('.screen-tab');
+      const heroImg = document.getElementById('heroScreenImg');
+      const heroCaption = document.getElementById('heroScreenCaption');
+      const heroBox = document.getElementById('heroScreenBox');
+
+      let activeMeta = {
+        src: tabs[0].dataset.src,
+        title: tabs[0].dataset.title,
+        desc: tabs[0].dataset.desc
+      };
+
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          tabs.forEach((t) => t.classList.remove('active'));
+          tab.classList.add('active');
+          activeMeta = {
+            src: tab.dataset.src,
+            title: tab.dataset.title,
+            desc: tab.dataset.desc
+          };
+          heroImg.style.opacity = '0.35';
+          heroImg.src = activeMeta.src;
+          heroImg.alt = activeMeta.title;
+          heroImg.onload = () => { heroImg.style.opacity = '1'; };
+          heroCaption.innerHTML = '<strong>' + activeMeta.title + '：</strong>' + activeMeta.desc;
+        });
+      });
+
+      const lb = document.getElementById('lightbox');
+      const lbImg = document.getElementById('lbImg');
+      const lbTitle = document.getElementById('lbTitle');
+      const lbDesc = document.getElementById('lbDesc');
+      const lbClose = document.getElementById('lbClose');
+
+      function openLightbox(src, title, desc) {
+        lbImg.src = src;
+        lbImg.alt = title;
+        lbTitle.textContent = title;
+        lbDesc.textContent = desc;
+        lb.classList.add('open');
+      }
+      function closeLightbox() {
+        lb.classList.remove('open');
+      }
+
+      heroBox.addEventListener('click', () => openLightbox(activeMeta.src, activeMeta.title, activeMeta.desc));
+      document.querySelectorAll('.shot-card').forEach((card) => {
+        card.addEventListener('click', () => openLightbox(card.dataset.src, card.dataset.title, card.dataset.desc));
+      });
+      lbClose.addEventListener('click', closeLightbox);
+      lb.addEventListener('click', (e) => { if (e.target === lb) closeLightbox(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+
+      const copyBtn = document.getElementById('copyShaBtn');
+      const shaVal = '0d7b4039696a0a3b98df093b58a333fb0de5b5372ab665bf4d6a9d3165b942bf';
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(shaVal);
+          copyBtn.textContent = '已复制 ✓';
+          setTimeout(() => { copyBtn.textContent = '复制校验和'; }, 1800);
+        } catch (_) {
+          copyBtn.textContent = '请手动复制';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
