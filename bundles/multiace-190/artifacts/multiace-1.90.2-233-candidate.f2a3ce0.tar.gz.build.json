@@ -1,0 +1,33 @@
+{
+  "version": "1.90.2-233-candidate.f2a3ce0",
+  "kind": "complete upstream managed component candidate, NOT production U1 firmware",
+  "upstream_commit": "91ba652f6896f22cecb4cf779ee5db06ee8e7840",
+  "candidate_source_commit": "f2a3ce0569e0efdc06cf0627446adfd0fd3ce6e7",
+  "managed_files": 54,
+  "verified_original_blobs": 54,
+  "runtime_patch_anchors": 37,
+  "archive_bytes": 1645185,
+  "sha256": "c9ede833fd0bb418a2147700fad9d9756a906da86129705d2b8337ee7f01d4d0",
+  "git_blob": "c1909e031bf76c1980849242078d793b5f2d63e3",
+  "focused_tests": {
+    "total": 54,
+    "passed": 53,
+    "skipped": 1,
+    "failed": 0
+  },
+  "verified": [
+    "original Git blob hashes and sizes",
+    "exact patch anchors",
+    "managed manifest completeness and exclusions",
+    "gzip deflate roundtrip and member SHA256s",
+    "uploaded Git blob SHA1"
+  ],
+  "not_verified": [
+    "full upstream test suite",
+    "device installation or real motion",
+    "233 custom slot-exit and UI integration",
+    "offline Python dependency bundle",
+    "233 dual bundled MCU firmware images / 220V custom image"
+  ],
+  "notes": "This is the complete allowlisted upstream managed payload plus candidate patches. It is not the 233 full firmware image and must not replace the installed flow.15.116 directly. Old overlay pins remain unchanged."
+}
