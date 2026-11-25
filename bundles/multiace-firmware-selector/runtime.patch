@@ -1,0 +1,546 @@
+--- a/i18n/de.json
++++ b/i18n/de.json
+@@ -167,6 +167,7 @@
+       "acefw_test_noimg": "Image nicht lesbar: {reason}",
+       "acefw_bundled_version": "Mitgelieferte Firmware {v}",
+       "acefw_flash_bundled": "Firmware flashen",
++      "acefw_flash_target": "{target} flashen",
+       "acefw_phase_releasing": "Seriellen Port freigeben",
+       "acefw_phase_flashing": "Firmware wird geflasht",
+       "acefw_phase_resuming": "Verbindung wird wiederhergestellt",
+--- a/i18n/en.json
++++ b/i18n/en.json
+@@ -167,6 +167,7 @@
+       "acefw_test_noimg": "image not readable: {reason}",
+       "acefw_bundled_version": "Bundled firmware {v}",
+       "acefw_flash_bundled": "Flash firmware",
++      "acefw_flash_target": "Flash {target}",
+       "acefw_phase_releasing": "Releasing serial port",
+       "acefw_phase_flashing": "Flashing firmware",
+       "acefw_phase_resuming": "Reconnecting",
+--- a/i18n/zh.json
++++ b/i18n/zh.json
+@@ -174,6 +174,7 @@
+       "acefw_test_noimg": "无法读取镜像：{reason}",
+       "acefw_bundled_version": "内置固件 {v}",
+       "acefw_flash_bundled": "刷写固件",
++      "acefw_flash_target": "刷写 {target}",
+       "acefw_phase_releasing": "正在交接串口",
+       "acefw_phase_flashing": "正在刷写固件",
+       "acefw_phase_resuming": "正在重新连接",
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -818,6 +818,7 @@
+         self._protocols = {}
+         self._ace_path_protocol = {}
+         self._ace_models = {}
++        self._fw_live_versions = {}
+         self._v2_verified = set()
+         self._v2_probe_after = {}
+         self._v2_probe_timers = {}
+@@ -2288,7 +2289,7 @@
+         self.gcode.register_command(
+             'ACE_FW_RESUME',
+             self.cmd_ACE_FW_RESUME,
+-            desc='[multiACE] Reconnect an ACE released with ACE_FW_RELEASE (ACE=n)')
++            desc='[multiACE] Reconnect a released ACE (ACE=n [PROTOCOL=v2|ace2k])')
+         self.gcode.register_command(
+             'ACE_PICKUP_CLEAN',
+             self.cmd_ACE_PICKUP_CLEAN,
+@@ -2494,6 +2495,23 @@
+             except OSError:
+                 pass
+         claimed_real = set()
++        # The updater records only ports whose Gen-2 protocol it verified.
++        # These take priority over static ace2k_ports and USB-ID autodetection.
++        # A switch on one port never enables autodetection on the others.
++        canonical = {os.path.realpath(p): p for p in (self._ace_canonical or ())
++                     if os.path.exists(p)}
++        for port, name in self.save_variables.allVariables.get(
++                'ace__fw_port_protocols', {}).items():
++            if name not in ('ace2k', 'v2') or not os.path.exists(port):
++                continue
++            real = os.path.realpath(port)
++            if real in claimed_real:
++                continue
++            path = canonical.get(real, port)
++            self._ace_path_protocol[path] = (AceProtocolAce2k if name == 'ace2k'
++                                            else AceProtocolV2)
++            ace_devices.append(path)
++            claimed_real.add(real)
+ 
+         active_protocols = []
+         for p in KNOWN_PROTOCOLS:
+@@ -6170,11 +6188,16 @@
+         self._v2_filament_info_empty.pop(idx, None)
+ 
+         def info_callback(self, response):
++            if self._serials.get(idx) is not ser:
++                return
+             if response.get('msg') != 'success':
+                 self.log_error(self._t('msg.ace_error_generic', error=response.get('msg')))
++                return
+             result = response.get('result', {})
+             model = result.get('model', 'Unknown')
+             firmware = result.get('firmware', 'Unknown')
++            if firmware and firmware != 'Unknown':
++                self._fw_live_versions[idx] = firmware
+             self._ace_models[idx] = (model, firmware)
+             self._usb_log.info('CONNECT info idx=%d model=%s firmware=%s', idx, model, firmware)
+             self.log_always(self._t('msg.ace_connected',
+@@ -6193,8 +6216,10 @@
+                     pass
+ 
+         def _info_known():
+-            fw = (self._ace_models.get(idx) or ('', ''))[1]
+-            return bool(fw) and fw != 'Unknown'
++            # Ignore a previous connection's cached display version. A retry
++            # from a retired connection must not submit work on its successor.
++            return (self._serials.get(idx) is not ser
++                    or bool(self._fw_live_versions.get(idx)))
+ 
+         def _info_retry(eventtime):
+             # The handshake's get_info went unanswered: ask once more, and
+@@ -6328,6 +6353,7 @@
+                 return False
+             self._transport_abandon.pop(idx, None)
+             self._serials[idx] = ser
++            self._fw_live_versions.pop(idx, None)
+             if protocol.NAME == 'v2':
+                 self._v2_verified.add(idx)
+                 self._v2_probe_after.pop(idx, None)
+@@ -6500,6 +6526,7 @@
+ 
+     def _disconnect_from(self, idx):
+         self._usb_stats['disconnects'] += 1
++        self._fw_live_versions.pop(idx, None)
+         self._native_buffer.invalidate(idx, reason='disconnected')
+ 
+         self._retire_transport(idx)
+@@ -14434,7 +14461,7 @@
+ 
+     cmd_ACE_FW_RELEASE_help = (
+         '[multiACE] Release one ACE serial port for a firmware flash: '
+-        'ACE_FW_RELEASE ACE=n. Works for both generations (Gen 1 ACE Pro: '
++        'ACE_FW_RELEASE ACE=n [SWITCH=1]. Works for both generations (Gen 1 ACE Pro: '
+         'IAP flasher, Gen 2 ACE 2: OTA updater). Disconnects the unit and '
+         'holds every reconnect path until ACE_FW_RESUME.')
+ 
+@@ -14454,11 +14481,18 @@
+         if idx >= len(self._ace_devices):
+             raise self._ace_error(gcmd, 'No ACE %d' % self._disp(idx),
+                                   code=208)
+-        if not (self._is_v2(idx) or self._is_v1(idx)):
++        if not (self._is_v2(idx) or self._is_v1(idx) or self._is_ace2k(idx)):
+             raise self._ace_error(
+                 gcmd, 'ACE %d has no detected protocol yet - connect it '
+                       'once so the flasher is known before releasing the '
+                       'port' % self._disp(idx), code=200)
++        switching = gcmd.get_int('SWITCH', 0, minval=0, maxval=1)
++        if switching and self._is_v1(idx):
++            raise self._ace_error(gcmd, 'Cross-protocol firmware requires an ACE 2 Pro',
++                                  code=200)
++        if (switching or self._is_ace2k(idx)) and not self._fw_port_key(self._ace_devices[idx]):
++            raise self._ace_error(gcmd, 'ACE firmware handoff needs a stable USB port identity',
++                                  code=208)
+         path = getattr(self, '_path_calibration', None)
+         operations = getattr(self, '_path_operations', None)
+         if path is not None and (path.task.get('active') or path.store.pending is not None):
+@@ -14499,14 +14533,66 @@
+ 
+     cmd_ACE_FW_RESUME_help = (
+         '[multiACE] Reconnect an ACE released with ACE_FW_RELEASE: '
+-        'ACE_FW_RESUME ACE=n.')
++        'ACE_FW_RESUME ACE=n [PROTOCOL=v2|ace2k].')
++
++    def _fw_port_key(self, path):
++        # Never save a kernel-assigned ttyUSB/ttyACM number as the identity
++        # of a flasher target. Boot-time enumeration may assign it to a peer.
++        if os.path.dirname(path) in ('/dev/serial/by-id', '/dev/serial/by-path'):
++            return path
++        real = os.path.realpath(path)
++        for directory in ('/dev/serial/by-path', '/dev/serial/by-id'):
++            if os.path.isdir(directory):
++                for name in sorted(os.listdir(directory)):
++                    alias = os.path.join(directory, name)
++                    if os.path.realpath(alias) == real:
++                        return alias
++        return None
++
++    def _fw_set_port_protocol(self, idx, name, gcmd):
++        path = self._ace_devices[idx]
++        key = self._fw_port_key(path)
++        if not key:
++            raise self._ace_error(gcmd, 'No stable USB port identity for %s' % path,
++                                  code=208)
++        protocol = {'v2': AceProtocolV2, 'ace2k': AceProtocolAce2k}.get(name)
++        if protocol is None or self._ace_path_protocol.get(path) not in (
++                AceProtocolV2, AceProtocolAce2k):
++            raise self._ace_error(gcmd, 'Select v2 or ace2k on an ACE 2 Pro',
++                                  code=200)
++        store = self.save_variables.allVariables
++        var = 'ace__fw_port_protocols'
++        old = store.get(var, {})
++        same_port = {p for p in old if p == key or
++                     os.path.realpath(p) == os.path.realpath(key)}
++        already_set = any(old[p] == name for p in same_port)
++        if idx not in self._fw_update_hold and not already_set:
++            raise self._ace_error(gcmd, 'Release the ACE before switching its driver',
++                                  code=205)
++        updated = {p: driver for p, driver in old.items() if p not in same_port}
++        updated[key] = name
++        if old != updated:
++            try:
++                self.save_variable(var, updated, write=True)
++            except Exception:
++                store[var] = old
++                raise
++        self._ace_path_protocol[path] = protocol
++        self._v2_probe_after.pop(idx, None)
+ 
+     def cmd_ACE_FW_RESUME(self, gcmd):
+         idx = gcmd.get_int('ACE', minval=0, maxval=3)
+-        self._fw_update_hold.discard(idx)
+         if idx >= len(self._ace_devices):
+             raise self._ace_error(gcmd, 'No ACE %d' % self._disp(idx),
+                                   code=208)
++        name = gcmd.get('PROTOCOL', None)
++        if name is not None:
++            name = name.strip().lower()
++            self._fw_set_port_protocol(idx, name, gcmd)
++            if idx not in self._fw_update_hold and self._connected_per_ace.get(idx):
++                if getattr(self._protocols.get(idx), 'NAME', '') == name:
++                    return
++        self._fw_update_hold.discard(idx)
+         try:
+             ok = self._open_ace(idx)
+         except Exception as e:
+@@ -25368,6 +25454,8 @@
+                 # OTA updater).
+                 'model':        (self._ace_models.get(i) or ('', ''))[0],
+                 'firmware':     (self._ace_models.get(i) or ('', ''))[1],
++                'firmware_live': (self._fw_live_versions.get(i, '')
++                                  if self._connected_per_ace.get(i) else ''),
+                 'community_fw': self._community_fw_kind(i),
+                 'status':       info.get('status', 'unknown'),
+                 'temp':         info.get('temp', 0),
+--- /dev/null
++++ b/web/backend/ace2k_update.py
+@@ -0,0 +1,62 @@
++"""Run the upstream v0.16.0 updater on the one ACE port released by MultiACE."""
++
++import asyncio
++import hashlib
++import os
++import re
++import sys
++from collections import deque
++from pathlib import Path
++
++HERE = Path(__file__).resolve().parent
++TOOL = HERE / "vendor" / "ace2k_flash.pyz"
++TOOL_SHA256 = "290a47cc677b9000eaf6d7edc5bcefb8947a0659ca71b5367865560dfc91547b"
++IMAGES = {
++    "open": ("ACE2-1.2.04O-insert-policy.bin", "V1.2.04O", "v2",
++             "818200b199c1d121bd7f1919e5ca507a443b650fe0debe3ddaf6d77e3b5d3251"),
++    "ace2k": ("ace2k-0.16.0-233b.bin", "0.16.0-233b", "ace2k",
++              "6f4a0e38c481fb0fc057031bb05bdb07900d4f9f64a2007d12c80c7ff59d6d18"),
++}
++
++
++def verify_files(target):
++    filename, _, _, expected = IMAGES[target]
++    for path, digest in ((HERE / "firmware" / filename, expected), (TOOL, TOOL_SHA256)):
++        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
++            raise ValueError(f"{path.name}: SHA-256 校验失败")
++
++
++async def flash(target, port, calibration_dir, moonraker, progress):
++    filename, version, _, _ = IMAGES[target]
++    calibration_dir.mkdir(parents=True, exist_ok=True)
++    # The web service already owns a per-device hold. A global service restart
++    # would release that hold and interrupt other boxes on the same printer.
++    argv = [sys.executable, "-u", str(TOOL), str(HERE / "firmware" / filename),
++            "--port", port, "--version", version.lstrip("V"), "--yes", "--config-follows",
++            "--calibration-dir", str(calibration_dir), "--moonraker", moonraker,
++            "--klipper-stop", "/bin/false", "--klipper-start", "/bin/false"]
++    env = os.environ.copy()
++    vendor = str(TOOL.parent)
++    env["PYTHONPATH"] = os.pathsep.join(filter(None, [vendor, env.get("PYTHONPATH")]))
++    proc = await asyncio.create_subprocess_exec(
++        *argv, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
++        stderr=asyncio.subprocess.STDOUT, env=env)
++    recent = deque(maxlen=4)
++    try:
++        async for raw in proc.stdout:
++            line = raw.decode(errors="replace").strip()
++            if line:
++                recent.append(line)
++                chunk = re.fullmatch(r"(\d+)/(\d+) chunks", line)
++                percent = (100 * int(chunk[1]) / int(chunk[2])) if chunk and int(chunk[2]) else None
++                progress(percent, line)
++        code = await proc.wait()
++    finally:
++        # Never return the serial port to Klipper while the child still owns it.
++        if proc.returncode is None:
++            proc.terminate()
++            await proc.wait()
++    # With --config-follows, exit 2 asks the caller to prove the new ace2k
++    # version after installing the new driver mapping. It is not success yet.
++    if code != 0 and not (code == 2 and target == "ace2k"):
++        raise RuntimeError(f"ACE 更新器退出 {code}: " + " / ".join(recent))
+--- a/web/backend/main.py
++++ b/web/backend/main.py
+@@ -707,6 +707,7 @@
+             "protocol":     a.get("protocol", ""),
+             "model":        a.get("model", ""),
+             "firmware":     a.get("firmware", ""),
++            "firmware_live": a.get("firmware_live"),
+             # ACE2-Open firmware (Simon-CR): version string ends in the
+             # letter O (V1.1.3O) - same rule as ace._is_open_fw_idx. The
+             # RC522 tag read/write live only there.
+@@ -3380,7 +3381,7 @@
+                     _acefw["state"], _acefw["result"], _acefw["error"])
+ 
+ 
+-async def _acefw_release(ace: int) -> None:
++async def _acefw_release(ace: int, expected_port: str = "", *, switch_driver=False) -> None:
+     # Claim the update synchronously after the callers' async preflights.
+     if _acefw_running():
+         raise HTTPException(409, "a firmware update is already running")
+@@ -3389,12 +3390,13 @@
+                    "result": None})
+     released = False
+     try:
+-        await _mr_post("/printer/gcode/script",
+-                       {"script": f"ACE_FW_RELEASE ACE={ace}"})
++        command = f"ACE_FW_RELEASE ACE={ace}" + (" SWITCH=1" if switch_driver else "")
++        await _mr_post("/printer/gcode/script", {"script": command})
+         released = True
+         status = _parse_state(await _query_state())
+         if not any(a["idx"] == ace and a.get("fw_hold")
+-                   for a in status.get("aces", [])):
++                   and (not expected_port or os.path.realpath(a.get("serial_path") or "") ==
++                        os.path.realpath(expected_port)) for a in status.get("aces", [])):
+             raise RuntimeError("release not confirmed by the printer")
+     except Exception as exc:
+         error = str(exc)
+@@ -3413,6 +3415,54 @@
+         raise HTTPException(500, error) from exc
+ 
+ 
++async def _acefw_verify_reconnected(ace, port, target):
++    import ace2k_update
++    _, version, protocol, _ = ace2k_update.IMAGES[target]
++    expected = "ace2k " + version if target == "ace2k" else version
++    deadline = time.monotonic() + 30
++    while True:
++        state = _parse_state(await _query_state())
++        for unit in state.get("aces", []):
++            if (unit["idx"] == ace and unit.get("connected") and unit.get("protocol") == protocol
++                    and os.path.realpath(unit.get("serial_path") or "") == os.path.realpath(port)
++                    and unit.get("firmware_live") == expected):
++                return expected
++        if time.monotonic() >= deadline:
++            raise RuntimeError(f"设备重连后未在原端口读到目标固件 {expected}")
++        await asyncio.sleep(0.5)
++
++
++async def _acefw_run_cross(ace, port, target):
++    import ace2k_update
++
++    def progress(pct, msg):
++        _acefw.update(pct=pct, msg=msg)
++        _trace.info("acefw: ACE %s: %s", ace, msg)
++
++    _, _, protocol, _ = ace2k_update.IMAGES[target]
++    handoff = ""
++    try:
++        _acefw["state"] = "flashing"
++        await ace2k_update.flash(
++            target, port, Path(_CFG_EXT_DIR) / "multiace" / "ace-calibration",
++            MOONRAKER_URL, progress)
++        handoff = f" PROTOCOL={protocol}"
++    except Exception as exc:
++        _acefw["error"] = str(exc)
++        _trace.warning("acefw: ACE %s update failed: %s", ace, exc)
++    finally:
++        _acefw["state"] = "resuming"
++        try:
++            await _mr_post("/printer/gcode/script",
++                           {"script": f"ACE_FW_RESUME ACE={ace}{handoff}"}, timeout=60.0)
++            if handoff:
++                version = await _acefw_verify_reconnected(ace, port, target)
++                _acefw["result"] = {"new": version, "verified": True, "app_alive": True}
++        except Exception as exc:
++            _acefw["error"] = " / ".join(filter(None, (_acefw["error"], f"重连验证: {exc}")))
++        _acefw["state"] = "error" if _acefw["error"] else "done"
++
++
+ @app.post("/api/acefw/flash-bundled")
+ async def acefw_flash_bundled(payload: dict) -> dict:
+     import ace2_ota
+@@ -3427,18 +3477,35 @@
+     if state.get("printer_state") in ("printing", "paused", "busy"):
+         raise HTTPException(409, "请在打印机空闲时更新 ACE")
+     entry = next((a for a in state.get("aces", []) if a["idx"] == ace), None)
+-    if not entry or entry.get("protocol") != "v2":
++    target = payload.get("target", "open")
++    if not isinstance(target, str) or target not in ("open", "ace2k"):
++        raise HTTPException(400, "请选择已内置的 ACE 固件")
++    if not entry or entry.get("protocol") not in ("v2", "ace2k"):
+         raise HTTPException(400, "内置固件仅支持 ACE 2")
++    if "target" not in payload and entry["protocol"] != "v2":
++        raise HTTPException(400, "请刷新网页并明确选择目标固件")
+     port = entry.get("serial_path")
+     if not entry.get("connected") or not port or entry.get("fw_hold"):
+         raise HTTPException(409, "请先确认目标 ACE 2 已连接")
++    if target == "ace2k" or entry["protocol"] == "ace2k":
++        import ace2k_update
++        if entry.get("firmware_live") is None:
++            raise HTTPException(409, "请加载新版 MultiACE Klipper 模块后再切换固件")
++        try:
++            await asyncio.to_thread(ace2k_update.verify_files, target)
++        except (OSError, ValueError) as exc:
++            raise HTTPException(503, f"内置刷写文件不可用: {exc}") from exc
++        await _acefw_release(ace, port, switch_driver=True)
++        asyncio.create_task(_acefw_run_cross(ace, port, target))
++        return {"ok": True}
++
+     try:
+         image = await asyncio.to_thread(ace2_ota.load_bundled_image)
+     except (OSError, ace2_ota.FlashError) as exc:
+         _trace.warning("acefw: bundled image validation failed: %s", exc)
+         raise HTTPException(503, "内置 ACE 固件缺失或校验失败") from exc
+ 
+-    await _acefw_release(ace)
++    await _acefw_release(ace, port)
+     # A confirmed bundled-image update also supports reinstalling the same version.
+     asyncio.create_task(_acefw_run(ace, port, image.version, None, None,
+                                    dry_run=False, force=True, bundled_image=image))
+@@ -3561,7 +3628,10 @@
+ @app.get("/api/acefw/status")
+ async def acefw_status() -> dict:
+     from ace2_ota import BUNDLED_VERSION
+-    return dict(_acefw, bundled_version=f"V{BUNDLED_VERSION}")
++    import ace2k_update
++    targets = [{"id": key, "version": spec[1], "protocols": ["v2", "ace2k"]}
++               for key, spec in ace2k_update.IMAGES.items()]
++    return dict(_acefw, bundled_version=f"V{BUNDLED_VERSION}", targets=targets)
+ 
+ 
+ @app.get("/api/acefw/versions")
+--- a/web/frontend/app.js
++++ b/web/frontend/app.js
+@@ -2440,14 +2440,26 @@
+       await spoolMacro("ACE_SET_SPOOLMAN", {AUTO: enable ? 1 : 0});
+     }
+     const acefw = reactive({status: {}, submitting: false, uiError: ""});
++    const acefwTargets = computed(() => {
++      const {targets, bundled_version} = acefw.status;
++      if (Array.isArray(targets)) return targets;
++      // Older backends only accept the original bundled V2 image.
++      return bundled_version ? [{id: "open", version: bundled_version, protocols: ["v2"]}] : [];
++    });
++    function acefwTargetsFor(a) {
++      return acefwTargets.value.filter(target => target.protocols.includes(a.protocol));
++    }
++    function acefwTargetLabel(target) {
++      return target.id === "open" ? `ACE2-Open ${target.version}` : `${target.id} ${target.version}`;
++    }
+     const acefwCandidates = computed(() =>
+-      (state.aces || []).filter(a => a.protocol === "v2"));
++      (state.aces || []).filter(a => acefwTargetsFor(a).length));
+     const acefwBusy = computed(() => acefw.submitting ||
+       ["releasing", "flashing", "resuming"].includes(acefw.status.state));
+ 
+     function acefwCanFlash(a) {
+-      return !!acefw.status.bundled_version && a.connected && !a.fw_hold &&
+-        !acefwBusy.value && !["printing", "paused", "busy"].includes(state.printer_state);
++      return a.connected && !a.fw_hold && !acefwBusy.value &&
++        ["idle", "ready", "standby", "complete", "cancelled"].includes(state.printer_state);
+     }
+ 
+     let acefwTimer = null;
+@@ -2461,19 +2473,22 @@
+         if (previous !== acefw.status.state &&
+             ["done", "error"].includes(acefw.status.state)) reloadState();
+       } catch (e) {
+-        if (!acefw.status.bundled_version) acefw.uiError = e.message;
++        if (!acefwTargets.value.length) acefw.uiError = e.message;
+       }
+       if (acefwBusy.value) acefwTimer = setTimeout(acefwPoll, 1500);
+     }
+ 
+-    async function acefwStart(a) {
+-      if (!acefwCanFlash(a)) return;
++    async function acefwStart(idx, target) {
++      const a = state.aces.find(unit => unit.idx === idx);
++      if (!a || !acefwCanFlash(a) || !acefwTargetsFor(a).some(
++        current => current.id === target.id && current.version === target.version)) return;
+       acefw.submitting = true;
+       acefw.uiError = "";
+       try {
+         const r = await fetch(`${API}/acefw/flash-bundled`, {
+           method: "POST", headers: {"Content-Type": "application/json"},
+-          body: JSON.stringify({ace: a.idx}),
++          body: JSON.stringify(Array.isArray(acefw.status.targets)
++            ? {ace: idx, target: target.id} : {ace: idx}),
+         });
+         if (!r.ok) {
+           const body = await r.json().catch(() => ({}));
+@@ -2487,14 +2502,14 @@
+       }
+     }
+ 
+-    function acefwFlash(a) {
++    function acefwFlash(a, target) {
+       if (!acefwCanFlash(a)) return;
+       confirm({
+         title: t("ui.config.acefw_confirm_title"),
+         message: `<div class="acefw-danger">${tHtml("ui.config.acefw_confirm_msg",
+-          {ace: dispIdx(a.idx), version: acefw.status.bundled_version})}</div>`,
++          {ace: dispIdx(a.idx), version: acefwTargetLabel(target)})}</div>`,
+         okLabel: t("ui.config.acefw_confirm_ok"),
+-        onOk: () => acefwStart(a),
++        onOk: () => acefwStart(a.idx, target),
+       });
+     }
+ 
+@@ -7987,7 +8002,7 @@
+       paCalibrate, paCanCalibrate, paCalibrating, paLoading, paSpoolHead, paSpoolLoadPlan,
+       paSave, paDirty, paKeyValid, paValueValid, paKeyOptions, pickerPaDialog,
+       spoolCreating, spoolNewForm,
+-      acefw, acefwCandidates, acefwBusy, acefwCanFlash, acefwFlash,
++      acefw, acefwCandidates, acefwTargetsFor, acefwTargetLabel, acefwBusy, acefwCanFlash, acefwFlash,
+       acefwStatusText, acefwStatusBad,
+       spoolCreateFromPicker,
+       spoolExport, spoolImport, triggerSpoolImport,
+--- a/web/frontend/index.html
++++ b/web/frontend/index.html
+@@ -2358,18 +2358,19 @@
+         </div>
+         <pre v-if="updateState.log" class="update-log">{{ updateState.log }}</pre>
+       </div>
+-      <div class="update-card acefw-card" v-if="acefwCandidates.length || acefwBusy">
++      <div class="update-card acefw-card" v-if="acefwCandidates.length || acefwBusy || acefwStatusBad">
+         <h4>{{ t('ui.config.acefw_title') }}</h4>
+-        <p class="muted small" v-if="acefw.status.bundled_version">{{
+-          t('ui.config.acefw_bundled_version', {v: acefw.status.bundled_version})
+-        }}</p>
+         <div class="config-form">
+           <div class="config-row" v-for="a in acefwCandidates" :key="a.idx">
+             <label>ACE {{ dispIdx(a.idx) }} · {{ a.firmware || '—' }}
+               <span v-if="!a.connected" class="muted">{{ t('ui.acefw.offline') }}</span>
+             </label>
+-            <button class="danger" :disabled="!acefwCanFlash(a)"
+-                    @click="acefwFlash(a)">{{ t('ui.config.acefw_flash_bundled') }}</button>
++            <div class="acefw-actions">
++              <button v-for="target in acefwTargetsFor(a)" :key="target.id" class="danger"
++                      :disabled="!acefwCanFlash(a)" @click="acefwFlash(a, target)">{{
++                t('ui.config.acefw_flash_target', {target: acefwTargetLabel(target)})
++              }}</button>
++            </div>
+           </div>
+         </div>
+         <p v-if="acefwStatusText" class="small" role="status"

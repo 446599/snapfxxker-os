@@ -4,6 +4,7 @@
 
 > **官网介绍页**：[https://446599.github.io/snapfxxker-os/](https://446599.github.io/snapfxxker-os/)（含实机 480×320 界面交互预览与原厂功能对比）  
 > **最新预发布固件**：`2.1.2-233-paxx8d8af0d.2`（[前往 Releases 下载](https://github.com/446599/snapfxxker-os/releases)）
+> **开发分支 ACE 固件刷写**：MultiACE flow.15.113 在网页里为每台 ACE 2 Pro 提供 ACE2-Open V1.2.04O 与 ace2k 0.16.0-233b 两个刷写选项。[组件、构建与使用说明](bundles/multiace-firmware-selector/README.md)。
 
 ---
 
