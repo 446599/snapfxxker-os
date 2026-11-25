@@ -9,9 +9,9 @@
 # integration removes the installed copy only; reboot or firmware upgrade must
 # load this embedded definition, without requiring /oem/.debug or a live cache.
 PKG_LABEL="multiACE"
-PKG_VERSION="1.27b-233.20261122-flow.15.112"
-PKG_URL="file:///usr/local/share/233-firmware/multiace-managed-1.27b-233.20261122-flow.15.112.tar.gz"
-PKG_SHA256="0d21c8d2d4b4477c68588c075a68c9b645d3892e72b4b6befa44ccd4f6957b25"
+PKG_VERSION="1.27b-233.20261122-flow.15.113"
+PKG_URL="file:///usr/local/share/233-firmware/multiace-managed-1.27b-233.20261122-flow.15.113.tar.gz"
+PKG_SHA256="d49cf0b24776f3403cf9f32c6e293ef651f7a89a7fd86498a88f79c9f72414e8"
 PKG_APP_DIR="/oem/apps/multiace"
 PKG_PREFIX="multiace"
 PKG_BINARIES="web/backend/vendor/.paxx-dependencies-ready"
@@ -40,6 +40,10 @@ pkg_post_install() {
         config/extended/multiace/ace_vars.cfg \
         VERSION \
         web/backend/main.py \
+        web/backend/ace2k_update.py \
+        web/backend/firmware/ACE2-1.2.04O-insert-policy.bin \
+        web/backend/firmware/ace2k-0.16.0-233b.bin \
+        web/backend/vendor/ace2k_flash.pyz \
         web/backend/requirements.txt \
         web/frontend/index.html \
         tools/post_process_virtual_toolheads.py; do

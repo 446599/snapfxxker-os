@@ -1,0 +1,12 @@
+ace2k_flash.pyz is the unmodified Python flasher distributed by tobecwb/ace2k.
+Upstream version: v0.16.0
+Tag commit: 27c564d210170f01aa1a57cd928a60c520247aff
+Source: https://github.com/tobecwb/ace2k/tree/27c564d210170f01aa1a57cd928a60c520247aff/firmware/tools/ace2k_flash
+Release: https://github.com/tobecwb/ace2k/releases/tag/v0.16.0
+Archive: https://github.com/tobecwb/ace2k/releases/download/v0.16.0/ace2k_flash.pyz
+SHA-256: 290a47cc677b9000eaf6d7edc5bcefb8947a0659ca71b5367865560dfc91547b
+License: GNU General Public License v3, included in ace2k-flasher-LICENSE.
+
+ace2k-0.16.0-233b.bin is the downstream firmware distributed with this U1 release:
+https://github.com/446599/snapfxxker-os/releases/tag/v2.1.2-233-paxx8d8af0d.2
+SHA-256: 6f4a0e38c481fb0fc057031bb05bdb07900d4f9f64a2007d12c80c7ff59d6d18
