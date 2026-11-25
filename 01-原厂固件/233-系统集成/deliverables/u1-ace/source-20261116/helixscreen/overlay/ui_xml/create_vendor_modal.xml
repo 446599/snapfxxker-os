@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Modal dialog for creating a new vendor in the spool wizard -->
+<component>
+  <view name="create_vendor_modal" extends="ui_dialog" width="90%" height="content" align="center" flex_flow="column" style_flex_main_place="start" style_pad_gap="0" style_max_height="90%" style_radius="#u1_card_radius" style_min_width="0">
+    <!-- Form container -->
+    <lv_obj name="form_container" width="100%" height="content" style_pad_left="#space_lg" style_pad_right="#space_lg" style_pad_top="#space_lg" style_pad_bottom="#space_lg" flex_flow="column" style_flex_cross_place="start" style_pad_gap="#u1_card_gap" style_pad_all="#u1_page_pad" style_max_height="#dialog_content_max" scrollable="true" scroll_dir="ver">
+      <!-- Title -->
+      <text_heading width="100%" text="Create New Vendor" style_text_align="left" long_mode="wrap"/>
+      <!-- Vendor name input -->
+      <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+        <text_small text="Vendor Name" style_text_color="#text_muted"/>
+        <text_input name="new_vendor_name" width="100%" placeholder_text="e.g. Polymaker" placeholder_tag="e.g. Polymaker" style_min_height="#u1_touch_target" height="#u1_touch_target">
+          <event_cb trigger="value_changed" callback="on_wizard_new_vendor_name_changed"/>
+        </text_input>
+      </lv_obj>
+      <!-- Vendor URL input (optional) -->
+      <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+        <text_small text="Website (optional)" style_text_color="#text_muted"/>
+        <text_input name="new_vendor_url" width="100%" placeholder_text="https://..." placeholder_tag="https://..." style_min_height="#u1_touch_target" height="#u1_touch_target">
+          <event_cb trigger="value_changed" callback="on_wizard_new_vendor_url_changed"/>
+        </text_input>
+      </lv_obj>
+    </lv_obj>
+    <!-- Divider + button row -->
+    <modal_button_row primary_text="Add Vendor" primary_callback="on_wizard_confirm_create_vendor" secondary_text="Cancel" secondary_callback="on_wizard_cancel_create_vendor"/>
+  </view>
+</component>

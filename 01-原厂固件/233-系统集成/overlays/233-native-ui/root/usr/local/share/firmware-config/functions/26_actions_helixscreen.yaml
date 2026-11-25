@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+quick_actions:
+  upgrades:
+    items:
+      helixscreen-upgrade:
+        label: 安装固件内置界面版本
+        description: 使用本固件附带的 233 原生运行包，保持界面与配套服务匹配。
+        if_cmd: /usr/local/bin/extended-pkg helixscreen needs_upgrade
+        confirm: "安装固件内置的 233 界面版本？完成后设备将重启。"
+        cmd:
+          - bash
+          - -ec
+          - |
+            /usr/local/bin/extended-pkg helixscreen upgrade
+            echo ">> 已安装固件内置界面，正在重启。"
+            (sleep 3; /sbin/reboot) >/dev/null 2>&1 &
+        message: 正在安装 233 原生界面…

@@ -1,0 +1,30 @@
+{
+  "uid": {
+    "uid1": 808780566,
+    "uid2": 17445170,
+    "uid3": 942880330
+  },
+  "fw": "V1.1.97O",
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "lanes": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "key": {
+    "1": 17749
+  },
+  "printer": "ready",
+  "holds": [
+    false,
+    false,
+    false,
+    false
+  ]
+}

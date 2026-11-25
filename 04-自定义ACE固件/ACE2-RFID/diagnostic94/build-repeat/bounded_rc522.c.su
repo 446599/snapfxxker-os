@@ -1,0 +1,11 @@
+/work/diagnostic94/firmware/bounded_rc522.c:34:23:validate	24	static
+/work/diagnostic94/firmware/bounded_rc522.c:59:23:poll	24	static
+/work/diagnostic94/firmware/bounded_rc522.c:53:23:fault.isra	0	static
+/work/diagnostic94/firmware/bounded_rc522.c:88:23:exchange	48	static
+/work/diagnostic94/firmware/bounded_rc522.c:136:16:br_read	16	static
+/work/diagnostic94/firmware/bounded_rc522.c:139:16:br_write	24	static
+/work/diagnostic94/firmware/bounded_rc522.c:143:23:cleanup_reader	16	static
+/work/diagnostic94/firmware/bounded_rc522.c:160:16:br_publish	32	static
+/work/diagnostic94/firmware/bounded_rc522.c:173:16:br_transceive_exact	112	static
+/work/diagnostic94/firmware/bounded_rc522.c:206:16:br_transceive	24	static
+/work/diagnostic94/firmware/bounded_rc522.c:214:16:br_wupa94	344	static

@@ -1,0 +1,12 @@
+{
+  "complete": false,
+  "forward_commanded": 325,
+  "reverse_commanded": 0,
+  "forward_encoder": 304,
+  "reverse_encoder": 0,
+  "forward_segments": 65,
+  "reverse_segments": 0,
+  "decoder_resolution_mm_per_count": 1.2342,
+  "triggered_heads": [],
+  "error": "JSONDecodeError('Expecting value: line 1 column 1 (char 0)')"
+}

@@ -1,0 +1,92 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Progress sits beside a single row of touch-height actions on landscape
+     screens and above them in portrait. Small landscape screens keep the
+     actions in a single row to leave height for the model. -->
+<component>
+  <styles>
+    <style name="strip_row" layout="flex" flex_flow="row" flex_cross_place="center"/>
+    <style name="strip_stacked" layout="flex" flex_flow="column"/>
+    <style name="buttons_row" width="54%"/>
+    <style name="buttons_compact_row" width="68%"/>
+    <style name="buttons_stacked" width="100%"/>
+    <style name="progress_row" height="content" min_height="#u1_touch_target" flex_grow="1" flex_main_place="center"/>
+    <style name="progress_stacked" width="100%" height="content"/>
+  </styles>
+  <view extends="lv_obj" width="100%" height="content" style_pad_hor="#u1_card_pad"
+        style_pad_ver="#space_xxs" style_pad_gap="#u1_card_gap" style_radius="0"
+        style_bg_opa="0" style_border_side="top" style_border_width="1"
+        style_border_color="#border" scrollable="false">
+    <bind_style_if name="strip_row" cond="ps_strip_stacked eq 0 or (not ui_is_portrait and ui_breakpoint le 1)"/>
+    <bind_style_if name="strip_stacked" cond="ps_strip_stacked eq 1 and (ui_is_portrait or ui_breakpoint gt 1)"/>
+
+    <!-- Progress and timing. The adjacent buttons control the print. -->
+    <lv_obj name="ps_strip_progress" style_min_width="0" style_pad_all="0" style_bg_opa="0" style_border_width="0" flex_flow="column" style_pad_gap="#space_xs" scrollable="false">
+      <bind_style_if name="progress_row" cond="ps_strip_stacked eq 0 or (not ui_is_portrait and ui_breakpoint le 1)"/>
+      <bind_style_if name="progress_stacked" cond="ps_strip_stacked eq 1 and (ui_is_portrait or ui_breakpoint gt 1)"/>
+      <!-- Printing: percent, time left, clock time of the finish, time elapsed. -->
+      <lv_obj name="ps_strip_print_line" width="100%" height="content" style_pad_all="0" style_bg_opa="0" style_border_width="0" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_xs" scrollable="false">
+        <bind_flag_if_eq subject="preparing_visible" flag="hidden" ref_value="1"/>
+        <text_body name="print_percent" bind_text="print_progress_text" style_text_font="#font_progress" style_pad_right="#space_xs"/>
+        <text_small text="Remaining" style_text_color="#text_muted">
+          <bind_flag_if cond="not ui_is_portrait and ui_breakpoint eq 0" flag="hidden"/>
+        </text_small>
+        <text_heading name="print_remaining" bind_text="print_remaining" style_text_color="#text" flex_grow="1" long_mode="dots"/>
+        <text_small name="print_eta" bind_text="print_eta" style_text_color="#text_muted" flex_grow="1" long_mode="dots">
+          <bind_flag_if cond="ui_breakpoint le 2" flag="hidden"/>
+        </text_small>
+        <icon name="elapsed_icon" src="hourglass" size="xs" variant="secondary" clickable="false">
+          <bind_flag_if cond="ui_breakpoint le 2" flag="hidden"/>
+        </icon>
+        <text_small name="print_elapsed" bind_text="print_elapsed" style_text_color="#text_muted">
+          <bind_flag_if cond="ui_breakpoint le 2" flag="hidden"/>
+        </text_small>
+      </lv_obj>
+      <!-- Pre-print: what the start sequence has left. -->
+      <lv_obj name="ps_strip_prepare_line" width="100%" height="content" style_pad_all="0" style_bg_opa="0" style_border_width="0" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_xs" scrollable="false" hidden="true">
+        <bind_flag_if_eq subject="preparing_visible" flag="hidden" ref_value="0"/>
+        <text_body name="preparing_heading" text="Preparing" style_text_font="#font_body_bold"/>
+        <text_small name="preparing_eta" bind_text="print_start_time_left" style_text_color="#text_muted" flex_grow="1" long_mode="dots"/>
+      </lv_obj>
+      <progress_bar name="print_progress" bind_value="print_progress_display">
+        <bind_flag_if_eq subject="preparing_visible" flag="hidden" ref_value="1"/>
+      </progress_bar>
+      <!-- Its sweep runs at every value, 0 included, because the value is an
+           estimate that can stall through a long phase. -->
+      <progress_bar_estimate name="preparing_progress_bar" bind_value="preparing_progress">
+        <bind_flag_if_eq subject="preparing_visible" flag="hidden" ref_value="0"/>
+      </progress_bar_estimate>
+    </lv_obj>
+
+    <!-- Keep the touch areas clear of the floating E-stop in the bottom-right corner. -->
+    <lv_obj name="ps_strip_buttons" height="#u1_touch_target" style_pad_left="0" style_pad_right="#u1_touch_target" style_pad_ver="0" style_bg_opa="0" style_border_width="0" flex_flow="row" style_flex_main_place="end" style_flex_cross_place="center" style_pad_gap="#u1_compact_gap" scrollable="false">
+      <bind_style_if name="buttons_row" cond="ps_strip_stacked eq 0 and (ui_is_portrait or ui_breakpoint gt 1)"/>
+      <bind_style_if name="buttons_compact_row" cond="not ui_is_portrait and ui_breakpoint le 1"/>
+      <bind_style_if name="buttons_stacked" cond="ps_strip_stacked eq 1 and (ui_is_portrait or ui_breakpoint gt 1)"/>
+      <ui_button name="btn_pause" width="0" height="100%" flex_grow="1" style_min_width="#u1_touch_target" style_radius="#u1_card_radius" style_pad_hor="0" style_pad_ver="0" bind_icon="print_control_primary_icon" icon_size="xs" text="Pause" bind_text="print_control_primary_label" icon_position="left" variant="primary">
+        <event_cb trigger="clicked" callback="on_print_control_primary"/>
+        <bind_state_if_eq subject="print_control_primary_enabled" state="disabled" ref_value="0"/>
+      </ui_button>
+      <ui_button name="btn_tune" width="0" height="100%" flex_grow="1" style_min_width="#u1_touch_target" style_radius="#u1_card_radius" style_pad_hor="#u1_compact_gap" style_pad_ver="0" text="Tune" icon_position="left" variant="ghost">
+        <event_cb trigger="clicked" callback="on_print_status_tune"/>
+        <bind_state_if_eq subject="print_controls_enabled" state="disabled" ref_value="0"/>
+      </ui_button>
+      <!-- The overflow menu only appears when an entry is available. -->
+      <ui_button name="btn_more" width="0" height="100%" flex_grow="1" style_min_width="#u1_touch_target" style_radius="#u1_card_radius" style_pad_hor="#u1_compact_gap" style_pad_ver="0" variant="ghost" text="More" icon_position="left">
+        <bind_flag_if cond="print_status_camera_available or timelapse_owner eq 1 or (led_controllable and ui_is_portrait)" flag="hidden" invert="true"/>
+        <event_cb trigger="clicked" callback="on_print_status_more"/>
+      </ui_button>
+      <!-- Cancel while a print runs (outcome NONE), Reprint once it has an outcome. -->
+      <ui_button name="btn_cancel" width="0" height="100%" flex_grow="1" style_min_width="#u1_touch_target" style_radius="#u1_card_radius" style_pad_hor="#u1_compact_gap" style_pad_ver="0" variant="ghost" style_text_color="#danger" text="Cancel" icon_position="left">
+        <bind_flag_if_not_eq subject="print_outcome" flag="hidden" ref_value="0"/>
+        <bind_state_if_eq subject="print_control_stop_enabled" state="disabled" ref_value="0"/>
+        <event_cb trigger="clicked" callback="on_print_control_stop"/>
+      </ui_button>
+      <ui_button name="btn_reprint" width="0" height="100%" flex_grow="1" style_min_width="#u1_touch_target" style_radius="#u1_card_radius" style_pad_hor="#u1_compact_gap" style_pad_ver="0" text="Reprint" icon_position="left" hidden="true" variant="primary">
+        <bind_flag_if_eq subject="print_outcome" flag="hidden" ref_value="0"/>
+        <event_cb trigger="clicked" callback="on_print_status_reprint"/>
+      </ui_button>
+    </lv_obj>
+  </view>
+</component>

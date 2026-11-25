@@ -1,0 +1,272 @@
+{
+  "identity": {
+    "uid1": 808780566,
+    "uid2": 17445170,
+    "uid3": 942880330
+  },
+  "firmware": {
+    "boot_version": "",
+    "firmware": "V1.1.93O",
+    "model": "ACE 2 Pro"
+  },
+  "heads": [
+    false,
+    false,
+    true,
+    false
+  ],
+  "lanes": [
+    {
+      "_wire_valid": true,
+      "brand": "",
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 0,
+      "rfid": 0,
+      "sku": "",
+      "slot_status": "ready",
+      "status": "unknown",
+      "type": ""
+    },
+    {
+      "_wire_valid": true,
+      "brand": "",
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 1,
+      "rfid": 0,
+      "sku": "",
+      "slot_status": "ready",
+      "status": "unknown",
+      "type": ""
+    },
+    {
+      "_wire_valid": true,
+      "brand": "",
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 2,
+      "rfid": 0,
+      "sku": "",
+      "slot_status": "ready",
+      "status": "unknown",
+      "type": ""
+    },
+    {
+      "_wire_valid": true,
+      "brand": "",
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 3,
+      "rfid": 0,
+      "sku": "",
+      "slot_status": "ready",
+      "status": "empty",
+      "type": ""
+    }
+  ],
+  "calibration": {
+    "state": "at_sensor",
+    "session_id": 1,
+    "ace": 0,
+    "slot": 2,
+    "head": 2,
+    "scope": "slot",
+    "protocol": "v2",
+    "commanded_feed_mm": 349,
+    "commanded_retract_mm": 0,
+    "load_length_mm": 349,
+    "swap_retract_length_mm": null,
+    "retract_length_mm": null,
+    "decoder_span": 270,
+    "feed_decoder_span": 270,
+    "return_decoder_span": null,
+    "decoder_return_delta": null,
+    "park_reference": "ace_preload",
+    "tip_position_mm": 349,
+    "verify_phase": "unavailable",
+    "verify_position_mm": null,
+    "verify_paused_from": null,
+    "verify_feed_actual_mm": null,
+    "verify_feed_delta_mm": null,
+    "verify_fine_offset_mm": 0,
+    "verify_fine_limit_mm": 50,
+    "verify_decoder_span": null,
+    "verify_move_seq": 0,
+    "toolhead_sensor": true,
+    "max_feed_mm": 2400,
+    "speed_mm_s": 30,
+    "previous_load_length": 2100,
+    "previous_swap_retract_length": 900,
+    "previous_retract_length": 1950,
+    "error": null
+  },
+  "context": {
+    "0": {
+      "0": {
+        "raw": 2143289344,
+        "float": NaN
+      },
+      "1": {
+        "raw": 2143289344,
+        "float": NaN
+      },
+      "2": {
+        "raw": 0,
+        "float": 0.0
+      },
+      "3": {
+        "raw": 0,
+        "float": 0.0
+      },
+      "4": {
+        "raw": 0,
+        "float": 0.0
+      }
+    },
+    "1": {
+      "0": {
+        "raw": 2143289344,
+        "float": NaN
+      },
+      "1": {
+        "raw": 2143289344,
+        "float": NaN
+      },
+      "2": {
+        "raw": 0,
+        "float": 0.0
+      },
+      "3": {
+        "raw": 0,
+        "float": 0.0
+      },
+      "4": {
+        "raw": 0,
+        "float": 0.0
+      }
+    },
+    "2": {
+      "0": {
+        "raw": 2143289344,
+        "float": NaN
+      },
+      "1": {
+        "raw": 2143289344,
+        "float": NaN
+      },
+      "2": {
+        "raw": 0,
+        "float": 0.0
+      },
+      "3": {
+        "raw": 0,
+        "float": 0.0
+      },
+      "4": {
+        "raw": 0,
+        "float": 0.0
+      }
+    },
+    "3": {
+      "0": {
+        "raw": 2143289344,
+        "float": NaN
+      },
+      "1": {
+        "raw": 2143289344,
+        "float": NaN
+      },
+      "2": {
+        "raw": 0,
+        "float": 0.0
+      },
+      "3": {
+        "raw": 0,
+        "float": 0.0
+      },
+      "4": {
+        "raw": 0,
+        "float": 0.0
+      }
+    }
+  },
+  "cmd13": {
+    "0": {
+      "_code_absent": true,
+      "_code_present": false,
+      "_index_present": false,
+      "brand": "",
+      "code": 0,
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 0,
+      "rfid": 0,
+      "sku": "",
+      "type": ""
+    },
+    "1": {
+      "_code_absent": true,
+      "_code_present": false,
+      "_index_present": true,
+      "brand": "",
+      "code": 0,
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 1,
+      "rfid": 0,
+      "sku": "",
+      "type": ""
+    },
+    "2": {
+      "_code_absent": true,
+      "_code_present": false,
+      "_index_present": true,
+      "brand": "",
+      "code": 0,
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 2,
+      "rfid": 0,
+      "sku": "",
+      "type": ""
+    },
+    "3": {
+      "_code_absent": true,
+      "_code_present": false,
+      "_index_present": true,
+      "brand": "",
+      "code": 0,
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 3,
+      "rfid": 0,
+      "sku": "",
+      "type": ""
+    }
+  }
+}

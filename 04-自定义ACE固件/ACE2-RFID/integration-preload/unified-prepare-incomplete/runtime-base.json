@@ -1,0 +1,5 @@
+{
+  "base_image": "6b67835bff4cbc3c52bab477929206fe79e48807176c91393246021633921c93",
+  "base_elf": "1e0e98f12edf9bf5cd803d3e6a0ee7605063765410371dd88195d373d2a0922c",
+  "scope": "diagnostic result separation; no persistent layout change; NOFLASH permanent"
+}

@@ -1,0 +1,2 @@
+PASS: 300 linked ARM Thumb diagnostic executions; lane/field bounds, all-lane busy, PRIMASK 0/1, r4/r7, no writes
+PASS: patched dispatch and native epilogue restore r4-r10/SP; only normal response word written

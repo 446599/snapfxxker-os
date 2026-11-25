@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Adapted from the PAXX touchscreen component definition.
+settings:
+  snapmaker_components:
+    items:
+      gui:
+        label: 屏幕界面
+        description: 选择 U1 触屏界面。233 原生界面包含黄白主题、耗材工作台和高级设置。
+        help_url: https://github.com/446599/snapfxxker-os/blob/main/docs/233/NATIVE_UI.md
+        get_cmd:
+          - /usr/local/bin/extended-config.py
+          - get
+          - /oem/printer_data/config/extended/extended2.cfg
+          - components
+          - gui
+          - snapmaker
+        options:
+          snapmaker:
+            label: Snapmaker 原界面
+            confirm: "切换回 Snapmaker 原界面？已有打印机与耗材配置会保留，设备将重启。"
+            cmd:
+              - bash
+              - -ec
+              - |
+                /usr/local/bin/extended-config.py add /oem/printer_data/config/extended/extended2.cfg components gui snapmaker
+                echo ">> 已选择 Snapmaker 原界面，正在重启。"
+                (sleep 3; /sbin/reboot) >/dev/null 2>&1 &
+          helixscreen:
+            label: 233 原生界面
+            confirm: "启用 233 黄白原生界面？运行包已随固件提供，无需在线下载。设备将重启。"
+            cmd:
+              - bash
+              - -ec
+              - |
+                /usr/local/bin/extended-pkg helixscreen upgrade
+                /usr/local/bin/extended-config.py add /oem/printer_data/config/extended/extended2.cfg components gui helixscreen
+                echo ">> 已选择 233 原生界面，正在重启。"
+                (sleep 3; /sbin/reboot) >/dev/null 2>&1 &
+        default: helixscreen

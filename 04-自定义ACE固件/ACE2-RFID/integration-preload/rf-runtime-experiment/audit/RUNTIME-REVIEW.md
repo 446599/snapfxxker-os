@@ -1,0 +1,26 @@
+# Runtime source review (read-only target, pre-AUTH snapshot)
+
+Reviewed rf-runtime-experiment source bounded_halt.c, bounded_rc522.c, experimental_binding.c, stock_bounded_bridge.c, thunk and hook builder. No target files modified; no hash certification, device access, or network use.
+
+## Blocking production findings
+
+1. Caller identity is not enforced. experimental_binding.c valid_locked() and br_platform_transaction() prove a global operation is live, not that this caller owns it. A different RTOS task or ISR using the same reader can retrieve the live global transaction and pass bounded_rc522.c validate(). It can preempt between validate and CS/DR accesses, corrupt the ongoing exchange and spend the common poll quota. Rechecking the same metadata at each register cannot fix this. Production exclusivity remains unproven. Ready=false and worker rejection prevent the current offline image from running the path; do not weaken them on the strength of fixture tests.
+2. Current-task evidence exists in exact stock: PendSV 0x08009060 reads PSP; 0x08009068 loads literal at 0x080090C0 (value 0x20001DD0); 906A dereferences current TCB and 907A saves PSP context to TCB[0]. After scheduler call 9090 -> 0x08013F14, 90A0 reloads current TCB, 90A2 reads its saved stack and 90B2 restores PSP. Scheduler builds 0x20001DD0 at 13F38/13F3E and stores next selected list-owner TCB there at 13F98/13F9A. Therefore current TCB pointer is *(volatile uintptr_t *)0x20001DD0 in this stock image. Bind/check it under metadata protection, separately reject IPSR != 0, reject zero/pre-scheduler state and same-task recursive active exchange. TCB pointer alone is not a permanent session identity across deletion/reuse.
+3. Stock 0x08013C0C executes MRS IPSR but is an interrupt-priority assertion with infinite fault branches, NOT an IPSR getter. Emit MRS IPSR directly; do not call it as a getter.
+4. valid_locked() does not expire/check operation lease or hard deadline against a current time; phase remains RF_ACTIVE if no separate rf_expire() call occurs. Source-level finite common poll quota exists, but it is not lease enforcement. Current rf_platform_now() is deliberately offline_now, not a proved device clock.
+
+## HALT assessment
+
+- No obvious command-4/StartSend mix-up: implementation loads HLTA 50 00, enables Tx/Rx CRC bits as stock, clears Crypto1 as stock, programs stock timer(1) reload 0x34f7 and issues CommandReg=4 (Transmit), without setting Transceive StartSend. TxIRQ completion is required; Timer-only, Idle-only, receive and reader errors fail. TxIRQ means reader transmit completion, not tag acknowledgement or proven HALT state.
+- E108 entry replacement is B.W to br_stock_halt before stock stack setup. The E6FC tail call continues to work under normal ABI: the replacement returns to E244's restored caller LR. Hook builder explicitly substitutes br_stock_halt for E108. No binary hash/install audit performed, per instruction.
+- Legacy F32C thunk's E186 return-PC case only accepts command4,length2,50 00 and runs bounded HALT, leaving rx/bits untouched. It does not grant a general raw Transmit entry. With E108 entry replaced, this is a defensive compatibility branch rather than normal reachability.
+- Restoration is verified on the normal/protocol-error path; it is NOT guaranteed on transport failure, cancellation, or budget exhaustion. W/R macros return immediately before restore_registers(), quarantine prevents subsequent ordinary br_write, and no reserved cleanup budget exists. A timeout after CommandReg=4 may leave command/timer/config active or modified. Existing RF_UNVERIFIED/UNKNOWN behavior is appropriate. Never describe this as completed physical cleanup after failure.
+- restore_registers() does not explicitly stop the RC522 timer. It writes CommandReg idle, clears FIFO/IRQ, restores timer configuration and then expects IRQ low bits zero. Since TAuto started at transmit completion and no stop-now is issued, TimerIRQ can arrive during/after those writes on real hardware. This can conservatively cause false failures, or leave a timer active after successful readback. Need a documented timer-state contract and a fixture modelling post-transmit timer progression before claiming register quiescence. Do not assume CommandReg Idle stops every timer on this clone.
+- It restores saved TxControl (0x14), so a successful routine intentionally preserves any previously enabled RF field. That is not antenna-off cleanup.
+- br_halt_checked currently returns BR_OK for checked register-level completion only. This is consistent with ex_finalize refusing RF_QUIESCENT, provided no higher layer reinterprets it as whole-operation safe release.
+
+## Recommended regression coverage
+
+Simulate different TCB and ISR entry with the exact same reader while owner active; require rejection before MMIO. Exercise preemption after validate and mid-register exchange. Add same-task nested exchange rejection, operation expiry without an external expire call, TCB reuse/generation tests, timer-IRQ arrival during restoration and immediately after final readback, and explicit assertions that any exhausted/failed cleanup stays unknown and unreleased.
+
+No physical STOP, thermal, RF cleanup, tag-state or RTOS runtime proof is supplied by this review.

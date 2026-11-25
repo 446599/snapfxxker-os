@@ -1,0 +1,16 @@
+{
+  "result": {
+    "state": "ready",
+    "state_message": "Printer is ready",
+    "hostname": "lava",
+    "klipper_path": "/home/lava/klipper",
+    "python_path": "/usr/bin/python3",
+    "process_id": 24911,
+    "user_id": 1000,
+    "group_id": 1000,
+    "log_file": "/oem/klippylogs/klippy.log",
+    "config_file": "/home/lava/printer_data/config/printer.cfg",
+    "software_version": "2.1.0-233-dev.1-rsyncfix.1",
+    "cpu_info": "4 core ?"
+  }
+}

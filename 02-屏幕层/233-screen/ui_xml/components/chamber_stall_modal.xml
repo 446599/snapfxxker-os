@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- A print is held by a wait on the chamber, and the chamber heater is not
+     heating. The message (wait target, the heater's reason, the last Try
+     Again's outcome) and the cancel hint for the waiting command are composed
+     in ChamberStallPrompt and bound here. Try Again hides when there is
+     nothing to resend or no route around the blocked gcode queue, and is
+     disabled while a retry is in flight. -->
+<!-- NOTE: Backdrop is created programmatically by the Modal class in C++. -->
+<!-- Buttons are wired programmatically in ChamberStallModal::on_show(). -->
+<component>
+  <view name="chamber_stall_modal" extends="ui_dialog" width="94%" height="94%" style_max_height="94%" align="center" flex_flow="column" style_flex_main_place="start" style_pad_gap="0" style_pad_all="0" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#border_radius" style_border_width="#u1_border" style_border_color="#border">
+    <modal_header icon_src="alert" icon_variant="warning" title="Chamber heater didn't start"/>
+    <lv_obj width="100%" height="0" style_pad_left="#space_lg" style_pad_right="#space_lg" style_pad_top="#space_sm" style_pad_bottom="#space_lg" flex_flow="column" style_pad_gap="#space_md" flex_grow="1" scrollable="true" scrollbar_mode="active" style_pad_all="#space_md">
+      <text_body name="chamber_stall_text" width="100%" long_mode="wrap" bind_text="chamber_stall_message" style_text_align="left"/>
+      <text_muted name="chamber_stall_cancel_hint" width="100%" long_mode="wrap" bind_text="chamber_stall_cancel_hint"/>
+    </lv_obj>
+    <!-- Left to right: Cancel print (btn_quaternary), Keep waiting (btn_secondary,
+         the Modal cancel role ESC and the backdrop also reach), Try again
+         (btn_primary). Cancel print is not the cancel role: dismissing must
+         not cancel a print. -->
+    <modal_button_row hide_quaternary="false" quaternary_name="btn_quaternary" quaternary_variant="danger" quaternary_text="取消打印" secondary_text="继续等待" primary_text="重新加热" primary_hide_subject="chamber_stall_no_retry" primary_disable_subject="chamber_stall_busy"/>
+  </view>
+</component>

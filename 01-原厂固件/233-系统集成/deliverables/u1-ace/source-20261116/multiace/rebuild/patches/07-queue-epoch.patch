@@ -1,0 +1,20 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -3832,6 +3832,17 @@
+             # status handler's own print branch has already stopped its
+             # pull-in.
+             if depth != 'auto':
++                if isinstance(depth, dict) and depth.get('kind') == 'relative_unknown':
++                    epoch = (getattr(self, '_insert_epochs', {}) or {}).get((idx, slot))
++                    gates = self._gate_status_per_ace.get(idx) or []
++                    if (depth.get('transport') is not self._serials.get(idx)
++                            or depth.get('identity') != self._location_identity(idx)
++                            or type(epoch) is not int or type(depth.get('epoch')) is not int
++                            or epoch != depth['epoch'] + 1
++                            or len(gates) <= slot or gates[slot] != GATE_AVAILABLE
++                            or self._insert_queue_stale_reason(idx, slot) is not None):
++                        return {'kind': 'transport_changed', 'parked': False}
++                    depth = dict(depth, epoch=epoch)
+                 if not hasattr(self, '_insert_read_queue'):
+                     self._insert_read_queue = []
+                 if not any(q[0] == idx and q[1] == slot

@@ -1,0 +1,142 @@
+--- dual-spool-host/ace.py	2026-11-07 21:53:34
++++ dual-spool-host/ace_rescan_candidate.py	2026-11-07 22:07:17
+@@ -7314,21 +7314,33 @@
+         empty = self._v2_filament_info_empty.setdefault(idx, {})
+         now = time.monotonic()
+         slots = result.get('slots') or []
+-        if slots and self._v2_rfid_rescan_pending.pop(idx, False):
+-            self._v2_rfid_boot_rescan(idx, slots)
+         if not hasattr(self, '_v2_cmd13_slot_epochs'):
+             self._v2_cmd13_slot_epochs = {}
++        # Advance all slot epochs before either rescan or cmd13 callbacks are queued.
+         for i, slot in enumerate(slots):
+             _key = (idx, i)
+             _present = not self._is_empty_status(slot.get('status', ''))
+             _prev = self._v2_cmd13_slot_epochs.get(_key)
+-            if _prev is None:
+-                _epoch = 0
+-            elif _prev[0] != _present:
+-                _epoch = _prev[1] + 1
+-            else:
+-                _epoch = _prev[1]
++            _epoch = 0 if _prev is None else _prev[1] + (_prev[0] != _present)
+             self._v2_cmd13_slot_epochs[_key] = (_present, _epoch)
++            if _prev is not None and _prev[0] != _present:
++                # A pending reconnect scan for the old occupant must not
++                # bind this slot when a different reply completes the batch.
++                _targets = self._rescan_bind_targets.get(idx)
++                _pending = self._rescan_bind_pending.get(idx)
++                if _targets is not None:
++                    for _affected in (i, i ^ 1):
++                        if _affected in _targets:
++                            _targets.remove(_affected)
++                        if _pending is not None:
++                            _pending.discard(_affected)
++                    if not _targets:
++                        self._rescan_bind_targets.pop(idx, None)
++                        self._rescan_bind_pending.pop(idx, None)
++        if slots and self._v2_rfid_rescan_pending.pop(idx, False):
++            self._v2_rfid_boot_rescan(idx, slots)
++        for i, slot in enumerate(slots):
++            _epoch = self._v2_cmd13_slot_epochs[(idx, i)][1]
+             cached = cache.get(i)
+             host_read = bool(cached and cached.get('host'))
+             # A UID-only read (MIFARE/Bambu, or a tag with no decodable
+@@ -8094,6 +8106,21 @@
+         identify must not strand the slots that DID answer)."""
+         targets = self._rescan_bind_targets.pop(idx, None)
+         self._rescan_bind_pending.pop(idx, None)
++        context = getattr(self, '_v2_rescan_contexts', {}).pop(idx, None)
++        if (not targets or not context
++                or self._serials.get(idx) is not context['transport']
++                or self._v2_rescan_tokens.get(idx) is not context['token']):
++            return
++        # Every flush path, including direct store completion, rechecks the
++        # current pair and slot epochs before any binding is committed.
++        targets = [slot for slot in targets
++                   if context['epochs'].get(slot)
++                   and context['epochs'][slot][0] is True
++                   and self._v2_cmd13_slot_epochs.get((idx, slot)) == context['epochs'][slot]
++                   and context['partners'].get(slot)
++                   and context['partners'][slot][0] is False
++                   and self._v2_cmd13_slot_epochs.get((idx, slot ^ 1)) == context['partners'][slot]
++                   and not (self._v2_filament_info_per_ace.get(idx, {}).get(slot) or {}).get('host')]
+         if not targets:
+             return
+         cache = self._v2_filament_info_per_ace.get(idx) or {}
+@@ -8153,6 +8180,14 @@
+                     continue
+                 if self._is_empty_status(slot.get('status', '')):
+                     continue
++                # A shared antenna with two occupied slots cannot attribute
++                # an unsolicited identify response to either physical bay.
++                partner = i ^ 1
++                if (partner >= len(slots) or not isinstance(slots[partner], dict)
++                        or not self._is_empty_status(slots[partner].get('status', ''))):
++                    logging.info('[multiACE] boot identify skipped ACE %d slot %d: shared reader ambiguous',
++                                 idx, i)
++                    continue
+                 # A restored HOST read (insert sweep / manual read /
+                 # write, persisted) is a better source than a bare
+                 # identify: the identify reads whatever card sits in the
+@@ -8175,8 +8210,37 @@
+             # ever be bound - worse than the ordering bug it fixes.
+             self._rescan_bind_targets[idx] = list(targets)
+             self._rescan_bind_pending[idx] = set(targets)
++            if not hasattr(self, '_v2_rescan_tokens'):
++                self._v2_rescan_tokens = {}
++            _rescan_token = object()
++            self._v2_rescan_tokens[idx] = _rescan_token
++            _transport = self._serials.get(idx)
++            _epochs = {slot: self._v2_cmd13_slot_epochs.get((idx, slot))
++                       for slot in targets}
++            _partner_epochs = {slot: self._v2_cmd13_slot_epochs.get((idx, slot ^ 1))
++                               for slot in targets}
++            if not hasattr(self, '_v2_rescan_contexts'):
++                self._v2_rescan_contexts = {}
++            self._v2_rescan_contexts[idx] = {'token': _rescan_token,
++                'transport': _transport, 'epochs': _epochs, 'partners': _partner_epochs}
+ 
+-            def _flush(eventtime, _idx=idx):
++            def _flush(eventtime, _idx=idx, _token=_rescan_token,
++                       _transport=_transport, _epochs=_epochs,
++                       _partner_epochs=_partner_epochs):
++                if (self._v2_rescan_tokens.get(_idx) is not _token
++                        or self._serials.get(_idx) is not _transport):
++                    return self.reactor.NEVER
++                _valid = [slot for slot in self._rescan_bind_targets.get(_idx, [])
++                          if _epochs.get(slot) and _epochs[slot][0] is True
++                          and self._v2_cmd13_slot_epochs.get((_idx, slot)) == _epochs[slot]
++                          and _partner_epochs.get(slot) and _partner_epochs[slot][0] is False
++                          and self._v2_cmd13_slot_epochs.get((_idx, slot ^ 1)) == _partner_epochs[slot]
++                          and not (self._v2_filament_info_per_ace.get(_idx, {}).get(slot) or {}).get('host')]
++                if not _valid:
++                    self._rescan_bind_targets.pop(_idx, None)
++                    self._rescan_bind_pending.pop(_idx, None)
++                    return self.reactor.NEVER
++                self._rescan_bind_targets[_idx] = _valid
+                 if self._rescan_bind_pending.get(_idx):
+                     logging.info(
+                         '[multiACE] [spool] rescan ACE %d: %d slot(s) never '
+@@ -8188,7 +8252,20 @@
+             self.reactor.register_timer(
+                 _flush, self.reactor.monotonic() + RESCAN_BIND_WINDOW)
+             for i in targets:
+-                def _ident_cb(self, response, _idx=idx, _slot=i):
++                _epoch = self._v2_cmd13_slot_epochs.get((idx, i))
++                _partner_epoch = self._v2_cmd13_slot_epochs.get((idx, i ^ 1))
++                def _ident_cb(self, response, _idx=idx, _slot=i,
++                              _token=_rescan_token, _transport=_transport,
++                              _epoch=_epoch, _partner_epoch=_partner_epoch):
++                    if (self._v2_rescan_tokens.get(_idx) is not _token
++                            or self._serials.get(_idx) is not _transport
++                            or self._v2_cmd13_slot_epochs.get((_idx, _slot)) != _epoch
++                            or not _epoch or _epoch[0] is not True
++                            or not _partner_epoch or _partner_epoch[0] is not False
++                            or self._v2_cmd13_slot_epochs.get((_idx, _slot ^ 1)) != _partner_epoch
++                            or _slot not in self._rescan_bind_pending.get(_idx, set())
++                            or (self._v2_filament_info_per_ace.get(_idx, {}).get(_slot) or {}).get('host')):
++                        return
+                     res = (response or {}).get('result') or {}
+                     if not res.get('type'):
+                         # The raw fields show what the identify returned

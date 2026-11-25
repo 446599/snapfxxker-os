@@ -1,0 +1,235 @@
+# Pre-Rendered Image System
+
+HelixScreen pre-renders splash screen images to LVGL binary format (`.bin`) at build time for instant display on embedded devices. This eliminates runtime PNG decoding, dramatically improving startup performance.
+
+## Performance Impact
+
+| Mode | FPS on AD5M | Time to Display |
+|------|-------------|-----------------|
+| PNG decoding (runtime) | ~2 FPS | ~500ms |
+| Pre-rendered `.bin` | ~116 FPS | ~8ms |
+
+## How It Works
+
+1. **Build time**: The `scripts/regen_images.sh` script converts `helixscreen-logo.png` to LVGL binary format at exact pixel sizes matching each supported screen resolution
+2. **Runtime**: `splash_screen.cpp` checks for pre-rendered images and uses them directly if available, falling back to PNG with runtime scaling otherwise
+
+### Pre-rendered Image Sizes
+
+Images are pre-rendered at **exact pixel sizes** matching the splash screen calculations in `splash_screen.cpp`:
+
+Size classes are the `UiBreakpoint` tiers from `include/ui_breakpoint.h`, selected
+from the **narrow axis** by `helix::get_splash_3d_size_name()`. The same word means
+the same resolution in an asset filename and in a layout override.
+
+The 3D splash composites a full-screen canvas at every class:
+
+| Class | Resolution | Logo Size | Calculation | Devices |
+|-------|------------|-----------|-------------|---------|
+| micro | 480x272 | 240x240 | 480 × 50% (height < 500) | CC1 |
+| tiny | 480x320 | 240x240 | 480 × 50% | Snapmaker U1 |
+| small | 480x400 | 240x240 | 480 × 50% | |
+| medium | 800x480 | 400x400 | 800 × 50% | K1, K2, AD5M, AD5X |
+| large | 1024x600 | 614x614 | 1024 × 60% | |
+| xlarge | 1280x720 | 768x768 | 1280 × 60% | |
+| ultrawide | 1920x440 | 384x384 | wide and short; its own class, not a tier | |
+
+The 2D logo is centred art rather than a canvas, so it is rendered for a subset -
+`tiny`, `medium`, `large`, `xlarge`. A class with no logo falls back to scaling the
+PNG, which costs a decode but never fails.
+
+Nothing is composited above `xlarge`: a larger panel clamps to it and scales.
+
+Which classes a platform's package contains is derived from its panel geometry in
+`assets/config/platforms.json`; see `scripts/platform_manifest.py`.
+
+### What a release actually ships
+
+Two steps, and both are needed. `gen-splash-3d-<platform>` narrows what gets
+**built**, but a release copies whatever `build/` happens to hold, so a tree left
+over from another platform's build would ship with it. `release-clean-assets` in
+`mk/cross.mk` then calls `platform_manifest.py prune-assets`, which is what bounds
+the payload: it drops splash classes the panel cannot select, printer renders at
+the other size, and the source PNGs.
+
+Dropping the PNGs is safe because `get_prerendered_printer_path()` degrades
+rather than fails - prerendered, then PNG, then `generic-corexy`. The prune keeps
+the `generic-corexy` render always, and keeps every PNG if *any* printer lacks a
+render at the size being kept, so a missing image can never become no image.
+
+It also drops `assets/sounds` where the platform has no tracker player. That
+question is asked of `platforms.json`, not of `TRACKER_CXXFLAGS`, because the
+release recipe runs on the host: `PLATFORM_TARGET` is unset there and defaults to
+`native`, so a flag test answers for the packaging machine rather than the printer.
+
+Measured on a real `make package-k2`, `assets/images` goes from 42 MB to 15 MB:
+
+| Removed | Size |
+|---------|------|
+| Printer source PNGs (75) | 24.1 MB |
+| Printer renders at the unused size | 2.4 MB |
+| Splash classes the panel cannot select | 0.7 MB |
+| Tracker music, unplayable on K2 | 0.9 MB |
+
+The 15 MB that remains is the 300px printer set (7.7 MB), the `medium` splash
+canvases and logo (1.2 MB), and ~6 MB of other UI art that every platform needs.
+A platform with a tracker keeps its music.
+
+A package that serves several known boards (`mips`, one binary for the K1, the
+AD5X and the Creator 5 / 5 Pro) names them in `panel.candidates` and ships the union
+of what each board selects, hedges such as `extra_printer_image_sizes` included. A
+candidate is a platform id or, for a board with no entry of its own, an inline panel. Its PNGs go only when
+every printer has a render at every kept size.
+
+A platform whose panel is unbounded (`pi`, `pi32`, `x86`, `x86-desktop`) keeps every
+size class and the source PNGs. `generate_cached_printer_image()` reads the PNG
+whenever the home printer widget is larger than the 300px tier (396x386 at
+1920x1080 in the default layout), so dropping them would bake an upscaled tier
+into that cache. Every package, the APK and the ESP32 image included, drops
+`ui_xml/translations/translations.xml` and `en.xml`: the runtime loads one
+`<lang>.xml` per locale and needs no English pack (`scripts/translation_packs.py`).
+
+### File Format
+
+`.bin` files are LVGL's own image format, written by `scripts/LVGLImage.py` via
+`scripts/lib/lvgl_image_lib.sh#lvgl_render_image` with `--cf ARGB8888 --ofmt BIN
+--compress LZ4`:
+
+- 12-byte header (magic, version, dimensions, color format)
+- LZ4-compressed ARGB8888 pixel data
+
+The compression is why a render is far smaller than its pixel count implies:
+`splash-logo-medium.bin` holds 400x400 ARGB8888 (640,000 bytes of pixels) in 123,654
+bytes on disk. `LV_BIN_DECODER_RAM_LOAD 1` means LVGL decompresses the whole image into
+RAM on load, so the decoded footprint is the uncompressed size either way — the win over
+PNG is skipping the lodepng decode and the draw-time rescale, not the RAM.
+
+## Usage
+
+### Generate Images
+
+```bash
+# All sizes (for Pi with variable displays)
+make gen-images
+
+# AD5M only (800x480 fixed display)
+make gen-images-ad5m
+
+# Specific sizes
+TARGET_SIZES=medium,large ./scripts/regen_images.sh
+```
+
+### Makefile Targets
+
+| Target | Description |
+|--------|-------------|
+| `gen-images` | Generate all pre-rendered images |
+| `gen-images-ad5m` | Generate only 800x480 size for AD5M |
+| `gen-images-pi` | Generate all sizes for Pi |
+| `clean-images` | Remove generated images |
+| `list-images` | Show what would be generated |
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OUTPUT_DIR` | `build/assets/images/prerendered` | Output directory |
+| `TARGET_SIZES` | (all sizes) | Comma-separated classes: `tiny,medium,large,xlarge` |
+
+## Integration with Build System
+
+Pre-rendered images are **build artifacts** (not committed to the repository). They are automatically generated during:
+
+- `make deploy-pi` / `make deploy-pi-*` (generates all sizes)
+- `make deploy-ad5m` / `make deploy-ad5m-*` (generates only `medium`)
+- `make release-pi` (generates all sizes)
+- `make release-ad5m` (generates only `medium`)
+
+### Platform-Specific Generation
+
+The AD5M has a fixed 800×480 display, so only the `medium` class is generated. The Raspberry Pi can have various displays, so all classes are generated.
+
+## Runtime Behavior
+
+`splash_screen.cpp` implements this logic:
+
+```cpp
+const char* get_splash_3d_size_name(int screen_width, int screen_height) {
+    // A wide, short bar display gets its own class rather than a tier.
+    if (screen_width >= 1100 && screen_height < 500)
+        return "ultrawide";
+
+    // breakpoint_for() is the project's one resolution ladder, keyed on the
+    // narrow axis - which is what a full-screen canvas has to fit into.
+    UiBreakpoint bp = breakpoint_for(std::min(screen_width, screen_height));
+    if (bp > UiBreakpoint::XLarge)
+        bp = UiBreakpoint::XLarge;
+    return breakpoint_name(bp);
+}
+```
+
+The caller then builds `splash-3d-<mode>-<class>.bin`, checks it exists, and
+compares `get_splash_3d_target_height()` against the real screen height before
+using it. A missing file or an oversized canvas falls back to the PNG.
+
+If no pre-rendered image is found, the splash screen falls back to PNG loading with runtime scaling (slower but works for any screen size).
+
+## Adding New Pre-rendered Images
+
+1. Add the source image to `assets/images/`
+2. Update `IMAGES_TO_RENDER` in `scripts/regen_images.sh`:
+   ```bash
+   IMAGES_TO_RENDER=(
+       "assets/images/helixscreen-logo.png:splash-logo:Splash screen logo"
+       "assets/images/new-image.png:new-image:Description"
+   )
+   ```
+3. Update the C++ code to use the pre-rendered image
+
+## Troubleshooting
+
+### Images not found at runtime
+
+Check that images exist in the correct location:
+```bash
+ls -la build/assets/images/prerendered/
+```
+
+### Wrong image size displayed
+
+The screen width breakpoints in `splash_screen.cpp` must match the sizes defined in `regen_images.sh`. If you add new screen sizes, update both files.
+
+### Build fails with missing Pillow
+
+Install the Python dependency:
+```bash
+pip install Pillow
+# or with the project venv:
+.venv/bin/pip install Pillow
+```
+
+## Technical Details
+
+### LVGLImage.py
+
+The `scripts/LVGLImage.py` script (from LVGL's tools) handles the conversion with these key options:
+
+- `--cf ARGB8888`: Color format (32-bit with alpha)
+- `--ofmt BIN`: Output format (LVGL binary)
+- `--resize WxH`: Target size in pixels
+- `--resize-fit`: Preserve aspect ratio (letterbox if needed)
+
+### Why Not Use LVGL's Built-in Image Conversion?
+
+LVGL can convert images at build time via its CMake integration, but:
+
+1. This project uses Make, not CMake
+2. We need exact pixel sizes for each screen resolution
+3. The Python script gives us more control over the conversion process
+
+### Memory Considerations
+
+Pre-rendered images are larger than PNGs (uncompressed vs. compressed), but:
+- They're stored on the filesystem, not in RAM
+- They're loaded directly into LVGL's image cache
+- The AD5M has ~108MB RAM and 8GB storage, so disk space isn't a concern (RAM is)

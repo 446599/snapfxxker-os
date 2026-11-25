@@ -1,0 +1,326 @@
+{
+  "classification": "EXPERIMENTAL DO NOT FLASH; NORMAL RESET BLOCKED OFFLINE FIXTURE",
+  "stock_sha256": "a468e366226e7c483d3dd96b444223e89cbf0d1b10573d42b6263843ffd6be3e",
+  "image_sha256": "1ffba30b853ece41509c79b885180447d52c8d591be9185e2849ef341a202e6b",
+  "image_bytes": 82729,
+  "elf_sha256": "e4fbade558785e32b97341b6ee4c499c6f8925b73977450a79d7f717d1724286",
+  "payload_address": "0x80197a0",
+  "state_source": "checked event-group handle at 0x20001E64, tail at object+32",
+  "arm_extended_payload_bytes": 176,
+  "arm_tail_bytes": 144,
+  "arm_allocator_block_min": 184,
+  "ram_verified_for_device": false,
+  "valid_iap_trailer": false,
+  "reset_normal_control_flow_reaches_stock": false,
+  "exception_paths_quarantined": false,
+  "production_output_supported": false,
+  "device_tests_run": false,
+  "physical_stop_implemented": false,
+  "physical_cleanup_proven": false,
+  "unresolved_symbols": [],
+  "hooks": [
+    {
+      "address": "0x80116a8",
+      "target": "0x80197b4",
+      "symbol": "ex_event_factory_entry",
+      "expected_bytes": "04f049fd",
+      "replacement_bytes": "08f084f8",
+      "reason": "extended event-group allocation factory BL",
+      "branch_kind": "BL"
+    },
+    {
+      "address": "0x8008244",
+      "target": "0x80197a0",
+      "symbol": "experiment_reset_gate",
+      "expected_bytes": "09488047",
+      "replacement_bytes": "11f0acba",
+      "reason": "original reset barrier",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800f574",
+      "target": "0x801a078",
+      "symbol": "br_stock_read",
+      "expected_bytes": "81b0d0e90123",
+      "replacement_bytes": "0af080bd00bf",
+      "reason": "stock register read",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800f5d0",
+      "target": "0x801a0aa",
+      "symbol": "br_stock_write",
+      "expected_bytes": "81b0d0e901c3",
+      "replacement_bytes": "0af06bbd00bf",
+      "reason": "stock register write",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800f32c",
+      "target": "0x801a1f8",
+      "symbol": "br_stock_transceive_entry",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0af064bf",
+      "reason": "six-argument transceive + LR",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800deb6",
+      "target": "0x8019b48",
+      "symbol": "ex_reject_select",
+      "expected_bytes": "f0b585b0",
+      "replacement_bytes": "0bf047be",
+      "reason": "unsafe stock SELECT rejected",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800e108",
+      "target": "0x8019b56",
+      "symbol": "ex_reject_halt",
+      "expected_bytes": "b0b584b0",
+      "replacement_bytes": "0bf025bd",
+      "reason": "unimplemented physical HALT rejected",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800e244",
+      "target": "0x801a7a4",
+      "symbol": "rf_background_entry",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0cf0aeba",
+      "reason": "background RF operation",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800e7a8",
+      "target": "0x801a7d8",
+      "symbol": "rf_cmd68_entry",
+      "expected_bytes": "2de9f047",
+      "replacement_bytes": "0cf016b8",
+      "reason": "CMD68",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800e910",
+      "target": "0x801a82e",
+      "symbol": "rf_cmd13_entry",
+      "expected_bytes": "2de9f043",
+      "replacement_bytes": "0bf08dbf",
+      "reason": "CMD13 cache response",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800e74c",
+      "target": "0x801a884",
+      "symbol": "rf_cmd14_entry",
+      "expected_bytes": "10b582b0",
+      "replacement_bytes": "0cf09ab8",
+      "reason": "CMD14 queue path blocked",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800e70c",
+      "target": "0x801a8de",
+      "symbol": "rf_requeue_entry",
+      "expected_bytes": "80b582b0",
+      "replacement_bytes": "0cf0e7b8",
+      "reason": "requeue path blocked",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800ea14",
+      "target": "0x8019b64",
+      "symbol": "ex_reject_worker",
+      "expected_bytes": "82b041f2f056",
+      "replacement_bytes": "0bf0a6b800bf",
+      "reason": "outer worker GPIO/cache writes blocked",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800e7da",
+      "target": "0x80197aa",
+      "symbol": "ex_raw_reject_stub",
+      "expected_bytes": "012092e0",
+      "replacement_bytes": "0af0e6bf",
+      "reason": "legacy unticketed raw commands rejected",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800e836",
+      "target": "0x801c00c",
+      "symbol": "uid_stub",
+      "expected_bytes": "062064e0",
+      "replacement_bytes": "0df0e9bb",
+      "reason": "UID success and fallback publication rejected",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800e842",
+      "target": "0x801c010",
+      "symbol": "rawtag_stub",
+      "expected_bytes": "0df18c0e",
+      "replacement_bytes": "0df0e5bb",
+      "reason": "live decoder publication rejected",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800fe3c",
+      "target": "0x801c014",
+      "symbol": "rawtag_cache_stub",
+      "expected_bytes": "05f1880e",
+      "replacement_bytes": "0cf0eab8",
+      "reason": "cache copy and parse publication rejected",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800fe36",
+      "target": "0x801c01e",
+      "symbol": "rawtag_extract_stub",
+      "expected_bytes": "06468c28",
+      "replacement_bytes": "0cf0f2b8",
+      "reason": "background decoder publication rejected",
+      "branch_kind": "B.W"
+    },
+    {
+      "address": "0x800e228",
+      "target": "0x801c028",
+      "symbol": "pageread_gate_stub",
+      "expected_bytes": "40f20471",
+      "replacement_bytes": "0df0febe",
+      "reason": "page read publication rejected",
+      "branch_kind": "B.W"
+    }
+  ],
+  "prefix_changes": [
+    {
+      "address": "0x80116a8",
+      "expected_bytes": "04f049fd",
+      "replacement_bytes": "08f084f8",
+      "reason": "extended event-group allocation factory BL"
+    },
+    {
+      "address": "0x8008244",
+      "expected_bytes": "09488047",
+      "replacement_bytes": "11f0acba",
+      "reason": "original reset barrier"
+    },
+    {
+      "address": "0x800f574",
+      "expected_bytes": "81b0d0e90123",
+      "replacement_bytes": "0af080bd00bf",
+      "reason": "stock register read"
+    },
+    {
+      "address": "0x800f5d0",
+      "expected_bytes": "81b0d0e901c3",
+      "replacement_bytes": "0af06bbd00bf",
+      "reason": "stock register write"
+    },
+    {
+      "address": "0x800f32c",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0af064bf",
+      "reason": "six-argument transceive + LR"
+    },
+    {
+      "address": "0x800deb6",
+      "expected_bytes": "f0b585b0",
+      "replacement_bytes": "0bf047be",
+      "reason": "unsafe stock SELECT rejected"
+    },
+    {
+      "address": "0x800e108",
+      "expected_bytes": "b0b584b0",
+      "replacement_bytes": "0bf025bd",
+      "reason": "unimplemented physical HALT rejected"
+    },
+    {
+      "address": "0x800e244",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0cf0aeba",
+      "reason": "background RF operation"
+    },
+    {
+      "address": "0x800e7a8",
+      "expected_bytes": "2de9f047",
+      "replacement_bytes": "0cf016b8",
+      "reason": "CMD68"
+    },
+    {
+      "address": "0x800e910",
+      "expected_bytes": "2de9f043",
+      "replacement_bytes": "0bf08dbf",
+      "reason": "CMD13 cache response"
+    },
+    {
+      "address": "0x800e74c",
+      "expected_bytes": "10b582b0",
+      "replacement_bytes": "0cf09ab8",
+      "reason": "CMD14 queue path blocked"
+    },
+    {
+      "address": "0x800e70c",
+      "expected_bytes": "80b582b0",
+      "replacement_bytes": "0cf0e7b8",
+      "reason": "requeue path blocked"
+    },
+    {
+      "address": "0x800ea14",
+      "expected_bytes": "82b041f2f056",
+      "replacement_bytes": "0bf0a6b800bf",
+      "reason": "outer worker GPIO/cache writes blocked"
+    },
+    {
+      "address": "0x800e7da",
+      "expected_bytes": "012092e0",
+      "replacement_bytes": "0af0e6bf",
+      "reason": "legacy unticketed raw commands rejected"
+    },
+    {
+      "address": "0x800e836",
+      "expected_bytes": "062064e0",
+      "replacement_bytes": "0df0e9bb",
+      "reason": "UID success and fallback publication rejected"
+    },
+    {
+      "address": "0x800e842",
+      "expected_bytes": "0df18c0e",
+      "replacement_bytes": "0df0e5bb",
+      "reason": "live decoder publication rejected"
+    },
+    {
+      "address": "0x800fe3c",
+      "expected_bytes": "05f1880e",
+      "replacement_bytes": "0cf0eab8",
+      "reason": "cache copy and parse publication rejected"
+    },
+    {
+      "address": "0x800fe36",
+      "expected_bytes": "06468c28",
+      "replacement_bytes": "0cf0f2b8",
+      "reason": "background decoder publication rejected"
+    },
+    {
+      "address": "0x800e228",
+      "expected_bytes": "40f20471",
+      "replacement_bytes": "0df0febe",
+      "reason": "page read publication rejected"
+    },
+    {
+      "address": "0x8008004",
+      "expected_bytes": "45820008",
+      "replacement_bytes": "a1970108",
+      "reason": "reset vector"
+    },
+    {
+      "address": "0x8018c20",
+      "expected_bytes": "56312e312e333100",
+      "replacement_bytes": "4558505246212100",
+      "reason": "invalid experimental version label"
+    }
+  ],
+  "stock_busy_checks_preserved": [
+    "0x0800F6F8",
+    "0x0800F724"
+  ]
+}

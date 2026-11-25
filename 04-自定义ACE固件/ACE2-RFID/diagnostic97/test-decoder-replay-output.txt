@@ -1,0 +1,15 @@
+Bambu verified decode, failures, and SELECT binding: PASS
+Production RC522 wrappers: AUTH error rejection, RX 0..255 staging, CRC/collision/length rejection PASS
+--- Running Native RFID Decoder Unit Tests on Devbox ---
+[PASS] Test 1: Anycubic native passthrough verified (return 0)
+[PASS] Test 2: OpenSpool NDEF JSON verified (SKU=SM99, Brand=Polymaker, Material=PolyLite PLA, Nozzle=205-225C, Bed=50-60C)
+[PASS] Test 3: FilaMan numeric sm_id verified (SKU=SM24, Brand=eSUN, Material=PETG, Nozzle=230-250C)
+[PASS] Test 4: Prusament verified (Brand=Prusament, Material=PC Blend, Nozzle=265-285C, Bed=100-115C)
+[PASS] Test 5: Creality CFS verified (Brand=Creality, Material=Hyper PLA, Nozzle=190-230C, Bed=45-60C)
+[PASS] UID-only paths do not invent Bambu metadata
+
+>>> ALL 6 TAG DECODER SUITES PASSED VERIFICATION <<<
+wrote /tmp/replayed.bin: 78898 bytes, crc16/kermit 0xA682
+magic last 8 bytes: 61a5635a65a5325a
+expected crc from spec: 0xA682 MATCH
+reports version: V1.1.97O

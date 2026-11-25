@@ -1,0 +1,363 @@
+diff --git a/include/ui_head_inventory.h b/include/ui_head_inventory.h
+index 53f7474d2262de520a34a6c65d4f8ea8edbff23f..e54aa3678407e96efce09543611fd20e8220a595 100644
+--- a/include/ui_head_inventory.h
++++ b/include/ui_head_inventory.h
+@@ -32,15 +32,20 @@ class HeadInventory : public OverlayBase {
+     SubjectManager subjects_;
+     void refresh();
+     void select_unit(int unit);
++    void open_action(const std::string& action);
+     void draw_routes(lv_event_t* event);
+     int head_ = 0;
+     int selected_unit_ = -1;
+     ObserverGuard revision_observer_;
+     ObserverGuard connection_observer_;
++    ObserverGuard job_observer_;
+     lv_subject_t selected_head_{}, selected_unit_subject_{}, unit_count_{}, hold_{}, online_{};
+     lv_subject_t external_{}, can_manage_{}, external_color_{}, external_loaded_{};
++    lv_subject_t can_load_{}, can_read_{};
+     lv_subject_t external_material_{}, external_state_{};
++    lv_subject_t external_name_{}, route_{}, load_label_{};
+     char external_material_buf_[128]{}, external_state_buf_[128]{};
++    char external_name_buf_[64]{}, route_buf_[128]{}, load_label_buf_[32]{};
+     lv_subject_t source_{}, selection_{}, head_title_{}, notice_{};
+     lv_subject_t toolhead_image_{};
+     char toolhead_image_buf_[256]{};
+diff --git a/src/ui/filament/ui_head_inventory.cpp b/src/ui/filament/ui_head_inventory.cpp
+index 45a9fdcf76ea8877dac6333b38cbb918e9820f42..67c71ea9a83299aa2a1ebc174d5b658dc74ba42c 100644
+--- a/src/ui/filament/ui_head_inventory.cpp
++++ b/src/ui/filament/ui_head_inventory.cpp
+@@ -28,6 +28,7 @@ namespace helix::ui {
+ HeadInventory::~HeadInventory() {
+     revision_observer_.reset();
+     connection_observer_.reset();
++    job_observer_.reset();
+     subjects_.deinit_all();
+ }
+ 
+@@ -41,12 +42,19 @@ void HeadInventory::init_subjects() {
+         UI_MANAGED_SUBJECT_INT(external_, 0, "inventory_external", subjects_);
+         UI_MANAGED_SUBJECT_INT(can_manage_, 0, "inventory_can_manage", subjects_);
+         UI_MANAGED_SUBJECT_INT(external_loaded_, 0, "inventory_external_loaded", subjects_);
++        UI_MANAGED_SUBJECT_INT(can_load_, 0, "inventory_can_load", subjects_);
++        UI_MANAGED_SUBJECT_INT(can_read_, 0, "inventory_can_read", subjects_);
+         UI_MANAGED_SUBJECT_COLOR(external_color_, lv_color_hex(kAmsDefaultSlotColor),
+                                 "inventory_external_color", subjects_);
+         UI_MANAGED_SUBJECT_STRING(external_material_, external_material_buf_, "等待耗材信息",
+                                   "inventory_external_material", subjects_);
+         UI_MANAGED_SUBJECT_STRING(external_state_, external_state_buf_, "等待装载状态",
+                                   "inventory_external_state", subjects_);
++        UI_MANAGED_SUBJECT_STRING(external_name_, external_name_buf_, "1号外置料卷",
++                                  "inventory_external_name", subjects_);
++        UI_MANAGED_SUBJECT_STRING(route_, route_buf_, "1槽 → 1号喷头", "inventory_route", subjects_);
++        UI_MANAGED_SUBJECT_STRING(load_label_, load_label_buf_, "换料", "inventory_load_label",
++                                  subjects_);
+         UI_MANAGED_SUBJECT_STRING(source_, source_buf_, "等待设备状态", "inventory_source",
+                                   subjects_);
+         UI_MANAGED_SUBJECT_STRING(selection_, selection_buf_, "选择耗材查看详情",
+@@ -109,6 +117,12 @@ void HeadInventory::register_callbacks() {
+                      [self, token](int head) { if (!token.expired()) self->select_head(head); });
+              }
+          }},
++        {"inventory_action",
++         [](lv_event_t* e) {
++             if (auto* self = from_event<HeadInventory>(e))
++                 if (const auto* action = static_cast<const char*>(lv_event_get_user_data(e)))
++                     self->open_action(action);
++         }},
+         {"inventory_draw_routes",
+          [](lv_event_t* e) {
+              if (auto* self = from_event<HeadInventory>(e))
+@@ -133,6 +147,10 @@ void HeadInventory::on_activate() {
+         network.get_nav_buttons_enabled_subject(), this,
+         [](HeadInventory* self, int) { self->refresh(); },
+         get_printer_state().get_subjects_lifetime());
++    job_observer_ = observe<int>(
++        get_printer_state().print_state().get_job_holds_machine_subject(), this,
++        [](HeadInventory* self, int) { self->refresh(); },
++        get_printer_state().get_subjects_lifetime());
+     refresh();
+ }
+ 
+@@ -148,6 +166,19 @@ void HeadInventory::select_head(int head) {
+ void HeadInventory::on_deactivating(DeactivateReason) {
+     revision_observer_.reset();
+     connection_observer_.reset();
++    job_observer_.reset();
++}
++
++void HeadInventory::open_action(const std::string& action) {
++    // Re-read the backend even for forced or stale widget callbacks.
++    refresh();
++    if (!lv_subject_get_int(&can_manage_) ||
++        (action == "load" && !lv_subject_get_int(&can_load_)) ||
++        (action == "read_tag" && !lv_subject_get_int(&can_read_)))
++        return;
++    auto token = object_lifetime_.token();
++    get_material_workspace().open_action(head_, selected_unit_, action,
++        [this, token](int head) { if (!token.expired()) select_head(head); });
+ }
+ 
+ void HeadInventory::select_unit(int unit) {
+@@ -177,12 +208,15 @@ void HeadInventory::refresh() {
+     lv_subject_set_int(&hold_, !info.path_hold_reason.empty());
+     lv_subject_set_int(&selected_head_, head_);
+     lv_subject_copy_string(&head_title_, fmt::format("喷头 {}", head_ + 1).c_str());
++    lv_subject_copy_string(&route_, fmt::format("{}槽 → {}号喷头", head_ + 1, head_ + 1).c_str());
++    lv_subject_set_int(&can_load_, 0);
++    lv_subject_set_int(&can_read_, 0);
+ 
+     // All four external spools are independent. Browsing a card changes only
+     // the selected head; live load state always comes from the backend.
+     for (int head = 0; head < 4; ++head) {
+         const auto* slot = material_workspace::head_slot(info, head);
+-        const bool available = external && ready && slot && info.units.front().connected;
++        const bool available = ready && slot && info.units.front().connected;
+         const bool loaded = available && backend->slot_is_actively_loaded(slot->global_index);
+         external_head_materials_.set_string(head, !available ? "等待设备"
+             : slot->material.empty() ? "未设置耗材" : slot->material);
+@@ -206,11 +240,12 @@ void HeadInventory::refresh() {
+         lv_subject_copy_string(&external_material_, !available ? "等待耗材信息"
+                                   : slot->material.empty() ? "未设置耗材" : slot->material.c_str());
+         const char* state = !available ? "等待装载状态"
+-                            : loaded ? "已装载 · 设备已确认"
++                            : loaded ? "已装载"
+                             : slot->status == SlotStatus::UNKNOWN ? "装载状态待确认"
+                             : slot->status == SlotStatus::BLOCKED ? "料路异常"
+                             : "未装载到喷头";
+         lv_subject_copy_string(&external_state_, state);
++        lv_subject_copy_string(&external_name_, fmt::format("{}号外置料卷", head_ + 1).c_str());
+         lv_subject_copy_string(&source_, fmt::format("喷头 {} · 外置料卷", head_ + 1).c_str());
+         lv_subject_copy_string(&selection_, "编辑耗材或手动进退料");
+         lv_subject_copy_string(&notice_, !ready ? "设备离线 · 等待连接"
+@@ -290,6 +325,27 @@ void HeadInventory::refresh() {
+         selected_unit_ = source_unit >= 0 ? source_unit : count > 0 ? 0 : -1;
+     lv_subject_set_int(&selected_unit_subject_, selected_unit_);
+     lv_subject_set_int(&can_manage_, ready && selected_unit_ >= 0);
++    if (selected_unit_ >= 0) {
++        const auto& unit = info.units[static_cast<size_t>(selected_unit_) + 1];
++        const auto slot = std::find_if(unit.slots.begin(), unit.slots.end(), [this](const SlotInfo& s) {
++            return s.mapped_tool == head_ && s.slot_index == head_;
++        });
++        const bool present = slot != unit.slots.end();
++        const bool current = present && source && *source == slot->global_index;
++        const bool empty = present && slot->status == SlotStatus::EMPTY;
++        const bool occupied = present && (slot->status == SlotStatus::AVAILABLE ||
++            slot->status == SlotStatus::FROM_BUFFER || slot->status == SlotStatus::LOADED);
++        const bool idle = ready && unit.connected && info.action == AmsAction::IDLE &&
++            info.path_hold_reason.empty() &&
++            !lv_subject_get_int(get_printer_state().print_state().get_job_holds_machine_subject());
++        const auto* head_slot = material_workspace::head_slot(info, head_);
++        const bool unrecorded_loaded = head_slot &&
++            backend->slot_is_actively_loaded(head_slot->global_index) && !source;
++        lv_subject_set_int(&can_load_, idle && occupied && !current && !unrecorded_loaded);
++        lv_subject_set_int(&can_read_, idle && present);
++        lv_subject_copy_string(&load_label_, current ? "当前供料" : empty ? "空槽" : "换料");
++    } else
++        lv_subject_copy_string(&load_label_, "等待设备");
+     const std::string selection =
+         selected_unit_ >= 0
+             ? fmt::format("查看 {} · {}槽{}",
+diff --git a/ui_xml/head_inventory.xml b/ui_xml/head_inventory.xml
+index 5ee99ce482f1cb566366069fa99eb261c780368e..07659cefab5d06ee5c522bb4e969d39265515551 100644
+--- a/ui_xml/head_inventory.xml
++++ b/ui_xml/head_inventory.xml
+@@ -2,99 +2,130 @@
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+ <component>
+   <consts>
+-    <px name="inventory_tab_h_small" value="44"/>
+-    <px name="inventory_tab_h_medium" value="54"/>
+-    <px name="inventory_tab_h_large" value="64"/>
+-    <px name="inventory_card_h_small" value="96"/>
+-    <px name="inventory_card_h_medium" value="124"/>
+-    <px name="inventory_card_h_large" value="144"/>
+-    <px name="inventory_swatch_small" value="24"/>
+-    <px name="inventory_swatch_medium" value="28"/>
+-    <px name="inventory_swatch_large" value="32"/>
+-    <px name="inventory_gauge_h_small" value="4"/>
+-    <px name="inventory_gauge_h_medium" value="5"/>
+-    <px name="inventory_gauge_h_large" value="6"/>
+-    <px name="inventory_card_h_tiny" value="88"/>
+-    <px name="inventory_swatch_tiny" value="24"/>
++    <px name="inventory_compact_card_h" value="80"/>
++    <px name="inventory_line_h" value="16"/>
++    <px name="inventory_top_pad" value="4"/>
++    <px name="inventory_bottom_pad" value="6"/>
++    <px name="inventory_spool_w" value="40"/>
++    <px name="inventory_selected_border" value="2"/>
+   </consts>
+   <styles>
+-    <style name="tab_idle" bg_color="#card_bg" bg_opa="255" border_color="#border" border_width="1"/>
+-    <style name="tab_selected" bg_color="#primary" bg_opa="255" border_color="#primary" border_width="1"/>
+-    <style name="card_idle" bg_color="#card_bg" bg_opa="255" border_color="#border" border_width="1"/>
+-    <style name="card_viewed" bg_color="#card_bg" bg_opa="255" border_color="#primary" border_width="2"/>
+-    <style name="card_loaded" bg_color="#primary" bg_opa="70" border_color="#primary" border_width="2"/>
++    <style name="tab_idle" bg_color="#elevated_bg" bg_opa="0" border_width="0"/>
++    <style name="tab_selected" bg_color="#card_bg" bg_opa="255" border_width="0"/>
++    <style name="card_idle" bg_color="#card_bg" bg_opa="255" border_color="#border" border_width="#u1_border"/>
++    <style name="card_viewed" bg_color="#card_bg" bg_opa="255" border_color="#text" border_width="#inventory_selected_border"/>
++    <style name="card_loaded_light" bg_color="#u1_selection_light" bg_opa="255" border_color="#primary" border_width="#inventory_selected_border"/>
++    <style name="card_loaded_dark" bg_color="#u1_selection_dark" bg_opa="255" border_color="#primary" border_width="#inventory_selected_border"/>
+   </styles>
+-  <view name="head_inventory" extends="overlay_panel" title="耗材" title_transform="none" back_button_callback="inventory_back" action_button_text="操作" hide_action_button="false" action_button_callback="inventory_manage" action_button_disabled_cond="not inventory_can_manage" action_button_2_text="耗材库" hide_action_button_2="false" action_button_2_hidden_cond="inventory_external or not inventory_online" action_button_2_callback="inventory_library" action_button_2_bg_color="#elevated_bg" bg_color="#screen_bg">
+-    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scroll_dir="ver">
+-      <lv_obj name="inventory_heads" width="100%" height="#inventory_tab_h" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+-        <bind_flag_if cond="inventory_external" flag="hidden"/>
++  <view name="head_inventory" extends="lv_obj" width="100%" height="#u1_overlay_height" align="top_left" flex_flow="column" style_pad_all="0" style_pad_gap="0" style_border_width="0" style_bg_color="#screen_bg" style_bg_opa="255" scrollable="false">
++    <lv_obj name="overlay_header" width="100%" height="#u1_status_height" flex_flow="row" style_pad_hor="#u1_page_pad" style_pad_ver="0" style_pad_gap="#u1_nav_icon_gap" style_flex_cross_place="center" scrollable="false">
++      <lv_obj width="#u1_brand_width" height="#u1_brand_height" style_pad_all="0" style_border_width="0" style_radius="#u1_brand_radius" style_bg_color="#primary" style_bg_opa="255" clickable="false"/>
++      <text_body text="耗材" width="0" flex_grow="1"/>
++      <lv_obj width="#u1_status_dot" height="#u1_status_dot" style_pad_all="0" style_border_width="0" style_radius="#u1_brand_radius" style_bg_color="#success" style_bg_opa="255" clickable="false">
++        <bind_flag_if cond="not inventory_online" flag="hidden"/>
++      </lv_obj>
++      <text_small text="等待设备"><bind_flag_if cond="inventory_online" flag="hidden"/></text_small>
++      <text_small text="就绪"><bind_flag_if cond="not inventory_online or print_active eq 1" flag="hidden"/></text_small>
++      <text_small text="打印中"><bind_flag_if cond="not inventory_online or print_state_enum ne 1" flag="hidden"/></text_small>
++      <text_small text="已暂停"><bind_flag_if cond="not inventory_online or print_state_enum ne 2" flag="hidden"/></text_small>
++    </lv_obj>
++    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" flex_flow="column" style_pad_hor="#u1_page_pad" style_pad_top="#inventory_top_pad" style_pad_bottom="#inventory_bottom_pad" style_pad_gap="#u1_card_gap" scroll_dir="ver">
++      <lv_obj name="inventory_heads" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="#space_xxs" style_pad_gap="#space_xxs" style_bg_color="#elevated_bg" style_bg_opa="255" style_radius="#u1_card_radius" scrollable="false">
+         <repeat count="4">
+-          <lv_obj name="inventory_head_${i}" width="0" flex_grow="1" height="100%" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_all="#space_xs" style_radius="#u1_card_radius" clickable="true" scrollable="false">
++          <lv_obj name="inventory_head_${i}" width="0" flex_grow="1" height="100%" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#space_sm" style_radius="#u1_nav_radius" clickable="true" scrollable="false">
+             <bind_style_if name="tab_idle" cond="inventory_selected_head ne ${i}"/>
+             <bind_style_if name="tab_selected" cond="inventory_selected_head eq ${i}"/>
+             <style name="styles.press_wash" selector="pressed"/>
+-            <text_body text="H${i + 1}" clickable="false" event_bubble="true"/>
++            <lv_obj width="#u1_status_dot" height="#u1_status_dot" style_radius="#u1_status_dot" style_bg_opa="255" style_pad_all="0" style_border_width="0" clickable="false" event_bubble="true" scrollable="false">
++              <bind_style_prop prop="bg_color" subject="inventory_external_head_${i}_color"/>
++            </lv_obj>
++            <text_body text="${i + 1}号" clickable="false" event_bubble="true"/>
+             <event_cb trigger="clicked" callback="inventory_select_head" user_data="${i}"/>
+           </lv_obj>
+         </repeat>
+       </lv_obj>
+-      <!-- External spools have no fabricated weight or remaining-percentage fields. -->
+-      <lv_obj name="inventory_external_cards" width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++      <lv_obj name="inventory_section" width="100%" height="#inventory_line_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" scrollable="false">
++        <text_small text="外置料卷" width="0" flex_grow="1" style_text_color="#text_muted"><bind_flag_if cond="not inventory_external" flag="hidden"/></text_small>
++        <text_small bind_text="inventory_external_state" style_text_color="#text_muted"><bind_flag_if cond="not inventory_external" flag="hidden"/></text_small>
++        <text_small bind_text="inventory_route" width="0" flex_grow="1" style_text_color="#text_muted"><bind_flag_if cond="inventory_external" flag="hidden"/></text_small>
++        <ui_button name="inventory_library" text="耗材库" variant="ghost" height="#inventory_line_h" style_pad_all="0" style_border_width="0" style_shadow_width="0">
++          <bind_flag_if cond="inventory_external" flag="hidden"/>
++          <bind_state_if cond="not inventory_online" state="disabled"/>
++          <event_cb trigger="clicked" callback="inventory_library"/>
++        </ui_button>
++        <ui_button name="inventory_manage" text="管理" icon="cog" icon_size="xs" variant="ghost" height="#inventory_line_h" style_pad_all="0" style_border_width="0" style_shadow_width="0">
++          <bind_flag_if cond="inventory_external" flag="hidden"/>
++          <bind_state_if cond="not inventory_can_manage" state="disabled"/>
++          <event_cb trigger="clicked" callback="inventory_manage"/>
++        </ui_button>
++      </lv_obj>
++      <!-- External spools expose identity and readback only; no RFID or quantity. -->
++      <lv_obj name="inventory_external_card" width="100%" height="#inventory_compact_card_h" flex_flow="row" style_pad_all="#u1_page_pad" style_pad_gap="#u1_page_pad" style_flex_cross_place="center" style_radius="#u1_card_radius" scrollable="false">
+         <bind_flag_if cond="not inventory_external" flag="hidden"/>
+-        <repeat count="4">
+-          <lv_obj name="inventory_external_card_${i}" width="48%" height="#inventory_card_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xxs" style_flex_main_place="center" style_radius="#u1_card_radius" clickable="true" scrollable="false">
+-            <bind_style_if name="card_idle" cond="inventory_selected_head ne ${i}"/>
+-            <bind_style_if name="card_viewed" cond="inventory_selected_head eq ${i}"/>
+-            <style name="styles.press_wash" selector="pressed"/>
+-            <text_body text="H${i + 1} · 外置料卷" width="100%" clickable="false" event_bubble="true"/>
+-            <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+-              <lv_obj width="#inventory_swatch" height="#inventory_swatch" style_bg_opa="255" style_radius="#space_xs" style_border_width="1" style_border_color="#border" clickable="false" event_bubble="true" scrollable="false">
+-                <bind_style_prop prop="bg_color" subject="inventory_external_head_${i}_color"/>
+-              </lv_obj>
+-              <text_heading width="0" flex_grow="1" bind_text="inventory_external_head_${i}_material" long_mode="dots" clickable="false" event_bubble="true"/>
+-            </lv_obj>
+-            <text_small width="100%" bind_text="inventory_external_head_${i}_state" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+-            <event_cb trigger="clicked" callback="inventory_select_head" user_data="${i}"/>
+-          </lv_obj>
+-        </repeat>
++        <bind_style_if name="card_loaded_light" cond="settings_dark_mode eq 0"/>
++        <bind_style_if name="card_loaded_dark" cond="settings_dark_mode eq 1"/>
++        <icon src="filament" size="lg" width="#inventory_spool_w" variant="text">
++          <bind_style_prop prop="text_color" subject="inventory_external_color"/>
++        </icon>
++        <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
++          <text_heading name="inventory_external_material" width="100%" bind_text="inventory_external_material" long_mode="dots"/>
++          <text_small width="100%" bind_text="inventory_external_name" style_text_color="#text_muted" long_mode="dots"/>
++        </lv_obj>
++        <icon src="check" size="sm" variant="text"><bind_flag_if cond="not inventory_external_loaded" flag="hidden"/></icon>
+       </lv_obj>
+-      <!-- Each ACE keeps its backend identity; every card is the selected head's same-number slot. -->
+-      <lv_obj name="inventory_cards" width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+-        <bind_flag_if cond="inventory_external or inventory_unit_count eq 0" flag="hidden"/>
++      <!-- Actual supply and the viewed candidate remain independent states. -->
++      <lv_obj name="inventory_cards" width="100%" height="#inventory_compact_card_h" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++        <bind_flag_if cond="inventory_external" flag="hidden"/>
+         <repeat count="4">
+-          <lv_obj name="inventory_card_${i}" width="48%" height="#inventory_card_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="space_between" style_radius="#u1_card_radius" clickable="true" scrollable="false">
++          <lv_obj name="inventory_card_${i}" width="0" flex_grow="1" height="100%" flex_flow="column" style_pad_all="#space_sm" style_pad_gap="0" style_flex_main_place="space_between" style_radius="#u1_card_radius" clickable="true" scrollable="false">
+             <bind_flag_if cond="inventory_unit_count le ${i}" flag="hidden"/>
+             <bind_style_if name="card_idle" cond="inventory_selected_unit ne ${i} and not inventory_unit_${i}_current"/>
+             <bind_style_if name="card_viewed" cond="inventory_selected_unit eq ${i} and not inventory_unit_${i}_current"/>
+-            <bind_style_if name="card_loaded" cond="inventory_unit_${i}_current"/>
++            <bind_style_if name="card_loaded_light" cond="inventory_unit_${i}_current and settings_dark_mode eq 0"/>
++            <bind_style_if name="card_loaded_dark" cond="inventory_unit_${i}_current and settings_dark_mode eq 1"/>
+             <style name="styles.press_wash" selector="pressed"/>
+-            <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" clickable="false" event_bubble="true" scrollable="false">
+-              <text_body name="inventory_unit_name_${i}" width="0" flex_grow="1" bind_text="inventory_unit_${i}_name" long_mode="dots" clickable="false" event_bubble="true"/>
+-              <text_small name="inventory_current_${i}" text="供料中" clickable="false" event_bubble="true">
+-                <bind_flag_if_eq subject="inventory_unit_${i}_current" flag="hidden" ref_value="0"/>
+-              </text_small>
+-              <text_small name="inventory_candidate_${i}" text="候选" style_text_color="#text_muted" clickable="false" event_bubble="true">
+-                <bind_flag_if_eq subject="inventory_unit_${i}_current" flag="hidden" ref_value="1"/>
+-              </text_small>
+-            </lv_obj>
+-            <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+-              <lv_obj name="inventory_color_${i}" width="#inventory_swatch" height="#inventory_swatch" style_bg_opa="255" style_radius="#space_xs" style_border_width="1" style_border_color="#border" clickable="false" event_bubble="true" scrollable="false">
++            <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++              <text_small name="inventory_unit_name_${i}" width="0" flex_grow="1" bind_text="inventory_unit_${i}_name" long_mode="dots" clickable="false" event_bubble="true"/>
++              <icon name="inventory_current_${i}" src="check" size="xs" clickable="false" event_bubble="true"><bind_flag_if cond="not inventory_unit_${i}_current" flag="hidden"/></icon>
++              <lv_obj name="inventory_color_${i}" width="#u1_status_dot" height="#u1_status_dot" style_bg_opa="255" style_radius="#u1_status_dot" style_pad_all="0" style_border_width="0" clickable="false" event_bubble="true" scrollable="false">
++                <bind_flag_if cond="inventory_unit_${i}_current" flag="hidden"/>
+                 <bind_style_prop prop="bg_color" subject="inventory_unit_${i}_color"/>
+               </lv_obj>
+-              <text_body name="inventory_material_${i}" width="0" flex_grow="1" bind_text="inventory_unit_${i}_material" long_mode="dots" clickable="false" event_bubble="true"/>
+-              <text_small name="inventory_weight_${i}" bind_text="inventory_unit_${i}_weight" clickable="false" event_bubble="true"/>
+             </lv_obj>
+-            <text_small name="inventory_environment_${i}" width="100%" bind_text="inventory_unit_${i}_env" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+-            <lv_bar name="inventory_gauge_${i}" width="100%" height="#inventory_gauge_h" min_value="0" max_value="100" bind_value="inventory_unit_${i}_fill" style_bg_color="#border" style_bg_opa="100" style_bg_color-indicator="#primary" style_radius="#space_xs" style_radius-indicator="#space_xs" clickable="false" event_bubble="true"/>
++            <text_body name="inventory_material_${i}" width="100%" bind_text="inventory_unit_${i}_material" long_mode="dots" clickable="false" event_bubble="true"/>
++            <text_small name="inventory_weight_${i}" width="100%" bind_text="inventory_unit_${i}_weight" long_mode="dots" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+             <event_cb trigger="clicked" callback="inventory_select_unit" user_data="${i}"/>
+           </lv_obj>
+         </repeat>
+       </lv_obj>
+-      <text_body name="inventory_notice" width="100%" bind_text="inventory_source" long_mode="wrap"/>
+-      <text_small name="inventory_selection" width="100%" bind_text="inventory_selection" style_text_color="#text_muted" long_mode="wrap"/>
+-      <text_body name="inventory_warning" width="100%" bind_text="inventory_notice" style_text_color="#warning" long_mode="wrap">
+-        <bind_flag_if cond="inventory_online and not inventory_hold" flag="hidden"/>
+-      </text_body>
++      <lv_obj name="inventory_external_actions" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++        <bind_flag_if cond="not inventory_external" flag="hidden"/>
++        <ui_button name="inventory_edit" text="编辑耗材" icon="pencil" variant="outline" width="0" flex_grow="1" height="100%" style_bg_color="#elevated_bg" style_border_width="0" style_shadow_width="0">
++          <bind_state_if cond="not inventory_can_manage" state="disabled"/>
++          <event_cb trigger="clicked" callback="inventory_action" user_data="edit"/>
++        </ui_button>
++        <ui_button name="inventory_manual" text="进退料" icon="swap_vertical" variant="primary" width="0" flex_grow="1" height="100%" style_border_width="0" style_shadow_width="0">
++          <bind_state_if cond="not inventory_can_manage" state="disabled"/>
++          <event_cb trigger="clicked" callback="inventory_action" user_data="manual"/>
++        </ui_button>
++      </lv_obj>
++      <lv_obj name="inventory_ace_actions" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++        <bind_flag_if cond="inventory_external" flag="hidden"/>
++        <ui_button name="inventory_details" text="详情" variant="outline" width="0" flex_grow="1" height="100%" style_bg_color="#elevated_bg" style_border_width="0" style_shadow_width="0">
++          <bind_state_if cond="not inventory_can_manage" state="disabled"/>
++          <event_cb trigger="clicked" callback="inventory_manage"/>
++        </ui_button>
++        <ui_button name="inventory_read_tag" text="识别" variant="outline" width="0" flex_grow="1" height="100%" style_bg_color="#elevated_bg" style_border_width="0" style_shadow_width="0">
++          <bind_state_if cond="not inventory_can_read" state="disabled"/>
++          <event_cb trigger="clicked" callback="inventory_action" user_data="read_tag"/>
++        </ui_button>
++        <ui_button name="inventory_load" bind_text="inventory_load_label" variant="primary" width="0" flex_grow="1" height="100%" style_border_width="0" style_shadow_width="0" style_pad_hor="#space_sm">
++          <bind_state_if cond="not inventory_can_load" state="disabled"/>
++          <event_cb trigger="clicked" callback="inventory_action" user_data="load"/>
++        </ui_button>
++      </lv_obj>
++      <text_small name="inventory_notice" width="100%" height="#inventory_line_h" bind_text="inventory_notice" style_text_color="#text_muted" long_mode="dots"><bind_flag_if cond="not inventory_external and inventory_online and not inventory_hold" flag="hidden"/></text_small>
++      <text_small name="inventory_source" width="100%" height="#inventory_line_h" bind_text="inventory_source" style_text_color="#text_muted" long_mode="dots"><bind_flag_if cond="inventory_external or not inventory_online or inventory_hold" flag="hidden"/></text_small>
+     </lv_obj>
+   </view>
+ </component>

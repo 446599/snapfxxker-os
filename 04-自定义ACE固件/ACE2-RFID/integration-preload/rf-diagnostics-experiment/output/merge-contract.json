@@ -1,0 +1,29 @@
+{
+  "base": "frozen RF runtime 6b67835b",
+  "storage_magic": "0x45585231",
+  "storage_ready": "0x52445231",
+  "tail_bytes": 184,
+  "payload_bytes": 216,
+  "minimum_block": 224,
+  "offsets": {
+    "rf": 16,
+    "ex": 76,
+    "preload": 144
+  },
+  "changed_field": "ex+0 initialized -> owner_task; bit0 exchange busy; rest aligned TCB",
+  "new_fields": [],
+  "merge_conflicts": [
+    "experimental_binding.h/c storage version + ex_state semantics",
+    "event_storage.c sizeof and ready/version use",
+    "bounded_rc522.c/h exchange claim/finish and byte publication",
+    "rf_stock_adapter.c/h background immutable slot interface and bind_operation",
+    "build_accessor.py sources + hooks + label",
+    "native_tag_decoder.c typed probe",
+    "typed_results.c/h + decoder_typed_bridge.c/h"
+  ],
+  "do_not_merge_by_reusing_queue_v3": true,
+  "no_physical_proof": true,
+  "image_sha256": "840bafe77a7fba234fb6e75d3c38e766bf7e7ee05bcce963bbedf53cb72a7403",
+  "elf_sha256": "13f59b644a2f6b9706bfe51fbfe2793adc7b2b333e169ec30b981db9808799c5",
+  "diagnostic_return": "br_decoder_report { primary ar_result; cleanup br_result; cleanup_status_valid uint32 }"
+}

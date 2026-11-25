@@ -1,0 +1,324 @@
+diff --git a/include/ui_material_workspace.h b/include/ui_material_workspace.h
+index 342e3a2acafd9d2427c7b75c443baecdf73b0698..2e8ba9948163e928bd74092542956b59d21d288f 100644
+--- a/include/ui_material_workspace.h
++++ b/include/ui_material_workspace.h
+@@ -11,6 +11,7 @@
+ 
+ #include <functional>
+ #include <optional>
++#include <array>
+ 
+ namespace helix::ui {
+ class MaterialWorkspace : public OverlayBase {
+@@ -34,13 +35,17 @@ class MaterialWorkspace : public OverlayBase {
+     void open_firmware();
+     void open(int head, int unit, bool library = false,
+               std::function<void(int)> on_return = {});
++    void open_action(int head, int unit, const std::string& action,
++                     std::function<void(int)> on_return = {});
+     void open_nozzle(int head, std::function<void(int)> on_return = {});
++    void open_temperature();
+ 
+   private:
+     void page(int value);
+     void act(const std::string& action);
+     void refresh();
+     void refresh_nozzle();
++    void refresh_temperatures();
+     void browse_head(int delta);
+     void activate_head();
+     void edit_external();
+@@ -69,6 +74,9 @@ class MaterialWorkspace : public OverlayBase {
+     std::optional<SlotInfo> original_slot_;
+     std::function<void(int)> on_return_;
+     std::string observed_extruder_;
++    std::array<std::string, 5> overview_heaters_{};
++    std::array<ObserverGuard, 5> overview_current_observers_, overview_target_observers_;
++    bool binding_temperatures_ = false;
+     int head_ = 0, unit_ = 0, slot_ = -1;
+     std::string spool_id_, firmware_token_;
+     nlohmann::json spools_ = nlohmann::json::array(), files_ = nlohmann::json::array();
+@@ -83,7 +91,7 @@ class MaterialWorkspace : public OverlayBase {
+     nlohmann::json pending_args_;
+     lv_subject_t page_{}, busy_{}, list_count_{}, file_count_{}, confirmed_{}, progress_{},
+         ready_{}, auto_sensor_{}, auto_enabled_{}, settings_ready_{}, external_{},
+-        edit_external_{}, editable_{}, manual_ready_{}, nozzle_color_{};
++        edit_external_{}, editable_{}, manual_ready_{}, nozzle_color_{}, nozzle_head_{};
+     lv_subject_t title_{}, status_{}, detail_{}, form_material_{}, form_color_{}, form_weight_{},
+         form_vendor_{}, file_info_{}, version_{}, nozzle_title_{}, nozzle_temperature_{},
+         nozzle_material_{}, nozzle_source_{}, manual_hint_{};
+@@ -94,6 +102,12 @@ class MaterialWorkspace : public OverlayBase {
+         manual_hint_buf_[192]{};
+     helix::xml::IndexedSubjectPool auto_values_{"workspace_auto",
+                                                 helix::xml::IndexedSubjectPool::Type::String, 32};
++    helix::xml::IndexedSubjectPool overview_current_{
++        "workspace_heater", helix::xml::IndexedSubjectPool::Type::String, 32, "_current"};
++    helix::xml::IndexedSubjectPool overview_target_{
++        "workspace_heater", helix::xml::IndexedSubjectPool::Type::String, 32, "_target"};
++    helix::xml::IndexedSubjectPool overview_colors_{
++        "workspace_heater", helix::xml::IndexedSubjectPool::Type::Color, 0, "_color"};
+     helix::xml::IndexedSubjectPool settings_labels_{
+         "workspace_setting", helix::xml::IndexedSubjectPool::Type::String, 96};
+     helix::xml::IndexedSubjectPool settings_enabled_{
+diff --git a/src/ui/filament/ui_material_workspace.cpp b/src/ui/filament/ui_material_workspace.cpp
+index 8920055b7dc839c5347e4240ddc40f2202fde9b8..b74315fa33cbfd6bbc599acfc8d6c26809008876 100644
+--- a/src/ui/filament/ui_material_workspace.cpp
++++ b/src/ui/filament/ui_material_workspace.cpp
+@@ -6,6 +6,7 @@
+ #include "ui_callback_helpers.h"
+ #include "ui_nav.h"
+ #include "ui_temperature_utils.h"
++#include "ui_overlay_temp_graph.h"
+ 
+ #include "ams_backend.h"
+ #include "ams_state.h"
+@@ -42,6 +43,10 @@ MaterialWorkspace::~MaterialWorkspace() {
+     tool_observer_.reset();
+     temperature_observer_.reset();
+     target_observer_.reset();
++    for (auto& observer : overview_current_observers_)
++        observer.reset();
++    for (auto& observer : overview_target_observers_)
++        observer.reset();
+     subjects_.deinit_all();
+ }
+ void MaterialWorkspace::init_subjects() {
+@@ -53,6 +58,10 @@ void MaterialWorkspace::init_subjects() {
+         UI_MANAGED_SUBJECT_INT(edit_external_, 0, "workspace_edit_external", subjects_);
+         UI_MANAGED_SUBJECT_INT(editable_, 0, "workspace_editable", subjects_);
+         UI_MANAGED_SUBJECT_INT(manual_ready_, 0, "workspace_manual_ready", subjects_);
++        UI_MANAGED_SUBJECT_INT(nozzle_head_, 0, "workspace_nozzle_head", subjects_);
++        overview_current_.ensure_size(5);
++        overview_target_.ensure_size(5);
++        overview_colors_.ensure_size(4);
+         UI_MANAGED_SUBJECT_COLOR(nozzle_color_, lv_color_hex(kAmsDefaultSlotColor),
+                                 "workspace_nozzle_color", subjects_);
+         UI_MANAGED_SUBJECT_STRING(nozzle_title_, nozzle_title_buf_, "喷头 1",
+@@ -120,6 +129,19 @@ void MaterialWorkspace::open_nozzle(int head, std::function<void(int)> on_return
+     manual_origin_ = -1;
+     page(9);
+ }
++void MaterialWorkspace::open_action(int head, int unit, const std::string& action,
++                                    std::function<void(int)> on_return) {
++    if (subjects_initialized_ && lv_subject_get_int(&busy_))
++        return;
++    open(head, unit, false, std::move(on_return));
++    act(action);
++}
++void MaterialWorkspace::open_temperature() {
++    if (subjects_initialized_ && lv_subject_get_int(&busy_))
++        return;
++    open(0, -1);
++    page(10);
++}
+ void MaterialWorkspace::open_firmware() {
+     if (subjects_initialized_ && lv_subject_get_int(&busy_))
+         return;
+@@ -178,6 +200,11 @@ void MaterialWorkspace::on_activate() {
+             self->observed_extruder_.clear();
+             self->temperature_observer_.reset();
+             self->target_observer_.reset();
++            self->overview_heaters_.fill("");
++            for (auto& observer : self->overview_current_observers_)
++                observer.reset();
++            for (auto& observer : self->overview_target_observers_)
++                observer.reset();
+             self->refresh();
+         }, state.get_subjects_lifetime());
+     job_observer_ = observe<int>(state.print_state().get_machine_motion_blocked_subject(),
+@@ -202,12 +229,17 @@ void MaterialWorkspace::on_deactivating(DeactivateReason) {
+     tool_observer_.reset();
+     temperature_observer_.reset();
+     target_observer_.reset();
++    for (auto& observer : overview_current_observers_)
++        observer.reset();
++    for (auto& observer : overview_target_observers_)
++        observer.reset();
++    overview_heaters_.fill("");
+     observed_extruder_.clear();
+ }
+ void MaterialWorkspace::page(int value) {
+     lv_subject_set_int(&page_, value);
+     const char* titles[] = {"耗材操作", "本地耗材库", "编辑线盘", "本地固件升级", "确认固件升级",
+-                            "升级进度", "确认操作",   "自动烘干", "耗材设置", "喷头详情"};
++                            "升级进度", "确认操作",   "自动烘干", "耗材设置", "喷头详情", "温度"};
+     lv_subject_copy_string(&title_, titles[value]);
+     if (value != 5)
+         poll_.reset();
+@@ -288,6 +320,54 @@ void MaterialWorkspace::refresh() {
+     else if (slot_ < 0 && lv_subject_get_int(&page_) == 0)
+         lv_subject_copy_string(&detail_, "等待所选喷头的耗材状态");
+     refresh_nozzle();
++    refresh_temperatures();
++}
++void MaterialWorkspace::refresh_temperatures() {
++    if (binding_temperatures_)
++        return;
++    binding_temperatures_ = true;
++    auto* backend = AmsState::instance().get_backend();
++    const auto info = backend ? backend->get_system_info() : AmsSystemInfo{};
++    auto& temperatures = get_printer_state().temperature_state();
++    const bool online = lv_subject_get_int(
++        get_printer_state().network_state().get_nav_buttons_enabled_subject()) == 1;
++    for (int i = 0; i < 5; ++i) {
++        const auto* head_slot = i < 4 ? material_workspace::head_slot(info, i) : nullptr;
++        // Only backend-supplied head/heater mappings identify physical nozzles.
++        const std::string name = !online ? "" : i == 4 ? "heater_bed"
++                                                    : head_slot ? head_slot->extruder_name : "";
++        SubjectLifetime current_lifetime, target_lifetime;
++        auto* current = name.empty() ? nullptr : i == 4
++            ? temperatures.get_bed_temp_subject(current_lifetime)
++            : temperatures.get_extruder_temp_subject(name, current_lifetime);
++        auto* target = name.empty() ? nullptr : i == 4
++            ? temperatures.get_bed_target_subject(target_lifetime)
++            : temperatures.get_extruder_target_subject(name, target_lifetime);
++        if (overview_heaters_[i] != name ||
++            (visible_ && current && !overview_current_observers_[i])) {
++            overview_heaters_[i] = name;
++            overview_current_observers_[i].reset();
++            overview_target_observers_[i].reset();
++            if (visible_ && current)
++                overview_current_observers_[i] = observe<int>(current, this,
++                    [](MaterialWorkspace* self, int) { self->refresh_temperatures(); },
++                    current_lifetime);
++            if (visible_ && target)
++                overview_target_observers_[i] = observe<int>(target, this,
++                    [](MaterialWorkspace* self, int) { self->refresh_temperatures(); },
++                    target_lifetime);
++        }
++        overview_current_.set_string(i, current
++            ? fmt::format("{:.0f}°C", temperature::deci_to_degrees_f(lv_subject_get_int(current)))
++            : "—°C");
++        overview_target_.set_string(i, target
++            ? fmt::format("目标 {:.0f}°C", temperature::deci_to_degrees_f(lv_subject_get_int(target)))
++            : "目标 —°C");
++        if (i < 4)
++            overview_colors_.set_color(i, online && head_slot ? head_slot->color_rgb
++                                                             : kAmsDefaultSlotColor);
++    }
++    binding_temperatures_ = false;
+ }
+ void MaterialWorkspace::refresh_nozzle() {
+     auto* backend = AmsState::instance().get_backend();
+@@ -295,7 +375,8 @@ void MaterialWorkspace::refresh_nozzle() {
+     const auto* head_slot = material_workspace::head_slot(info, head_);
+     const bool online = lv_subject_get_int(
+         get_printer_state().network_state().get_nav_buttons_enabled_subject()) == 1;
+-    lv_subject_copy_string(&nozzle_title_, fmt::format("喷头 {}", head_ + 1).c_str());
++    lv_subject_set_int(&nozzle_head_, head_);
++    lv_subject_copy_string(&nozzle_title_, fmt::format("喷头{} · {}/4", head_ + 1, head_ + 1).c_str());
+     const std::string extruder = head_slot ? head_slot->extruder_name : "";
+     if (observed_extruder_ != extruder) {
+         observed_extruder_ = extruder;
+@@ -349,7 +430,7 @@ void MaterialWorkspace::refresh_nozzle() {
+ void MaterialWorkspace::browse_head(int delta) {
+     if (lv_subject_get_int(&busy_))
+         return;
+-    head_ = (head_ + delta + 4) % 4;
++    head_ = std::clamp(head_ + delta, 0, 3);
+     refresh();
+ }
+ 
+@@ -738,7 +819,7 @@ void MaterialWorkspace::act(const std::string& action) {
+             page(library_origin_);
+             return;
+         }
+-        if (current_page == 0 || current_page == 1 || current_page == 9) {
++        if (current_page == 0 || current_page == 1 || current_page == 9 || current_page == 10) {
+             if (on_return_)
+                 on_return_(head_);
+             nav::go_back();
+@@ -749,6 +830,21 @@ void MaterialWorkspace::act(const std::string& action) {
+     if (lv_subject_get_int(&busy_))
+         return;
+     refresh();
++    if (action == "temperature_bed") {
++        get_global_temp_graph_overlay().open(TempGraphOverlay::Mode::Bed, lv_screen_active());
++        return;
++    }
++    if (action.compare(0, 17, "temperature_head_") == 0 && action.size() == 18) {
++        const int selected = action.back() - '0';
++        if (selected >= 0 && selected < 4) {
++            head_ = selected;
++            unit_ = -1;
++            manual_origin_ = 10;
++            refresh();
++            page(9);
++        }
++        return;
++    }
+     if (action == "previous_head" || action == "next_head") {
+         browse_head(action == "previous_head" ? -1 : 1);
+         return;
+diff --git a/ui_xml/material_workspace.xml b/ui_xml/material_workspace.xml
+index 16875a54121886afa79de04cf5e978d7a33986e5..6956385b49d3b14b5312d7b438321a8645ef4fc4 100644
+--- a/ui_xml/material_workspace.xml
++++ b/ui_xml/material_workspace.xml
+@@ -8,10 +8,14 @@
+     <px name="workspace_progress_h" value="8"/>
+     <px name="workspace_arrow_w" value="56"/>
+     <px name="workspace_swatch" value="24"/>
++    <px name="workspace_temperature_card_h" value="64"/>
++    <px name="workspace_temperature_bed_h" value="56"/>
+   </consts>
+   <view name="material_workspace" extends="overlay_panel" title_subject="workspace_title" title_transform="none" back_button_callback="workspace_back" bg_color="#screen_bg">
+     <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scroll_dir="ver" scrollable="true">
+-      <text_small name="workspace_status" width="100%" bind_text="workspace_status" style_text_color="#text_muted" long_mode="wrap"/>
++      <text_small name="workspace_status" width="100%" bind_text="workspace_status" style_text_color="#text_muted" long_mode="wrap">
++        <bind_flag_if cond="workspace_page eq 10" flag="hidden"/>
++      </text_small>
+       <lv_obj name="workspace_page_0" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+         <bind_flag_if cond="workspace_page ne 0" flag="hidden"/>
+         <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_md" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_border_width="1" style_border_color="#border">
+@@ -87,11 +91,41 @@
+           </ui_button>
+         </lv_obj>
+       </lv_obj>
++      <lv_obj name="workspace_page_10" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++        <bind_flag_if cond="workspace_page ne 10" flag="hidden"/>
++        <lv_obj name="workspace_temperature_heads" width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++          <repeat count="4">
++            <lv_obj name="workspace_temperature_head_${i}" width="48%" height="#workspace_temperature_card_h" flex_flow="column" style_pad_all="#space_sm" style_pad_gap="#space_xxs" style_radius="#u1_card_radius" style_bg_color="#card_bg" style_bg_opa="255" clickable="true" scrollable="false">
++              <style name="styles.press_wash" selector="pressed"/>
++              <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" scrollable="false" clickable="false" event_bubble="true">
++                <icon src="nozzle" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++                <text_small text="${i + 1}号喷头" width="0" flex_grow="1" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++                <lv_obj width="#u1_status_dot" height="#u1_status_dot" style_radius="#u1_status_dot" style_bg_opa="255" scrollable="false" clickable="false" event_bubble="true">
++                  <bind_style_prop prop="bg_color" subject="workspace_heater_${i}_color"/>
++                </lv_obj>
++              </lv_obj>
++              <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_flex_cross_place="center" style_flex_main_place="space_between" scrollable="false" clickable="false" event_bubble="true">
++                <text_body bind_text="workspace_heater_${i}_current" clickable="false" event_bubble="true"/>
++                <text_small bind_text="workspace_heater_${i}_target" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++              </lv_obj>
++              <event_cb trigger="clicked" callback="workspace_action" user_data="temperature_head_${i}"/>
++            </lv_obj>
++          </repeat>
++        </lv_obj>
++        <lv_obj name="workspace_temperature_bed" width="100%" height="#workspace_temperature_bed_h" flex_flow="row" style_pad_hor="#u1_page_pad" style_pad_ver="#space_sm" style_pad_gap="#space_sm" style_flex_cross_place="center" style_radius="#u1_card_radius" style_bg_color="#card_bg" style_bg_opa="255" clickable="true" scrollable="false">
++          <style name="styles.press_wash" selector="pressed"/>
++          <icon src="radiator" size="sm" clickable="false" event_bubble="true"/>
++          <text_body text="热床" width="0" flex_grow="1" clickable="false" event_bubble="true"/>
++          <text_body bind_text="workspace_heater_4_current" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++          <icon src="chevron_right" size="sm" variant="muted" clickable="false" event_bubble="true"/>
++          <event_cb trigger="clicked" callback="workspace_action" user_data="temperature_bed"/>
++        </lv_obj>
++      </lv_obj>
+       <lv_obj name="workspace_page_9" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+         <bind_flag_if cond="workspace_page ne 9" flag="hidden"/>
+         <lv_obj width="100%" height="#workspace_action_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_md" style_flex_cross_place="center" scrollable="false">
+           <ui_button name="workspace_previous_head" icon="chevron_left" variant="outline" width="#workspace_arrow_w" height="100%">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
++            <bind_state_if cond="workspace_busy or workspace_nozzle_head eq 0" state="disabled"/>
+             <event_cb trigger="clicked" callback="workspace_action" user_data="previous_head"/>
+           </ui_button>
+           <text_heading width="0" flex_grow="1" bind_text="workspace_nozzle_title" style_text_align="center"/>
+@@ -100,7 +134,7 @@
+             <event_cb trigger="clicked" callback="workspace_action" user_data="activate_head"/>
+           </ui_button>
+           <ui_button name="workspace_next_head" icon="chevron_right" variant="outline" width="#workspace_arrow_w" height="100%">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
++            <bind_state_if cond="workspace_busy or workspace_nozzle_head eq 3" state="disabled"/>
+             <event_cb trigger="clicked" callback="workspace_action" user_data="next_head"/>
+           </ui_button>
+         </lv_obj>

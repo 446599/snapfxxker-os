@@ -1,0 +1,1665 @@
+[
+  {
+    "key": "home",
+    "title": "首页",
+    "group": "主页面",
+    "mode": "light",
+    "recipe": "navigate home",
+    "current": {
+      "overlays": [],
+      "panel": "home",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-home.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-home.png",
+    "status": "ok"
+  },
+  {
+    "key": "print-select",
+    "title": "文件与打印任务",
+    "group": "主页面",
+    "mode": "light",
+    "recipe": "navigate print-select",
+    "current": {
+      "overlays": [],
+      "panel": "print-select",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-print-select.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-print-select.png",
+    "status": "ok"
+  },
+  {
+    "key": "controls",
+    "title": "机器控制",
+    "group": "主页面",
+    "mode": "light",
+    "recipe": "navigate controls",
+    "current": {
+      "overlays": [],
+      "panel": "controls",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-controls.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-controls.png",
+    "status": "ok"
+  },
+  {
+    "key": "filament",
+    "title": "喷头与耗材操作",
+    "group": "主页面",
+    "mode": "light",
+    "recipe": "navigate filament",
+    "current": {
+      "overlays": [],
+      "panel": "filament",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-filament.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-filament.png",
+    "status": "ok"
+  },
+  {
+    "key": "settings",
+    "title": "设置首页",
+    "group": "主页面",
+    "mode": "light",
+    "recipe": "navigate settings",
+    "current": {
+      "overlays": [],
+      "panel": "settings",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-settings.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-settings.png",
+    "status": "ok"
+  },
+  {
+    "key": "advanced",
+    "title": "高级功能",
+    "group": "主页面",
+    "mode": "light",
+    "recipe": "navigate advanced",
+    "current": {
+      "overlays": [],
+      "panel": "advanced",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-advanced.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-advanced.png",
+    "status": "ok"
+  },
+  {
+    "key": "inventory-head-1",
+    "title": "耗材料路 · 喷头 1",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "recipe": "demo ams; click inventory_head_0",
+    "current": {
+      "overlays": [
+        "head_inventory"
+      ],
+      "panel": "home",
+      "root_path": "s/head_inventory"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-inventory-head-1.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-inventory-head-1.png",
+    "status": "ok"
+  },
+  {
+    "key": "inventory-head-2",
+    "title": "耗材料路 · 喷头 2",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "recipe": "demo ams; click inventory_head_1",
+    "current": {
+      "overlays": [
+        "head_inventory"
+      ],
+      "panel": "home",
+      "root_path": "s/head_inventory"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-inventory-head-2.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-inventory-head-2.png",
+    "status": "ok"
+  },
+  {
+    "key": "inventory-head-3",
+    "title": "耗材料路 · 喷头 3",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "recipe": "demo ams; click inventory_head_2",
+    "current": {
+      "overlays": [
+        "head_inventory"
+      ],
+      "panel": "home",
+      "root_path": "s/head_inventory"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-inventory-head-3.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-inventory-head-3.png",
+    "status": "ok"
+  },
+  {
+    "key": "inventory-head-4",
+    "title": "耗材料路 · 喷头 4",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "recipe": "demo ams; click inventory_head_3",
+    "current": {
+      "overlays": [
+        "head_inventory"
+      ],
+      "panel": "home",
+      "root_path": "s/head_inventory"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-inventory-head-4.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-inventory-head-4.png",
+    "status": "ok"
+  },
+  {
+    "key": "inventory-candidate",
+    "title": "查看候选耗材",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "recipe": "demo ams; click inventory_head_0; click inventory_card_2",
+    "current": {
+      "overlays": [
+        "head_inventory"
+      ],
+      "panel": "home",
+      "root_path": "s/head_inventory"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-inventory-candidate.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-inventory-candidate.png",
+    "status": "ok"
+  },
+  {
+    "key": "ace-management",
+    "title": "ACE 单机管理",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "recipe": "demo ams; click inventory_head_0; click inventory_manage",
+    "current": {
+      "overlays": [
+        "head_inventory",
+        "ams_overview_panel"
+      ],
+      "panel": "home",
+      "root_path": "s/ams_overview_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-ace-management.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-ace-management.png",
+    "status": "ok"
+  },
+  {
+    "key": "motion",
+    "title": "运动控制",
+    "group": "控制与校准",
+    "mode": "light",
+    "recipe": "navigate controls; click btn_motion",
+    "current": {
+      "overlays": [
+        "motion_panel"
+      ],
+      "panel": "controls",
+      "root_path": "s/motion_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-motion.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-motion.png",
+    "status": "ok"
+  },
+  {
+    "key": "nozzle-temp",
+    "title": "喷头温度",
+    "group": "控制与校准",
+    "mode": "light",
+    "recipe": "navigate controls; click btn_nozzle_temp",
+    "current": {
+      "overlays": [
+        "temp_graph_overlay"
+      ],
+      "panel": "controls",
+      "root_path": "s/temp_graph_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-nozzle-temp.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-nozzle-temp.png",
+    "status": "ok"
+  },
+  {
+    "key": "bed-temp",
+    "title": "热床温度",
+    "group": "控制与校准",
+    "mode": "light",
+    "recipe": "navigate controls; click btn_bed_temp",
+    "current": {
+      "overlays": [
+        "temp_graph_overlay"
+      ],
+      "panel": "controls",
+      "root_path": "s/temp_graph_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-bed-temp.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-bed-temp.png",
+    "status": "ok"
+  },
+  {
+    "key": "fan",
+    "title": "风扇控制",
+    "group": "控制与校准",
+    "mode": "light",
+    "recipe": "navigate controls; click card_cooling",
+    "current": {
+      "overlays": [
+        "fan_control_overlay"
+      ],
+      "panel": "controls",
+      "root_path": "s/fan_control_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-fan.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-fan.png",
+    "status": "ok"
+  },
+  {
+    "key": "bed-mesh",
+    "title": "热床网格",
+    "group": "控制与校准",
+    "mode": "light",
+    "recipe": "navigate controls; click btn_bed_mesh",
+    "current": {
+      "overlays": [
+        "bed_mesh_panel"
+      ],
+      "panel": "controls",
+      "root_path": "s/bed_mesh_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-bed-mesh.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-bed-mesh.png",
+    "status": "ok"
+  },
+  {
+    "key": "pid",
+    "title": "PID 调校",
+    "group": "控制与校准",
+    "mode": "light",
+    "recipe": "navigate advanced; click row_pid_tuning",
+    "current": {
+      "overlays": [
+        "calibration_pid_panel"
+      ],
+      "panel": "advanced",
+      "root_path": "s/calibration_pid_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-pid.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-pid.png",
+    "status": "ok"
+  },
+  {
+    "key": "input-shaper",
+    "title": "输入整形",
+    "group": "控制与校准",
+    "mode": "light",
+    "recipe": "navigate advanced; click row_input_shaping",
+    "current": {
+      "overlays": [
+        "input_shaper_panel"
+      ],
+      "panel": "advanced",
+      "root_path": "s/input_shaper_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-input-shaper.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-input-shaper.png",
+    "status": "ok"
+  },
+  {
+    "key": "screws",
+    "title": "热床调平",
+    "group": "控制与校准",
+    "mode": "light",
+    "recipe": "navigate advanced; click row_bed_mesh",
+    "current": {
+      "overlays": [
+        "screws_tilt_panel"
+      ],
+      "panel": "advanced",
+      "root_path": "s/screws_tilt_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-screws.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-screws.png",
+    "status": "ok"
+  },
+  {
+    "key": "zoffset",
+    "title": "Z 偏移",
+    "group": "控制与校准",
+    "mode": "light",
+    "recipe": "navigate advanced; click row_z_offset",
+    "status": "not_applicable",
+    "note": "U1 使用喷头偏移校准入口，已另行渲染"
+  },
+  {
+    "key": "history-dashboard",
+    "title": "打印历史",
+    "group": "工具与状态",
+    "mode": "light",
+    "recipe": "navigate advanced; click row_print_history",
+    "current": {
+      "overlays": [
+        "history_dashboard_panel"
+      ],
+      "panel": "advanced",
+      "root_path": "s/history_dashboard_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-history-dashboard.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-history-dashboard.png",
+    "status": "ok"
+  },
+  {
+    "key": "spoolman",
+    "title": "耗材库",
+    "group": "工具与状态",
+    "mode": "light",
+    "recipe": "navigate advanced; click row_spoolman",
+    "current": {
+      "overlays": [
+        "spoolman_panel"
+      ],
+      "panel": "advanced",
+      "root_path": "s/spoolman_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-spoolman.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-spoolman.png",
+    "status": "ok"
+  },
+  {
+    "key": "macros",
+    "title": "宏命令",
+    "group": "工具与状态",
+    "mode": "light",
+    "recipe": "navigate advanced; click row_macros",
+    "current": {
+      "overlays": [
+        "macro_panel"
+      ],
+      "panel": "advanced",
+      "root_path": "s/macro_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-macros.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-macros.png",
+    "status": "ok"
+  },
+  {
+    "key": "console",
+    "title": "控制台",
+    "group": "工具与状态",
+    "mode": "light",
+    "recipe": "navigate advanced; click row_console",
+    "current": {
+      "overlays": [
+        "console_panel"
+      ],
+      "panel": "advanced",
+      "root_path": "s/console_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-console.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-console.png",
+    "status": "ok"
+  },
+  {
+    "key": "display",
+    "title": "显示设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_display",
+    "current": {
+      "overlays": [
+        "settings_display_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_display_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-display.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-display.png",
+    "status": "ok"
+  },
+  {
+    "key": "display-2",
+    "title": "显示设置 · 下半页",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_display; wait_idle; scroll overlay_content 0 -274",
+    "current": {
+      "overlays": [
+        "settings_display_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_display_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-display-2.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-display-2.png",
+    "status": "ok"
+  },
+  {
+    "key": "appearance",
+    "title": "外观设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_appearance",
+    "current": {
+      "overlays": [
+        "settings_appearance_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_appearance_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-appearance.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-appearance.png",
+    "status": "ok"
+  },
+  {
+    "key": "appearance-2",
+    "title": "外观设置 · 打印机外观",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_appearance; wait_idle; scroll group_printer_visuals",
+    "current": {
+      "overlays": [
+        "settings_appearance_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_appearance_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-appearance-2.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-appearance-2.png",
+    "status": "ok"
+  },
+  {
+    "key": "theme",
+    "title": "主题编辑",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_appearance; click row_theme_settings",
+    "current": {
+      "overlays": [
+        "settings_appearance_overlay",
+        "theme_preview_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/theme_preview_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-theme.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-theme.png",
+    "status": "ok"
+  },
+  {
+    "key": "touch-input",
+    "title": "触摸与输入",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_touch_input",
+    "current": {
+      "overlays": [
+        "settings_touch_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_touch_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-touch-input.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-touch-input.png",
+    "status": "ok"
+  },
+  {
+    "key": "touch-input-2",
+    "title": "触摸与输入 · 下半页",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_touch_input; wait_idle; scroll overlay_content 0 -333",
+    "current": {
+      "overlays": [
+        "settings_touch_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_touch_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-touch-input-2.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-touch-input-2.png",
+    "status": "ok"
+  },
+  {
+    "key": "sound",
+    "title": "声音设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_sound",
+    "current": {
+      "overlays": [
+        "settings_sound_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_sound_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-sound.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-sound.png",
+    "status": "ok"
+  },
+  {
+    "key": "sound-2",
+    "title": "声音设置 · 下半页",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_sound; wait_idle; scroll overlay_content 0 -190",
+    "current": {
+      "overlays": [
+        "settings_sound_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_sound_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-sound-2.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-sound-2.png",
+    "status": "ok"
+  },
+  {
+    "key": "printing",
+    "title": "打印设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_printing",
+    "current": {
+      "overlays": [
+        "settings_printing_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_printing_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-printing.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-printing.png",
+    "status": "ok"
+  },
+  {
+    "key": "printing-2",
+    "title": "打印设置 · 第二页",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_printing; wait_idle; scroll overlay_content 0 -406",
+    "current": {
+      "overlays": [
+        "settings_printing_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_printing_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-printing-2.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-printing-2.png",
+    "status": "ok"
+  },
+  {
+    "key": "printing-3",
+    "title": "打印设置 · 第三页",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_printing; wait_idle; scroll overlay_content 0 -832",
+    "current": {
+      "overlays": [
+        "settings_printing_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_printing_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-printing-3.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-printing-3.png",
+    "status": "ok"
+  },
+  {
+    "key": "devices",
+    "title": "设备设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_devices",
+    "current": {
+      "overlays": [
+        "settings_hardware_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_hardware_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-devices.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-devices.png",
+    "status": "ok"
+  },
+  {
+    "key": "devices-2",
+    "title": "设备设置 · 下半页",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_devices; wait_idle; scroll overlay_content 0 -209",
+    "current": {
+      "overlays": [
+        "settings_hardware_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_hardware_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-devices-2.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-devices-2.png",
+    "status": "ok"
+  },
+  {
+    "key": "sensors",
+    "title": "耗材传感器",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_devices; click row_filament_sensors",
+    "current": {
+      "overlays": [
+        "settings_hardware_overlay",
+        "sensors_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/sensors_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-sensors.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-sensors.png",
+    "status": "ok"
+  },
+  {
+    "key": "hardware-health",
+    "title": "硬件健康",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_devices; click row_hardware_health",
+    "current": {
+      "overlays": [
+        "settings_hardware_overlay",
+        "hardware_health_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/hardware_health_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-hardware-health.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-hardware-health.png",
+    "status": "ok"
+  },
+  {
+    "key": "fan-settings",
+    "title": "风扇配置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_devices; click row_fan_settings",
+    "current": {
+      "overlays": [
+        "settings_hardware_overlay",
+        "fan_settings_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/fan_settings_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-fan-settings.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-fan-settings.png",
+    "status": "ok"
+  },
+  {
+    "key": "barcode-scanner",
+    "title": "扫码器设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_devices; click row_spoolman_settings; click row_barcode_scanner",
+    "current": {
+      "overlays": [
+        "settings_hardware_overlay",
+        "spoolman_settings",
+        "barcode_scanner_settings"
+      ],
+      "panel": "settings",
+      "root_path": "s/barcode_scanner_settings"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-barcode-scanner.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-barcode-scanner.png",
+    "status": "ok"
+  },
+  {
+    "key": "label-printer",
+    "title": "标签打印机设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_devices; click row_spoolman_settings; click row_label_printer",
+    "current": {
+      "overlays": [
+        "settings_hardware_overlay",
+        "spoolman_settings",
+        "label_printer_settings"
+      ],
+      "panel": "settings",
+      "root_path": "s/label_printer_settings"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-label-printer.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-label-printer.png",
+    "status": "ok"
+  },
+  {
+    "key": "safety",
+    "title": "安全设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_safety",
+    "current": {
+      "overlays": [
+        "settings_safety_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_safety_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-safety.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-safety.png",
+    "status": "ok"
+  },
+  {
+    "key": "connection",
+    "title": "连接设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_connection",
+    "current": {
+      "overlays": [
+        "settings_connection_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_connection_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-connection.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-connection.png",
+    "status": "ok"
+  },
+  {
+    "key": "network",
+    "title": "网络设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_connection; click row_network",
+    "current": {
+      "overlays": [
+        "settings_connection_overlay",
+        "network_settings_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/network_settings_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-network.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-network.png",
+    "status": "ok"
+  },
+  {
+    "key": "printers",
+    "title": "打印机管理",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_connection; click row_printers",
+    "current": {
+      "overlays": [
+        "settings_connection_overlay",
+        "printer_list_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/printer_list_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-printers.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-printers.png",
+    "status": "ok"
+  },
+  {
+    "key": "language-time",
+    "title": "语言与时间",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_language_time",
+    "current": {
+      "overlays": [
+        "settings_language_time_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_language_time_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-language-time.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-language-time.png",
+    "status": "ok"
+  },
+  {
+    "key": "system",
+    "title": "系统设置",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_system",
+    "current": {
+      "overlays": [
+        "settings_system_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_system_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-system.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-system.png",
+    "status": "ok"
+  },
+  {
+    "key": "system-2",
+    "title": "系统设置 · 下半页",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_system; wait_idle; scroll overlay_content 0 -124",
+    "current": {
+      "overlays": [
+        "settings_system_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_system_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-system-2.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-system-2.png",
+    "status": "ok"
+  },
+  {
+    "key": "security",
+    "title": "锁屏与安全",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_system; click row_security",
+    "current": {
+      "overlays": [
+        "settings_system_overlay",
+        "security_settings_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/security_settings_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-security.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-security.png",
+    "status": "ok"
+  },
+  {
+    "key": "updates",
+    "title": "更新管理",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_updates",
+    "current": {
+      "overlays": [
+        "settings_updates_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_updates_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-updates.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-updates.png",
+    "status": "ok"
+  },
+  {
+    "key": "help-about",
+    "title": "帮助",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_help",
+    "current": {
+      "overlays": [
+        "settings_help_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/settings_help_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-help-about.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-help-about.png",
+    "status": "ok"
+  },
+  {
+    "key": "about",
+    "title": "关于",
+    "group": "设置详情",
+    "mode": "light",
+    "recipe": "navigate settings; click row_help; click row_about",
+    "current": {
+      "overlays": [
+        "settings_help_overlay",
+        "about_settings_overlay"
+      ],
+      "panel": "settings",
+      "root_path": "s/about_settings_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-about.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-about.png",
+    "status": "ok"
+  },
+  {
+    "key": "leds",
+    "title": "灯光控制",
+    "group": "工具与状态",
+    "mode": "light",
+    "recipe": "demo leds",
+    "current": {
+      "overlays": [
+        "led_control_overlay"
+      ],
+      "panel": "home",
+      "root_path": "s/led_control_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-leds.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-leds.png",
+    "status": "ok"
+  },
+  {
+    "key": "camera",
+    "title": "摄像头",
+    "group": "工具与状态",
+    "mode": "light",
+    "recipe": "demo camera",
+    "current": {
+      "overlays": [
+        "camera_fullscreen"
+      ],
+      "panel": "home",
+      "root_path": "s/nav_btn_estop"
+    },
+    "status": "ok",
+    "file": "screens/light-camera.png",
+    "note": "动态模拟画面，按单帧截图展示"
+  },
+  {
+    "key": "preflight-check",
+    "title": "打印前检查",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "demo preflight-check",
+    "current": {
+      "overlays": [],
+      "panel": "home",
+      "root_path": "s/26"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-preflight-check.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-preflight-check.png",
+    "status": "ok"
+  },
+  {
+    "key": "preflight-material",
+    "title": "打印前耗材检查",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "demo preflight-material",
+    "current": {
+      "overlays": [],
+      "panel": "home",
+      "root_path": "s/26"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-preflight-material.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-preflight-material.png",
+    "status": "ok"
+  },
+  {
+    "key": "color-mismatch",
+    "title": "耗材颜色匹配提示",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "demo color-mismatch",
+    "current": {
+      "overlays": [],
+      "panel": "home",
+      "root_path": "s/26"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-color-mismatch.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-color-mismatch.png",
+    "status": "ok"
+  },
+  {
+    "key": "runout-modal",
+    "title": "耗材用尽提示",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "demo runout-modal",
+    "current": {
+      "overlays": [],
+      "panel": "home",
+      "root_path": "s/26"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-runout-modal.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-runout-modal.png",
+    "status": "ok"
+  },
+  {
+    "key": "print-status",
+    "title": "打印状态 · 待机",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "demo print-status",
+    "current": {
+      "overlays": [
+        "print_status_panel"
+      ],
+      "panel": "home",
+      "root_path": "s/print_status_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-print-status.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-print-status.png",
+    "status": "ok"
+  },
+  {
+    "key": "print-tune",
+    "title": "打印参数调整 · 待机",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "demo print-tune",
+    "current": {
+      "overlays": [
+        "print_tune_panel"
+      ],
+      "panel": "home",
+      "root_path": "s/print_tune_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-print-tune.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-print-tune.png",
+    "status": "ok"
+  },
+  {
+    "key": "lock-screen",
+    "title": "屏幕锁定",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "demo lock-screen",
+    "current": {
+      "overlays": [],
+      "panel": "home",
+      "root_path": "t/4"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-lock-screen.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-lock-screen.png",
+    "status": "ok"
+  },
+  {
+    "key": "tool-offsets",
+    "title": "U1 喷头偏移校准",
+    "group": "控制与校准",
+    "mode": "light",
+    "recipe": "navigate advanced; click row_tool_offsets",
+    "current": {
+      "overlays": [
+        "snapmaker_nozzle_offset_overlay"
+      ],
+      "panel": "advanced",
+      "root_path": "s/snapmaker_nozzle_offset_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-tool-offsets.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-tool-offsets.png",
+    "status": "ok"
+  },
+  {
+    "key": "ace-slot-menu",
+    "title": "耗材操作菜单",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "recipe": "demo ams; click inventory_manage; click ams_slot_view[0]",
+    "current": {
+      "overlays": [
+        "head_inventory",
+        "ams_overview_panel"
+      ],
+      "panel": "home",
+      "root_path": "s/context_backdrop"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-ace-slot-menu.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-ace-slot-menu.png",
+    "status": "ok"
+  },
+  {
+    "key": "ace-spool-edit",
+    "title": "耗材编辑",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "recipe": "demo ams; click inventory_manage; click ams_slot_view[0]; click btn_edit",
+    "current": {
+      "overlays": [
+        "head_inventory",
+        "ams_overview_panel",
+        "ams_edit_overlay"
+      ],
+      "panel": "home",
+      "root_path": "s/ams_edit_overlay"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-ace-spool-edit.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-ace-spool-edit.png",
+    "status": "ok"
+  },
+  {
+    "key": "ace-device-operations",
+    "title": "ACE 设备操作",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "recipe": "demo ams; click inventory_manage; click btn_settings",
+    "current": {
+      "overlays": [
+        "head_inventory",
+        "ams_overview_panel",
+        "ams_device_operations"
+      ],
+      "panel": "home",
+      "root_path": "s/ams_device_operations"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-ace-device-operations.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-ace-device-operations.png",
+    "status": "ok"
+  },
+  {
+    "key": "print-status-running",
+    "title": "打印进度 · 进行中",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "scenario printing; demo print-status",
+    "current": {
+      "overlays": [
+        "print_status_panel"
+      ],
+      "panel": "home",
+      "root_path": "s/nav_btn_estop"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-print-status-running.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-print-status-running.png",
+    "status": "ok"
+  },
+  {
+    "key": "print-tune-running",
+    "title": "打印参数调整 · 进行中",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "scenario printing; demo print-tune",
+    "current": {
+      "overlays": [
+        "print_tune_panel"
+      ],
+      "panel": "home",
+      "root_path": "s/nav_btn_estop"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-print-tune-running.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-print-tune-running.png",
+    "status": "ok"
+  },
+  {
+    "key": "print-status-paused",
+    "title": "打印进度 · 已暂停",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "scenario paused; demo print-status",
+    "current": {
+      "overlays": [
+        "print_status_panel"
+      ],
+      "panel": "home",
+      "root_path": "s/nav_btn_estop"
+    },
+    "status": "ok",
+    "file": "screens/light-print-status-paused.png",
+    "note": "动态状态按单帧截图展示"
+  },
+  {
+    "key": "print-status-heating",
+    "title": "打印准备 · 加热",
+    "group": "打印流程",
+    "mode": "light",
+    "recipe": "scenario heating; demo print-status",
+    "current": {
+      "overlays": [
+        "print_status_panel"
+      ],
+      "panel": "home",
+      "root_path": "s/nav_btn_estop"
+    },
+    "status": "ok",
+    "file": "screens/light-print-status-heating.png",
+    "note": "动态状态按单帧截图展示"
+  },
+  {
+    "key": "ace-spool-color",
+    "title": "耗材自定义颜色",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "recipe": "demo ams; click inventory_manage; click ams_slot_view[0]; click btn_edit; click btn_custom_color",
+    "current": {
+      "overlays": [
+        "head_inventory",
+        "ams_overview_panel",
+        "ams_edit_overlay"
+      ],
+      "panel": "home",
+      "root_path": "s/nav_btn_estop"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/light-ace-spool-color.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/light-ace-spool-color.png",
+    "status": "ok"
+  },
+  {
+    "key": "ace-environment",
+    "title": "ACE 温湿度与烘干",
+    "group": "耗材与ACE",
+    "mode": "light",
+    "status": "ok",
+    "file": "screens/light-ace-environment.png",
+    "current": {
+      "overlays": [
+        "head_inventory",
+        "ams_overview_panel",
+        "ams_environment_overlay"
+      ],
+      "panel": "home",
+      "root_path": "s/nav_btn_estop"
+    },
+    "note": "当前环境入口控件处于隐藏状态，本图通过原生回调打开以展示页面效果"
+  }
+]

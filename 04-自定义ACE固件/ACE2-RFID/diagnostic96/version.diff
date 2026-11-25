@@ -1,0 +1,11 @@
+--- ace2-rfid-dev-20261107/diagnostic95/firmware/build_patch.py	2026-11-07 19:32:27
++++ ace2-rfid-dev-20261107/diagnostic96/firmware/build_patch.py	2026-11-07 20:43:40
+@@ -53,7 +53,7 @@
+     "extract_resume": 0x0800FE3A, # rawtag_extract_stub Anycubic/failure resume
+     "scan_exit": 0x0800FE98,      # background scan success exit (bypasses Anycubic parse)
+ }
+-VERSION_STRING = b"V1.1.95O\x00"  # Private minimal Bambu repair; not an upstream release
++VERSION_STRING = b"V1.1.96O\x00"  # Private minimal Bambu repair; not an upstream release
+                                # Trailing 'O' ensures multiACE auto-detects open firmware build.
+ 
+ HERE = os.path.dirname(os.path.abspath(__file__))

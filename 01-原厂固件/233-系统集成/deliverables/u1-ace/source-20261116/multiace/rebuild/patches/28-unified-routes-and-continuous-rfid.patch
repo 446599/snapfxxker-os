@@ -1,0 +1,397 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -43,7 +43,7 @@
+ from .ace_protocol_v2 import AceProtocolV2
+ from .ace_controlled_motion import (request_operation, MotionError, REQUEST,
+                                     QUERY, RENEW, STOP, CLOSE)
+-from .ace_path_store import PathStateError
++from .ace_path_store import PathStateError, configured_route_heads
+ 
+ KNOWN_PROTOCOLS = (AceProtocolV1, AceProtocolV2)
+ 
+@@ -6383,21 +6383,24 @@
+         except Exception:
+             return None, None
+ 
++    def _invalidate_changed_rfid_origins(self):
++        policy = getattr(self, '_insert_policy', None)
++        if policy is not None:
++            policy.drop_changed_scan_origins()
++
+     def _rfid_route_heads(self, idx, slot):
+-        if type(idx) is not int or type(slot) is not int or not 0 <= slot < 4:
+-            return None
+-        mode = getattr(self, '_ace_mode', None)
+-        if mode in ('multi', 'normal'):
+-            return [slot]
+-        if mode != 'head':
+-            return None
+-        try:
+-            heads = {h for h in range(4) if self.head_uses_ace(h) and self.head_ace_for(h) == idx}
+-            for h, source in self._head_source.items():
+-                if (type(h) is int and 0 <= h < 4 and isinstance(source,dict)
+-                        and source.get('ace_index') == idx):
+-                    heads.add(h)
+-            return sorted(heads) or None
++        try:
++            heads = set(configured_route_heads(self, idx, slot))
++            if not heads:
++                return None
++            if self._ace_mode == 'head':
++                # A recorded occupant is an additional safety check. It
++                # cannot establish or redirect the configured route.
++                heads.update(h for h, source in self._head_source.items()
++                             if type(h) is int and 0 <= h < 4
++                             and isinstance(source, dict)
++                             and source.get('ace_index') == idx)
++            return sorted(heads)
+         except Exception:
+             return None
+ 
+@@ -17399,7 +17402,8 @@
+         path = getattr(self, '_path_calibration', None)
+         if path is not None and path.task.get('active'):
+             raise gcmd.error('后台料管校准正在进行，请稍后识别标签')
+-        self._insert_policy.options.require('rfid', gcmd.error)
++        self._insert_policy.options.require('rfid', gcmd.error,
++                                            idx=gcmd.get_int('ACE', self._active_device_index, minval=0, maxval=3))
+         self._require_slot_eject_idle(gcmd)
+         _hold_idx = gcmd.get_int('ACE', self._active_device_index, minval=0, maxval=3)
+         _hold_slot = gcmd.get_int('SLOT', 3, minval=0, maxval=3)
+@@ -17471,7 +17475,7 @@
+         if context is not None and context != (self._serials.get(ace_idx),
+                 self._location_identity(ace_idx), self._insert_epochs.get((ace_idx, slot))):
+             raise gcmd.error('插料事件已变化，未启动自动 RFID')
+-        self._insert_policy.options.require('rfid', gcmd.error)
++        self._insert_policy.options.require('rfid', gcmd.error, idx=ace_idx)
+         self._slot_actions.cancel = False
+         setattr(self, _busy_flag, True)
+         self._tag_op_kind = 'read'
+@@ -17495,13 +17499,18 @@
+         _epoch = (getattr(self, '_insert_epochs', {}) or {}).get((ace_idx, slot))
+         _observed_uid = {'value': None}
+         _cached_uid = (getattr(self, '_rc_last_uid', {}) or {}).get((ace_idx, slot))
+-        _fast_route = (policy.options.enabled('remaining') and (ace_idx, slot) == (0, 3) and
++        _fast_route = (policy.options.enabled('remaining', ace_idx) and (ace_idx, slot) == (0, 3) and
+                        self._location_hold.park_verified() and
+                        str((self._ace_models.get(0) or ('',''))[1]).upper() in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O'))
+         # The persisted known Blue UID selects this route; None epoch after a
+         # restart is a captured context, never evidence of a fresh insertion.
+         _fast_expected = (_cached_uid if _fast_route and _cached_uid == '55F328E6' and
+                           (_epoch is None or (type(_epoch) is int and _epoch > 0)) else None)
++        # Switch the supervised entry, not the ownership, STOP or identity
++        # checks. Only the existing measurement route keeps its old entry.
++        continuous = policy.capable(ace_idx) and not _fast_route
++        if continuous:
++            reader.read_slot = reader.read_slot_continuous
+         _fast = {'used': False, 'sample': None, 'snapshot': None}
+         _auth_rf_lease = {'value': None}
+         _original_note_uid = reader._note_uid
+@@ -17517,7 +17526,7 @@
+         def _slot_motion_allowed(idx, target):
+             _out.pop('admission_reason', None)
+             try:
+-                policy.options.require('rfid')
++                policy.options.require('rfid', idx=ace_idx)
+                 self._slot_actions._check(idx, target, _transport, allow_tag=True)
+                 self._slot_actions._lanes_ready(idx)
+                 if not _original_motion_allowed(idx, target):
+@@ -17553,17 +17562,23 @@
+             logging.info('[multiACE] [rc522] %s' % msg)
+             if 'rc522[dbg]' in msg:
+                 return
++            if msg.startswith('rc522: result pending: '):
++                _out.update(ok=False, pending=True, msg=msg.split(': ', 2)[-1])
++                return
+             # A later motion/restore failure overrides an earlier tag hit.
+             if 'WARNING - ' in msg or any(k in msg for k in _FAIL):
+-                _out['ok'] = False
+-                _out['msg'] = msg.replace('rc522: ', '', 1)
++                _out.update(ok=False, pending=False, msg=msg.replace('rc522: ', '', 1))
+             elif _out['ok'] is not False and any(k in msg for k in _OK):
+                 _out['ok'] = True
+                 _out['msg'] = msg.replace('rc522: ', '', 1)
+ 
+         def _run(eventtime):
+             try:
+-                policy.options.require('rfid')
++                policy.options.require('rfid', idx=ace_idx)
++                if continuous and (len(configured_route_heads(self, ace_idx, slot)) != 1
++                                   or not policy.take_scan_origin(ace_idx, slot)):
++                    _respond('rc522: result pending: 料头起点待确认，下次插料后可识别')
++                    return
+                 if _fast_expected:
+                     _fast['used'] = True
+                     from .ace_manual_measure import (run_measurement, capture_spool,
+@@ -17655,7 +17670,7 @@
+                             _out['msg'] = _out['msg'] or '未能确认标签与余量'
+                         else:
+                             _out['msg'] = (_out['msg'] or 'RFID识别完成') + '；余量暂未测得'
+-                elif _out['ok'] and policy.options.enabled('remaining'):
++                elif _out['ok'] and policy.options.enabled('remaining', ace_idx):
+                     try:
+                         from .ace_manual_remaining import refresh
+                         remaining = refresh(self, reader, ace_idx, slot, _transport,
+@@ -17678,13 +17693,13 @@
+                 self._tag_op_result = {
+                     'ok': bool(_out['ok']), 'kind': 'read', 'seq': _seq,
+                     'msg': (_out['msg'] or 'no tag read')[:200], 'ace': ace_idx, 'slot': slot,
+-                    'remaining': remaining}
++                    'pending': bool(_out.get('pending')), 'remaining': remaining}
+                 if (self._slot_actions.state.get('kind') == 'rfid' and
+                         self._slot_actions.state.get('ace') == ace_idx and
+                         self._slot_actions.state.get('slot') == slot):
+                     self._slot_actions.state.update(
+                         state=('cancelled' if self._slot_actions.cancel else
+-                               'complete' if _out['ok'] else 'error'),
++                               'complete' if _out['ok'] or _out.get('pending') else 'error'),
+                         message=(_out['msg'] or '未识别到标签')[:200])
+                 self._insert_drain_queue()
+ 
+@@ -19267,6 +19282,7 @@
+             self._head_source[head] = None
+             self._save_head_source()
+         self.head_manual[head] = bool(enable)
++        self._invalidate_changed_rfid_origins()
+         if self.save_variables:
+             self._save_head_manual()
+         # Fresh switch TO manual (the head is guaranteed empty - the guard above
+@@ -19360,6 +19376,7 @@
+             self._heads_manual_conv.discard(head)
+             self._save_heads_manual_conv()
+         self.head_feeder[head] = bool(enable)
++        self._invalidate_changed_rfid_origins()
+         if self.save_variables:
+             self._save_head_feeder()
+         # Fresh switch TO feeder (the head is guaranteed empty): clear the
+@@ -19414,6 +19431,7 @@
+                 _swapped = other
+                 break
+         self.head_ace[head] = ace_idx
++        self._invalidate_changed_rfid_origins()
+         if self.save_variables:
+             self._save_head_ace()
+         if _swapped is not None:
+@@ -23650,6 +23668,7 @@
+             self.gcode.run_script_from_command(
+                 "SAVE_VARIABLE VARIABLE=ace__mode VALUE=\"'%s'\"" % mode)
+             self._ace_mode = mode
++            self._invalidate_changed_rfid_origins()
+             if mode == 'head':
+                 if legacy_head is not None:
+                     self._ace_head = legacy_head
+@@ -23660,6 +23679,7 @@
+                 # (the designated ACE head is manual) resolves to feeder
+                 # and the log says so.
+                 self._convert_manual_to_feeder()
++                self._invalidate_changed_rfid_origins()
+                 # Feeder heads must not keep ACE filament identity that was
+                 # pushed onto them while they were ACE heads - clear their
+                 # display once so they don't show stale ACE colour/material
+--- a/klipper/extras/ace_rc522.py
++++ b/klipper/extras/ace_rc522.py
+@@ -44,6 +44,9 @@
+ import logging
+ 
+ PARK_STEP_MM = 20        # feed per probe step (Simon-CR: 15-25 works)
++CONTINUOUS_SCAN_MM = 600
++CONTINUOUS_SCAN_SPEED = 20
++PARK_TOLERANCE_MM = 10
+ PARK_SPEED = 40          # mm/s. Faster only shortens the time BETWEEN probe
+ # points - the probe is stationary after each step,
+ # so speed costs no detection.
+@@ -526,7 +529,7 @@
+                 raise MotionUncertain('manual move completion telemetry timeout')
+         raise MotionUncertain('manual move completion telemetry unconfirmed')
+ 
+-    def _move_and_confirm(self, idx, slot, length, mode, respond):
++    def _move_and_confirm(self, idx, slot, length, mode, respond, *, observe=None):
+         """Manual scan move with fresh completion and encoder feedback."""
+         if not self._target_motion_allowed(idx, slot):
+             respond(
+@@ -547,7 +550,11 @@
+         )
+         self._relative_measured = True
+         try:
+-            if not self._move(idx, slot, length, mode, respond):
++            if observe is None:
++                moved = self._move(idx, slot, length, mode, respond)
++            else:
++                moved = self._move(idx, slot, length, mode, respond, speed=CONTINUOUS_SCAN_SPEED)
++            if not moved:
+                 return False
+         finally:
+             self._relative_measured = False
+@@ -571,7 +578,16 @@
+                 initial_row = dict((getattr(self, '_encoder_diagnostic', {}) or {}).get('row') or {})
+         # An ACK can precede the motion; do not treat an immediate READY as
+         # completion. Then use a fresh status and this move's reset counter.
+-        self._pause(length / float(PARK_SPEED) + 0.6)
++        if observe is None:
++            self._pause(length / float(PARK_SPEED) + 0.6)
++        else:
++            deadline = self.ace.reactor.monotonic() + length / float(CONTINUOUS_SCAN_SPEED)
++            while self.ace.reactor.monotonic() < deadline:
++                observe(baseline_row)
++                remaining = deadline - self.ace.reactor.monotonic()
++                if remaining > 0:
++                    self._pause(min(0.08, remaining))
++            self._pause(0.6)
+         if not self._wait_motion_ready(idx, slot):
+             self._motion_uncertain = (
+                 "ACE %d slot %d: motion completion "
+@@ -1621,6 +1637,125 @@
+                 self._restore_recorded_motion(respond)
+             finally:
+                 self._manual_proof = False
++
++    def _continuous_uid(self, idx, slot):
++        """Fresh card observation; ambiguity is never evidence of absence."""
++        status = self._rc(idx, slot, 6)
++        if status == 1:
++            return ''
++        if status != SELECT_OK:
++            return None
++        return self._current_single_uid(idx, slot) or self._rc_read_uid(idx, slot) or None
++
++    def _continuous_sample(self, idx, slot, length, baseline, samples):
++        before = self._manual_sample(idx, slot)
++        start_row = (getattr(self, '_encoder_diagnostic', {}) or {}).get('row') or {}
++        if (type(before) is not int or not 0 < abs(before) <= length
++                or start_row.get('_decoder_present') is not True
++                or dict(start_row) == baseline):
++            return
++        direction = 1 if before > 0 else -1
++        observed_direction = getattr(self, '_continuous_direction', None)
++        if observed_direction is not None and observed_direction != direction:
++            self._continuous_direction = 0
++            return
++        uid = self._continuous_uid(idx, slot)
++        after = self._manual_sample(idx, slot)
++        end_row = (getattr(self, '_encoder_diagnostic', {}) or {}).get('row') or {}
++        if (type(after) is not int or before * after <= 0
++                or end_row.get('_decoder_present') is not True
++                or not abs(before) <= abs(after) <= length
++                or abs(after) - abs(before) > PARK_TOLERANCE_MM
++                or abs(before) < samples[-1][1]):
++            return
++        self._continuous_direction = direction
++        samples.append((abs(before), abs(after), uid))
++
++    @staticmethod
++    def _continuous_card_window(samples):
++        """Use a repeatable moving window, not a stationary shared-reader hit."""
++        seen = {uid for _, _, uid in samples if uid}
++        if len(seen) != 1:
++            return None
++        candidate = next(iter(seen))
++        hits = [i for i, (_, _, uid) in enumerate(samples) if uid == candidate]
++        first, last = hits[0], hits[-1]
++        if len(hits) < 2 or samples[first][0] == samples[last][0]:
++            return None
++        if not any(uid == '' for _, _, uid in samples[last + 1:]):
++            return None
++        if any(uid != candidate for _, _, uid in samples[first:last + 1]):
++            return None
++        if first != 0 and not any(uid == '' for _, _, uid in samples[:first]):
++            return None
++        lower, upper = samples[first][1], samples[last][0]
++        if lower > upper:
++            return None
++        target = 0 if first == 0 else (lower + upper) // 2
++        return candidate, target, samples[first][0], samples[last][1]
++
++    def read_slot_continuous(self, idx, slot, respond, max_mm=PARK_MAX_MM):
++        """One finite forward sweep, one card revisit at most, measured return."""
++        self._manual_proof = True
++        self._park_tolerance_mm = PARK_TOLERANCE_MM
++        self._continuous_direction = None
++        length = min(max_mm, CONTINUOUS_SCAN_MM)
++        self._manual_motor_budget = 3 * length + 150
++        key = (idx, slot)
++        returned = False
++        try:
++            if not self._target_motion_allowed(idx, slot) or not self._wait_motion_ready(idx, slot):
++                respond('rc522: read failed - target lane not ready; nothing moved')
++                return
++            neighbour = self._neighbour_signature(idx, slot)
++            if neighbour is None:
++                respond('rc522: result pending: 邻槽状态待确认，未转盘')
++                return
++            samples = [(0, 0, self._continuous_uid(idx, slot))]
++            if not self._move_and_confirm(
++                    idx, slot, length, SEARCH_MODE, respond,
++                    observe=lambda baseline: self._continuous_sample(idx, slot, length, baseline, samples)):
++                return
++            if self._neighbour_signature(idx, slot) != neighbour:
++                respond('rc522: result pending: 邻槽状态变化，未确认标签归属')
++                return
++            window = self._continuous_card_window(samples)
++            if window is None:
++                respond('rc522: result pending: 未读到可归属标签')
++                return
++            uid, target, lower, upper = window
++            direction = self._encoder_direction[key]
++            if self._continuous_direction != direction or self._known_neighbour_uid(idx, slot) == uid:
++                respond('rc522: result pending: 未确认标签属于目标槽')
++                return
++            position = direction * self._encoder_ledger[key]
++            if target > position or position > length:
++                raise MotionUncertain('连续识别终点超出已确认行程')
++            if target == 0:
++                self._restore_recorded_motion(respond)
++                returned = True
++            elif target < position:
++                if not self._move_and_confirm(idx, slot, position-target, RESTORE_MODE, respond):
++                    return
++                position = direction * self._encoder_ledger[key]
++                if not lower <= position <= upper:
++                    respond('rc522: result pending: 回到读区的位置未确认')
++                    return
++            if (self._neighbour_signature(idx, slot) != neighbour
++                    or self._observed_uid(idx, slot) != uid):
++                respond('rc522: result pending: 返回读区时未复核到同一标签')
++                return
++            self._read_card(idx, slot, respond, expected_uid=uid, allow_nudges=False)
++        finally:
++            try:
++                if not returned:
++                    self._restore_recorded_motion(respond)
++                if (not self._motion_uncertain and key in self._motion_ledger
++                        and not self.ace._slot_actions._gate(idx, slot)):
++                    raise MotionUncertain('识别结束后入口无料，回停未确认')
++            finally:
++                self._manual_proof = False
++                self._park_tolerance_mm = 2
+ 
+     def read_slot_single_checked(self, idx, slot, respond, guard, **kwargs):
+         """One bounded scan and one UID/content read, without attribution guesses."""
+@@ -2233,9 +2368,10 @@
+         direction = direction or 1
+         budget = 2 * abs(raw) + 20
+         commanded = 0
++        tolerance = getattr(self, '_park_tolerance_mm', 2)
+         for _ in range(8):
+             remaining = self._encoder_ledger.get(key,0) * direction
+-            if abs(remaining) <= 2:
++            if abs(remaining) <= tolerance:
+                 self._insert_guard()
+                 if not self._wait_motion_ready(idx,slot):
+                     raise MotionUncertain('scan origin standstill unconfirmed')
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -681,12 +681,14 @@
+     reactor = actions.ace.reactor
+     original_identity = actions.ace._location_identity(idx)
+     original_heads = actions.ace._rfid_route_heads(idx, slot)
++    original_mode = getattr(actions.ace, '_ace_mode', None)
+     original_epoch = getattr(actions.ace, '_insert_epochs', {}).get((idx, slot))
+     original_scope = "ace" if getattr(actions.ace, "_ace_mode", None) != "multi" else "route"
+     def manual_session_guard():
+         return (transport is not None and actions.ace._serials.get(idx) is transport
+                 and actions.ace._location_identity(idx) == original_identity
+                 and actions.ace._rfid_route_heads(idx, slot) == original_heads
++                and getattr(actions.ace, '_ace_mode', None) == original_mode
+                 and getattr(actions.ace, '_insert_epochs', {}).get((idx, slot)) == original_epoch)
+     reader._manual_session_guard = manual_session_guard
+     original_pause = reader._pause

@@ -1,0 +1,207 @@
+diff --git a/src/ui/settings/ui_panel_settings.cpp b/src/ui/settings/ui_panel_settings.cpp
+index 0e2d560a2fedf55e873ef26be185d7dc26bf9990..40100f86268d9752cfe3b19e91ef23a672e5297c 100644
+--- a/src/ui/settings/ui_panel_settings.cpp
++++ b/src/ui/settings/ui_panel_settings.cpp
+@@ -382,6 +382,8 @@ void register_settings_panel_callbacks() {
+         {"on_devices_clicked", nav_row<get_hardware_settings_overlay>()},
+         {"on_safety_clicked", nav_row<get_safety_settings_overlay>()},
+         {"on_system_clicked", nav_row<get_system_settings_overlay>()},
++        {"on_native_advanced_clicked",
++         [](lv_event_t*) { helix::nav::set_active(PanelId::Advanced); }},
+         {"on_help_clicked", nav_row<get_help_settings_overlay>()},
+         {"on_touch_input_clicked", nav_row<get_touch_settings_overlay>()},
+         {"on_connection_clicked", nav_row<get_connection_settings_overlay>()},
+diff --git a/ui_xml/app_layout.xml b/ui_xml/app_layout.xml
+index 739c801fc4d9f1fe3fe8bc1c59d8c2eab6db5a15..deba726113f32d5cadef3ddea22dee33fa6fc093 100644
+--- a/ui_xml/app_layout.xml
++++ b/ui_xml/app_layout.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0"?>
++<!-- Copyright (C) 2025-2026 356C LLC -->
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+ <component>
+   <view extends="lv_obj" width="100%" height="100%" flex_flow="column_reverse"
+diff --git a/ui_xml/navigation_bar.xml b/ui_xml/navigation_bar.xml
+index 9095c508381d3f555b20b24cc16d01c58512e333..febf5371f8ab24b9b508e7dbd6f41c6b22b1f8cd 100644
+--- a/ui_xml/navigation_bar.xml
++++ b/ui_xml/navigation_bar.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0"?>
++<!-- Copyright (C) 2025-2026 356C LLC -->
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+ <component>
+   <consts>
+diff --git a/ui_xml/settings_panel.xml b/ui_xml/settings_panel.xml
+index 6f466460dcd0be299f59404833b148e3e2d028d2..4c5954232f7fb274dc6e54ca987b4c6acca9aa6c 100644
+--- a/ui_xml/settings_panel.xml
++++ b/ui_xml/settings_panel.xml
+@@ -1,49 +1,90 @@
+-<?xml version='1.0' encoding='UTF-8'?>
++<?xml version="1.0"?>
+ <!-- Copyright (C) 2025-2026 356C LLC -->
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+-<!-- Settings Panel - Category Navigation -->
+-<!-- Three groups (Screen, Printer, HelixScreen) of rows that open sub-panel overlays -->
+-<!-- for grouped settings -->
+-<!-- All styling controlled via XML - C++ only handles callbacks -->
+ <component>
+-  <styles>
+-    <style name="spacer_standard" height="#space_lg"/>
+-    <style name="spacer_micro" height="#space_md"/>
+-  </styles>
+-  <view name="settings_panel" extends="lv_obj" width="100%" height="100%" style_bg_opa="255" style_border_width="0" style_pad_all="0" style_pad_gap="0" flex_flow="column" scrollable="false" style_bg_color="#screen_bg">
+-    <lv_obj width="100%" height="#u1_header_height" style_pad_hor="#u1_page_pad" style_pad_ver="0" flex_flow="row" style_flex_cross_place="center" style_flex_track_place="center" style_bg_color="#card_bg" style_bg_opa="255" scrollable="false">
+-      <text_heading text="设置" style_text_font="#font_heading"/>
++  <consts>
++    <px name="u1_settings_hero_icon" value="36"/>
++  </consts>
++  <view name="settings_panel" extends="lv_obj" width="100%" height="100%" flex_flow="column"
++        style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" style_border_width="0"
++        style_bg_color="#screen_bg" style_bg_opa="255" scrollable="false">
++    <lv_button name="row_firmware_settings" width="100%" height="#u1_menu_tile_height" flex_flow="row"
++               style_pad_hor="#u1_page_pad" style_pad_ver="#u1_card_gap" style_pad_gap="#u1_card_gap"
++               style_flex_cross_place="center" scrollable="false">
++      <style name="styles.u1_flat_card"/>
++      <style name="styles.press_wash" selector="pressed"/>
++      <event_cb trigger="clicked" callback="on_firmware_settings_clicked"/>
++      <lv_obj width="#u1_settings_hero_icon" height="#u1_settings_hero_icon" style_pad_all="0"
++              style_border_width="0" style_radius="#u1_nav_radius" clickable="false" event_bubble="true" scrollable="false">
++        <bind_style_if name="styles.u1_selected_light" cond="settings_dark_mode eq 0"/>
++        <bind_style_if name="styles.u1_selected_dark" cond="settings_dark_mode eq 1"/>
++        <icon src="tune" size="sm" variant="secondary" align="center" clickable="false" event_bubble="true"/>
++      </lv_obj>
++      <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="0" clickable="false" event_bubble="true" scrollable="false">
++        <text_heading text="高级设置" width="100%" height="#u1_emphasis_line" long_mode="dots" clickable="false" event_bubble="true"/>
++        <text_small text="打印 · 耗材 · 设备与扩展" width="100%" height="#u1_text_line" long_mode="dots" clickable="false" event_bubble="true"/>
++      </lv_obj>
++      <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++    </lv_button>
++    <lv_obj name="settings_row_network_display" width="100%" height="#u1_menu_tile_height" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++      <lv_button name="row_connection" width="0" flex_grow="1" height="#u1_menu_tile_height" flex_flow="row"
++                 style_pad_hor="#u1_page_pad" style_pad_ver="#u1_card_gap" style_pad_gap="#u1_card_gap"
++                 style_flex_cross_place="center" scrollable="false">
++        <style name="styles.u1_flat_card"/>
++        <style name="styles.press_wash" selector="pressed"/>
++        <event_cb trigger="clicked" callback="on_connection_clicked"/>
++        <lv_obj width="#u1_emphasis_line" height="100%" style_pad_all="0" clickable="false" event_bubble="true" scrollable="false">
++          <icon src="wifi" size="sm" variant="secondary" align="top_mid" clickable="false" event_bubble="true"/>
++        </lv_obj>
++        <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="0" clickable="false" event_bubble="true" scrollable="false">
++          <text_body text="网络" width="100%" height="#u1_text_line" long_mode="dots" clickable="false" event_bubble="true"/>
++          <text_small bind_text="settings_status_connection" width="100%" height="#u1_text_line" long_mode="dots" clickable="false" event_bubble="true"/>
++        </lv_obj>
++      </lv_button>
++      <lv_button name="row_display" width="0" flex_grow="1" height="#u1_menu_tile_height" flex_flow="row"
++                 style_pad_hor="#u1_page_pad" style_pad_ver="#u1_card_gap" style_pad_gap="#u1_card_gap"
++                 style_flex_cross_place="center" scrollable="false">
++        <style name="styles.u1_flat_card"/>
++        <style name="styles.press_wash" selector="pressed"/>
++        <event_cb trigger="clicked" callback="on_display_clicked"/>
++        <lv_obj width="#u1_emphasis_line" height="100%" style_pad_all="0" clickable="false" event_bubble="true" scrollable="false">
++          <icon src="television_classic" size="sm" variant="secondary" align="top_mid" clickable="false" event_bubble="true"/>
++        </lv_obj>
++        <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="0" clickable="false" event_bubble="true" scrollable="false">
++          <text_body text="屏幕" width="100%" height="#u1_text_line" long_mode="dots" clickable="false" event_bubble="true"/>
++          <text_small bind_text="settings_status_display" width="100%" height="#u1_text_line" long_mode="dots" clickable="false" event_bubble="true"/>
++        </lv_obj>
++      </lv_button>
+     </lv_obj>
+-    <lv_obj name="settings_category_grid" width="100%" flex_grow="1" flex_flow="row_wrap" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scroll_dir="ver" scrollbar_mode="auto" style_bg_color="#screen_bg">
+-      <text_body width="100%" text="常用设置" style_text_font="#font_body_bold" style_text_color="#text_muted" style_margin_top="#space_xs"/>
+-      <u1_menu_tile name="row_firmware_settings" label="高级设置" icon="tune" callback="on_firmware_settings_clicked" description="固件的全部功能选项" style_border_color="#primary" style_border_width="2">
+-        <bind_flag_if cond="not local_upgrade_available" flag="hidden"/>
+-      </u1_menu_tile>
+-      <u1_menu_tile name="row_connection" label="连接与网络" icon="lan" callback="on_connection_clicked" bind_description="settings_status_connection"/>
+-      <u1_menu_tile name="row_display" label="屏幕显示" icon="light" callback="on_display_clicked" bind_description="settings_status_display"/>
+-      <u1_menu_tile name="row_appearance" label="主题与外观" icon="palette" callback="on_appearance_clicked" bind_description="settings_status_appearance"/>
+-      <text_body width="100%" text="打印机" style_text_font="#font_body_bold" style_text_color="#text_muted" style_margin_top="#space_xs"/>
+-      <u1_menu_tile name="row_printing" label="打印偏好" icon="printer_3d" callback="on_printing_clicked"/>
+-      <u1_menu_tile name="row_devices" label="硬件设备" icon="sysinfo" callback="on_devices_clicked" bind_description="settings_status_devices"/>
+-      <u1_menu_tile name="row_safety" label="安全与提醒" icon="alert_octagon" callback="on_safety_clicked"/>
+-      <u1_menu_tile name="row_printer" label="打印机信息" icon="printer" callback="on_printer_clicked" description="名称、图片与机型"/>
+-      <text_body width="100%" text="屏幕与系统" style_text_font="#font_body_bold" style_text_color="#text_muted" style_margin_top="#space_xs"/>
+-      <u1_menu_tile name="row_touch_input" label="触摸与输入" icon="cursor_move" callback="on_touch_input_clicked"/>
+-      <u1_menu_tile name="row_sound" label="声音" icon="volume_high" callback="on_sound_clicked" bind_description="settings_status_sound">
+-        <bind_flag_if_eq subject="printer_has_speaker" flag="hidden" ref_value="0"/>
+-      </u1_menu_tile>
+-      <u1_menu_tile name="row_language_time" label="语言与时间" icon="translate" callback="on_language_time_clicked" bind_description="settings_status_language_time"/>
+-      <u1_menu_tile name="row_system" label="系统维护" icon="settings" callback="on_system_clicked"/>
+-      <u1_menu_tile name="row_local_firmware" label="本地固件升级" icon="download" callback="on_local_firmware_clicked">
+-        <bind_flag_if cond="not local_upgrade_available" flag="hidden"/>
+-      </u1_menu_tile>
+-      <u1_menu_tile name="row_updates" label="更新" icon="download" callback="on_updates_clicked" bind_description="settings_status_updates">
+-        <bind_flag_if cond="show_update_settings eq 0 and updates_firmware_managed eq 0 and updates_unavailable eq 0" flag="hidden"/>
+-      </u1_menu_tile>
+-      <u1_menu_tile name="row_plugins" label="扩展功能" icon="puzzle_outline" callback="on_plugins_clicked">
+-        <bind_flag_if_eq subject="settings_plugins_available" flag="hidden" ref_value="0"/>
+-      </u1_menu_tile>
+-      <u1_menu_tile name="row_help" label="帮助与关于" icon="help" callback="on_help_clicked"/>
++    <lv_obj name="settings_row_system_about" width="100%" height="#u1_menu_tile_height" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++      <lv_button name="row_system" width="0" flex_grow="1" height="#u1_menu_tile_height" flex_flow="row"
++                 style_pad_hor="#u1_page_pad" style_pad_ver="#u1_card_gap" style_pad_gap="#u1_card_gap"
++                 style_flex_cross_place="center" scrollable="false">
++        <style name="styles.u1_flat_card"/>
++        <style name="styles.press_wash" selector="pressed"/>
++        <event_cb trigger="clicked" callback="on_system_clicked"/>
++        <lv_obj width="#u1_emphasis_line" height="100%" style_pad_all="0" clickable="false" event_bubble="true" scrollable="false">
++          <icon src="settings" size="sm" variant="secondary" align="top_mid" clickable="false" event_bubble="true"/>
++        </lv_obj>
++        <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="0" clickable="false" event_bubble="true" scrollable="false">
++          <text_body text="系统" width="100%" height="#u1_text_line" long_mode="dots" clickable="false" event_bubble="true"/>
++          <text_small text="声音、时间与更新" width="100%" height="#u1_text_line" long_mode="dots" clickable="false" event_bubble="true"/>
++        </lv_obj>
++      </lv_button>
++      <lv_button name="row_help" width="0" flex_grow="1" height="#u1_menu_tile_height" flex_flow="row"
++                 style_pad_hor="#u1_page_pad" style_pad_ver="#u1_card_gap" style_pad_gap="#u1_card_gap"
++                 style_flex_cross_place="center" scrollable="false">
++        <style name="styles.u1_flat_card"/>
++        <style name="styles.press_wash" selector="pressed"/>
++        <event_cb trigger="clicked" callback="on_help_clicked"/>
++        <lv_obj width="#u1_emphasis_line" height="100%" style_pad_all="0" clickable="false" event_bubble="true" scrollable="false">
++          <icon src="info" size="sm" variant="secondary" align="top_mid" clickable="false" event_bubble="true"/>
++        </lv_obj>
++        <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="0" clickable="false" event_bubble="true" scrollable="false">
++          <text_body text="关于" width="100%" height="#u1_text_line" long_mode="dots" clickable="false" event_bubble="true"/>
++          <text_small text="版本与开源许可" width="100%" height="#u1_text_line" long_mode="dots" clickable="false" event_bubble="true"/>
++        </lv_obj>
++      </lv_button>
+     </lv_obj>
+   </view>
+ </component>
+diff --git a/ui_xml/settings_system_overlay.xml b/ui_xml/settings_system_overlay.xml
+index ad9edba461a7ec52578158c868e2178bb0017638..f249f056e249c381cf8935e0daa5326bfc341a77 100644
+--- a/ui_xml/settings_system_overlay.xml
++++ b/ui_xml/settings_system_overlay.xml
+@@ -4,9 +4,31 @@
+ <!-- System Settings Overlay -->
+ <!-- Security, performance, telemetry, log level, restart, factory reset -->
+ <component>
+-  <view name="settings_system_overlay" extends="overlay_panel" title="System" bg_color="#screen_bg" title_transform="none">
++  <view name="settings_system_overlay" extends="overlay_panel" title="系统" bg_color="#screen_bg" title_transform="none">
+     <!-- Content Area - no padding, rows handle their own -->
+     <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_top="#u1_page_pad" style_pad_left="0" style_pad_right="0" style_pad_bottom="#u1_page_pad" scrollable="true" flex_flow="column" style_pad_gap="#u1_card_gap" scrollbar_mode="auto">
++      <setting_group name="u1_system_native_entries" style_radius="#u1_card_radius">
++        <setting_action_row name="row_native_advanced" label="原生高级功能" icon="tune" description="宏、校准、控制台与诊断" description_min_bp="0" callback="on_native_advanced_clicked"/>
++        <setting_action_row name="row_appearance" label="主题与外观" icon="palette" callback="on_appearance_clicked" bind_description="settings_status_appearance" description_min_bp="0" />
++        <setting_action_row name="row_printing" label="打印偏好" icon="printer_3d" callback="on_printing_clicked" description_min_bp="0" />
++        <setting_action_row name="row_devices" label="硬件设备" icon="sysinfo" callback="on_devices_clicked" bind_description="settings_status_devices" description_min_bp="0" />
++        <setting_action_row name="row_safety" label="安全与提醒" icon="alert_octagon" callback="on_safety_clicked" description_min_bp="0" />
++        <setting_action_row name="row_printer" label="打印机信息" icon="printer" callback="on_printer_clicked" description="名称、图片与机型" description_min_bp="0" />
++        <setting_action_row name="row_touch_input" label="触摸与输入" icon="cursor_move" callback="on_touch_input_clicked" description_min_bp="0" />
++        <setting_action_row name="row_sound" label="声音" icon="volume_high" callback="on_sound_clicked" bind_description="settings_status_sound" description_min_bp="0">
++        <bind_flag_if_eq subject="printer_has_speaker" flag="hidden" ref_value="0" />
++      </setting_action_row>
++        <setting_action_row name="row_language_time" label="语言与时间" icon="translate" callback="on_language_time_clicked" bind_description="settings_status_language_time" description_min_bp="0" />
++        <setting_action_row name="row_local_firmware" label="本地固件升级" icon="download" callback="on_local_firmware_clicked" description_min_bp="0">
++        <bind_flag_if cond="not local_upgrade_available" flag="hidden" />
++      </setting_action_row>
++        <setting_action_row name="row_updates" label="更新" icon="download" callback="on_updates_clicked" bind_description="settings_status_updates" description_min_bp="0">
++        <bind_flag_if cond="show_update_settings eq 0 and updates_firmware_managed eq 0 and updates_unavailable eq 0" flag="hidden" />
++      </setting_action_row>
++        <setting_action_row name="row_plugins" label="扩展功能" icon="puzzle_outline" callback="on_plugins_clicked" description_min_bp="0">
++        <bind_flag_if_eq subject="settings_plugins_available" flag="hidden" ref_value="0" />
++      </setting_action_row>
++      </setting_group>
+       <!-- All system settings live in a single grouped-list card (no section
+            headers in this overlay); the card owns the horizontal inset. -->
+       <setting_group name="group_system" style_radius="#u1_card_radius" style_border_width="#u1_border" style_border_color="#border" style_border_opa="255">

@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# S49 creates the persistent configuration; S90 starts the lmd-owned GUI.
+case "${1:-}" in
+    start) PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 /usr/local/bin/u1-native-ui-setup.py ;;
+    stop) : ;;
+    restart|reload) "$0" start ;;
+    *) echo "Usage: $0 {start|stop|restart}" >&2; exit 2 ;;
+esac

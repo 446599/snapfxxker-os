@@ -1,0 +1,14 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -16,8 +16,9 @@
+ _multiace_extras = "/oem/apps/multiace/latest/klipper/extras"
+ if not os.path.isdir(_multiace_extras):
+     raise ImportError("MultiACE persistent extras directory is missing")
+-if _multiace_extras not in sys.modules[__package__].__path__:
+-    sys.modules[__package__].__path__.append(_multiace_extras)
++if _multiace_extras in sys.modules[__package__].__path__:
++    sys.modules[__package__].__path__.remove(_multiace_extras)
++sys.modules[__package__].__path__.insert(0, _multiace_extras)
+ # Klipper checks the runtime file path before importing a config section.
+ _native_guard_source = os.path.join(_multiace_extras, "ace_native_guard.py")
+ _native_guard_target = os.path.join(os.path.dirname(__file__), "ace_native_guard.py")

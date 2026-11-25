@@ -1,0 +1,137 @@
+--- ../guard-slot4-trace/ace_native_guard.py	2026-11-07 22:23:19
++++ ace_native_guard.py	2026-11-07 22:51:02
+@@ -13,6 +13,7 @@
+         self.gcode = self.printer.lookup_object('gcode')
+         self.gcode.register_command('ACE_NATIVE_GUARD_ARM', self.cmd_arm)
+         self.gcode.register_command('ACE_NATIVE_GUARD_CLEAR', self.cmd_clear)
++        self.gcode.register_command('ACE_NATIVE_GUARD_REARM', self.cmd_rearm)
+         self.gcode.register_command('ACE_NATIVE_GUARD_SELFTEST', self.cmd_selftest)
+         self.gcode.register_command('ACE_NATIVE_GUARD_TELEMETRY_TEST', self.cmd_telemetry_test)
+         self.printer.register_event_handler('klippy:ready', self.ready)
+@@ -22,6 +23,7 @@
+         self.trace_events=[]; self.trace_seq=0
+ 
+     def ready(self):
++        if getattr(self, '_ready_installed', False): return
+         self.ace = self.printer.lookup_object('ace')
+         module=importlib.import_module(self.ace.__class__.__module__.rsplit('.',1)[0]+'.ace_protocol_v2')
+         cls=module.AceProtocolV2
+@@ -48,6 +50,7 @@
+                 # Do not allow an already-queued callback to run after CLEAR.
+                 return None
+             setattr(self.ace, name, wrapper)
++        self._ready_installed=True
+ 
+     def heads(self, now):
+         values=[]
+@@ -94,7 +97,12 @@
+         return ok
+ 
+     def cmd_arm(self, gcmd):
+-        if self.state!='idle': raise gcmd.error('native guard already armed')
++        if self.state != 'idle': raise gcmd.error('native guard already armed')
++        self._arm(gcmd, reuse_timer=False)
++
++    def _arm(self, gcmd, reuse_timer):
++        if not reuse_timer and self.timer is not None:
++            raise gcmd.error('previous guard timer still registered')
+         target=gcmd.get_int('TARGET', minval=2, maxval=3)
+         self.ace._require_no_stop_fault()
+         if (self.ace._active_device_index!=0 or getattr(self.ace,'_ace_mode',None)!='multi'
+@@ -112,13 +120,15 @@
+         self.slot=target
+         self.state='waiting_empty';self.reason=None;self.triggered=[]
+         self.started=self.reactor.monotonic();self.inserted=None;self.last_stop=0
++        self.last_tick=None;self.timer_max_gap=0.0
+         self.key=None;self.key_time=0;self.status=None;self.status_time=0;self.rfid_flags=None
+         self.pending=None;self.poll_token=0;self.poll_failures=0;self.poll_index=0;self.next_poll=0;self.event_seq+=1
+         self.poll_timeouts=0;self.poll_requests=0;self.poll_replies=0;self.last_request_id=None;self.last_reply_id=None
+         self.fail_counts={};self.retry_method=None;self.poll_events=[]
+-        self.last_decoder=None;self.stable_since=None;self.stable_count=0;self.stop_ack=False;self.saw_busy=False
++        self.last_decoder=None;self.stable_since=None;self.stable_count=0;self.confirmed_at=None;self.feed_time=None;self.stop_ack=False;self.saw_busy=False
+         self.natural_decoder=None;self.natural_since=None;self.natural_count=0
+-        self.timer=self.reactor.register_timer(self.tick,self.reactor.NOW)
++        if not reuse_timer:
++            self.timer=self.reactor.register_timer(self.tick,self.reactor.NOW)
+         gcmd.respond_info('Native guard armed; wait for ready_for_insert')
+ 
+     def cmd_telemetry_test(self,gcmd):
+@@ -153,12 +163,42 @@
+             self.selftest_active=False;return self.reactor.NEVER
+         return now+.05
+ 
++    def _check_confirmed(self,gcmd):
++        if self.state != 'confirmed': raise gcmd.error('requires confirmed stop')
++        now=self.reactor.monotonic()
++        self.ace._require_no_stop_fault()
++        if (getattr(self,'stop_inflight',False) or self.stop_ack is not True
++            or self.stable_count < 3 or self.stable_since is None
++            or now-self.stable_since < 1.5
++            or self.confirmed_at is None or self.feed_time is None
++            or now-self.confirmed_at > .5 or now-self.feed_time > .5):
++            raise gcmd.error('stop evidence missing or stale')
++        if (self.ace._serials.get(0) is not self.transport or not getattr(self.transport,'is_open',False)
++            or self.ace._active_device_index != 0 or getattr(self.ace,'_ace_mode',None) != 'multi'
++            or not self.ace._connected_per_ace.get(0,False)):
++            raise gcmd.error('ACE transport changed')
++        if (self.status != ['ready']*4 or not self.status_time or now-self.status_time > .5
++            or any(self.heads(now))): raise gcmd.error('fresh ready and clear heads required')
++        if (self.pending is not None or getattr(self.ace,'_tag_read_busy',False)
++            or getattr(self.ace,'_gen1_manual_busy',False)
++            or getattr(self.ace,'_insert_read_running',None) or getattr(self.ace,'_insert_abort_running',None)
++            or getattr(self.ace,'_insert_read_queue',None)):
++            raise gcmd.error('pending operation')
++        if self.timer is None: raise gcmd.error('guard timer unavailable')
++
++    def cmd_rearm(self,gcmd):
++        self._check_confirmed(gcmd)
++        # _arm does not yield: old timer stays registered across the transition.
++        self._arm(gcmd, reuse_timer=True)
++        self.trace_events=[];self.trace_seq=0;self.poll_events=[]
++
+     def cmd_clear(self,gcmd):
+-        if self.state != 'idle':
+-            raise gcmd.error('STOP first and verify stable before CLEAR')
+-        if self.state=='fault':raise gcmd.error('STOP fault must be resolved first')
+-        if self.timer is not None:self.reactor.unregister_timer(self.timer);self.timer=None
+-        self.state='idle';self.event_seq+=1
++        if self.state == 'confirmed': self._check_confirmed(gcmd)
++        elif self.state != 'idle': raise gcmd.error('STOP first and verify stable before CLEAR')
++        self.event_seq+=1
++        if hasattr(self,'poll_token'): self.invalidate_pending()
++        if self.timer is not None: self.reactor.unregister_timer(self.timer);self.timer=None
++        self.state='idle'
+         gcmd.respond_info('Native guard cleared')
+ 
+     def get_status(self,eventtime):
+@@ -217,7 +257,7 @@
+                     row=lanes[guard.slot];value=row.get('decoder')
+                     if (row.get('_wire_valid') is not True or type(value) is not int
+                         or type(row.get('_decoder_present')) is not bool
+-                        or (row['_decoder_present'] is False and (value!=0 or (guard.saw_busy and guard.state=='stopping')))):
++                        or (row['_decoder_present'] is False and (value!=0 or (guard.saw_busy and guard.state in ('stopping','confirmed'))))):
+                         raise ValueError('decoder invalid')
+                     if guard.state=='active' and guard.saw_busy:
+                         t=guard.reactor.monotonic()
+@@ -232,16 +272,17 @@
+                                 guard.stop(guard.slot,'ready and encoder stable; supervised stop')
+                         else:
+                             guard.natural_decoder=None;guard.natural_since=None;guard.natural_count=0
+-                    if (guard.state=='stopping' and guard.stop_ack and guard.status==['ready']*4
++                    if (guard.state in ('stopping','confirmed') and guard.stop_ack and guard.status==['ready']*4
+                         and guard.reactor.monotonic()-guard.status_time<=.5):
+                         t=guard.reactor.monotonic()
+                         if value==guard.last_decoder:
+                             guard.stable_count+=1
+                             if guard.stable_since is None:guard.stable_since=t
+-                        else:guard.stable_count=0;guard.stable_since=None
+-                        guard.last_decoder=value
++                        else:
++                            guard.stable_count=0;guard.stable_since=None;guard.confirmed_at=None
++                        guard.last_decoder=value;guard.feed_time=t
+                         if guard.stable_count>=3 and guard.stable_since is not None and t-guard.stable_since>=1.5:
+-                            guard.state='confirmed'
++                            guard.confirmed_at=t;guard.state='confirmed'
+                 else:
+                     lanes=result['slots']
+                     if result.get('_status_wire_valid') is not True or len(lanes)!=4:raise ValueError('status invalid')

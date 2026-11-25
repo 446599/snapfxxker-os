@@ -1,0 +1,2657 @@
+# Environment Variables Reference
+
+This document is a reference for the environment variables HelixScreen reads at runtime, plus the build-time and shell-script variables that surround them. Every `getenv()` call in `src/`, `include/`, the patched LVGL SDL driver, and `scripts/helix-launcher.sh` has an entry here or in [MOCK_ENVIRONMENT_VARIABLES.md](MOCK_ENVIRONMENT_VARIABLES.md) as of the last audit. New vars are added often, so grep `getenv("HELIX_` / `EnvironmentConfig` if something looks missing.
+
+## How `helixscreen.env` is loaded
+
+The launcher (`scripts/helix-launcher.sh`) reads `helixscreen.env` from the first
+existing search path (`<install>/config/helixscreen.env`, then `/etc/helixscreen/helixscreen.env`),
+exporting `KEY=VALUE` lines whose variable is not already set. The same parse answers
+`--print-env`.
+
+Values are literal text. One pair of matching surrounding quotes (`"..."` or `'...'`) is
+stripped, an unquoted value ends at a whitespace-led `#` comment, and nothing is expanded.
+A value holding `$VAR`, `$(...)`, `${...}` or a backtick is skipped with a warning rather than
+exported, so a line written for the old shell-evaluated file (a generated token, say) never
+becomes a readable literal. Generate the value first and write the result into the file.
+
+A variable read as an on/off flag is on for `1`, `true`, `yes` or `on` (ASCII case-insensitive, surrounding whitespace ignored) and off for anything else, including `0`, `false`, `10` or an empty value (`include/env_knobs.h#env_truthy`).
+
+Some keys carry a stricter rule, because root acts on the value:
+
+| Key | Accepted value |
+|-----|----------------|
+| `HELIX_DPI`, `HELIX_LOG_DEST`, `HELIX_LOG_LEVEL` | no whitespace and no `*`, `?` or `[`: the launcher passes them to the app as command-line flags |
+| `HELIX_LOG_FILE` | the same, and an absolute `*.log` path whose directory resolves to `/tmp` or `/var/log`, or to a directory under those or the install directory that root or the launcher's user owns with no group or world write bit, with no `..` segment and no symlink at the file. The app writes its log there as root and echoes other settings into it, so a log aimed at a script would be code. Platform hooks choose their own firmware log directory when this key is unset |
+| `HELIX_REMOTE_SOCKET` | the same flag rule, and a path under `/tmp/` or `/run/` with no `..` |
+| `HELIX_NICE` | `0` to `19`; a negative nice would let the UI starve Klipper |
+| `HELIX_ALSA_DEVICE` | `default`, `sysdefault`, `sysdefault:...`, `hw:...`, `plughw:...` or `dmix:...`, with no `|`, `file` or `tee`: ALSA's file plugin runs a `|cmd` target. The app applies the same rule to this variable and to the saved output device |
+
+Only these keys are read; any other key is ignored with one logged warning per key:
+
+`HELIX_ALSA_DEVICE`, `HELIX_AUTO_QUIT_MS`, `HELIX_AUTO_SCREENSHOT`, `HELIX_BACKLIGHT_DEVICE`,
+`HELIX_COLOR_SWAP_RB`, `HELIX_DEBUG`, `HELIX_DEBUG_TOUCH`, `HELIX_DIAGNOSTIC_UPLOADS`,
+`HELIX_DISABLE_AUTO_UPDATES`, `HELIX_DISPLAY_BACKEND`, `HELIX_DISPLAY_ROTATION`, `HELIX_DPI`,
+`HELIX_DRM_DEVICE`, `HELIX_FB_DEVICE`, `HELIX_GCODE_MODE`,
+`HELIX_GCODE_STREAMING`, `HELIX_KEYBOARD_DEVICE`, `HELIX_LOG_DEST`, `HELIX_LOG_FILE`,
+`HELIX_LOG_LEVEL`, `HELIX_MOUSE_DEVICE`, `HELIX_NICE`, `HELIX_NO_SPLASH`, `HELIX_PWM_SOUND`,
+`HELIX_REMOTE_CONTROL`, `HELIX_REMOTE_HTTP_TOKEN`, `HELIX_REMOTE_SOCKET`, `HELIX_REQUIRE_POINTER`, `HELIX_SCREEN_SIZE`, `HELIX_SCROLL_GUARD`,
+`HELIX_SCROLL_GUARD_COOLDOWN_MS`, `HELIX_SKIP_SPLASH`, `HELIX_SSAO`, `HELIX_THEME`,
+`HELIX_TOUCH_CALIBRATE`, `HELIX_TOUCH_DEVICE`, `HELIX_TOUCH_SWAP_AXES`, `HELIX_USB_AUTOMOUNT`,
+`MALLOC_ARENA_MAX`, `MALLOC_CHECK_`, `MALLOC_PERTURB_`, `MOONRAKER_HOST`, `MOONRAKER_PORT`.
+
+That is every key `config/helixscreen.env` names (a bats lint holds the two together), the
+env-file settings the user guide lists, and the keys deploys and the init script write or
+query. Every other variable in this reference is set by a platform hook, by the service
+environment, or by hand before a manual run, never by this file. That includes the directory
+keys (`HELIX_DATA_DIR`, `HELIX_CONFIG_DIR`, `HELIX_CACHE_DIR`, `HELIX_TMP_DIR`), since the app
+changes into its data directory and loads plugins from it, and `LD_*`, `PATH`, `IFS`, `HOME`,
+`SHELL`, `ENV`, `BASH_ENV` and `PYTHON*`. The file reaches the environment of root on every
+SysV firmware device.
+
+Ownership is gated as well: the file is only read when it is owned by root or by the user
+the launcher itself runs as, and carries no group or world write bit. On the printer_data
+layout, where `<install>/config/helixscreen.env` is a symlink into
+`printer_data/config/helixscreen/` so Mainsail and Fluidd can edit it, the owner of that
+directory is trusted too: Moonraker saves an edit as its own user (`lava` on the Snapmaker U1)
+while the launcher runs as root. That extra trust holds only while the directory has no group
+or world write bit, the symlink sits in a directory owned by root or the launcher's user with
+none either, and the symlink points straight at the file rather than through another link, so
+only the installer could have aimed it there. A file whose owner passes that check and whose
+only fault is a write bit is repaired in place to `0644` (web updates and deploys ship the
+file without pinning it) and loaded, with one log line saying so. Anything else (a mode the
+repair cannot settle, an owner none of those rules trusts) is skipped with a logged warning
+naming the file, its owner and mode, and the fix, always in this form (the owner is the
+printer_data directory's uid for a file there, which keeps web editing working):
+
+```sh
+chown root:root /etc/helixscreen/helixscreen.env && chmod 644 /etc/helixscreen/helixscreen.env
+```
+
+The launcher continues with defaults rather than exiting, so a mis-placed file costs
+configuration, not the screen. The installer pins the file to `0644` (owned by the install
+user) on every install and update.
+
+## Quick Reference
+
+| Category | Prefix |
+|----------|--------|
+| [Display & Backend](#display--backend-configuration) | `HELIX_` |
+| [Touch Calibration](#touch-calibration) | `HELIX_TOUCH_*` / `HELIX_SCROLL_*` |
+| [G-Code Viewer](#g-code-viewer) | `HELIX_` |
+| [Bed Mesh](#bed-mesh) | `HELIX_` |
+| [Audio](#audio) | `HELIX_` |
+| [Networking](#networking) | `HELIX_` |
+| [Mock & Testing](MOCK_ENVIRONMENT_VARIABLES.md) | `HELIX_MOCK_*` |
+| [UI Automation](#ui-automation) | `HELIX_AUTO_*` |
+| [Calibration](#calibration-auto-start) | `*_AUTO_START` |
+| [Development](#development) | `HELIX_` |
+| [Debugging](#debugging) | `HELIX_` |
+| [Deployment](#deployment) | `HELIX_` |
+| [Logging & Startup](#logging--startup) | `HELIX_LOG_*` |
+| [Process & Supervision](#process--supervision) | `HELIX_` / Standard Unix |
+| [Data Paths](#data-paths) | `HELIX_` / Standard Unix |
+
+Per-section counts are deliberately omitted — they rotted between almost every
+release. `HELIX_DEBUG_TOUCH` is documented in both
+[Touch Calibration](#touch-calibration) and [Debugging](#debugging).
+[Shell Script Variables](#shell-script-variables) are launcher/script-only.
+
+---
+
+## Display & Backend Configuration
+
+These variables control how HelixScreen connects to displays and input devices.
+
+### `HELIX_THEME`
+
+Override the theme loaded from config. Useful for testing themes or taking screenshots without changing settings.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Theme filename without `.json` extension (e.g., `gruvbox`, `dracula`, `nord`) |
+| **Default** | Read from config (`/display/theme`) |
+| **File** | `src/ui/theme/theme_manager.cpp` |
+
+```bash
+# Test Gruvbox theme
+HELIX_THEME=gruvbox ./build/bin/helix-screen --test
+
+# Take screenshot with Dracula theme
+HELIX_THEME=dracula ./scripts/screenshot.sh helix-screen dracula-home home
+```
+
+**Available themes:** `ayu`, `catppuccin`, `chatgpt`, `chatgpt-classic`, `dracula`, `everforest`, `google-drive`, `google-notebooklm`, `gruvbox`, `kanagawa`, `nord`, `onedark`, `rose-pine`, `solarized`, `tokyonight`
+
+### `HELIX_TOKEN_TABLE`
+
+Resolve design-token lookups from the compiled token table (`src/generated/theme_token_table.cpp`, regenerated by `make regen-tokens`) instead of scanning `ui_xml/*.xml` at startup. The table records the same last-wins values the live scanner would parse, so the theme renders identically - this only chooses which source answers token lookups. On a device that cannot rebuild, it is the compiled table or nothing; `ui_xml/` edits only take effect through the live scanner.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1`, `true`, `yes` or `on` uses the compiled table; any other value uses the live scanner |
+| **Default** | Unset - on for ESP32 builds (`ui_xml/` ships there as a read-only frogfs image) and cross-built release targets (`HELIX_RELEASE_BUILD`), off for native dev builds |
+| **File** | `src/ui/theme/theme_token_table_runtime.cpp` |
+
+Set, the flag rule decides, so `HELIX_TOKEN_TABLE=0` forces the live scanner back on - useful on a device to confirm an edited `ui_xml/` token still parses, and the only way to move tokens there without a rebuild. A build can also flip its default on by defining `HELIX_TOKEN_TABLE_DEFAULT_ON`, which nothing needs now that release builds default on.
+
+The table exists because aggregating tokens live reopens every top-level `ui_xml` file once per aggregation call, ~28 times a boot. That scan is most of what `theme_manager_init` spends on a slow filesystem - 7.2s of a 16.8s splash on a 480x272 QIDI Q2.
+
+### `HELIX_DISPLAY_BACKEND`
+
+Override the automatic display backend detection.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `sdl`, `drm`, `fbdev`, `egl` |
+| **Default** | `fbdev` (CPU rendering, maximum compatibility) |
+| **File** | `src/platform/display/display_backend.cpp`, `scripts/helix-launcher.sh#app_display_backend` |
+
+**Backend comparison:**
+
+| Backend | Rendering | Best for |
+|---------|-----------|----------|
+| `fbdev` | CPU (software), plain memory copy | Maximum compatibility, all hardware, SPI displays |
+| `drm` | CPU (software), vsynced page flip via dumb buffers | Pi 3B+, Pi 4, Pi 5, BTT CB1 with HDMI/DSI displays |
+| `egl` | CPU rasterizes, GPU composites and presents | Boards with a working Mesa GL userspace |
+| `sdl` | SDL2 (desktop development) | Development on Linux/macOS desktops |
+
+The `drm` backend uses DRM (Direct Rendering Manager) dumb buffers with a vsynced page flip, which avoids tearing that a plain memory copy can show. Rendering itself is CPU-based on both `drm` and `fbdev`. The `fbdev` backend is the safe default that works everywhere, including SPI displays that lack DRM support.
+
+`egl` is the DRM backend presenting through LVGL's EGL driver instead of dumb buffers. The Pi builds link both drivers into `helix-screen`, and the app picks one from this variable; a binary without the EGL path (x86, every single-binary platform) logs that and auto-detects. Setting `HELIX_DISPLAY_BACKEND=egl` tells `scripts/helix-launcher.sh` to take the EGL rung without probing first.
+
+Left unset on a board with a `/dev/dri/card*`, the launcher runs `helix-screen --probe-egl` and exports `egl` only when that exits 0, which requires a hardware renderer — a context that resolves to llvmpipe is refused, since it would spend CPU to save CPU. A board whose probe declines steps down to `drm`, never straight to `fbdev`; a crash steps down one rung the same way (`egl` to `drm`, `drm` to `fbdev`). A build with no rungs answers the probe with 2 and auto-detects. See `docs/devel/GPU_ACCELERATION.md` for what the rung is worth per board.
+
+The Pi and x86 builds are one binary with no load-time dependency on libdrm, libinput, libEGL, libGLESv2 or libgbm: they load at runtime (`mk/implib.mk`, `include/gpu_libs.h`). On a system missing any of them, `drm` and `egl` report unavailable and the app falls back to `fbdev` in-process. `HELIX_DRI_DIR` replaces `/dev/dri` for the launcher's card check, for tests.
+
+```bash
+# Force SDL backend (useful for debugging on embedded systems)
+HELIX_DISPLAY_BACKEND=sdl ./build/bin/helix-screen
+
+# Force DRM backend (vsynced, avoids tearing)
+HELIX_DISPLAY_BACKEND=drm ./build/bin/helix-screen
+```
+
+**Enabling in production (systemd service):**
+```ini
+# /etc/systemd/system/helixscreen.service (or override)
+[Service]
+Environment="HELIX_DISPLAY_BACKEND=drm"
+```
+
+Then reload and restart:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart helixscreen
+```
+
+**Supported hardware for `drm`:** Raspberry Pi 3B+, Pi 4, Pi 5, BTT CB1 (and other Allwinner H616 boards). Requires a display connected via HDMI or DSI — SPI displays are not supported with `drm`. If the `drm` backend fails to initialize, HelixScreen falls back to `fbdev` automatically.
+
+**Rotation paths:** A GPU-accelerated DRM/EGL build rotates the completed display texture in its OpenGL ES presentation pass, including 90° and 270°, and keeps the DRM backend active. A dumb-buffer DRM build uses the KMS plane when it supports the requested angle. If neither path is available, HelixScreen switches to `fbdev` and uses LVGL's software rotation. That fallback is logged as:
+```
+DRM lacks hardware rotation for 180°, falling back to fbdev (flicker-free software rotation)
+```
+
+**Legacy DRM fallback:** If `drmModeAtomicCommit` fails (e.g., `EACCES` on some Pi 4 configurations), the DRM driver automatically falls back to legacy `drmModeSetCrtc` page flips. If the legacy path also fails, a log message suggests using `HELIX_DISPLAY_BACKEND=fbdev`.
+
+### `HELIX_DRM_DEVICE`
+
+Specify which DRM device to use when the DRM backend is active. Needed when multiple GPU/display controllers are present (common on Pi 5).
+
+| Property | Value |
+|----------|-------|
+| **Values** | Device path (e.g., `/dev/dri/card0`, `/dev/dri/card1`) |
+| **Default** | `/dev/dri/card0` (auto-detect scans for first device with a connected display) |
+| **File** | `src/platform/display/display_backend_drm.cpp` |
+
+```bash
+# Use secondary GPU / display controller
+HELIX_DRM_DEVICE=/dev/dri/card1 ./build/bin/helix-screen
+```
+
+**Pi 5 DRM device mapping:**
+| Device | Controller | Use |
+|--------|-----------|-----|
+| `/dev/dri/card0` | v3d | 3D rendering only (no display output) |
+| `/dev/dri/card1` | DSI | Official Pi touchscreen |
+| `/dev/dri/card2` | vc4 (HDMI) | HDMI displays |
+
+On Pi 4 and earlier, `/dev/dri/card0` is typically the only device with display output. Auto-detection finds the first device with dumb buffer support and a connected display, so most users do not need to set this variable.
+
+### `HELIX_TOUCH_DEVICE`
+
+Override automatic touch input device detection.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Device path (e.g., `/dev/input/event0`) |
+| **Default** | Auto-detect |
+| **Files** | `src/platform/display/display_backend_fbdev.cpp`, `src/platform/display/display_backend_drm.cpp` |
+
+```bash
+# Specify touch device explicitly
+HELIX_TOUCH_DEVICE=/dev/input/event2 ./build/bin/helix-screen
+```
+
+### `HELIX_MOUSE_DEVICE`
+
+Override automatic USB mouse device detection. When set, skips sysfs capability scanning and uses the specified device directly.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Device path (e.g., `/dev/input/event4`) |
+| **Default** | Auto-detect (scans for `REL_X` + `REL_Y` + `BTN_LEFT` capabilities) |
+| **Files** | `src/platform/display/display_backend_drm.cpp`, `src/platform/display/display_backend_fbdev.cpp` |
+
+```bash
+# Specify mouse device explicitly
+HELIX_MOUSE_DEVICE=/dev/input/event4 ./build/bin/helix-screen
+```
+
+**Auto-detection:** When unset, HelixScreen scans `/sys/class/input/event*/device/capabilities/` for devices with relative axes (`REL_X`, `REL_Y`) and a left mouse button (`BTN_LEFT`). Devices with absolute axes (`ABS_X`, `ABS_Y`) are skipped — those are touchscreens. The first matching device is used.
+
+**Mouse cursor:** When a mouse is detected (manually or via auto-detection), a 12px white circular cursor is displayed. The mouse works alongside the touchscreen — both are active simultaneously.
+
+**Rotation:** the cursor moves with the picture at every display rotation, on the DRM plane path and under fbdev's software rotation alike. A relative device's position is never turned with the panel the way a touchscreen's samples are, whichever variable or scan found it (`include/pointer_frame_hook.h#pointer_transform_for`).
+
+### `HELIX_ALSA_DEVICE`
+
+Override the ALSA PCM device used for UI sounds. The stock `default` resolves to `hw:0`, which fails on boards whose only audio output enumerates at a higher card index — leaving ALSA unable to open any PCM device.
+
+| Property | Value |
+|----------|-------|
+| **Values** | ALSA PCM name (e.g., `plughw:CARD=vc4hdmi0,DEV=0`, `default`) |
+| **Default** | `default` |
+| **Precedence** | `HELIX_ALSA_DEVICE` env > `/sound/output_device` setting > `default` |
+| **File** | `src/system/alsa_device_enum.cpp` (`resolve_alsa_device`) |
+
+```bash
+# Route UI sounds to an HDMI screen's built-in speaker
+HELIX_ALSA_DEVICE=plughw:CARD=vc4hdmi0,DEV=0 ./build/bin/helix-screen
+```
+
+**Common case — BTT HDMI5 (and similar HDMI-audio screens):** the screen's built-in speaker rides HDMI audio. On a Pi CM4 the only cards are `vc4hdmi0`/`vc4hdmi1`, which enumerate as cards **1 and 2** — there is no card 0, so `default` fails (`snd_pcm_dmix_open: unable to open slave`). Identify the right card with `aplay -l`, confirm it plays with `aplay -D plughw:CARD=vc4hdmi0,DEV=0 <wav>`, then set this variable (or write an `/etc/asound.conf` that remaps `default`). The service also needs the `audio` supplementary group — see `config/helixscreen.service`.
+
+**Combo devices:** USB devices that combine keyboard and trackpad (e.g., Logitech K400) present as a single evdev node. The same device path can be used by both mouse and keyboard input — LVGL filters events by type internally.
+
+### `HELIX_KEYBOARD_DEVICE`
+
+Override automatic USB keyboard device detection.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Device path (e.g., `/dev/input/event5`) |
+| **Default** | Auto-detect (scans for `KEY_A` capability) |
+| **Files** | `src/platform/display/display_backend_drm.cpp`, `src/platform/display/display_backend_fbdev.cpp` |
+
+```bash
+# Specify keyboard device explicitly
+HELIX_KEYBOARD_DEVICE=/dev/input/event5 ./build/bin/helix-screen
+```
+
+**Auto-detection:** When unset, HelixScreen scans `/sys/class/input/event*/device/capabilities/key` for devices with `KEY_A` (bit 30) set. This distinguishes real keyboards from power buttons and other key-like devices.
+
+### `HELIX_BACKLIGHT_DEVICE`
+
+Force a specific backlight control method, or disable backlight control entirely.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `sysfs`, `allwinner`, `brightness`, or `"none"` to disable. Any other value (including a `/sys/...` device path) is ignored and falls back to auto-detection |
+| **Default** | Auto-detect |
+| **File** | `src/platform/display/backlight_backend.cpp` |
+
+```bash
+# Disable backlight control (e.g., for external displays)
+HELIX_BACKLIGHT_DEVICE=none ./build/bin/helix-screen
+
+# Force the standard Linux sysfs backlight (skip auto-detection)
+HELIX_BACKLIGHT_DEVICE=sysfs ./build/bin/helix-screen
+
+# Creality Sonic Pad: drive the `brightness` CLI tool instead of sysfs/ioctl.
+# Use this when the screen brightness/blank doesn't respond on a Sonic Pad even
+# though auto-detection picked a backend (issue #972).
+HELIX_BACKLIGHT_DEVICE=brightness ./build/bin/helix-screen
+```
+
+### `HELIX_DISPLAY_ROTATION`
+
+Override the display rotation angle. Takes highest priority over config file (`/display/rotate`) and CLI flags (`--rotate`).
+
+| Property | Value |
+|----------|-------|
+| **Values** | `0`, `90`, `180`, `270` (degrees) |
+| **Default** | `0` (no rotation) |
+| **Files** | `src/application/display_manager.cpp` |
+
+```bash
+# Rotate display 90° (e.g., portrait display mounted landscape)
+HELIX_DISPLAY_ROTATION=90 ./build/bin/helix-screen
+
+# Rotate 180° (upside-down mount)
+HELIX_DISPLAY_ROTATION=180 ./build/bin/helix-screen
+```
+
+**Priority order:**
+1. `HELIX_DISPLAY_ROTATION` environment variable (highest)
+2. `--rotate <degrees>` CLI flag
+3. `/display/rotate` in `settings.json`
+4. Default: `0` (no rotation)
+
+**Note:** Software rotation is only supported on embedded backends (fbdev/DRM). On SDL (desktop dev), rotation is logged as a warning and skipped due to LVGL's DIRECT render mode limitation.
+
+**Automatic backend switching:** DRM/EGL performs every supported rotation on the GPU and does not switch backends. A dumb-buffer DRM build switches to fbdev when its KMS plane cannot rotate to the requested angle. The DRM software rotation path remains a last resort for direct backend use.
+
+**Touch auto-rotation:** On DRM/EGL and fbdev, LVGL rotates panel-attached absolute touch coordinates with the display. DRM plane rotation uses HelixScreen's pointer-frame hook because LVGL remains unrotated on that path. Relative mouse positions are protected from a second transform. `HELIX_TOUCH_SWAP_AXES` remains available as a manual override for edge cases.
+
+### `HELIX_SHOW_ROTATION_SETTING`
+
+Reveal the **Screen Rotation** row in Settings → Display on an SDL desktop build. The row is hidden there by default because SDL renders in DIRECT mode and ignores `/display/rotate` entirely, so the control would be inert. Only affects visibility - the setting still writes `/display/rotate` and still takes effect on the next start of an fbdev/DRM build.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (show the row) |
+| **Default** | Unset (row hidden on SDL, always shown on fbdev/DRM) |
+| **Files** | `src/system/display_settings_manager.cpp`, `ui_xml/settings_display_overlay.xml` |
+
+```bash
+# Drive the rotation row on desktop
+HELIX_SHOW_ROTATION_SETTING=1 ./build/bin/helix-screen --test -vv
+```
+
+Unlike `HELIX_FORCE_ROTATION_PROBE`, this does not start the interactive probe.
+
+### `HELIX_FORCE_ROTATION_PROBE`
+
+Force the rotation probe to run on next startup, even if it has already run or a rotation is configured. Useful for testing the probe UI on SDL or re-running on a device.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (force probe) |
+| **Default** | Unset (probe only on first boot, fbdev only, no existing rotation) |
+| **Files** | `src/application/application.cpp`, `src/application/display_manager.cpp` |
+
+```bash
+# Test the rotation probe on SDL (desktop)
+HELIX_FORCE_ROTATION_PROBE=1 ./build/bin/helix-screen --test -vv
+
+# Re-run probe on a device that already has rotation configured
+HELIX_FORCE_ROTATION_PROBE=1 ./build/bin/helix-screen
+```
+
+**Rotation probe behavior:**
+- On first boot with no configured rotation (fbdev only), HelixScreen cycles through 0°, 90°, 180°, 270° showing "Tap anywhere if this text is right-side up" for 5 seconds each
+- Two-tap confirmation: after initial tap, shows "Tap again to confirm" (10s timeout) to prevent accidental selection
+- Loops continuously until user confirms — does not exit after one cycle
+- Saves the confirmed rotation to `/display/rotate` in `settings.json`
+- Sets `/display/rotation_probed` flag so it doesn't re-run on subsequent boots
+- Skips entirely if: rotation is already configured (config, env var, or CLI), or the probe has already run
+- Never shows on a board whose orientation is already known: the kernel's `panel_orientation`, else the board's mount (`upright_rotation` in `src/application/display_metrics.cpp#kKnownPanels`; 270° on the K1, K1C and K1 Max), which applies only when the framebuffer is the geometry that mount was measured on (480x800 for the K1). That rotation is saved the same way, with no prompt
+- `HELIX_FORCE_ROTATION_PROBE=1` skips the board's mount, so the probe runs on a board that resolved wrongly. A kernel `panel_orientation` still applies
+- Runs after translations are loaded (Phase 8c) so probe strings are translatable via `lv_tr()`
+
+**The probe cannot be driven by `helix-screen ctl`.** It blocks in startup Phase 8b, and the
+remote-control server does not start until Phase 14c - measured at 0.45s *after* the probe
+gives up, so there is no socket to connect to while any probe screen is on display. `ctl press`
+would not reach it in any case: that drives the synthetic `RemotePointer` indev, while the probe
+reads the built-in pointer's callback directly. A tap has to come from the real touchscreen or
+mouse. Cover tap-detection logic with the `[rotation_probe]` unit tests instead
+(`tests/unit/test_rotation_probe_tap_detection.cpp`), and use `HELIX_FORCE_ROTATION_PROBE=1` for
+what it can still show you: that the probe runs, cycles, times out, and hands off cleanly.
+
+### `HELIX_SCREEN_SIZE`
+
+Override the screen resolution. Alternative to the `-s` / `--size` command-line flag, useful for persistent configuration via `helixscreen.env` or systemd `EnvironmentFile`.
+
+The name says size, but the value is a resolution: it selects the display mode, and the layout breakpoint is classified from that resolution rather than set directly. The UI Scale setting (`/display/ui_scale_percent`), or `HELIX_DPI` while that is Automatic, is the separate knob for UI scale.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Named preset: `micro`, `tiny`, `small`, `medium`, `large`, `xlarge` — or custom `WxH` format (e.g., `480x400`, `1920x1080`) |
+| **Default** | Auto-detected from display hardware |
+| **File** | `src/system/cli_args.cpp#parse_screen_size_string` (reached from `src/application/application.cpp` via `EnvironmentConfig::get_screen_size()`) |
+| **Priority** | The `-s` command-line flag takes precedence over this variable |
+| **Case** | Case-insensitive: the value is lowercased before matching, which also normalises the separator, so `1920X1080` and `MEDIUM` parse (`src/system/cli_args.cpp#parse_screen_size_string/"helix::text_io::to_lower(size_str)"`) |
+
+Named presets and their resolutions:
+
+| Preset | Width | Height |
+|--------|-------|--------|
+| `micro` | 480 | 272 |
+| `tiny` | 480 | 320 |
+| `small` | 480 | 400 |
+| `medium` | 800 | 480 |
+| `large` | 1024 | 600 |
+| `xlarge` | 1280 | 720 |
+
+Custom `WxH` values are automatically classified into the nearest breakpoint based on the narrow axis, `min(W, H)` — the height on a landscape size, the width on a portrait one.
+
+```bash
+# Force small screen layout
+HELIX_SCREEN_SIZE=small ./build/bin/helix-screen --test
+
+# Custom resolution
+HELIX_SCREEN_SIZE=1920x1080 ./build/bin/helix-screen --test
+
+# In helixscreen.env (persistent):
+HELIX_SCREEN_SIZE=medium
+```
+
+### `HELIX_IMAGE_CACHE_KB`
+
+Size of LVGL's decoded-image cache. `0` (the built-in default) means no image is ever held between draws: every re-show of a PNG decodes it again. The K1 platform hook exports `2048` because that board measurably gains from caching shipped printer images; the K2 and AD5X measured inside their own run-to-run spread and stay at 0.
+
+| Property | Value |
+|----------|-------|
+| **Values** | kilobytes of decoded-image cache, at most `65536` (64 MB; larger values are capped with a warning); `0` or unset disables caching |
+| **Default** | `0` (K1 hook: `2048`) |
+| **File** | `src/application/display_manager.cpp#apply_image_cache_env`, exported by `assets/config/platform/hooks-k1.sh` |
+
+### `HELIX_DPI`
+
+> Changed in 1.1: the DPI drives the UI scale. In 1.0 it only reached LVGL's built-in padding.
+
+Override the panel's physical DPI. It replaces the measured DPI as input to `DisplayMetrics::resolve_dpi` (`include/display_metrics.h`), and `ui_scale_for_dpi` turns that into the UI scale: `1.0` at or below 225 DPI, then +0.0032118 per DPI, capped at `2.0` (`500` is about 1.88x). The scale never drops below `1.0`, so a low DPI cannot shrink the UI. A non-Automatic `/display/ui_scale_percent` setting overrides the DPI-derived scale.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `50` – `500` |
+| **Default** | Auto-detected (falls back to `160` — the project's `LV_DPI_DEF` in `lv_conf.h`) |
+| **File** | `scripts/helix-launcher.sh`, `src/system/cli_args.cpp` |
+
+```bash
+# Force 240 DPI (common for high-density small screens)
+HELIX_DPI=240 ./build/bin/helix-screen
+
+# In helixscreen.env (persistent):
+HELIX_DPI=240
+```
+
+The launcher translates this to `--dpi=<value>` on the CLI. Can also be passed directly: `./build/bin/helix-screen --dpi 240`.
+
+### `HELIX_COLOR_SWAP_RB`
+
+Override the automatic R/B channel swap detection for BGR framebuffers. The LVGL fbdev driver auto-detects BGR layout from `fb_var_screeninfo.red.offset` / `blue.offset`, but some kernel drivers report incorrect offsets.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (force swap ON), `0` (force swap OFF) |
+| **Default** | Auto-detect from framebuffer vinfo |
+| **File** | `src/platform/display/display_backend_fbdev.cpp` |
+
+```bash
+# Force R/B swap for Allwinner R818 with BGR framebuffer
+HELIX_COLOR_SWAP_RB=1 ./build/bin/helix-screen
+
+# Disable auto-detected swap (if detection is wrong)
+HELIX_COLOR_SWAP_RB=0 ./build/bin/helix-screen
+```
+
+**Symptoms of needing this:** Red images appear blue and blue images appear red. The green channel is unaffected. Common on some Allwinner SoCs with RGB parallel (40-pin) display interfaces.
+
+**Fbdev only:** This setting only applies to the framebuffer backend. DRM and SDL backends handle color format natively.
+
+### `HELIX_SDL_DISPLAY`
+
+Select which monitor to use when running with SDL backend on multi-monitor systems.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Display index (`0`, `1`, `2`, ...) |
+| **Default** | `0` (primary display) |
+| **File** | `src/application/application.cpp` (set via `setenv()` in `init_display()`, consumed by the SDL driver) |
+
+```bash
+# Run on second monitor
+HELIX_SDL_DISPLAY=1 ./build/bin/helix-screen
+```
+
+### `HELIX_SDL_XPOS` / `HELIX_SDL_YPOS`
+
+Position the SDL window at exact screen coordinates.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Pixel coordinates (integers) |
+| **Default** | Centered on selected display |
+| **File** | `src/application/application.cpp` (set via `setenv()` in `init_display()`, consumed by the SDL driver) |
+
+```bash
+# Position window at specific coordinates
+HELIX_SDL_XPOS=100 HELIX_SDL_YPOS=200 ./build/bin/helix-screen
+```
+
+### `HELIX_SDL_BORDERLESS`
+
+Drop the SDL window's title bar and borders. Decorations are kept by default so the window stays draggable, but a compositor that draws client-side decorations carves them out of the *content* area (a requested 800x480 becomes 800x444 under Wayland/libdecor), which would hand LVGL a smaller canvas than asked for and silently select the wrong responsive breakpoint. The `SDL_WINDOWEVENT_RESIZED` handler normally measures that shortfall and grows the window to cancel it out — set this variable when that compensation cannot converge on your compositor.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Any value whose first character is not `0` enables borderless (e.g. `1`) |
+| **Default** | Unset — decorated (bordered) window |
+| **File** | `lib/lvgl/src/drivers/sdl/lv_sdl_window.c` (HelixScreen change, kept in `patches/lvgl_sdl_window.patch`) |
+
+```bash
+# Undecorated window on a compositor whose CSD shrink can't be compensated
+HELIX_SDL_BORDERLESS=1 ./build/bin/helix-screen --test
+```
+
+**Android is unaffected:** that build path forces `SDL_WINDOW_FULLSCREEN_DESKTOP` and never consults this variable.
+
+### `HELIX_REQUIRE_POINTER`
+
+Allow HelixScreen to start with no pointer input device. By default `DisplayManager` requires a pointer (touchscreen or mouse) and treats its absence as a fatal display-init error. Set this to `0` for headless or VNC-only operation where input arrives some other way — or not at all.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `0` or `false` drops the requirement. Any other value (or unset) keeps it. |
+| **Default** | Unset — a pointer device is required |
+| **File** | `src/application/application.cpp` (sets `DisplayManager::Config::require_pointer`) |
+
+```bash
+# Boot on a machine with no touchscreen and no mouse
+HELIX_REQUIRE_POINTER=0 ./build/bin/helix-screen -vv
+```
+
+Note the asymmetry: only the literal strings `0` and `false` disable the requirement. `HELIX_REQUIRE_POINTER=no` leaves it enabled.
+
+### `HELIX_REMOTE_SCREEN`
+
+Set to `firmware` by a platform hook whose firmware serves the screen to browsers itself. The built-in screen server (`docs/devel/REMOTE_SCREEN.md`) then never starts and its Settings > Connection > Screen Sharing row stays hidden. `HELIX_REMOTE_SCREEN_FB0` implies the same.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `firmware`; anything else is ignored |
+| **Default** | Unset: the built-in server is available |
+| **File** | `src/application/remote_screen_service.cpp` (`remote_screen_firmware_provides`) |
+
+### `HELIX_REMOTE_SCREEN_FB0`
+
+Mirror every rendered frame into a framebuffer device in addition to the normal display output. Set by the Snapmaker U1 platform hook so the firmware's `fb-http` snapshot daemon — which reads `/dev/fb0` — keeps serving the remote-screen view while HelixScreen renders through its own backend.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Framebuffer device path (e.g. `/dev/fb0`) |
+| **Default** | Unset — no mirror sink is attached |
+| **File** | `src/application/display_manager.cpp` (attaches `helix::Fb0MailboxSink`) |
+
+```bash
+# Mirror frames to /dev/fb0 for a firmware snapshot daemon
+HELIX_REMOTE_SCREEN_FB0=/dev/fb0 ./build/bin/helix-screen
+```
+
+**Presence, not content, is the gate.** The check is a plain non-null `getenv()`, so setting it to the empty string still attaches a sink — with an empty device path, which will fail to open. Set a real path or leave it unset. Normally exported by `assets/config/platform/hooks-snapmaker-u1.sh`, not by hand.
+
+### `HELIX_SCREENSAVER_NOW`
+
+Force the screensaver to start immediately instead of waiting for the idle timeout. Checked once, on the first `check_display_sleep()` tick, so the screensaver comes up within a frame or two of startup — the fast path for iterating on screensaver rendering.
+
+| Property | Value |
+|----------|-------|
+| **Values** | A saver name from `include/screensaver_registry.h#"kScreensavers[]"` (`toasters`, `starfield`, `pipes`, `bounce`, `fireworks`, `logo`, `maze`, `hyperspace`, `flipclock`, `fireflies`, `aqua`, `highfly`), `random` (a random saver the board can run), or `1` / any other value (uses the configured type, falling back to flying toasters). A saver stored as too heavy for the board runs its fallback, as the idle screen would (`docs/devel/SCREENSAVERS.md` § "The gate") |
+| **Default** | Unset — normal idle-timeout behavior |
+| **File** | `src/application/display_manager.cpp`, names in `include/screensaver_registry.h` |
+
+```bash
+# Jump straight into the starfield screensaver
+HELIX_SCREENSAVER_NOW=starfield ./build/bin/helix-screen --test -vv
+
+# Use whatever type is configured in settings.json
+HELIX_SCREENSAVER_NOW=1 ./build/bin/helix-screen --test -vv
+```
+
+Requires a build with screensavers (`HELIX_ENABLE_SCREENSAVER` defined and non-zero; the ESP32 firmware defines it as 0). Without them the whole block is compiled out and the variable is ignored.
+
+### `HELIX_REFR_PERIOD_MS`
+
+Display refresh and animation timer period, in milliseconds. LVGL's default is 33 ms (~30 fps); the panel on a Raspberry Pi is 60 Hz, so `16` asks for every refresh the panel can show. Read once when the display comes up. The refresh timer pauses itself while nothing is invalidated, so a shorter period costs nothing on an idle screen.
+
+When the period is longer than 33 ms, the main loop's awake sleep cap follows it instead of waking every 33 ms for nothing.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Whole milliseconds, `8` to `100` |
+| **Default** | Unset: LVGL's 33 ms |
+| **Invalid** | Anything else (out of range, `16ms`, negative, empty) is ignored with a warning, and the default is kept |
+| **File** | `include/refresh_timing_env.h`, applied in `src/application/display_manager.cpp` |
+
+```bash
+HELIX_REFR_PERIOD_MS=16 ./build/bin/helix-screen --test -vv
+```
+
+### `HELIX_REFR_PERIOD_SCOPE`
+
+Which timers `HELIX_REFR_PERIOD_MS` sets. `display` sets the display refresh and animation timers. `all` also sets every input device's read timer and the UpdateQueue drain timer, and applies them again when the input devices are rebuilt after a backend swap. Has no effect without `HELIX_REFR_PERIOD_MS`. The synthetic pointer `helix-screen ctl` creates on its first pointer command appears after startup, so it keeps LVGL's default read period.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `display`, `all` |
+| **Default** | `display` |
+| **Invalid** | Any other value is ignored with a warning |
+| **File** | `include/refresh_timing_env.h` |
+
+`all` wakes the main loop at the configured period even on an idle screen, because input and queue timers never pause. Measure CPU before keeping it.
+
+### `HELIX_SCREENSAVER_REFR_PERIOD_MS`
+
+Level 0 frame period of every screensaver, for manual testing: the saver draws at it, and the display refreshes and animates at it. Without it, level 0 runs at 16 ms. Levels 1 and up keep their own periods (33 ms and slower) either way, and while a saver runs the display refresh follows it to them. Switching between saver types keeps it, and so does an input rebuild after a backend swap, which makes the new global period the one stopping puts back. Stopping the saver, a saver that fails to start, and entering sleep all put back the period in force before (`HELIX_REFR_PERIOD_MS`, or LVGL's default). The static software sleep overlay does not use it.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Whole milliseconds, `8` to `100`, or `0` to run savers at the global period |
+| **Default** | Unset: level 0 runs at 16 ms |
+| **Invalid** | Ignored with a warning |
+| **File** | `include/refresh_period_hold.h`, `src/ui/screensaver/screensaver_manager.cpp`, `src/ui/screensaver/screensaver_base.cpp` |
+
+```bash
+# Savers at the global period instead of 16 ms
+HELIX_SCREENSAVER_REFR_PERIOD_MS=0 HELIX_SCREENSAVER_NOW=1 ./build/bin/helix-screen --test -vv
+```
+
+Requires a build with screensavers (`HELIX_ENABLE_SCREENSAVER` non-zero).
+
+### `HELIX_SCREENSAVER_BUDGET_PCT`
+
+Replaces the screensaver gate's CPU budget, as a whole percent of one core. Each 5 s window of a running saver's CPU share, with the idle baseline subtracted, is compared with this number instead of the core-count budget (4 or more cores 50%, 3 cores 37%, 2 cores 25%, 1 core 10%, halved while a print runs), so a small value proves on a device that a saver steps down and remembers its level. Read when a saver starts.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Whole percent, `1` to `400` |
+| **Default** | Unset: the core-count budget |
+| **Invalid** | Anything else (`0`, `25%`, `-5`, empty) is ignored with a warning |
+| **File** | `include/screensaver_gate.h#saver_env_overrides`, `src/ui/screensaver/screensaver_manager.cpp` |
+
+```bash
+HELIX_SCREENSAVER_BUDGET_PCT=5 HELIX_SCREENSAVER_NOW=toasters ./build/bin/helix-screen --test -vv
+```
+
+Requires a build with screensavers (`HELIX_ENABLE_SCREENSAVER` non-zero).
+
+### `HELIX_SCREENSAVER_LEVEL`
+
+Runs every saver that starts at this quality level and turns the gate off for that run: no step-down and no stored level. A saver stored as too heavy runs too, with no fallback, and the settings dropdown offers it. Level 0 is the most expensive. A level past the saver's ladder is ignored with a warning, and the stored level is used. Read when a saver starts.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Whole level number, `0` to `99` |
+| **Default** | Unset: the stored level for this saver, app version and board |
+| **Invalid** | Ignored with a warning |
+| **File** | `include/screensaver_gate.h#saver_env_overrides`, `src/ui/screensaver/screensaver_manager.cpp` |
+
+```bash
+HELIX_SCREENSAVER_LEVEL=1 HELIX_SCREENSAVER_NOW=pipes ./build/bin/helix-screen --test -vv
+```
+
+Requires a build with screensavers (`HELIX_ENABLE_SCREENSAVER` non-zero).
+
+### `HELIX_GLASS`
+
+Forces the glass gate's verdict for this run. `1` makes the Glass Effects row show in Settings > Appearance and glass draw when it is switched on, even on a board that would fail (16 bpp, a limited tier, a software-rotated display) or whose probe failed; `0` hides the row and keeps the UI flat even where a probe passed. The stored probe record is neither read for the decision nor written. Read once, when the gate starts after boot.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` or `0` |
+| **Default** | Unset: the gate decides from the board and the probe stored at `/display/glass_probe` |
+| **Invalid** | Anything else is ignored with a warning |
+| **File** | `include/glass_gate.h#glass_env_force`, `src/ui/effects/glass_gate.cpp` |
+
+```bash
+HELIX_GLASS=1 HELIX_HEADLESS=1 SDL_VIDEODRIVER=dummy ./build/bin/helix-screen --test -vv
+```
+
+### `HELIX_LOOP_MIN_SLEEP_MS`
+
+Shortest sleep the main loop takes between `lv_timer_handler()` calls. The loop sleeps for LVGL's "next timer due" hint, but never less than this, so with a 16 ms refresh period the default floor of 5 ms can make a frame up to 4 ms late. A lower floor paces frames more closely at the cost of more wakeups. While a screensaver holds its refresh period the floor is 1 ms, so its 16 ms frames land on time; everywhere else it is 5 ms. Setting this variable sets the floor in both places.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Whole milliseconds, `1` to `33` |
+| **Default** | `5`; `1` while a screensaver runs |
+| **Invalid** | Ignored with a warning |
+| **File** | `include/refresh_timing_env.h`; `main_loop_sleep_ms()` in `include/refresh_timing.h`, used in `src/application/application.cpp` |
+
+### `HELIX_EGL_VSYNC`
+
+EGL presentation mode on the DRM backend (`HELIX_DISPLAY_BACKEND=egl`). By default the flush waits for the in-flight flip, so every rendered frame reaches the screen; the cost is that the LVGL thread blocks for up to one refresh interval inside the flush. `0` turns the wait off: a frame finished while the previous page flip is still in flight then waits as pending, and the next frame replaces it before it is ever shown, so an animation can skip frames or leave its last frame unshown. Flips are latched to vblank either way, so neither mode tears.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (wait for each flip), `0` (do not wait) |
+| **Default** | `1` |
+| **Invalid** | Any other value is ignored with a warning, and the default is kept |
+| **File** | `src/platform/display/display_backend_drm.cpp` (EGL builds only), `patches/lvgl-egl-vsync.patch` |
+
+The dumb-buffer DRM binary (`helix-screen`) already waits for every page flip; this variable does not affect it.
+
+### `HELIX_EGL_PARTIAL_UPLOAD`
+
+How much of each frame the EGL presentation path (`HELIX_DISPLAY_BACKEND=egl`) copies into the display texture. By default only the areas LVGL flushed are uploaded. `0` uploads the whole buffer every frame, however little of it changed. The first frame, a frame into a recreated or resized texture, and the frame after pixels changed outside the flush path still upload the whole buffer: the flush callback put back after the splash or a panel power-off, and a color transform change.
+
+Uploading a sub-rectangle needs `GL_UNPACK_ROW_LENGTH` (OpenGL ES 3, or `GL_EXT_unpack_subimage` on OpenGL ES 2). A GL driver without it keeps uploading whole frames and logs a warning. A driver may also make an upload wait while the previous frame still draws from the texture; `0` is the way out on such a driver.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (flushed areas only), `0` (whole frames) |
+| **Default** | `1` |
+| **Invalid** | Any other value is ignored with a warning, and the default is kept |
+| **File** | `src/platform/display/display_backend_drm.cpp` (EGL builds only), `patches/lvgl-egl-partial-upload.patch`; the decision is `lv_linux_drm_egl_upload_plan()` in `lib/lvgl/src/drivers/display/drm/lv_linux_drm_egl_upload.h` |
+
+A stale region after waking the panel or leaving the splash is the failure to look for, and only the panel shows it: `ctl screenshot` re-renders the widget tree instead of reading the texture.
+
+### `HELIX_EGL_XRGB`
+
+Pixel format of the display on the EGL presentation path (`HELIX_DISPLAY_BACKEND=egl`). LVGL's 32 bpp format is XRGB8888, whose fourth byte LVGL leaves undefined, and this path would present that byte as alpha (`docs/devel/GPU_ACCELERATION.md` § "The alpha trap"). By default the display stays XRGB8888 and the display shader ignores the fourth byte, and LVGL then skips clearing each area before redrawing it. `0` switches the display to ARGB8888 so LVGL keeps the byte a real alpha instead.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (keep XRGB8888), `0` (switch to ARGB8888) |
+| **Default** | `1` |
+| **Invalid** | Any other value is ignored with a warning, and the default is kept |
+| **File** | `src/platform/display/display_backend_drm.cpp` (EGL builds only), `patches/lvgl-egl-xrgb-shader.patch` |
+
+On aarch64, LVGL's NEON blends into an XRGB8888 destination write 0 into the fourth byte of every pixel they mix through a mask or partial opacity, fully covered pixels included (a plain full-opacity fill writes `0xFF`), so with the default that byte is 0 wherever anything was antialiased or masked and the shader has to ignore it outright. The C blends an x86 test build uses leave the byte alone, so only the device shows this. An ARGB8888 display (`0`) has the opposite trap: LVGL copies an XRGB8888 image or canvas into it byte for byte, so whatever the source's fourth byte holds, including the 0 those blends leave, arrives as alpha.
+
+A defect here is invisible to `ctl screenshot` for the same reason. Check the panel by eye: icons, borders and antialiased text must not turn black.
+
+### `HELIX_HEADLESS`
+
+Make `scripts/screenshot.sh` run without a display server by forcing SDL's dummy
+video driver. Already the default when neither `DISPLAY` nor `WAYLAND_DISPLAY`
+is set, so this is only needed to force headless on a desktop.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (force headless) / unset |
+| **Default** | Auto — headless when no `DISPLAY` and no `WAYLAND_DISPLAY` |
+| **File** | `scripts/screenshot.sh` |
+
+```bash
+# Capture on a CI runner / over ssh with no display
+HELIX_HEADLESS=1 ./scripts/screenshot.sh helix-screen filament-panel filament
+```
+
+The binary itself needs no HelixScreen-specific variable — `SDL_VIDEODRIVER=dummy`
+is enough, and the SDL backend falls back to the software renderer on its own
+when the accelerated one is unavailable. Audio is silenced automatically too:
+`main()` watches for `SDL_VIDEODRIVER=dummy` and forces `SDL_AUDIODRIVER=dummy`
+(with `overwrite=0`, so exporting `SDL_AUDIODRIVER` yourself still wins — useful
+when you want to debug audio under a headless window). See `docs/devel/HELIXCTL.md`
+§ "Running headless".
+
+### `HELIX_KEY_DEPTH`
+
+Force the on-screen keyboard's key depth treatment instead of picking it from
+the detected hardware tier. Set it on a device that renders slower than its
+RAM/core count suggests, or to check a branch you do not have hardware for.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `skirt` (hard-edged rim under each key), `emboss` (an edge on the key face, no shadow), `flat` (neither) |
+| **Default** | Auto — `emboss` on the `EMBEDDED` tier, `skirt` above it, `flat` on ESP32 builds |
+| **Files** | `include/ui_keycap_style.h`, `src/ui/components/ui_keycap_style.cpp`, `src/ui/components/ui_keyboard_manager.cpp` |
+
+```bash
+# A device where 30-plus per-key box shadows cost more than its tier implies
+HELIX_KEY_DEPTH=emboss ./build/bin/helix-screen -vv
+
+# Check the constrained-hardware look on a desktop
+HELIX_KEY_DEPTH=emboss ./build/bin/helix-screen --test -vv
+```
+
+The depth is resolved once per process, so this cannot be changed while running.
+`skirt` costs one box shadow per key at blur width 1; `emboss` draws the key's own
+edge as a border and costs no shadow at all, which is why constrained hardware
+falls back to it rather than to `flat`. How deep the skirt sits comes from the
+active theme's `shadow_intensity` (0, which is what 16 of the 18 shipped themes
+use, means default depth rather than off).
+
+Which way that edge faces depends on the mode, not on taste: a light theme shades
+the underside of the key, a dark theme lights the top. A shadow needs the
+background to contrast against, and a dark theme's keyboard background is darker
+than the keys themselves — measured on a stock dark theme the rim landed within
+four values of the background, i.e. invisible — so there the depth comes from a lit
+top edge drawn inside the key face instead. `skirt` on a dark theme draws both.
+Holding a key flips the edge to the opposite corner.
+
+---
+
+---
+
+## Touch Calibration
+
+### Linear Calibration (env vars)
+
+Simple axis range mapping via LVGL's built-in calibration. Use for devices with known linear offset/scale.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HELIX_TOUCH_MIN_X` | Minimum raw X value (maps to screen left) | Auto-detect |
+| `HELIX_TOUCH_MAX_X` | Maximum raw X value (maps to screen right) | Auto-detect |
+| `HELIX_TOUCH_MIN_Y` | Minimum raw Y value (maps to screen top) | Auto-detect |
+| `HELIX_TOUCH_MAX_Y` | Maximum raw Y value (maps to screen bottom) | Auto-detect |
+| `HELIX_TOUCH_SWAP_AXES` | Swap X/Y axes (set to "1" to enable). Overrides auto-detection. | Disabled (auto-detected) |
+
+**Usage Notes:**
+- All four min/max variables must be set together for calibration to apply
+- Precedence at boot: **these env vars > the range the calibration wizard solved (`input.touch_range`) > the kernel/MT-declared `EVIOCGABS` range**. Whichever wins is logged at info as `Touch range source: ...` by both backends
+- To invert an axis, swap the min/max values (e.g., `MIN_Y=3200 MAX_Y=900` inverts Y)
+- These values override the kernel-reported axis ranges from `EVIOCGABS`
+- `HELIX_TOUCH_SWAP_AXES` is a manual override honored by **both** the fbdev and DRM backends, applied at the evdev layer (raw X/Y are swapped before the calibration matrix). Since [#1259](https://github.com/prestonbrown/helixscreen/issues/1259) the calibration wizard can also write a swap of its own, to `input.touch_range.swap_axes`, which **is** read at boot - see "Solved Range (config file)" below. The env var still wins over it
+- **The swap happens BEFORE the min/max scaling** (`lv_evdev.c`, `_evdev_process_pointer`). So with `HELIX_TOUCH_SWAP_AXES=1`, `HELIX_TOUCH_MIN_X`/`MAX_X` describe the range of the axis that is now feeding screen X — that is, the controller's **raw Y** range. Set the pair to the raw range of the axis it consumes, not the one it is named after. Combining the swap with inverted min/max reaches all eight panel orientations.
+
+**Example:**
+```bash
+# AD5M resistive touchscreen with inverted Y axis
+export HELIX_TOUCH_MIN_X=500
+export HELIX_TOUCH_MAX_X=3580
+export HELIX_TOUCH_MIN_Y=3200  # Higher value = screen top (inverted)
+export HELIX_TOUCH_MAX_Y=900
+./build/bin/helix-screen
+```
+
+**Known panel needing this:** the Qidi Q2's Goodix digitizer *over-reports* its ABS range — EVIOCGABS says 800x480 but the glass only emits ~460x237 — so the auto-installed coarse scale over-divides and taps compress toward the top-left until calibrated ([#943](https://github.com/prestonbrown/helixscreen/issues/943); calibration span-check logs the captured/target ratio, ~0.57x/0.49y on this panel). Setting the four values to the **emitted** range restores 1:1 mapping; the affine calibration from the wizard fixes it without env vars. Full hardware notes: [`printers/QIDI_SUPPORT.md`](printers/QIDI_SUPPORT.md).
+
+### Solved Range (config file)
+
+The evdev stage runs **before** the affine and **clamps** to the display, so a driver that
+declares an ABS range the panel does not actually emit is not something an affine can undo:
+coordinates arrive already compressed and already flattened at the edges. That is the shape
+behind [#1259](https://github.com/prestonbrown/helixscreen/issues/1259) (a transposed panel with
+an inverted axis) and [#1276](https://github.com/prestonbrown/helixscreen/issues/1276) (a
+digitizer emitting a narrow slice of what it declares).
+
+The three-point wizard therefore also solves for the evdev stage and stores it:
+
+| Key | Meaning |
+|-----|---------|
+| `input.touch_range.valid` | `false` (or absent) means "use whatever range the kernel declared" - the behaviour of every release before this existed |
+| `input.touch_range.swap_axes` | screen X is driven by the controller's raw Y axis, and vice versa |
+| `input.touch_range.min_x` / `max_x` | raw values that map to display x = 0 and x = width-1 |
+| `input.touch_range.min_y` / `max_y` | same for the Y axis |
+
+`min > max` on an axis is meaningful, not a mistake: `lv_evdev`'s scale has a negative
+denominator there, which inverts the axis. A panel wired upside down calibrates to exactly that.
+`min == max` is never written - `_evdev_calibrate()` skips the scale but still clamps, which would
+pin the whole panel to one pixel.
+
+Because `min_x`/`max_x` describe the axis feeding screen X, they name the controller's **raw Y**
+range whenever `swap_axes` is set - the same convention as the env vars above.
+
+A calibration writes exactly one of `touch_range` and a full `input.calibration` affine, never
+both, and explicitly clears the other. When the range is solved, `input.calibration` holds only
+the rotation/shear the axis-aligned range cannot express, which on a panel square to the display
+is nothing at all (`valid: false`). Stacking a stored range under a full-pipeline affine would
+apply both stages and double the mapping.
+
+### Affine Calibration (config file)
+
+For precise calibration including rotation and skew correction, use the touch calibration wizard. The wizard computes a 6-coefficient affine transform and saves it to the config file at `input.calibration.{a,b,c,d,e,f}`. (The legacy `display.calibration` path is auto-migrated to `input.calibration` on load — see `docs/devel/CONFIG_MIGRATION.md`.)
+
+**Affine transform formula:**
+```
+screen_x = a * touch_x + b * touch_y + c
+screen_y = d * touch_x + e * touch_y + f
+```
+
+Identity is `a=1, b=0, c=0, d=0, e=1, f=0`.
+
+**`touch_x`/`touch_y` are NOT raw controller counts.** `install_calibration_wrapper()` wraps evdev's read callback, so by the time the affine runs, LVGL has already linearly mapped the controller's ABS range onto the display — the inputs are screen-space, `0..width-1` and `0..height-1`. The wizard's "raw" capture only disables the affine, so it records that same space. Hand-writing a matrix means working in display pixels: on a 480x272 panel a pure axis swap is `a=0, b=480/272, c=0, d=272/480, e=0, f=0`, not `b=1, d=1` — the two axes have different lengths and a bare swap drops one to 57% of its span while running the other off the end. A rotation additionally needs `c`/`f` to move the origin back into the corner.
+
+**Availability:** the wizard auto-fires during first-run setup only on devices the auto-heuristic flags (resistive controllers, or a broken/mismatched ABS range). The manual Settings entry point is offered for **any** real touch panel — including factory-calibrated capacitive ones — because a panel mounted at 90° to the display reports an ordinary controller name and an ABS range matching the display exactly, so nothing we can probe distinguishes it from a correct one (prestonbrown/helixscreen#1259). It can also be forced via the `HELIX_TOUCH_CALIBRATE` environment variable.
+
+### `HELIX_TOUCH_CALIBRATE`
+
+Force the touch calibration wizard to appear on startup. Set to any value to enable.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HELIX_TOUCH_CALIBRATE` | Force touch calibration wizard on startup | Disabled |
+
+**Equivalent to:** `--calibrate-touch` CLI flag or `/input/force_calibration` config option.
+
+**Example:**
+```bash
+# One-shot: force calibration on next launch
+HELIX_TOUCH_CALIBRATE=1 ./build/bin/helix-screen
+
+# Or add to helixscreen.env for persistent use
+echo "HELIX_TOUCH_CALIBRATE=1" >> ~/helixscreen/config/helixscreen.env
+```
+
+**Note:** There are no environment variable overrides for affine calibration coefficients. Edit the config file directly or use the calibration wizard.
+
+### `HELIX_TOUCH_CAL_DEBOUNCE`
+
+Press-debounce for the calibration wizard. **On by default.** The calibration state machine uses **capture-on-press / commit-on-release**: it captures the press point on `LV_EVENT_PRESSED` and commits it as a sample on the matching `LV_EVENT_RELEASED`, gated by a release-immune time refractory. A burst of press/release cycles from a single tap (capacitive controllers — e.g. the Qidi Q2 and Goodix panels — emit several per physical contact) contributes only **one** sample instead of filling a target (or cascading through all targets) from one finger touch. See [issue #943](https://github.com/prestonbrown/helixscreen/issues/943).
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HELIX_TOUCH_CAL_DEBOUNCE` | Capture-on-press / commit-on-release debounce. Set to `0` to opt out to the legacy sample-on-press path. | Enabled |
+
+**How it works:** `on_press()` captures the press point without sampling; `on_release()` commits it. A commit within **150 ms** (`kRefractoryMs`) of the previous committed sample is treated as bounce and dropped. A **600 ms** (`kStallCommitMs`) stall timer commits a pending press for controllers that never deliver a clean release, so calibration can never wedge. Setting `HELIX_TOUCH_CAL_DEBOUNCE=0` restores the exact legacy behavior — sample on every press, release is a no-op — for A/B testing on real hardware.
+
+**Composes with `HELIX_DEBUG_TOUCH`:** set both to capture the validation evidence in a debug bundle — `HELIX_DEBUG_TOUCH=1` logs one `[TouchDebug] sample N/3 …` line per recorded sample, and with debounce on you also get `[TouchDebug] dropped bounce sample, dt=…ms` for each collapsed burst press.
+
+**Example:**
+```bash
+# Opt out to the legacy sample-on-press path, with per-press debug logging
+HELIX_TOUCH_CAL_DEBOUNCE=0 HELIX_DEBUG_TOUCH=1 ./build/bin/helix-screen
+
+# Or persist on a device that needs the legacy path
+echo "HELIX_TOUCH_CAL_DEBOUNCE=0" >> ~/helixscreen/config/helixscreen.env
+```
+
+### `HELIX_DEBUG_TOUCH`
+
+Enables `[TouchDebug]` diagnostic logging across the touch input and calibration paths. This is the primary tool for diagnosing a bad calibration result (wrong scale, or correct scale with garbage offsets — see [issue #986](https://github.com/prestonbrown/helixscreen/issues/986)), because it dumps every coordinate space involved so you can see exactly where they diverge.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HELIX_DEBUG_TOUCH` | Enable `[TouchDebug]` logging (`1` = enable; `HELIX_DEBUG_TOUCHES` also accepted) | Disabled |
+
+Also enableable at runtime via the `/input/debug_touches` config key.
+
+**What it logs (lines emitted during a calibration wizard run):**
+
+| Line | Coordinate space it reveals |
+|------|------------------------------|
+| `device detection: name=… event=…` / `abs=… multitouch=…` | which input device + capability flags |
+| `Touch ABS range: X(min..max), Y(min..max) — display: WxH` | the **raw** controller range vs the display (the linear-scale factor) |
+| `calibration target space: WxH display_rotation=N` | the space the on-screen **targets** are placed in (and whether rotation is active) |
+| `sample N/3 …` | each recorded tap as it's captured |
+| `compute_calibration inputs: screen[…] touch[…]` | the 3 **target** points vs the 3 **captured** points fed to the solve |
+| `determinant=… coefficients: a…f` / `transform: …` | the resulting affine matrix |
+
+If the `screen[]` (targets) and `touch[]` (captures) aren't in the same coordinate space — e.g. targets in `272x480` (rotated) while captures arrive scaled from an `800x480` ABS range — the solve yields a correct-ish scale with large translation offsets. That mismatch is what these lines are designed to surface.
+
+**Capturing a calibration diagnostic (e.g. to attach to a bug report):**
+```bash
+# Persist on the device, force the wizard, then run it once
+echo "HELIX_DEBUG_TOUCH=1" >> ~/helixscreen/config/helixscreen.env
+echo "HELIX_TOUCH_CALIBRATE=1" >> ~/helixscreen/config/helixscreen.env
+```
+The `[TouchDebug]` lines are logged at WARN, so they appear at the default log level — no `-v` needed. Then complete the 3-point wizard and grab a debug bundle (or the log). Composes with `HELIX_TOUCH_CAL_DEBOUNCE` (above) for per-press sampling evidence.
+
+### Scroll and touch tuning
+
+The tuning knobs for tap-vs-scroll feel are config keys, not env vars: `/input/scroll_limit` (pixels before LVGL commits to scrolling, default 10, range 1-20) and `/input/scroll_throw` (momentum decay, default 25, range 5-50), both applied by `DisplayManager::configure_scroll()` at startup and changeable from **Settings > Touch & Input** (`scroll_limit` only). `/input/long_press_time` is the live-applied companion. See `docs/user/CONFIGURATION.md` § Input Settings for the full list.
+
+---
+
+## G-Code Viewer
+
+### `HELIX_GCODE_MODE`
+
+Force the G-code preview rendering mode.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `2D`, `3D` |
+| **Default** | unset — Auto, which resolves to 3D on GLES-capable builds and 2D elsewhere |
+| **Files** | `include/gcode_render_mode_policy.h`, `src/ui/gcode/ui_gcode_viewer.cpp`, `src/ui/print/ui_panel_print_status.cpp` |
+
+Only the exact strings `2D` and `3D` are honored — matching is case-sensitive, so
+`3d` is an unrecognized value. An unrecognized value resolves to 2D (the renderer
+that works everywhere), not to Auto; unset is the only path to Auto.
+
+```bash
+# Force 2D layer view
+HELIX_GCODE_MODE=2D ./build/bin/helix-screen
+```
+
+### `HELIX_FORCE_GCODE_MEMORY_FAIL`
+
+Force the G-code memory safety check to fail, simulating a memory-constrained device like AD5M. Useful for testing thumbnail fallback behavior without deploying to embedded hardware.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (force failure), unset (normal behavior) |
+| **Default** | Unset (normal memory checking) |
+| **File** | `src/system/memory_utils.cpp` |
+
+```bash
+# Force memory check to fail - viewer falls back to thumbnail mode
+# (drive the UI with helix-screen ctl — see docs/devel/HELIXCTL.md)
+HELIX_FORCE_GCODE_MEMORY_FAIL=1 ./build/bin/helix-screen --test -vv &
+./build/bin/helix-screen ctl demo print-status
+```
+
+**Use case:** Testing that the thumbnail displays immediately when G-code rendering is unavailable, without needing to deploy to memory-constrained hardware.
+
+### `HELIX_GCODE_STREAMING`
+
+Control G-code streaming mode for memory-efficient loading of large files. Streaming loads layers on-demand instead of the entire file at once, enabling 10MB+ G-code files on memory-constrained devices like AD5M.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `on` (always stream), `off` (always full load), `auto` (calculate based on RAM) |
+| **Default** | `auto` |
+| **Config** | `gcode_viewer.streaming_mode`, `streaming.force_streaming`, `streaming.threshold_mb` in `settings.json` |
+| **File** | `src/rendering/gcode_streaming_config.cpp` |
+
+The same decision governs the G-code viewer and the file rewrite in `GCodeFileModifier::apply()`.
+
+**Priority order:**
+1. Environment variable (highest) - for testing/debugging
+2. `gcode_viewer.streaming_mode` `on`/`off`, then `streaming.force_streaming: true` (= `on`)
+3. Auto-detection based on available RAM; a non-zero `streaming.threshold_mb` also streams any file above it
+
+```bash
+# Force streaming mode (useful for testing streaming behavior)
+HELIX_GCODE_STREAMING=on ./build/bin/helix-screen --test -vv &
+./build/bin/helix-screen ctl demo print-status
+
+# Force full load mode (may crash on large files with low RAM!)
+HELIX_GCODE_STREAMING=off ./build/bin/helix-screen --test --gcode-file large.gcode -vv
+
+# Use auto-detection (default)
+HELIX_GCODE_STREAMING=auto ./build/bin/helix-screen --test -vv &
+./build/bin/helix-screen ctl demo print-status
+```
+
+**Auto-detection thresholds** (15x expansion factor; boards at or under 2GB
+total RAM (they usually co-host Klipper and Moonraker) take a 15% share of
+available memory instead of the 40% default, so a small file still full-parses
+and the 3D preview can follow the print):
+| Available RAM | Streaming kicks in at |
+|---------------|----------------------|
+| 47 MB (AD5M, 15% cap) | ~0.5 MB |
+| 600 MB (Pi 3B, 15% cap) | ~6 MB |
+| 1 GB (40% default) | ~27 MB |
+| 4 GB (40% default) | ~107 MB |
+
+**Related config options:**
+- `gcode_viewer.streaming_mode`: `"auto"`, `"on"`, or `"off"`
+- `gcode_viewer.streaming_threshold_percent`: 1-90 (default 40)
+
+### `HELIX_SSAO`
+
+Control enhanced 2D G-code shading: per-segment directional lighting, a
+silhouette outline post-process, and anti-aliased line drawing (Wu's algorithm).
+
+The outline pass and the antialiasing are **separate flags** internally, because
+they cost very different amounts. `HELIX_SSAO` overrides both together so a
+forced comparison covers all of it; the device tier sets them independently.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (force both on), `0` (force both off), unset (device tier decides) |
+| **Default** | Unconstrained: both on. Constrained: outline on, antialiasing off. |
+| **File** | `include/gcode_ssao_policy.h`, `src/ui/gcode/ui_gcode_viewer.cpp`, `src/rendering/gcode_layer_renderer.cpp` |
+
+Only the exact strings `0` and `1` are honoured; anything else (including empty,
+`true`, `yes`) falls through to the tier.
+
+```bash
+# Disable enhanced shading (use original flat rendering)
+# The gcode viewer is reached via the print-status panel's 3D viewer (--gcode-file):
+HELIX_SSAO=0 ./build/bin/helix-screen --test --gcode-file model.gcode -vv &
+./build/bin/helix-screen ctl demo print-status
+```
+
+**What it adds:**
+- **Normal-based directional shading:** Each extrusion segment is shaded based on its surface normal relative to a fixed upper-left light source, creating visible surface variation
+- **Anti-aliased lines:** Wu's line algorithm replaces Bresenham for smoother edges
+- **Silhouette outline:** 1px darkened border on the alpha boundary of the model for edge definition
+
+**Performance.** The outline pass is ~2 ms per cache revalidation, measured on a
+real AD5M. The antialiasing is not minimal:
+Wu's algorithm measures about **6.1x** the aliased rasterization cost. On the 135,197-segment test plate
+that is roughly 29 ms aliased against 178 ms antialiased, and the adaptive
+controller settles at 49 layers per frame instead of 22 - so a preview appears
+about 2.2x faster with antialiasing off. That is why the constrained tier keeps
+the outline and drops the antialiasing rather than turning everything off.
+
+---
+
+## Bed Mesh
+
+### `HELIX_BED_MESH_2D`
+
+Force the bed mesh visualization to use 2D heatmap mode instead of 3D surface rendering.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (enable), unset (disable) |
+| **Default** | Off (3D surface when available) |
+| **File** | `src/ui/calibration/ui_bed_mesh.cpp` |
+
+```bash
+# Force 2D heatmap visualization
+HELIX_BED_MESH_2D=1 ./build/bin/helix-screen
+```
+
+---
+
+## Audio
+
+### `HELIX_PWM_SOUND`
+
+Temporary override for the `sound.pwm_channel` setting, which names a passive buzzer on a sysfs PWM channel (generic SBC builds: pi, pi32, x86, yocto, native; and ad5m/ad5m-br). Use the setting for a permanent install; this variable is for trying a channel without editing `settings.json`. The PWM backend it selects, and the hardware requirements, are under `sound.pwm_channel` in the [configuration reference](../user/CONFIGURATION.md#sound-output).
+
+| Property | Value |
+|----------|-------|
+| **Values** | `<chip>:<channel>`, e.g. `0:0` for `/sys/class/pwm/pwmchip0/pwm0` |
+| **Default** | unset |
+| **Precedence** | `HELIX_PWM_SOUND` env > `/sound/pwm_channel` setting > no named buzzer |
+| **File** | `src/system/pwm_sound_backend.cpp` (`PWMSoundBackend::resolve_channel`) |
+
+```bash
+# Try a buzzer on pwmchip0/pwm0 for one run
+HELIX_PWM_SOUND=0:0 ./build/bin/helix-screen
+```
+
+### `HELIX_PWM_MIN_NOTE_MS`
+
+Audible floor for one theme note on the PWM sysfs buzzer backend (ad5m/ad5m-br, or a `sound.pwm_channel` buzzer on the generic SBC builds). The piezo needs ~20 ms of drive to register a tone; the sequencer quantizes every theme step up to this value, so a sub-floor tone+rest pair plays as one floor-length tone instead of a click. Read once at backend `initialize()` — relaunch to change it.
+
+| Property | Value |
+|----------|-------|
+| **Values** | milliseconds, clamped to 10-100; non-numeric or <= 0 keeps the default |
+| **Default** | `20` |
+| **File** | `src/system/pwm_sound_backend.cpp` (`PWMSoundBackend::initialize`) |
+
+```bash
+# Rig tuning: stretch the audible floor
+HELIX_PWM_MIN_NOTE_MS=35 ./build/bin/helix-screen
+```
+
+### `HELIX_PCM_PLAYER`
+
+The player the PCM pipe backend streams through (unified MIPS and k1-dynamic builds: a static binary that cannot open the K1's ALSA codec itself, so a child `aplay` reads raw S16 mono from a pipe). Unset, the backend takes the first executable of `/usr/bin/aplay`, `/usr/local/bin/aplay`, `/bin/aplay`, `/usr/sbin/aplay` and additionally requires a playback node (`pcmC*D*p`) under `/dev/snd`; a named path skips the `/dev/snd` check. Read once at backend probe (`SoundManager::create_backend()`); relaunch to change it. Set it in the shell that starts the binary: `helixscreen.env` does not reach it, because the launcher's allowlist admits no variable that names a program to run. To turn sound off on a device, use the `disable_sound` setting.
+
+| Property | Value |
+|----------|-------|
+| **Values** | a path to an `aplay`-compatible player; `0`, `off` or `no` disables the backend |
+| **Default** | unset |
+| **File** | `src/system/pcm_pipe_sound_backend.cpp` (`PcmPipeSoundBackend::find_player`) |
+
+```bash
+# K1: play through a wrapper script instead of the stock aplay
+HELIX_PCM_PLAYER=/usr/data/aplay-wrapper.sh ./helix-screen
+# Keep the Sound row hidden even though aplay exists
+HELIX_PCM_PLAYER=0 ./helix-screen
+```
+
+### `HELIX_ALSA_KEEPALIVE`
+
+Overrides the ALSA backend's idle-clock detection. Detection keeps the card clock running while idle on HDMI, iec958 and S/PDIF devices, because those hand the clock to a receiver that has to re-acquire it before emitting anything; every other device parks the clock when idle. Set `1` to force keep-alive, `0` to force parking, on a device the detection classifies wrong.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1`, `true`, `yes` or `on` keeps the clock alive; any other non-empty value parks it |
+| **Default** | unset - per-device detection |
+| **File** | `src/system/alsa_sound_backend.cpp`; detection in `include/alsa_clock_keepalive.h#device_needs_clock_keepalive` |
+
+### `HELIX_JZ_*` (jz_pwm rig tuning)
+
+Ear-sweep knobs for the AD5X jz_pwm backend's tracker voice path — one variable per listening round, read at backend `initialize()`. These exist for the piezo rig; they are not user settings.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `HELIX_JZ_VOICE_MS` | `1900` | Phrase length in ms (one daemon buffer) |
+| `HELIX_JZ_ATTACK_MS` | `2` | Per-voice attack envelope (ms) |
+| `HELIX_JZ_RELEASE_MS` | `10` | Per-voice release envelope (ms) |
+| `HELIX_JZ_SWING` | `0.4` | Duty depth around 50% |
+| `HELIX_JZ_WAVE` | `0` | Waveform: 0=triangle, 1=square, 2=saw (clamped 0-2) |
+| `HELIX_JZ_OCTAVE` | `0` | Global octave shift (clamped 0-5; piezo band is ~1-4 kHz) |
+| `HELIX_JZ_CARRIER` | `32768` | Carrier Hz — upload time scales with it (see `JzPwmVoiceKnobs` in the header) |
+| `HELIX_JZ_LOG_VOICE` | off | `1` appends voice rows to `/tmp/jz-voice.log` |
+
+| Property | Value |
+|----------|-------|
+| **File** | `src/system/jz_pwm_sound_backend.cpp` (`JzPwmSoundBackend::initialize`) |
+
+---
+
+## Networking
+
+### `HELIX_WPA_SOCKET_DIR`
+
+Override the directory searched for the `wpa_supplicant` control socket.
+
+The WiFi backend normally finds the control socket automatically: it auto-detects the directory from the running `wpa_supplicant` process's `-O` argument, then falls back to `/run/wpa_supplicant`, `/var/run/wpa_supplicant`, and `/etc/wifi/wpa_supplicant/sockets` (the Creality K2 Plus / Creality OS location). Set this variable only if a firmware launches `wpa_supplicant` with a control directory none of those cover — without it, network discovery fails and connecting via the UI is impossible.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute directory path containing the per-interface socket (e.g. `wlan0`) |
+| **Default** | Unset — auto-detect + known fallbacks |
+| **File** | `src/network/wifi_backend_wpa_supplicant.cpp` |
+
+```bash
+# Point HelixScreen at a vendor's non-standard control socket directory
+HELIX_WPA_SOCKET_DIR=/data/misc/wifi/sockets ./build/bin/helix-screen
+```
+
+### `HELIX_WPA_NET_SYSFS`
+
+Override the sysfs directory the WiFi hardware probe scans for radio
+interfaces.
+
+The wpa backend's pre-flight check reads `/sys/class/net` looking for
+`wlan*`/`wlp*`/`wlx*`/`wifi*` interfaces with a `wireless` subdirectory, and
+refuses to start when none exist. This variable points that probe at a
+different tree. It exists for the fake-supplicant unit tests
+(`tests/test_helpers/wpa_fake_supplicant.h`), which provide a hermetic
+`wlan0` so the suite runs on machines without a radio (CI runners); no
+device deployment should ever need it.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute directory path to use in place of `/sys/class/net` |
+| **Default** | Unset — the real `/sys/class/net` |
+| **File** | `src/network/wifi_backend_wpa_supplicant.cpp` |
+
+### `HELIX_WPA_PROC_ROOT`
+
+Override the process table the wpa backend scans for a running
+`wpa_supplicant` (its `-O`, `-c` and `-i` arguments).
+
+Each `start()` walks every PID's `cmdline` several times. On a device that is
+a few hundred files; on a host carrying tens of thousands of processes, such as
+a container that never reaps its zombies, it is seconds, and `start()` gives
+initialization 5 s. The fake-supplicant unit tests
+(`tests/test_helpers/wpa_fake_supplicant.h`) pin it to an empty directory so
+their timing does not depend on the host. No device deployment should need it.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute directory path to use in place of `/proc` |
+| **Default** | Unset — the real `/proc` |
+| **File** | `src/network/wifi_backend_wpa_supplicant.cpp` |
+
+### `HELIX_NETD_SOCKET`
+
+Override the control socket of the printer's network daemon (`netd`, the
+exclusive owner of WiFi/ethernet on the firmwares that ship it).
+
+Both the WiFi and Ethernet backends speak to the daemon over this AF_UNIX
+socket, and backend selection itself probes it. The daemon is detected by
+socket presence OR the on-disk binary — never by a version string, which is
+untrustworthy across these firmware releases. Set this only to repoint at a
+non-standard deployment or at a test double.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute path to an AF_UNIX SOCK_STREAM socket |
+| **Default** | `/run/netd.sock` |
+| **File** | `src/network/netd_protocol.cpp` |
+
+```bash
+# Run the app against a fake daemon on a dev box
+HELIX_NETD_SOCKET=/tmp/fake-netd.sock ./build/bin/helix-screen
+```
+
+Also the seam the netd unit tests use to drive the real backends against an
+in-test listener (`tests/unit/netd_test_server.h`).
+
+### `HELIX_NETD_BIN`
+
+Override the on-disk daemon binary path used as the second half of the
+presence probe when the socket is down (the daemon exists on disk even
+before it has created its socket at boot). When neither the socket nor an
+executable at this path exists, the netd backends stand down entirely and
+the factory falls through to NetworkManager/wpa_supplicant.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute path to an executable file |
+| **Default** | `/opt/config/mod/.bin/exec/netd` |
+| **File** | `src/network/netd_protocol.cpp` |
+
+```bash
+# Force the netd backends active on a dev box by naming any executable
+HELIX_NETD_BIN=/bin/true HELIX_NETD_SOCKET=/tmp/fake-netd.sock ./build/bin/helix-screen
+```
+
+Recovery-boot note: a boot that ships the daemon but runs the stock stack
+(the firmware's own netd-failure fallback, or a `SKIP_MOD_SOFT` boot) still
+selects the netd backends — the binary is present, so the probe commits.
+WiFi then reads unavailable until the daemon returns; Ethernet still shows
+kernel state (the netd ethernet backend falls back to the kernel reading
+when the daemon is unreachable). Point `HELIX_NETD_BIN` at a nonexistent
+path in `helixscreen.env` to make such a boot use the stock backends.
+
+---
+
+## UI Automation
+
+These variables enable automated testing and CI/CD workflows.
+
+### `HELIX_AUTO_QUIT_MS`
+
+Automatically quit the application after a specified duration.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `100` to `3600000` (milliseconds) |
+| **Default** | No timeout (run indefinitely) |
+| **File** | `src/config/environment_config.cpp` (surfaced via `src/application/application.cpp`) |
+
+```bash
+# Quit after 5 seconds
+HELIX_AUTO_QUIT_MS=5000 ./build/bin/helix-screen --test
+
+# CI test run (3 second timeout)
+HELIX_AUTO_QUIT_MS=3000 ./build/bin/helix-screen --test &
+./build/bin/helix-screen ctl navigate home
+```
+
+### `HELIX_AUTO_SCREENSHOT`
+
+Automatically capture a screenshot before quitting (use with `HELIX_AUTO_QUIT_MS`).
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (enable) |
+| **Default** | Disabled |
+| **File** | `src/config/environment_config.cpp` (surfaced via `src/application/application.cpp`) |
+
+```bash
+# Automated screenshot capture (screenshot.sh drives helix-screen ctl end to end)
+./scripts/screenshot.sh helix-screen motion motion --test
+```
+
+### `HELIX_BENCHMARK`
+
+Enable frame counting and FPS reporting for performance testing.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Any value (presence enables) |
+| **Default** | Disabled |
+| **File** | `src/config/environment_config.cpp` (surfaced via `src/application/application.cpp`) |
+
+```bash
+# Run performance benchmark
+HELIX_BENCHMARK=1 HELIX_AUTO_QUIT_MS=10000 ./build/bin/helix-screen --test
+```
+
+---
+
+## Calibration Auto-Start
+
+These variables auto-start calibration procedures for testing purposes.
+
+### `INPUT_SHAPER_AUTO_START`
+
+Auto-start X-axis input shaper calibration when the panel loads.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Any value (presence enables) |
+| **Default** | Disabled |
+| **File** | `src/ui/calibration/ui_panel_input_shaper.cpp` |
+
+```bash
+# Test input shaper panel with auto-start (drive the UI with helix-screen ctl —
+# see docs/devel/HELIXCTL.md)
+INPUT_SHAPER_AUTO_START=1 ./build/bin/helix-screen --test &
+./build/bin/helix-screen ctl navigate advanced; ./build/bin/helix-screen ctl click row_input_shaping
+```
+
+### `SCREWS_AUTO_START`
+
+Auto-start bed screw probing when the screws tilt panel loads.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Any value (presence enables) |
+| **Default** | Disabled |
+| **File** | `src/ui/calibration/ui_panel_screws_tilt.cpp` |
+
+```bash
+# Test screws panel with auto-start
+SCREWS_AUTO_START=1 ./build/bin/helix-screen --test &
+./build/bin/helix-screen ctl navigate advanced; ./build/bin/helix-screen ctl click row_bed_mesh
+```
+
+---
+
+## Development
+
+### `HELIX_PLUGIN_DIR`
+
+Directory of Lua plugins, one subdirectory per plugin. While set, this local directory is the
+plugin source instead of the printer's `config/helixscreen/plugins/` folder: no Moonraker sync
+runs. In native dev builds, plugin hot reload is on by default under the same
+`HELIX_HOT_RELOAD` gate as XML hot reload: the app polls the directory about once a second and
+reloads each plugin whose files changed (`HELIX_HOT_RELOAD=0` disables it; cross-compiled
+release builds default it off). The manifest schema, the XML rules and the full `helix.*`
+API are in [PLUGIN_DEVELOPMENT.md](PLUGIN_DEVELOPMENT.md).
+
+| Property | Value |
+|----------|-------|
+| **Values** | Any readable directory path holding `<id>/manifest.json` subdirectories |
+| **Default** | Unset (plugins come from the per-printer cache, synced from Moonraker) |
+| **File** | `src/application/application.cpp` (`init_plugins`), `src/plugin/plugin_dir_watcher.cpp` |
+
+```bash
+HELIX_PLUGIN_DIR=$PWD/tests/fixtures/plugins ./build/bin/helix-screen --test -vv
+```
+
+### `HELIX_USB_AUTOMOUNT`
+
+Disable the in-app fallback USB mounter. When nothing else on the device mounts USB sticks
+(no udisks2, no vendor app doing it), HelixScreen mounts an unmounted removable device
+read-only after a 3s grace period so the print-from-USB picker can see it. `0` forces that
+off, leaving mounting entirely to whatever else is on the system. The mounter also disarms
+itself when the process does not run as root, so a developer's desktop build never mounts
+the workstation's own drives. The unit-test binary pins this to `0` in its startup
+constructor, so the suite never arms the mounter regardless of euid.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `0` (fallback mounting off), anything else or unset (on for root) |
+| **Default** | Enabled when running as root |
+| **File** | `src/platform/usb/usb_automount.cpp`, `include/usb_automount.h` |
+
+```bash
+# Leave USB mounting entirely to the platform's own mounter.
+HELIX_USB_AUTOMOUNT=0 ./build/bin/helix-screen -vv
+```
+
+### `HELIX_BLUETOOTH`
+
+Whether to load the Bluetooth plugin. Unloaded, `BluetoothLoader` reports unavailable as on
+a device with no adapter: no system-bus connection is opened and no BlueZ pairing agent is
+registered. A native build puts `libhelix-bluetooth.so` beside `helix-screen` and
+`helix-tests`, so a `--test` run leaves it unloaded unless this is `1`, and a desktop opening
+the Bluetooth settings never has its default agent taken. The unit-test binary pins `0` in
+its startup constructor. Decision: `src/system/bluetooth_loader.cpp#bluetooth_enabled`.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `0` (never load), `1` (load, `--test` included), anything else or unset (load except under `--test`) |
+| **Default** | Loaded in production, not loaded under `--test` |
+| **File** | `src/system/bluetooth_loader.cpp` |
+
+```bash
+# Exercise the real plugin from a mock run on a machine with an adapter.
+HELIX_BLUETOOTH=1 ./build/bin/helix-screen --test -vv
+```
+
+### `HELIX_TEMP_GRAPH_GRAD_SKIP`
+
+Force the temperature graph's gradient to re-render on every dirtied frame, disabling the
+content-signature skip. Diagnostic only: it exists so the skip's effect can be measured on a
+device without swapping binaries.
+
+The gradient under each trace is cached and re-rendered only when the drawn result would
+change. "Would change" is decided by hashing the pixel row each column's fill starts at
+(`include/temp_graph_column_map.h`), not the raw sample values - real temperatures jitter a
+tenth of a degree every sample, so a value hash never matches and nothing is ever skipped.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `0` (skip disabled, always render), anything else or unset (skip enabled) |
+| **Default** | Skip **enabled** |
+| **File** | `src/ui/controls/ui_temp_graph.cpp`, `include/temp_graph_column_map.h` |
+
+```bash
+# Baseline: every dirtied frame renders. Pair with -vv for the per-render timing.
+HELIX_TEMP_GRAPH_GRAD_SKIP=0 ./build/bin/helix-screen --test -vv
+```
+
+Measured on a Creality K2 Plus (456x102 gradient, 2 series): 167ms median per render with the
+skip ineffective, ~10ms after coalescing equal-height column runs, with ~47% of frames skipped
+outright. Most of the original cost was `lv_canvas_finish_layer()` rasterising 456 separate
+single-column fills, not the pixels themselves.
+
+### `HELIX_SWEEP_PREVIEW_OFF`
+
+Turn the live sweep preview off for one run: the Input Shaper panel and wizard step MEASURING
+charts and the Belt Tension chart draw nothing while the sweep runs, and the CSV curve appears
+at the end as it does without a stream. It exists for measuring what the preview costs on a
+board (the on/off CPU comparison in `BELT_TENSION.md` § Live preview), so it is a temporary
+override and not a setting. Logged once at info: `[LiveSweepPreview] HELIX_SWEEP_PREVIEW_OFF set`.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1`, `true`, `yes` or `on` (the `env_flag` set) |
+| **Default** | Unset, preview on wherever a stream is reachable |
+| **File** | `src/calibration/live_sweep_preview.cpp` (`LiveSweepPreview::arm`) |
+
+### `HELIX_BELT_CAPTURE_DIR`
+
+Write every resolved pluck event from the pluck belt tuner's `BeltListenSession` to disk, in the
+same format `tests/fixtures/belt_plucks/` already uses. Diagnostic only, for the reference-machine
+hardware pass: every threshold in `PluckDetector` and `pitch_estimator` was measured against a
+small, fixed capture set, and the algorithm has since been tuned against that same set. This is
+the instrument that collects the next round — a capture drops straight in as a new fixture with no
+conversion step.
+
+Off unless set: unset costs nothing (no buffering, no allocation, no branch on the sample path) and
+a normal user run never writes these files. When set, each resolved event (accepted **and**
+rejected — a rejection is the case most worth diagnosing) writes the live detection window and,
+once one was extracted, the separate ring-down as two files, since conflating those two buffers is
+exactly the mistake `PluckDetector`'s doc comments exist to prevent. The quiet buffer a session
+learned its noise floor and quiet spectrum from is written once, alongside `learn_noise_floor()`.
+Filenames carry an incrementing sequence number so same-second events cannot collide:
+`event_0000_ACCEPTED_detection.csv` / `event_0000_ACCEPTED_ringdown.csv`, `quiet_0000_quiet.csv`.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Any writable directory path (created if missing); unset disables the writer entirely |
+| **Default** | Unset |
+| **File** | `include/belt_capture.h`, `src/calibration/belt_capture.cpp`, `src/calibration/belt_listen_session.cpp` |
+
+No screen runs a `BeltListenSession` (`BELT_TUNER.md`: the pluck libraries back no UI), so the
+app writes nothing here whatever the variable says; the writer serves a harness or test that
+drives a session itself. The Belt Tension screen's sweeps never pass through it.
+
+Each rendered file's header extends the existing `sample_rate_hz=` / `rms_over_noise_floor=` line
+with the verdict fields (`verdict=`, `onset_rise=`, `decay_end_ratio=`, `harmonic_concentration=`,
+`estimate_hz=`, `median_hz=`) rather than inventing a second header line, so an old and a new
+capture still parse identically "by eye". A field never evaluated on that event's path (e.g.
+`harmonic_concentration` on a strike rejected before pitch estimation ran) renders as `n/a`, not a
+misleading `0`.
+
+To see a capture rendered back in the live panel — confirming the spectrum and its peak-frequency
+label actually draw, not just that the file parses — set the `bt_replay_path` subject on a running
+instance:
+
+```bash
+./build/bin/helix-screen ctl set bt_replay_path /tmp/belt-captures/event_0000_ACCEPTED_ringdown.csv
+```
+
+> **Setting the same path twice is a no-op.** The replay runs from a string-subject
+> observer, and LVGL does not notify observers when the value written equals the value
+> already there, so a second `ctl set` with an identical path never reaches
+> `replay_capture()` and the panel simply keeps drawing what it drew before. To replay
+> the same file again, set the subject to `""` first, or alternate between two paths.
+
+The panel's `bt_target_freq` and its estimated-frequency tick are driven by the span the
+panel currently holds, which is `TARGET_SPAN_MM` unless a live session already parked. A
+capture taken at a different span is searched in the wrong harmonic window; that is
+deliberate (this is a diagnostic replay, not a file importer) and shows up immediately as
+an implausible peak label.
+
+### `HELIX_DIAGNOSTIC_UPLOADS`
+
+Whether this build may ship diagnostics off-device: debug-bundle uploads
+(`DebugBundleCollector::upload_async`), the crash-reporter auto-send
+(`CrashReporter::try_auto_send`), and the `ctl log` RPC all ask this one
+question. A build that may not upload still collects bundles locally and still
+offers the QR-code crash fallback — only the trip to `crash.helixscreen.org`
+is refused, with a clear "unavailable in this build" message
+(prestonbrown/helixscreen#1410).
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (force on), `0` (force off), unset (use build default) |
+| **Default** | **ON for official packaging builds** (`HELIX_PACKAGING=1` sets `ENABLE_DIAGNOSTIC_UPLOADS=yes`); **OFF for every other build**, including plain local `make` and cross builds |
+| **File** | `src/system/diag_upload_gate.cpp` |
+
+```bash
+# A native dev run that should be able to upload:
+HELIX_DIAGNOSTIC_UPLOADS=1 ./build/bin/helix-screen --test -vv
+
+# Opt a device back out (note that the next `make deploy-*` restamps it to 1):
+# In helixscreen.env:
+HELIX_DIAGNOSTIC_UPLOADS=0
+```
+
+**Rigs never need this by hand**: `make deploy-*` stamps `HELIX_DIAGNOSTIC_UPLOADS=1`
+into the device env via `sync-device-features` (`mk/cross.mk`), the same mechanism that
+turns on `HELIX_REMOTE_CONTROL`, so a redeployed test device keeps uploading with no
+per-device change. Official packages need no env at all — the marker is compiled in.
+
+Every uploaded payload carries `diag_upload_marked` (true only in builds made with
+`ENABLE_DIAGNOSTIC_UPLOADS=yes`), so the endpoint can later reject or flag unmarked
+bundles — an env opt-in on an unmarked build uploads honestly unmarked.
+
+### `HELIX_BUNDLE_WORKER_URL` / `HELIX_CRASH_WORKER_URL`
+
+Repoint the debug-bundle / crash-report worker endpoints. A test seam, not an operator
+knob: the unit tests (`tests/unit/test_diag_upload_gate.cpp`) point both at a counting
+loopback listener, because libhv honours no proxy environment — without this override a
+test that reaches the real upload path would ship bytes to `crash.helixscreen.org` (and
+the crash path would auto-file a live GitHub issue).
+
+| Property | Value |
+|----------|-------|
+| **Values** | an `http://` URL |
+| **Default** | unset (the compiled-in `crash.helixscreen.org` endpoints) |
+| **File** | `src/system/debug_bundle_collector.cpp`, `src/system/crash_reporter.cpp` |
+
+### `HELIX_HOT_RELOAD`
+
+Enable XML hot reload for live UI editing. When enabled, a background thread polls `ui_xml/` (recursively — includes breakpoint variants and `components/`) every 500ms for file changes. Modified XML components are pre-validated, then unregistered and re-registered with LVGL, and the active panel/overlay/modal widget tree is torn down and rebuilt in place — no restart, no navigation needed.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `0` (force off), `1` (force on), unset (use build default) |
+| **Default** | **ON for native builds** (no `HELIX_RELEASE_BUILD`); **OFF for cross-compiled release targets** (Pi, AD5M, K1, etc.) |
+| **File** | `src/system/runtime_config.cpp`, `src/application/xml_hot_reloader.cpp` |
+
+```bash
+# Native dev build: hot reload is already ON by default — just run:
+./build/bin/helix-screen --test -vv
+
+# Force-enable on a device running a release build (rare; for live on-device debugging):
+HELIX_HOT_RELOAD=1 ./build/bin/helix-screen -vv
+
+# Force-disable in a native dev build (e.g., benchmarking):
+HELIX_HOT_RELOAD=0 ./build/bin/helix-screen --test -vv
+```
+
+**How it works:**
+1. On startup, recursively scans `ui_xml/` and records file modification times (skips `translations/`)
+2. Every 500ms, checks all tracked XML files for mtime changes
+3. On change: reads the file and validates XML well-formedness on the polling thread (no LVGL state touched). If the file is mid-write (truncated, briefly empty during atomic rename) or has a syntax error, the reload is deferred — the existing UI stays live and the next poll retries. Mtime cache is not updated on failure.
+4. If valid: queues `lv_xml_component_unregister()` + `lv_xml_register_component_from_data()` on the LVGL main thread, then fires `NavigationManager::rebuild_active_views()` which tears down + recreates the active panel, all overlays, and the top modal.
+5. Log output confirms each step: `[HotReload] Reloaded: home_panel (0.4ms)`, `[PanelBase::rebuild] Home Panel — tearing down and re-creating`, etc.
+
+**Limitations:**
+- **New files are not detected.** Only files present when the app starts are tracked. Adding a new XML file requires a restart.
+- **Component re-registration only.** If the XML change requires new subjects, callbacks, or C++ code, a full rebuild + restart is needed.
+- **`globals.xml`, `color_picker.xml` and `components/color_swatch_grid.xml` never reload.** Their registered scopes are extended from C++ after startup — `globals` owns every XML subject in the app plus the runtime theme constants, and unregistering it frees storage LVGL does not own. Editing them logs a warning and requires a restart.
+- **Breakpoint overrides only reload the copy in effect.** A component with a `micro/` or `portrait/` variant exists as several files that all register under one name. Only the copy the active layout resolves to reloads; editing a shadowed copy logs at debug and takes effect on the next launch at that breakpoint.
+- **A rebuild reproduces the XML, not what C++ put in the tree.** Subject-bound content comes back on its own, and so does anything populated in `create()`/`setup()` or `on_activate()` — the rebuild re-runs both. Content a view populates from a *separate* entry point (a `show_for_*()`, a click handler) is not restored unless that view overrides `IPanelLifecycle::repopulate()`, which `rebuild()` calls once the new tree exists. `HomePanel`, `AmsEditOverlay` and `PrintSelectPanel` (which re-renders the file list it holds, #1616) do; a view that populates dropdown options or list rows from a click handler and does not override it will come back empty. See `include/panel_lifecycle.h`.
+- **Some transient state still resets.** Scroll position, the current carousel page and unsaved text typed into a field are not preserved. `AmsEditOverlay` restores its dropdowns from the working slot, so a vendor/type change made but not yet saved snaps back. Modals rebuild via `Modal::show(component_name)`, which drops any per-invocation attributes the original caller passed.
+
+**Typical workflow:**
+```bash
+# Terminal 1: Run (hot reload is ON by default for native builds)
+./build/bin/helix-screen --test -vv
+
+# Terminal 2: Edit XML, save, watch the UI + log
+vim ui_xml/home_panel.xml
+# [HotReload] Detected change: home_panel
+# [HotReload] Reloaded: home_panel (0.3ms)
+# [PanelBase::rebuild] Home Panel — tearing down and re-creating
+```
+
+### `HELIX_FLOW_SEGMENT`
+
+Pin the filament-path animation to one segment so a single leg of the path can be inspected in isolation. Sets the active slot to 0 if none is set, forces `filament_segment` to the named value, and keeps a 30 ms repaint timer alive so the flow chevrons keep moving.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `PREP`, `LANE`, `HUB`, `OUTPUT`, `TOOLHEAD`, `NOZZLE` (matched case-insensitively) |
+| **Default** | Unset — segment follows real AMS state |
+| **Files** | `src/ui/filament/ui_filament_path_topology.cpp`, `src/ui/filament/ui_filament_path_anim.cpp` |
+
+```bash
+# Freeze the path at the hub leg with flow animation running
+HELIX_FLOW_SEGMENT=HUB ./build/bin/helix-screen --test -vv &
+./build/bin/helix-screen ctl demo ams
+```
+
+**Presence alone pins the animation on.** Independently of the value, `stop_flow_animation()` becomes a no-op whenever this variable is set — the flow never stops, even when the AMS state says it should. An *unrecognized* value therefore still disables the stop path and still spawns the repaint timer; it just leaves the segment alone.
+
+---
+
+## Debugging
+
+### `HELIX_DEBUG_SUBJECTS`
+
+Enable verbose subject debugging with stack traces. When LVGL subject type mismatches occur (e.g., trying to read an INT from a STRING subject), this enables detailed diagnostics including the subject name, registration location, and a full stack trace.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (enable), unset (disable) |
+| **Default** | Disabled |
+| **CLI equivalent** | `--debug-subjects` |
+| **File** | `src/system/runtime_config.cpp` |
+
+```bash
+# Enable via environment variable
+HELIX_DEBUG_SUBJECTS=1 ./build/bin/helix-screen -vv
+
+# Or via command-line flag (equivalent)
+./build/bin/helix-screen --debug-subjects -vv
+```
+
+**Example output when a type mismatch occurs:**
+```
+[warning] [LVGL] Subject type is not LV_SUBJECT_TYPE_INT (ptr=0x155008f30, type=7)
+[warning]   -> Expected type: LV_SUBJECT_TYPE_INT
+[warning]   -> Subject: "print_progress" (STRING) registered at printer_state.cpp:226
+[warning]   Stack trace:
+[warning]     #0 HomePanel::update_status() + 108
+[warning]     #1 HomePanel::on_state_changed(int) + 140
+```
+
+**Use cases:**
+- Debugging XML binding issues (e.g., `bind_text` on an INT subject)
+- Finding subject initialization order problems
+- Tracing observer callbacks that fire before subjects are ready
+
+### `HELIX_DEBUG_TOUCH`
+
+Unified touch debugging variable that enables both touch point visualization and detailed calibration logging.
+
+**Touch visualization:** A ripple effect is drawn at each touch point, showing exactly where the system registers touches. Useful for diagnosing touch accuracy issues, verifying calibration, and identifying UI elements that absorb click events.
+
+**Calibration logging:** Forces comprehensive logging of the entire calibration pipeline at WARN level, making it visible regardless of the configured log level. Logs include: raw touch samples, median computation, affine matrix calculation, axis swap detection, validation checks with residuals, and runtime coordinate transforms (throttled).
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (enable), unset (disable) |
+| **Default** | Disabled |
+| **CLI equivalent** | `--debug-touches` |
+| **Files** | `src/system/runtime_config.cpp`, `include/touch_calibration.h`, `src/ui/calibration/touch_calibration.cpp`, `src/ui/calibration/touch_calibration_panel.cpp`, `src/platform/display/display_backend_fbdev.cpp` |
+| **Legacy alias** | `HELIX_DEBUG_TOUCHES` (still accepted) |
+
+```bash
+# Enable via environment variable
+HELIX_DEBUG_TOUCH=1 ./build/bin/helix-screen -vv
+
+# Or via command-line flag (equivalent)
+./build/bin/helix-screen --debug-touches -vv
+
+# Combine with test mode for desktop debugging
+./build/bin/helix-screen --test --debug-touches -vv
+
+# On device: add to helixscreen.env
+HELIX_DEBUG_TOUCH=1
+```
+
+**Log prefix:** Calibration messages use `[TouchDebug]` prefix for easy filtering:
+```bash
+# Filter touch debug messages from log (path varies by platform; see LOGGING.md)
+grep '\[TouchDebug\]' /var/log/messages        # AD5M, Snapmaker U1 (syslog → file)
+logread | grep '\[TouchDebug\]'                # K1/K1C/K2/CC1/AD5X (BusyBox in-RAM syslog)
+journalctl -u helixscreen | grep '\[TouchDebug\]'  # Pi/x86 (systemd journal)
+```
+
+**What calibration logging shows:**
+- Each raw touch sample with saturation detection
+- Median point computation (all valid samples, selected median)
+- Affine matrix computation (all input points, determinant, coefficients)
+- Axis swap detection (cross-coupling ratios, swap decision)
+- Validation checks (coefficient bounds, back-transform residuals, center mapping)
+- Runtime coordinate transforms (throttled: first touch, then every 50th)
+- Calibration loaded from config at startup
+- Device detection details (name, phys, capabilities, calibration decision)
+
+**Use cases:**
+- Verifying touch calibration accuracy
+- Diagnosing buttons or UI elements that don't respond to taps
+- Identifying overlapping UI elements that absorb click events
+- Confirming extended click areas are working correctly
+
+**When to use:** Ask users with calibration issues to add `HELIX_DEBUG_TOUCH=1` to their `helixscreen.env` file and reproduce the issue. The `[TouchDebug]` messages in syslog/log will show exactly what the calibration pipeline sees, and the ripple visualization confirms where touches land visually.
+
+### `HELIX_CRASH_TEST`
+
+Deliberately segfault through a known call chain to verify that the crash handler's stack unwind works on a given piece of hardware. Fires immediately after `crash_handler::install()`, so the resulting crash.txt exercises the real handler and can be checked for correct frame resolution.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1`, `true`, `yes` or `on` enables; anything else leaves it off |
+| **Default** | Unset — no test crash |
+| **File** | `src/application/application.cpp` (calls `crash_handler::trigger_test_crash()`) |
+
+```bash
+# On-device: verify the crash handler unwinds and writes crash.txt
+HELIX_CRASH_TEST=1 ./helix-screen -vv
+```
+
+**Do not combine with `--test`.** The crash handler is *not* installed in test mode (crashes during development are deliberately not recorded), but this variable is checked unconditionally afterwards — so `--test` gives you a bare segfault with no crash report, which is not what you were trying to verify.
+
+### `HELIX_LVGL_THREAD_CHECK`
+
+What to do when an LVGL entry point is called from a thread other than the LVGL (main) thread. The checked entry points are every subject write (`lv_subject_set_int`/`_float`/`_pointer`/`_color`, `lv_subject_copy_string`, `lv_subject_snprintf`) and `lv_subject_notify`, `lv_timer_create`/`lv_timer_delete` (which covers `lv_async_call` and `lv_obj_delete_async`), and `lv_obj_delete`/`lv_obj_clean`.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `off` (or `0`), `report`, `abort`; anything else keeps the default |
+| **Default** | `abort` under `--test` and in `helix-tests`; `off` otherwise |
+| **File** | `src/system/lvgl_thread_check.cpp` (hook), `patches/lvgl_thread_check_hook.patch` (call sites) |
+
+`report` writes one stderr block per distinct call site (the entry point, the thread's name and a backtrace) and an `[LvglThreadCheck]` error line to the log, then carries on. `abort` writes the first one and calls `abort()`, so the run fails at the call that crossed the thread.
+
+```bash
+# List every off-thread call site instead of stopping at the first
+HELIX_LVGL_THREAD_CHECK=report ./build/bin/helix-screen --test -vv
+HELIX_LVGL_THREAD_CHECK=report ./build/bin/helix-tests '[tag]'
+```
+
+The backtrace names only exported symbols; resolve the `(+0x...)` offsets against the same binary with `nm -C`. **Release builds compile the check out** of LVGL (`LV_HELIX_THREAD_CHECK` in `lv_conf.h` is unset under `HELIX_RELEASE_BUILD`, and the ESP32 firmware never sets it), so the variable does nothing on a shipped device.
+
+### `HELIX_STRICT_OVERLAY_CHECK`
+
+Turn overlay-registration violations from a warning into a hard failure. Mirrors the `HELIX_STRICT_BG_THREAD_CHECK` machinery below: opt-in, dev/test only, compiled out of release builds.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1`, `true`, `yes` or `on` enables; anything else leaves it off |
+| **Default** | Off |
+| **File** | `src/ui/ui_nav_manager.cpp` |
+
+```bash
+# Fail loudly on an unregistered overlay
+HELIX_STRICT_OVERLAY_CHECK=1 ./build/bin/helix-screen --test -vv
+```
+
+**Release builds ignore it entirely** — the whole check short-circuits to `false` under `HELIX_RELEASE_BUILD` (defined by the cross-compile targets in `mk/cross.mk`), so a stray env var can never destabilize a shipped device.
+
+**An explicit setter wins.** `NavigationManager::set_overlay_registration_strict(bool)` marks the choice as resolved, so a later env read cannot clobber what a test asked for. The env var is only consulted once, on first use, and only if no setter call came first.
+
+### `HELIX_STRICT_BG_THREAD_CHECK`
+
+Abort instead of merely warning when the L081 `cluster:pstat-async-delete` Mechanism C anti-pattern fires — a bare `if (tok.expired()) return;` on a background thread followed by `this`/member access. CI exports this so any newly introduced instance fails the build rather than shipping as a latent use-after-free.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1`, `true`, `yes` or `on` enables; anything else leaves it off |
+| **Default** | Off for a plain run; `HelixTestFixture` opts in via `set_strict_bg_check(true)` |
+| **File** | `src/system/async_lifetime_guard.cpp` |
+
+```bash
+# Abort on the first bg-thread anti-pattern hit
+HELIX_STRICT_BG_THREAD_CHECK=1 ./build/bin/helix-screen --test -vv
+```
+
+**Read once, at `set_main_thread_id()` time**, so setting it later in the process has no effect — the cost at fire time is a single cached read.
+
+**Release builds ignore the env var *and* compile out the abort branch.** Under `HELIX_RELEASE_BUILD` the detector still emits its telemetry anomaly and debug log, but never aborts: a Snapmaker U1 user (dev `6d10417c`, 2026-05-14) somehow had this set in their environment and hit a stray strict-mode abort (crash signature `307b6f48`). `set_strict_bg_check(true)` still flips the flag in any build — the release build simply has nothing to do with it. See `CLAUDE.md` § "Threading & Lifecycle".
+
+---
+
+## Deployment
+
+### `HELIX_DATA_DIR`
+
+Override the runtime asset directory. When set, the application `chdir()`s to this path at startup so that all relative asset paths (`ui_xml/`, `assets/`, `config/`) resolve correctly. Use this when assets are installed to a different location than the default (e.g., due to storage constraints on embedded devices, or a custom filesystem layout).
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute path to directory containing `ui_xml/`, `assets/`, `config/` |
+| **Default** | Auto-detect from executable path |
+| **File** | `src/application/application.cpp` |
+
+```bash
+# Assets on a separate partition
+HELIX_DATA_DIR=/mnt/data/helixscreen /usr/bin/helix-screen
+
+# FHS-style installation with split layout
+HELIX_DATA_DIR=/usr/share/helixscreen /usr/bin/helix-screen
+
+# Systemd service
+Environment="HELIX_DATA_DIR=/opt/helixscreen"
+```
+
+**Required directory structure:**
+```
+$HELIX_DATA_DIR/
+  ├── ui_xml/          # XML layout files
+  ├── assets/          # Images (runtime-loaded only)
+  └── config/          # Default configuration
+```
+
+**Note:** Fonts compiled into the binary (e.g., `mdi_icons_64`, `noto_sans_*`) work regardless of this setting. Only runtime-loaded files (XML, images) require the data directory.
+
+---
+
+## Logging & Startup
+
+### `HELIX_LOG_LEVEL`
+
+Set the log verbosity level. Preferred over the legacy `HELIX_DEBUG` variable.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `trace`, `debug`, `info`, `warn`, `error`, `critical`, `off` |
+| **Default** | `warn` |
+| **File** | `scripts/helix-launcher.sh`, `src/system/cli_args.cpp`, `src/application/application.cpp` |
+
+```bash
+# In helixscreen.env (persistent, recommended for deployed systems):
+HELIX_LOG_LEVEL=debug
+
+# Or inline for one-off debugging:
+HELIX_LOG_LEVEL=trace ./build/bin/helix-screen
+```
+
+Read two ways, so it works however the binary was started: the launcher translates it to `--log-level=<value>`, and `Application::init_logging()` also reads the variable directly. Equivalent CLI flags: `-v` (info), `-vv` (debug), `-vvv` (trace), or `--log-level=<level>`. An unrecognized value is warned about and ignored rather than being fatal, so a typo in `helixscreen.env` cannot crash-loop a printer.
+
+**Where structured logs land** depends on the platform. Only Pi/x86 and Snapmaker U1 actually use `Auto` (→ systemd journal via `journalctl -u helixscreen`, or syslog → `/var/log/messages`). On AD5M, AD5X, K1, K2 and CC1 the platform hook sets `HELIX_LOG_DEST=file` at pre-start, so the log is a rotating file on persistent flash — `logread` there only shows whatever was emitted before the hook took effect. See [LOGGING.md](LOGGING.md#per-platform-routing-summary) for the per-platform paths. The launcher's shell-stdout-redirect file (`launcher.log`) is a separate, smaller stream that captures startup echoes and crash output.
+
+**Priority order:**
+1. CLI `--log-level` / `-v` flags (highest)
+2. `HELIX_LOG_LEVEL` env var
+3. `HELIX_DEBUG=1` (legacy, maps to debug level)
+4. Config `log_level` in `settings.json`
+5. Default: `warn`
+
+### `HELIX_SKIP_SPLASH`
+
+Skip the splash screen on startup. Useful for debugging startup issues or faster iteration.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (skip) or unset (show splash) |
+| **Default** | Unset (splash shown) |
+| **File** | `scripts/helix-launcher.sh` |
+
+```bash
+# In helixscreen.env:
+HELIX_SKIP_SPLASH=1
+```
+
+The launcher translates this to `--skip-splash` on the CLI.
+
+### `HELIX_REMOTE_CONTROL`
+
+Start the `helix-screen ctl` remote-control server on a deployed device.
+
+The server only listens when the app is started with `--remote` (or `--test`), and the SysV
+init script and systemd unit both exec the launcher with no arguments. Without this variable
+there is no way to reach an installed instance with `ctl` at all, so diagnosing a display
+problem means physically walking to the printer.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (enable) or unset (disabled) |
+| **Default** | Unset (server not started) |
+| **File** | `scripts/helix-launcher.sh` |
+
+```bash
+# In helixscreen.env:
+HELIX_REMOTE_CONTROL=1
+HELIX_REMOTE_SOCKET=/tmp/helix-cc1.sock   # optional; omit for the default path
+```
+
+The launcher translates these to `--remote` and `--remote-socket <path>`.
+
+**`make deploy-*` sets this for you** when the binary being deployed was built with
+`ENABLE_REMOTE_CONTROL=yes` — the link rule stamps `bin/.build-features` and the deploy's
+`sync-device-features` (`mk/cross.mk`) writes the key via `scripts/device-env-set.sh` before
+starting the app. Every developer cross build carries the server (`ENABLE_REMOTE_CONTROL`
+defaults to `yes` unless `HELIX_PACKAGING=1` marks a production packaging build), so a rig you
+deploy to is drivable as soon as the deploy finishes — having it compiled in but switched off
+is not a state anyone wants. An explicit `HELIX_REMOTE_CONTROL=0` in the file is preserved —
+the key is only rewritten when the value differs.
+
+Off by default deliberately: the control socket can drive the entire UI — navigate, click,
+set values, capture screenshots — so it is a debugging aid to switch on for a session, not
+something to leave enabled on a shared machine. Pin `HELIX_REMOTE_SOCKET` when more than one
+instance could be running, since a bare `ctl` silently drives whichever started first and
+still reports success. See `docs/devel/HELIXCTL.md`.
+
+### `HELIX_REMOTE_HTTP_TOKEN`
+
+Bearer token for the remote-control HTTP transport. Required before the server will bind an
+address reachable from off-box.
+
+The HTTP endpoint (`--remote-transport http`) exposes the same JSON-RPC command set as the
+Unix socket, and that set can drive any widget in the UI. The socket is protected by its 0600
+mode; a TCP listener has no equivalent, so an off-box bind refuses to start unless this is
+set. Loopback needs no token.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Any string of at least 16 characters |
+| **Default** | Unset (loopback binds only) |
+| **Read by** | `src/application/application.cpp#run` |
+| **Enforced by** | `src/remote/http_transport.cpp#decide_http_bind` |
+
+```bash
+# helixscreen.env does not run commands: generate the token first,
+openssl rand -hex 16
+# then write its output into the file:
+HELIX_REMOTE_HTTP_TOKEN=<paste the output here>
+```
+
+```bash
+curl -s -X POST http://<host>:7130/rpc \
+  -H "Authorization: Bearer $HELIX_REMOTE_HTTP_TOKEN" \
+  -d '{"jsonrpc":"2.0","method":"ping","id":1}'
+```
+
+Requests without a matching `Authorization: Bearer <token>` header get `401`. Once the token
+is set it gates every request, including on a loopback listener.
+
+Read from the environment rather than a CLI flag on purpose: `argv` is readable by any local
+user through `/proc`, so a token passed as a flag would leak. A bind that is refused logs the
+reason at error level and the app continues without a server:
+
+```
+[RemoteControl] Refusing to bind 0.0.0.0:7130: reachable from off-box and no token is set.
+```
+
+### `HELIX_HANG_THRESHOLD_SEC`
+
+How long the LVGL main loop may go without ticking before it is reported as hung. The main loop bumps a counter every iteration and `MemoryMonitor`'s existing background thread samples it; when the counter stops moving for this long, the stall is logged at error level, recorded to telemetry as `ui`/`main_loop_hang`, and left as a crash-handler breadcrumb.
+
+Detection only — nothing is killed. A deadlocked UI thread leaves the process alive and the screen lit, so `helix-watchdog` cannot see it: it supervises process exit, and by that measure the app is perfectly healthy.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `0`–`3600` seconds. `0` disables detection. Out-of-range and unparseable values are ignored with a warning. |
+| **Default** | `60` (`MainLoopHangDetector::kDefaultThresholdMs`) |
+| **File** | `src/application/application.cpp` (wiring), `include/main_loop_heartbeat.h` (logic) |
+
+```bash
+# Trip it quickly while testing the detector
+HELIX_HANG_THRESHOLD_SEC=5 ./build/bin/helix-screen --test -vv
+
+# Turn it off entirely
+HELIX_HANG_THRESHOLD_SEC=0 ./build/bin/helix-screen
+```
+
+The threshold has to clear the longest *legitimate* main-thread block, and those are real: the startup XML parse alone runs about 8s on an AD5M. Detection is only armed after the loop has completed its first iteration, so a slow startup can never register as a stall.
+
+### `HELIX_LOG_RING_LINES`
+
+Size the in-memory log ring, in messages. The ring sink is what a debug bundle harvests — it holds recent lines that the WARN-level file/syslog sinks never persisted, which is the whole point of attaching a bundle to a bug report. Shrink it on a device where even a few hundred KB matters.
+
+Read by `init_early()`, not by `init()`: the ring is allocated before the config system comes up so the startup diagnostics land in it, and `init()` adopts that same buffer. So this variable has to be in the process environment (`helixscreen.env`, a systemd `Environment=`, or the invoking shell) - there is no settings key equivalent, and nothing read from `settings.json` can influence the capacity.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Positive integer (message count). Zero, negative, and unparseable values are ignored. `helixscreen.env` takes `1`-`100000`. |
+| **Default** | Scales with total RAM: `clamp(total_ram_mb × 16, 2000, 20000)` |
+| **File** | `src/system/logging_init.cpp` (`ring_capacity_for_ram()`) |
+
+```bash
+# Shrink the ring on a very tight device
+HELIX_LOG_RING_LINES=500 ./build/bin/helix-screen
+
+# In helixscreen.env (persistent):
+HELIX_LOG_RING_LINES=500
+```
+
+Capacity is derived from the machine rather than fixed, because the ring's useful
+size is "how far back can we see" and that should track the hardware. At roughly
+150 bytes per retained line the formula budgets ~0.24% of RAM:
+
+| Device | RAM | Lines | Ring RAM |
+|--------|-----|-------|----------|
+| AD5M | 107 MB | 2000 (floor) | ~300 KB |
+| CC1 | 128 MB | 2048 | ~300 KB |
+| AD5X | 473 MB | 7568 | ~1.1 MB |
+| Pi / CB1 | 2 GB+ | 20000 (cap) | ~2.9 MB |
+
+The 2000 floor is the historical fixed size, so no device regresses; it is also
+the fallback when RAM detection fails. Keyed on **total** RAM, not `MemAvailable`
+— the latter depends on boot ordering, which would resize the ring every boot and
+shrink it hardest under memory pressure, exactly when the history matters most.
+
+### `HELIX_BUNDLE_LOG_DEBUG`
+
+Control whether the in-memory log ring captures at DEBUG level or matches the configured level of the persistent sinks. On by default: recovering live debug context in a bundle is worth the modest formatting cost of emitting debug lines into a memory ring, even on MIPS/AD5X. Turn it off if that per-line format pass is measurably hurting a constrained device.
+
+| Property | Value |
+|----------|-------|
+| **Values** | A value starting with `0`, `f`, `F`, `n`, or `N` disables. Anything else (including unset) enables. |
+| **Default** | Enabled — ring captures DEBUG regardless of the configured log level |
+| **File** | `src/system/logging_init.cpp` |
+
+```bash
+# Ring matches the configured sink level instead of always capturing debug
+HELIX_BUNDLE_LOG_DEBUG=0 ./build/bin/helix-screen
+```
+
+This only affects the ring sink. The file/syslog/journal sinks keep running at the configured level either way.
+
+The variable is read twice, because the ring is installed by `init_early()` and adopted by `init()` (see `LOGGING.md` § "Ring-Buffer Sink Lifecycle"). Before `init()` there is no configured level to fall back to, so during startup `=0` leaves the ring at WARN alongside the early console sink; from Phase 3 onward it means the configured level as documented above.
+
+### `HELIX_LOG_ROTATE_BYTES` / `HELIX_LOG_ROTATE_FILES`
+
+Tune rotating-file-log sizing on constrained-flash platforms. Together they cap total log disk usage at roughly `kBytes × FILES`.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Positive integers — bytes per file, and number of files retained. Zero and unparseable values fall back to the defaults. |
+| **Default** | `5242880` (5 MiB) × `3` files ≈ 15 MiB cap |
+| **File** | `src/system/logging_init.cpp` |
+
+```bash
+# 1 MiB × 3 files — the CC1 / K1 / AD5M platform-hook setting
+HELIX_LOG_ROTATE_BYTES=1048576 HELIX_LOG_ROTATE_FILES=3 ./build/bin/helix-screen
+```
+
+**Only applies when the log target is `file`.** The journal, syslog, console and Android targets never construct a rotating sink, so these variables are inert there. Platform hooks set them automatically where flash is tight — `hooks-cc1.sh`, `hooks-k1.sh`, `hooks-ad5m-*.sh` use 1 MiB; `hooks-k2.sh` uses 2 MiB.
+
+---
+
+## Process & Supervision
+
+These variables coordinate the boot splash, the watchdog, and the app's behavior under
+an external supervisor. Most are exported by platform hooks or by the process tree itself
+(`helix-launcher.sh` → `helix-watchdog` → `helix-screen`), not set by hand.
+
+### `HELIX_SPLASH_STATUS_FILE`
+
+Path of the boot-status file the launcher and init gate write while they wait for services. Each rewrite is a heartbeat; the first line is the message the splash displays. The splash stays visible as long as heartbeats arrive, which is what covers a slow startup with no blank gap.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute file path |
+| **Default** | `/tmp/helix-splash-status` |
+| **Files** | `src/helix_splash.cpp` (`splash_status_path()`), `scripts/helix-launcher.sh` |
+
+```bash
+# Point the heartbeat at a writable location inside a strict sandbox
+HELIX_SPLASH_STATUS_FILE=/opt/helixscreen/helix-splash-status ./build/bin/helix-screen
+```
+
+**The launcher picks a writable path when this is unset**, probing `/tmp`, `/var/tmp`, then the install directory, and exporting the first that accepts a write. That matters on `ProtectSystem=strict` installs (Creality Sonic Pad, OrangePi Zero3) where `/tmp` is read-only inside the service mount namespace and the heartbeat would silently fail — leaving the splash to blank out at its own 30 s self-cap on a slow boot. A value already set (e.g. from `helixscreen.env`) is respected and not probed.
+
+### `HELIX_SPLASH_MIN_FREE_KB`
+
+Free-memory floor, in KiB, below which the splash process voluntarily exits. The splash must never be the process that tips a tight-RAM device into OOM, so it watches free memory and gets out of the way.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Non-negative integer (KiB). `0` disables the valve entirely. Negative and unparseable values fall back to the default. |
+| **Default** | `8192` (≈ 8 MiB) |
+| **File** | `src/helix_splash.cpp` (`splash_min_free_kb()`) |
+
+```bash
+# Raise the floor on a device that OOMs earlier than 8 MiB free
+HELIX_SPLASH_MIN_FREE_KB=16384 ./bin/helix-splash
+
+# Never self-exit on memory pressure
+HELIX_SPLASH_MIN_FREE_KB=0 ./bin/helix-splash
+```
+
+Read by the splash binary itself, not by `helix-screen`.
+
+### `HELIX_SPLASH_PID`
+
+PID of an already-running `helix-splash` process, so whoever starts `helix-screen` can hand off the retirement of that splash rather than leaving it orphaned.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Positive integer PID. Zero, negative, empty and unparseable values are treated as unset. |
+| **Default** | Unset |
+| **Files** | `src/application/splash_screen_manager.cpp`, `scripts/helix-launcher.sh`, `config/helixscreen.init` |
+
+The init script starts the early splash for the fastest possible first pixel, then exports its PID; the launcher forwards it as `--splash-pid=<n>`.
+
+**Why the app also reads it directly:** on the DRM path the watchdog launches `helix-screen` *without* `--splash-pid`, so the early fb0 splash is an orphan nobody signals — it keeps repainting `/dev/fb0` (the remote screen) until its own 180 s backstop, then clears it and the remote goes black. When no PID argument was given, `SplashScreenManager::start()` adopts the one in this variable so the normal `SIGUSR1` handoff retires it. A launcher-provided PID always wins over the env var.
+
+**Verified before adoption:** the PID's `/proc/<pid>/comm` must read `helix-splash`, so a recycled PID cannot be signalled by mistake. Adoption is logged as `[SplashManager] Adopted early splash PID <n> from HELIX_SPLASH_PID`.
+
+### `HELIX_ENV_FILE_REFUSED`
+
+Why the launcher refused to evaluate `helixscreen.env` at all, as a classification rather than prose: the app owns the user-facing sentence, so the toast stays one line naming the single command the actual problem needs. Exported only on a whole-file trust-gate refusal (#1682: foreign owner, group/world-writable mode the self-heal could not fix, unreadable stat); the app turns it into the same startup toast config-restore warnings use, so the user sees that their settings stopped applying instead of a silent fall back to defaults.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `kind\|detail\|expected\|path`: kind is `mode`, `owner`, `chain` or `other`; detail is the offending uid (owner) or a short reason (other); expected is the chown target (owner only); a `chain` kind has no producer today (a symlink chain narrows the trusted owners and shows up as `owner`) but the app words it if one appears |
+| **Default** | Unset (no refusal, or no env file) |
+| **Files** | `scripts/helix-launcher.sh` (`helix_env_refuse`), `src/system/env_refusal_notice.cpp` (`parse_env_file_refused`, `env_refusal_copy`) |
+
+The launcher's log line keeps the full repair hint (`chown ... && chmod ...`); the toast carries only the command the kind needs. The toast is the channel's sticky form (`ui_notification_warning_sticky`): it stays on screen until the user closes it, because every setting in the file is being ignored. An unknown kind or missing field yields no notification rather than a broken one. Never set it by hand or in `helixscreen.env`: the launcher unsets both handoff variables before parsing, so an ambient value cannot forge a refusal notice. It inherits to `helix-screen` through the watchdog's `execv` like the rest of the environment.
+
+### `HELIX_ENV_LINES_SKIPPED`
+
+The individual `helixscreen.env` lines the launcher refused, joined by `|` after the file itself passed the trust gate. Each entry is `label:reason`: the label is the variable name, or `line N` for a line with no parsable key; the reason is the same sentence the log carries (key not on the allowlist, value refused for that key, unterminated quote, malformed line). Capped at 12 entries by the launcher; a longer file simply stops reporting the tail.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `label:reason` entries joined by `|` (reasons never contain the separator); first `:` splits label from reason, so a reason may itself hold colons |
+| **Default** | Unset (every line loaded, or the file refused outright; see `HELIX_ENV_FILE_REFUSED`) |
+| **Files** | `scripts/helix-launcher.sh` (`helix_env_note_skip`), `src/system/env_refusal_notice.cpp` (`parse_env_lines_skipped`) |
+
+The app parses this with a pure function that drops malformed entries rather than failing: the launcher owns the format, and a stray entry must not cost the boot. Observed in tests via `helix-launcher.sh --print-env HELIX_ENV_LINES_SKIPPED`, which runs the same parse the launch path does.
+
+### `HELIX_SUPERVISED`
+
+Marks that `helix-screen` is running under `helix-watchdog`. When an in-app action needs a service restart, a supervised process exits cleanly and lets the supervisor bring it back — forking a replacement itself would leave two instances running at once.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Any non-empty value (presence is the signal) |
+| **Default** | Unset — an unsupervised process re-execs itself on restart |
+| **Files** | `src/helix_watchdog.cpp` (sets it via `setenv` in the child before `execv`), `src/app_globals.cpp`, `src/system/update_checker.cpp` |
+
+Set automatically by the watchdog. You should not need to set it by hand — doing so on a genuinely unsupervised process turns "restart" into "quit and stay dead".
+
+### `HELIX_SERVICE_RESTARTS`
+
+Declares that the service manager restarts HelixScreen when it exits. `config/helixscreen.service` sets it beside `Restart=always`. After an update, `helix-watchdog` exits instead of respawning the app in place, so systemd restarts the whole service and `ExecStartPre` refreshes the installed units as root (prestonbrown/helixscreen#1713). Without it, every clean exit respawns in place.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Any non-empty value (presence is the signal) |
+| **Default** | Unset |
+| **Files** | `config/helixscreen.service`, `src/helix_watchdog.cpp`, `include/watchdog_restart_policy.h#hand_clean_exit_to_service_manager` |
+
+Not a systemd probe: `INVOCATION_ID` is also set for an init script wrapped by systemd-sysv-generator, whose unit does not restart, so exiting there would leave the screen dark. Never set it on a unit without `Restart=always`.
+
+### `INVOCATION_ID`
+
+Standard systemd variable, set for every unit invocation. HelixScreen uses its presence purely as a "running under systemd" probe, checked *before* `HELIX_SUPERVISED` on the same restart path.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Set by systemd (a 128-bit ID); the value is never parsed |
+| **Default** | Unset outside a systemd unit |
+| **Files** | `src/app_globals.cpp` (`app_request_restart_service()`), `src/system/update_checker.cpp` |
+
+```
+[App Globals] Running under systemd - quitting for service restart
+[App Globals] Running under watchdog - quitting for supervised restart
+```
+
+Those two log lines tell you which branch was taken. The update path treats either variable as "supervised" for the same reason.
+
+### `HELIX_GUI_PIDFILE`
+
+Write the watchdog's own PID to this file so an external UI supervisor that stops things by pidfile can signal the right process.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute file path (e.g. `/var/run/gui.pid`) |
+| **Default** | Unset — no pidfile is written (opt-in, no-op when unset) |
+| **Files** | `src/helix_watchdog.cpp`, `scripts/helix-launcher.sh` (removes the file on cleanup) |
+
+```bash
+# CC1 / COSMOS: let the stock `gui-switcher stop` find us
+HELIX_GUI_PIDFILE=/var/run/gui.pid ./bin/helix-watchdog -- ./bin/helix-screen
+```
+
+**Why the watchdog and not the other two processes:** on CC1/COSMOS the stock `gui-switcher stop` runs `start-stop-daemon -K` against this pidfile. The watchdog is the one process that supervises the whole launcher → watchdog → helix-screen tree and reaps it on SIGTERM. Signalling the launcher cannot work (its cleanup trap is deferred behind the foreground child), and signalling `helix-screen` just makes the watchdog respawn it.
+
+Exported by `assets/config/platform/hooks-cc1.sh`. A failed write logs `[Watchdog] Could not write GUI pidfile <path>` and is otherwise non-fatal.
+
+### `HELIX_DISABLE_AUTO_UPDATES`
+
+Declare that updates are managed externally, suppressing HelixScreen's in-app update flow. The firmware-facing opt-out — for images where the vendor ships HelixScreen as part of a larger update mechanism.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Truthy: `1`, `true`, `yes`, `on`. Falsy: `0`, `false`, `no`, `off`. Case-insensitive, surrounding whitespace trimmed. |
+| **Default** | Unset — defers to the platform (see below) |
+| **File** | `src/app_globals.cpp` (`updates_externally_managed()`), `src/system/platform_info.cpp` (the platform default) |
+
+```bash
+# In helixscreen.env on a vendor image — suppress in-app updates:
+HELIX_DISABLE_AUTO_UPDATES=1
+
+# On a dev box whose platform defaults to managed — force self-update back ON:
+HELIX_DISABLE_AUTO_UPDATES=0
+```
+
+**Set, it decides in either direction; unset, the platform does.** A truthy value suppresses and a falsy value force-enables, which is how a dev box overrides a platform that defaults to managed without a rebuild. An **empty** value counts as unset, not as falsy — `helixscreen.env` can export one, and reading it as an explicit "no" would silently re-enable self-update on a firmware-managed box.
+
+The platform default lives in `helix::platform_defaults_to_external_updates()` (`include/platform_info.h`), the single place any platform is named. It is currently true only for the **Snapmaker U1**, where PAXX Extended Firmware ships HelixScreen as a pinned, sha256-verified `extended-pkg` package in `/oem/apps/helixscreen` — self-updating there overwrites a package the firmware owns. The firmware hook exports `HELIX_DATA_DIR`/`HELIX_SUPERVISED` and friends but never this flag, so keying suppression on the flag alone left every U1 install checking for updates and raising the update modal.
+
+The result is cached in a function-local static on first call, so changing the environment mid-process has no effect.
+
+In-app updates are suppressed when *either* this flag is truthy *or* self-update is physically impossible (`self_update_supported()` tests write permission on the install root's parent, since the update renames the root). The whitespace trim exists because `helixscreen.env` values routinely carry a stray trailing space.
+
+---
+
+## Data Paths
+
+### `HELIX_CACHE_DIR`
+
+Override the base directory for all HelixScreen cache/temp files (thumbnails, screenshots, gcode temp files).
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute directory path |
+| **Default** | Auto-detected per platform |
+| **File** | `src/app_globals.cpp` |
+
+When set, all cache subdirectories are created under `$HELIX_CACHE_DIR/<subdir>`. Platform hooks set this automatically:
+- **AD5M**: `/data/.helixscreen/cache` (5.8GB ext4 partition)
+- **K1**: `/usr/data/helixscreen/cache`
+- **K2**: `/mnt/UDISK/helixscreen/cache` (27.5GB user partition). `/usr/data` on the
+  K2 is the ~240MB root overlay, not user storage, so it is only a fallback.
+- **CC1**: `/user-resource/helixscreen/cache` (6.3GB ext4 partition). `/` is a
+  read-only squashfs with no `/opt`, and the box has 117MB of RAM, so a cache root
+  that falls through the cascade lands in tmpfs and competes with the UI.
+- **Pi / M1 / x86**: not set. The install root is discovered rather than fixed, so
+  the XDG rung resolves correctly on its own and an override can only get it wrong.
+
+```bash
+# Custom cache location
+HELIX_CACHE_DIR=/mnt/storage/helix-cache ./build/bin/helix-screen
+
+# AD5M (set automatically by platform hooks)
+export HELIX_CACHE_DIR="/data/.helixscreen/cache"
+```
+
+**Resolution chain** (first match wins):
+1. `HELIX_CACHE_DIR` env var
+2. Config `/cache/base_directory`
+3. Platform-specific compile-time default
+4. `XDG_CACHE_HOME/helix/`
+5. `$HOME/.cache/helix/`
+6. `/var/tmp/helix_`
+7. `/tmp/helix_` (last resort)
+
+### `XDG_DATA_HOME`
+
+XDG base directory specification for application data storage.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Directory path |
+| **Default** | `~/.local/share` |
+| **File** | `src/system/logging_init.cpp` |
+
+HelixScreen stores logs and data in `$XDG_DATA_HOME/helixscreen/`.
+
+### `HOME`
+
+User home directory (standard Unix variable).
+
+| Property | Value |
+|----------|-------|
+| **Values** | Directory path |
+| **Default** | (from system) |
+| **File** | `src/system/logging_init.cpp` |
+
+Used as fallback when `XDG_DATA_HOME` is not set.
+
+### `HELIX_CONFIG_DIR`
+
+Override the directory HelixScreen reads and writes its user configuration from — `settings.json`, `helixscreen.env`, crash.txt and everything else resolved through `helix::writable_path()`.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Directory path (absolute recommended) |
+| **Default** | `config` (relative to the working directory, which `HELIX_DATA_DIR` may have changed) |
+| **File** | `src/core/data_root_resolver.cpp` (`get_user_config_dir()`) |
+
+```bash
+# Yocto-style split layout: writable config away from a read-only data root
+HELIX_CONFIG_DIR=/var/lib/helixscreen ./build/bin/helix-screen
+
+# Throwaway config for a test run
+HELIX_CONFIG_DIR=/tmp/helix-config-test ./build/bin/helix-screen --test -vv
+```
+
+An empty value is treated as unset. This is the config counterpart to [`HELIX_DATA_DIR`](#helix_data_dir), which points at the *read-only* asset root (`ui_xml/`, `assets/`) — the two are resolved independently, so a read-only image can pair a squashfs data root with a writable config dir.
+
+### `HELIX_TMP_DIR`
+
+Prepend a directory to the search list for **short-lived runtime files** — `nmcli` stderr capture, screenshots, timelapse temp downloads. Distinct from the cache dir, which holds files meant to persist.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute directory path (empty is treated as unset) |
+| **Default** | Unset — the probe starts at `/tmp` |
+| **File** | `src/app_globals.cpp` (`app_get_runtime_dir()`) |
+
+```bash
+# Put runtime scratch on a large partition
+HELIX_TMP_DIR=/data/helix-runtime ./build/bin/helix-screen
+```
+
+**Resolution chain** (first *writable* candidate wins; the returned path never has a trailing slash):
+1. `HELIX_TMP_DIR`
+2. `/tmp`
+3. `/var/tmp`
+4. `XDG_RUNTIME_DIR`
+5. `<cache dir>/runtime` — used when the whole `/tmp` family is read-only
+6. `/tmp` as a last resort, with a warning that writes may fail
+
+`/tmp` deliberately sits ahead of `XDG_RUNTIME_DIR` so a desktop session cannot pull writes off the path that `scripts/screenshot.sh` and other tooling expect.
+
+### `XDG_RUNTIME_DIR`
+
+Standard XDG per-session runtime directory. HelixScreen uses it only as a late fallback in the runtime-dir probe above, after `/tmp` and `/var/tmp` have both been rejected as unwritable.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Directory path (set by the session manager; empty is treated as unset) |
+| **Default** | (from the system; typically `/run/user/<uid>`) |
+| **File** | `src/app_globals.cpp` (`app_get_runtime_dir()`) |
+
+It is intentionally *not* preferred over `/tmp` — see the note under `HELIX_TMP_DIR`.
+
+### `XDG_CACHE_HOME`
+
+Standard XDG user cache base. Contributes the first entry to the cache-base candidate list, ahead of `$HOME/.cache`.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Directory path (empty is treated as unset) |
+| **Default** | Unset — falls back to `$HOME/.cache` |
+| **File** | `src/system/helix_paths.cpp` (`xdg_cache_bases()`) |
+
+Sits at step 4 of the [`HELIX_CACHE_DIR`](#helix_cache_dir) resolution chain, so an explicit `HELIX_CACHE_DIR`, the `/cache/base_directory` config key, and any platform compile-time default all take precedence.
+
+### `TMPDIR` / `TMP` / `TEMP`
+
+Standard temp-directory variables. All three are consulted, in that order, when the updater builds its list of candidate download locations for a release archive.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Directory paths (empty values are skipped) |
+| **Default** | Unset — the install root and the standard temp locations are still probed |
+| **File** | `src/system/update_checker.cpp` (`UpdateChecker::get_download_path()`) |
+
+**The candidate with the most free space wins — not the first one.** The updater checks every candidate exhaustively so it does not fill a tiny tmpfs or crowd out gcode storage on an embedded device. Setting `TMPDIR` therefore *offers* a location rather than forcing one. Candidates, in the order they are collected:
+
+1. The install root and its parent (usually the largest dedicated partition on embedded devices — CC1 `/user-resource`, Snapmaker U1 `/opt/lava`, K1/K2 `/usr/data`)
+2. `TMPDIR`, `TMP`, `TEMP`
+3. `HOME`
+4. `/tmp`, `/var/tmp`, `/mnt/tmp`
+5. `/data`, `/mnt/data`
+
+Not to be confused with `TMP_DIR` (underscore), the installer's staging variable — `update_checker.cpp` sets that one for `install.sh` and it is always a dot-prefixed subdirectory, never a bare mount point.
+
+### `PATH`
+
+Standard executable search path. HelixScreen does not read it to find its own binaries — it repairs it for child processes.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Colon-separated directory list |
+| **Default** | If unset or empty in a forked child, it is set to `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` |
+| **File** | `src/system/update_checker.cpp` |
+
+Systemd services can start with `PATH` cleared entirely. That breaks tools like `tar` and `gunzip`, which spawn their own subprocesses (`gzip`, `sh`) and need a working `PATH` to find them — and it breaks the `execvp()` lookup the updater relies on for BusyBox platforms. The fix is applied in the forked child only, so the parent's environment is untouched.
+
+### `SSL_CERT_FILE` / `SSL_CERT_DIR`
+
+Standard OpenSSL CA-bundle overrides. They are the first choice for the CA store that requests to HelixScreen's own servers (update check and download, changelog, telemetry, crash reports, debug bundle upload) verify against. Printer LAN services (Moonraker, cameras, Spoolman, IPP, plugins) are not verified, because self-signed certificates are normal there.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Path to a CA bundle file / path to a directory of CA certs |
+| **Default** | Unset: `/etc/ssl/certs/ca-certificates.crt`, `/etc/pki/tls/certs/ca-bundle.crt`, `/etc/ssl/cert.pem`, then `<install>/certs/ca-certificates.crt` are probed in that order |
+| **File** | `src/system/tls_trust.cpp` (`find_ca_store()`, `trusted_request()`) |
+
+```bash
+# Point at a bundle on a device without one in the standard location
+SSL_CERT_FILE=/usr/data/ca-certificates.crt ./build/bin/helix-screen
+```
+
+The store is resolved on the first such request and logged as `[TLS] Verifying our servers against <path>`. Servers are checked for chain and hostname but not for validity dates, because printers often boot with a 1970 clock. A store that exists but cannot be loaded trusts nothing, so those requests fail with `[TLS] Certificate for '<host>' rejected: ...`. With no store at all the app logs a warning and connects unverified.
+
+Telemetry also refuses to send when no store is found: on devices with no CA bundle at all (AD5M stock firmware), glibc's NSS resolver can `SIGSEGV` during the SSL handshake. The check runs once and is cached, so setting the variable after startup does not re-enable sends. On Android, telemetry, crash reports and debug bundle uploads go through the platform's own HTTPS stack, which needs no CA bundle on disk, so these variables do not apply to them and telemetry always has a transport (`src/system/ingest_client.cpp#transport_available`).
+
+---
+
+## Build-Time Variables
+
+These are set during compilation via the Makefile system.
+
+| Variable | Purpose | Source |
+|----------|---------|--------|
+| `HELIX_VERSION` | Version string | `VERSION.txt` |
+| `HELIX_VERSION_MAJOR` | Major version number | Parsed from version |
+| `HELIX_VERSION_MINOR` | Minor version number | Parsed from version |
+| `HELIX_VERSION_PATCH` | Patch version number | Parsed from version |
+| `HELIX_GIT_HASH` | Git commit hash (short) | `scripts/gen-git-hash.sh` → `build/generated/helix_git_hash.h`, not a global define (see BUILD_SYSTEM.md § Version) |
+
+---
+
+## Preprocessor Flags
+
+These are set at compile time to enable/disable features:
+
+| Flag | Purpose |
+|------|---------|
+| `HELIX_DISPLAY_SDL` | Enable SDL2 display backend |
+| `HELIX_DISPLAY_DRM` | Enable DRM display backend |
+| `HELIX_DISPLAY_FBDEV` | Enable framebuffer display backend |
+| `HELIX_ENABLE_OPENGLES` | Enable OpenGL ES support for 3D rendering |
+| `HELIX_HAS_SYSTEMD` | Enable systemd integration |
+
+---
+
+## Shell Script Variables
+
+### Screenshot Script (`scripts/screenshot.sh`)
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `HELIX_SCREENSHOT_DISPLAY` | Display number for multi-monitor | `1` |
+| `HELIX_SCREENSHOT_OPEN` | Auto-open in Preview (macOS) | Disabled |
+
+```bash
+# Take screenshot on display 0 and open it
+HELIX_SCREENSHOT_DISPLAY=0 HELIX_SCREENSHOT_OPEN=1 ./scripts/screenshot.sh helix-screen test-output
+```
+
+### Logging Destination (`scripts/helix-launcher.sh` + `src/application/application.cpp`)
+
+Set these in `helixscreen.env`, which the launcher sources before it builds the command line, or export them from a `platform_pre_start` hook.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HELIX_DEBUG` | Legacy debug switch; `1` adds `-vv` (debug-level logging). Launcher-only — the binary does not read it. Superseded by `HELIX_LOG_LEVEL`. | `0` |
+| `HELIX_LOG_DEST` | Log destination — same as `--log-dest`: `auto`, `journal`, `syslog`, `file`, `console`. | `auto` |
+| `HELIX_LOG_FILE` | Log file path — same as `--log-file`. Only meaningful once the destination resolves to `file`. | Unset |
+
+**Usage Notes:**
+- `HELIX_LOG_DEST` / `HELIX_LOG_FILE` / `HELIX_LOG_LEVEL` are read **twice, independently**: the launcher turns them into `--log-dest=` / `--log-file=` / `--log-level=`, and `Application::init_logging()` reads them directly. The direct read is what makes them work under a systemd unit's `Environment=`, a hand-run binary, or a third-party init script that execs `helix-screen` without our launcher. `HELIX_DEBUG` is the exception: launcher-only.
+- Resolution is CLI flag > env var (including `helixscreen.env` and hook exports) > `/log_dest` and `/log_path` in `settings.json` > default.
+- `HELIX_LOG_LEVEL` takes priority over `HELIX_DEBUG`: a named level emits `--log-level=<level>` and the legacy `-vv` branch is never reached.
+- `HELIX_LOG_DEST=auto` is the only value that produces no launcher flag. `auto` resolves to the systemd journal when `/run/systemd/journal/socket` exists, otherwise syslog on Linux, console on macOS. It **never** resolves to a file on any platform — the file sink has to be asked for, which is what the embedded platform hooks do.
+- The launcher resolves these **after** sourcing platform/hooks.sh, so a value exported from `platform_pre_start` is picked up. Every AD5M, AD5X, K1/K2 and CC1 hook relies on that; the Pi, QIDI, M1 and Snapmaker U1 targets have no firmware log archiver to feed.
+- An unopenable `HELIX_LOG_FILE` is not fatal: the sink construction is caught and the platform's normal system sink takes over with a warning.
+
+**Example:**
+```bash
+# In helixscreen.env
+HELIX_LOG_LEVEL=debug
+HELIX_LOG_DEST=file
+HELIX_LOG_FILE=/usr/data/helixscreen/helix.log
+```
+
+### Launcher Process Control (`scripts/helix-launcher.sh`)
+
+Launcher-only knobs for splash handling, scheduling priority, and boot-time respawn.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HELIX_NO_SPLASH` | `1` disables the splash entirely — no `--splash-pid`, no `--splash-bin`, no heartbeat write. For debugging. | `0` |
+| `HELIX_NICE` | Nice value applied to the launcher (children inherit it) when co-hosted with Klipper/Moonraker. `0` disables the renice. | `10` |
+| `HELIX_OOM_SCORE_ADJ` | `oom_score_adj` that `helix-screen` applies to itself when co-hosted with Klipper/Moonraker, so the OOM killer takes the UI instead of Klipper. `0` disables. Clamped to the kernel's `[-1000, 1000]`. | `300` |
+| `HELIX_BOOT_RESPAWN_MAX` | Max boot-time respawns after an early death, `0`-`10`. `0` disables the self-heal. | `0` (disabled) |
+| `HELIX_BOOT_RESPAWN_WINDOW` | Seconds after launch, `0`-`300`, within which a death counts as "lost the boot race" rather than a deliberate quit. | `25` |
+| `HELIX_BOOT_RESPAWN_DELAY` | Seconds to wait before each respawn, `0`-`60`. | `3` |
+
+**Usage Notes:**
+- The renice only happens when `helix_klipper_co_hosted` is true — a standalone display (remote Sonic Pad, dev workstation, kiosk pointed at a network printer) is never deprioritized. Raising nice is unprivileged, so it works as the non-root service user.
+- `helix_klipper_co_hosted` reads `/proc/<pid>/cmdline` directly rather than calling `pgrep`. `pgrep` is absent entirely on some BusyBox rootfs — Forge-X on the AD5M ships none — and the old socket fallback checked only `/tmp/klippy_uds` and `/tmp/moonraker.sock`, which Forge-X does not use (its klippy socket is `/tmp/uds`). Both probes missed there, so the UI ran at nice 0 against Klipper on exactly the boards this protects. `HELIX_PROC_ROOT` overrides the scan root for tests.
+- The co-host patterns match the klippy.py and moonraker.py script names, plus `moonraker-env` and `-m moonraker`, and RustiCC's Rust replacements on the CC1, `rusticc` and `moonruster` (by path or bare name, never as a substring of an argument). They are deliberately narrow: a bare `moonraker` would also match a standalone kiosk started as `helix-screen --moonraker ws://host:7125`, which must stay at nice 0. The socket fallback checks `/tmp/klippy_uds`, `/tmp/moonraker.sock`, RustiCC's `/run/moonraker.sock` and Forge-X's `/tmp/uds`.
+- The renice covers the whole process. Independently of it, the G-code preview's background workers (index scan, ghost pass, prefetch, viewer build) lower their own threads to nice 19 through `helix::make_background_thread` (`include/helix_thread.h`), so they yield to the UI and to Klipper even on a stack the launcher does not recognise.
+- `HELIX_OOM_SCORE_ADJ` is **exported** by the launcher, not applied by it. `oom_score_adj` is inherited across `fork` and preserved across `exec`, so setting it in the launcher would mark the launcher shell and `helix-watchdog` too — and killing the watchdog is what stops `helix-screen` from coming back. `helix-screen` writes it to `/proc/self/oom_score_adj` instead. Raising the value is unprivileged; only lowering it below 0 needs `CAP_SYS_RESOURCE`.
+- Measured on an AD5M (110 MB total, Forge-X 1.4.0): every process sat at `oom_score_adj` 0, leaving the OOM kill order Moonraker (score 156), Klipper (92), `helix-screen` (69) — exactly backwards, since `helix-screen` is the only one with a supervisor behind it.
+- The boot-respawn self-heal exists for firmwares that send `helix-screen` a single SIGTERM during a busy boot. `helix-screen` handles SIGTERM with a fast `_exit(0)` expecting a supervisor to restart it — on an unsupervised SysV boot (no `helix-watchdog`; BusyBox init does not respawn S99 children) that one signal is permanent. On the Snapmaker U1 that also strands the device off-network, since `helix-screen` owns the WiFi association.
+- A boot-time SIGTERM and a deliberate user quit both exit 0, so they are told apart by **uptime**: a process that dies inside `HELIX_BOOT_RESPAWN_WINDOW` seconds of launch is presumed to have lost the boot race. Opted into by the Snapmaker U1 platform hook.
+- A real `init stop` kills the launcher itself (its cleanup trap sets `HELIX_SHUTTING_DOWN`), so the respawn loop never fires for an intentional stop.
+
+**Example:**
+```bash
+# In helixscreen.env — 3 boot respawns inside a 25s window
+HELIX_BOOT_RESPAWN_MAX=3
+
+# Debug a startup problem with no splash in the way
+HELIX_NO_SPLASH=1 /opt/helixscreen/bin/helix-launcher.sh -vv
+```
+
+### `HELIX_SELF_UPDATE`
+
+Tells `install.sh` that it was spawned by HelixScreen's in-app update rather than run by a user, so it can skip work that is unnecessary or destructive mid-self-update.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (the installer tests for exactly this) |
+| **Default** | Unset — a normal user-initiated install |
+| **Files** | `src/system/update_checker.cpp` (sets it via `setenv` in the forked child before `execv`), `scripts/lib/installer/common.sh` (`_is_self_update()`) |
+
+Set automatically — never by hand. Installer modules (`service.sh`, `competing_uis.sh`) branch on `_is_self_update()` to skip `stop_service`/`start_service` on SysV, because the watchdog handles the restart. The same fork also sets `TMP_DIR` to an app-validated staging directory when that directory's parent is writable, otherwise leaving the installer to probe for one.
+
+---
+
+## Systemd Service Configuration
+
+When running as a systemd service, environment variables are set in the service file:
+
+```ini
+# /etc/systemd/system/helixscreen.service
+[Service]
+Environment="HELIX_DISPLAY_BACKEND=drm"
+# Environment="HELIX_DATA_DIR=/usr/share/helixscreen"
+```
+
+See `docs/user/CONFIGURATION.md` for systemd deployment details.
+
+---
+
+## Common Usage Patterns
+
+### Development Testing
+
+Boot once, then drive the UI to a panel/overlay with `helix-screen ctl` (see
+`docs/devel/HELIXCTL.md`).
+
+```bash
+# Basic mock testing
+./build/bin/helix-screen --test -vv
+
+# Test a specific overlay with verbose logging
+./build/bin/helix-screen --test -vv &
+./build/bin/helix-screen ctl navigate controls; ./build/bin/helix-screen ctl click btn_motion
+
+# Multi-slot AMS testing
+HELIX_AMS_GATES=8 ./build/bin/helix-screen --test &
+./build/bin/helix-screen ctl navigate filament
+```
+
+### CI/CD Screenshots
+
+```bash
+# Automated panel screenshots (screenshot.sh drives helix-screen ctl end to end)
+./scripts/screenshot.sh helix-screen home home --test
+./scripts/screenshot.sh helix-screen motion motion --test
+./scripts/screenshot.sh helix-screen settings settings --test
+```
+
+### Performance Benchmarking
+
+```bash
+# Run 10-second benchmark
+HELIX_BENCHMARK=1 HELIX_AUTO_QUIT_MS=10000 ./build/bin/helix-screen --test -v &
+./build/bin/helix-screen ctl navigate home
+```
+
+### Hardware Override (Embedded)
+
+```bash
+# Override all device paths
+HELIX_DISPLAY_BACKEND=drm \
+HELIX_DRM_DEVICE=/dev/dri/card1 \
+HELIX_TOUCH_DEVICE=/dev/input/event2 \
+HELIX_MOUSE_DEVICE=/dev/input/event4 \
+HELIX_KEYBOARD_DEVICE=/dev/input/event5 \
+HELIX_BACKLIGHT_DEVICE=sysfs \
+./build/bin/helix-screen
+```
+
+---
+
+## See Also
+
+- [Development Guide](DEVELOPMENT.md) - Daily development workflow
+- [Build System](BUILD_SYSTEM.md) - Build configuration
+- [Testing Guide](TESTING.md) - Test infrastructure
+- [User Configuration](../user/CONFIGURATION.md) - End-user setup

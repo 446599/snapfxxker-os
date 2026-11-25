@@ -1,0 +1,178 @@
+diff --git a/include/ui_print_tune_overlay.h b/include/ui_print_tune_overlay.h
+index 397e4e44d8067e5a7d4a0be4b9319e69343dffd3..b106fe04da15d4df262c7be58edd89f54f8fa4a9 100644
+--- a/include/ui_print_tune_overlay.h
++++ b/include/ui_print_tune_overlay.h
+@@ -99,6 +99,9 @@ class PrintTuneOverlay : public OverlayBase {
+     /// Apply one of the four validated absolute speed presets.
+     void handle_speed_preset(int percent);
+ 
++    /// Keep the full tuning controls available behind the compact speed page.
++    void show_advanced(bool advanced);
++
+     /**
+      * @brief Adjust flow by a delta and send G-code
+      * @param delta Flow change in percent (e.g. -10, -5, -1, +1, +5, +10)
+@@ -202,6 +205,7 @@ class PrintTuneOverlay : public OverlayBase {
+     // Subjects for reactive UI
+     lv_subject_t tune_speed_subject_{};
+     lv_subject_t tune_speed_percent_subject_{};
++    lv_subject_t tune_show_advanced_subject_{};
+     lv_subject_t tune_flow_subject_{};
+     lv_subject_t tune_z_offset_subject_{};
+     /// Which z-step amount is selected, as an index. ONE int, not four
+diff --git a/src/ui/print/ui_print_tune_overlay.cpp b/src/ui/print/ui_print_tune_overlay.cpp
+index e0e90f0a39d8fda37d47ee5f321d97f70adc60ca..28e6d754c9b0432823b9e8262b3ed95e26349c48 100644
+--- a/src/ui/print/ui_print_tune_overlay.cpp
++++ b/src/ui/print/ui_print_tune_overlay.cpp
+@@ -63,6 +63,7 @@ void PrintTuneOverlay::show(lv_obj_t* parent_screen, IMoonrakerAPI* api,
+     api_ = api;
+     printer_state_ = &printer_state;
+     OverlayBase::show(parent_screen);
++    show_advanced(false);
+ }
+ 
+ lv_obj_t* PrintTuneOverlay::create(lv_obj_t* parent) {
+@@ -79,6 +80,7 @@ lv_obj_t* PrintTuneOverlay::create(lv_obj_t* parent) {
+ 
+ void PrintTuneOverlay::init_subjects() {
+     UI_MANAGED_SUBJECT_INT(tune_speed_percent_subject_, 100, "tune_speed_percent", subjects_);
++    UI_MANAGED_SUBJECT_INT(tune_show_advanced_subject_, 0, "tune_show_advanced", subjects_);
+     UI_MANAGED_SUBJECT_STRING(tune_speed_subject_, tune_speed_buf_, "100%", "tune_speed_display",
+                               subjects_);
+     UI_MANAGED_SUBJECT_STRING(tune_flow_subject_, tune_flow_buf_, "100%", "tune_flow_display",
+@@ -124,6 +126,8 @@ void PrintTuneOverlay::init_subjects() {
+ 
+ void PrintTuneOverlay::register_callbacks() {
+     register_xml_callbacks({
++        {"on_tune_show_advanced", [](lv_event_t*) { get_print_tune_overlay().show_advanced(true); }},
++        {"on_tune_show_presets", [](lv_event_t*) { get_print_tune_overlay().show_advanced(false); }},
+         {"on_tune_speed_preset",
+          [](lv_event_t* e) {
+              if (auto percent = helix::ui::event_user_int(e))
+@@ -420,6 +424,11 @@ void PrintTuneOverlay::handle_speed_preset(int percent) {
+     helix::tune::set_speed_percent(api_, percent);
+ }
+ 
++void PrintTuneOverlay::show_advanced(bool advanced) {
++    if (subjects_initialized_)
++        lv_subject_set_int(&tune_show_advanced_subject_, advanced ? 1 : 0);
++}
++
+ void PrintTuneOverlay::handle_flow_adjust(int delta) {
+     flow_percent_ = helix::tune::clamp_flow_percent(flow_percent_ + delta);
+     update_display();
+diff --git a/ui_xml/print_tune_panel.xml b/ui_xml/print_tune_panel.xml
+index cc60590fdf4f1ae76eb24b55eca3a64004f761c4..b003a29157672d63f6b4b37246ab663a5dd15801 100644
+--- a/ui_xml/print_tune_panel.xml
++++ b/ui_xml/print_tune_panel.xml
+@@ -2,15 +2,81 @@
+ <!-- Copyright (C) 2025-2026 356C LLC -->
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+ <component>
++  <consts>
++    <px name="u1_speed_card_height" value="74"/>
++  </consts>
+   <!-- Styles for Z-offset step amount radio buttons (L040: TWO bind_styles per button) -->
+   <styles>
++    <style name="speed_card_idle" bg_color="#card_bg" bg_opa="255" border_color="#card_bg"/>
++    <style name="speed_card_selected" border_color="#primary"/>
+     <style name="z_step_selected" bg_color="#primary" bg_opa="255"/>
+     <style name="z_step_unselected" bg_color="#primary" bg_opa="40"/>
+   </styles>
+   <!-- Print Tuning Panel: Speed and Flow adjustment during active print -->
+-  <view name="print_tune_panel" extends="overlay_panel" title="打印调节" bg_color="#screen_bg">
+-    <!-- Content Area -->
++  <view name="print_tune_panel" extends="overlay_panel" title="打印速度" bg_color="#screen_bg">
++    <lv_obj name="speed_quick_content" width="100%" flex_grow="1" flex_flow="column" style_pad_hor="#u1_page_pad" style_pad_ver="#u1_card_gap" style_pad_gap="#u1_card_gap" scrollable="false">
++      <bind_flag_if_eq subject="tune_show_advanced" flag="hidden" ref_value="1"/>
++      <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
++      <lv_obj name="speed_quick_grid" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_page_pad" scrollable="false">
++        <lv_obj width="100%" height="#u1_speed_card_height" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_page_pad" scrollable="false">
++          <lv_obj name="btn_speed_preset_50" width="0" height="#u1_speed_card_height" flex_grow="1" style_pad_all="#u1_page_pad" style_border_width="#u1_border" style_radius="#u1_card_radius" scrollable="false" clickable="true">
++            <bind_style_if name="speed_card_idle" cond="tune_speed_percent ne 50"/>
++            <bind_style_if name="speed_card_selected" cond="tune_speed_percent eq 50"/>
++            <bind_style_if name="styles.u1_selected_light" cond="tune_speed_percent eq 50 and settings_dark_mode eq 0"/>
++            <bind_style_if name="styles.u1_selected_dark" cond="tune_speed_percent eq 50 and settings_dark_mode eq 1"/>
++            <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="50"/>
++            <text_heading text="50%" align="center" clickable="false" event_bubble="true"/>
++            <icon name="speed_selected_50" src="check" size="xs" align="top_right" clickable="false" event_bubble="true">
++              <bind_flag_if_not_eq subject="tune_speed_percent" flag="hidden" ref_value="50"/>
++            </icon>
++          </lv_obj>
++          <lv_obj name="btn_speed_preset_100" width="0" height="#u1_speed_card_height" flex_grow="1" style_pad_all="#u1_page_pad" style_border_width="#u1_border" style_radius="#u1_card_radius" scrollable="false" clickable="true">
++            <bind_style_if name="speed_card_idle" cond="tune_speed_percent ne 100"/>
++            <bind_style_if name="speed_card_selected" cond="tune_speed_percent eq 100"/>
++            <bind_style_if name="styles.u1_selected_light" cond="tune_speed_percent eq 100 and settings_dark_mode eq 0"/>
++            <bind_style_if name="styles.u1_selected_dark" cond="tune_speed_percent eq 100 and settings_dark_mode eq 1"/>
++            <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="100"/>
++            <text_heading text="100%" align="center" clickable="false" event_bubble="true"/>
++            <icon name="speed_selected_100" src="check" size="xs" align="top_right" clickable="false" event_bubble="true">
++              <bind_flag_if_not_eq subject="tune_speed_percent" flag="hidden" ref_value="100"/>
++            </icon>
++          </lv_obj>
++        </lv_obj>
++        <lv_obj width="100%" height="#u1_speed_card_height" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_page_pad" scrollable="false">
++          <lv_obj name="btn_speed_preset_125" width="0" height="#u1_speed_card_height" flex_grow="1" style_pad_all="#u1_page_pad" style_border_width="#u1_border" style_radius="#u1_card_radius" scrollable="false" clickable="true">
++            <bind_style_if name="speed_card_idle" cond="tune_speed_percent ne 125"/>
++            <bind_style_if name="speed_card_selected" cond="tune_speed_percent eq 125"/>
++            <bind_style_if name="styles.u1_selected_light" cond="tune_speed_percent eq 125 and settings_dark_mode eq 0"/>
++            <bind_style_if name="styles.u1_selected_dark" cond="tune_speed_percent eq 125 and settings_dark_mode eq 1"/>
++            <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="125"/>
++            <text_heading text="125%" align="center" clickable="false" event_bubble="true"/>
++            <icon name="speed_selected_125" src="check" size="xs" align="top_right" clickable="false" event_bubble="true">
++              <bind_flag_if_not_eq subject="tune_speed_percent" flag="hidden" ref_value="125"/>
++            </icon>
++          </lv_obj>
++          <lv_obj name="btn_speed_preset_150" width="0" height="#u1_speed_card_height" flex_grow="1" style_pad_all="#u1_page_pad" style_border_width="#u1_border" style_radius="#u1_card_radius" scrollable="false" clickable="true">
++            <bind_style_if name="speed_card_idle" cond="tune_speed_percent ne 150"/>
++            <bind_style_if name="speed_card_selected" cond="tune_speed_percent eq 150"/>
++            <bind_style_if name="styles.u1_selected_light" cond="tune_speed_percent eq 150 and settings_dark_mode eq 0"/>
++            <bind_style_if name="styles.u1_selected_dark" cond="tune_speed_percent eq 150 and settings_dark_mode eq 1"/>
++            <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="150"/>
++            <text_heading text="150%" align="center" clickable="false" event_bubble="true"/>
++            <icon name="speed_selected_150" src="check" size="xs" align="top_right" clickable="false" event_bubble="true">
++              <bind_flag_if_not_eq subject="tune_speed_percent" flag="hidden" ref_value="150"/>
++            </icon>
++          </lv_obj>
++        </lv_obj>
++      </lv_obj>
++      <ui_button name="btn_tune_more" width="100%" height="#u1_touch_target" text="更多调节" icon="tune" variant="secondary">
++        <event_cb trigger="clicked" callback="on_tune_show_advanced"/>
++      </ui_button>
++    </lv_obj>
++    <!-- Original tuning controls remain accessible from More tuning. -->
+     <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_flex_main_place="start" style_pad_gap="#u1_card_gap" style_pad_all="#u1_page_pad" scrollable="true" scroll_dir="ver">
++      <bind_flag_if_eq subject="tune_show_advanced" flag="hidden" ref_value="0"/>
++      <ui_button name="btn_tune_presets" width="100%" height="#u1_touch_target" text="速度预设" icon="chevron_left" variant="secondary">
++        <event_cb trigger="clicked" callback="on_tune_show_presets"/>
++      </ui_button>
+       <!-- Disable content when printer not connected or klippy not ready -->
+       <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+       <!-- Speed + Flow Row (side by side) -->
+@@ -28,22 +94,22 @@
+             <icon src="swap_horizontal" size="xs" variant="secondary" clickable="false" event_bubble="true"/>
+           </lv_obj>
+           <lv_obj name="speed_presets" width="100%" height="content" style_pad_all="0" flex_flow="row_wrap" style_pad_gap="#space_xs" style_flex_main_place="space_between" scrollable="false">
+-            <ui_button name="btn_speed_preset_50" width="48%" height="#button_height" text="安静 50%" variant="secondary">
++            <ui_button name="btn_tune_speed_preset_50" width="48%" height="#button_height" text="安静 50%" variant="secondary">
+               <bind_style_if_eq name="styles.choice_selected" subject="tune_speed_percent" ref_value="50"/>
+               <bind_style_if_not_eq name="styles.choice_idle" subject="tune_speed_percent" ref_value="50"/>
+               <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="50"/>
+             </ui_button>
+-            <ui_button name="btn_speed_preset_100" width="48%" height="#button_height" text="标准 100%" variant="secondary">
++            <ui_button name="btn_tune_speed_preset_100" width="48%" height="#button_height" text="标准 100%" variant="secondary">
+               <bind_style_if_eq name="styles.choice_selected" subject="tune_speed_percent" ref_value="100"/>
+               <bind_style_if_not_eq name="styles.choice_idle" subject="tune_speed_percent" ref_value="100"/>
+               <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="100"/>
+             </ui_button>
+-            <ui_button name="btn_speed_preset_125" width="48%" height="#button_height" text="运动 125%" variant="secondary">
++            <ui_button name="btn_tune_speed_preset_125" width="48%" height="#button_height" text="运动 125%" variant="secondary">
+               <bind_style_if_eq name="styles.choice_selected" subject="tune_speed_percent" ref_value="125"/>
+               <bind_style_if_not_eq name="styles.choice_idle" subject="tune_speed_percent" ref_value="125"/>
+               <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="125"/>
+             </ui_button>
+-            <ui_button name="btn_speed_preset_150" width="48%" height="#button_height" text="极速 150%" variant="secondary">
++            <ui_button name="btn_tune_speed_preset_150" width="48%" height="#button_height" text="极速 150%" variant="secondary">
+               <bind_style_if_eq name="styles.choice_selected" subject="tune_speed_percent" ref_value="150"/>
+               <bind_style_if_not_eq name="styles.choice_idle" subject="tune_speed_percent" ref_value="150"/>
+               <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="150"/>

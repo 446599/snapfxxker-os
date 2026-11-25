@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component>
+  <view name="material_operation_banner" width="100%" height="content" align="bottom_mid" y="0"
+        flex_flow="column" style_pad_all="#u1_card_pad" style_pad_gap="#u1_compact_gap"
+        style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#primary"
+        style_border_width="1" style_radius="#u1_card_radius" scrollable="false" clickable="true">
+    <bind_flag_if_eq subject="material_op_visible" ref_value="0" flag="hidden" />
+    <lv_obj width="100%" height="content" flex_flow="row" style_flex_cross_place="center"
+            style_pad_all="0" style_pad_gap="#u1_card_gap" style_border_width="0"
+            style_bg_opa="0" scrollable="false" clickable="false">
+      <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0"
+              style_pad_gap="#u1_compact_gap" style_border_width="0" style_bg_opa="0" scrollable="false" clickable="false">
+        <text_body name="material_op_heading" width="100%" bind_text="material_op_title" long_mode="dots" />
+        <text_small name="material_op_status" width="100%" bind_text="material_op_detail" long_mode="wrap" />
+      </lv_obj>
+      <ui_button name="material_op_stop_button" width="25%" height="#u1_touch_target"
+                 bind_text="material_op_button" variant="danger" style_shadow_width="0">
+        <bind_state_if_eq subject="material_op_stop_pending" ref_value="1" state="disabled" />
+        <event_cb trigger="clicked" callback="material_op_stop" />
+      </ui_button>
+    </lv_obj>
+    <lv_bar name="material_op_progress_bar" width="100%" height="#u1_compact_gap" min_value="0" max_value="100" bind_value="material_op_percent">
+      <bind_flag_if_lt subject="material_op_percent" ref_value="0" flag="hidden" />
+    </lv_bar>
+  </view>
+</component>

@@ -1,0 +1,113 @@
+{
+  "stop": {},
+  "samples": [
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": true,
+        "_wire_valid": true,
+        "decoder": 18446744073709550872,
+        "index": 2,
+        "length": 784,
+        "steps": 9686
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "flags": [
+        1,
+        1
+      ]
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": true,
+        "_wire_valid": true,
+        "decoder": 18446744073709550872,
+        "index": 2,
+        "length": 784,
+        "steps": 9686
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "flags": [
+        1,
+        1
+      ]
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": true,
+        "_wire_valid": true,
+        "decoder": 18446744073709550872,
+        "index": 2,
+        "length": 784,
+        "steps": 9686
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "flags": [
+        1,
+        1
+      ]
+    }
+  ],
+  "holds": [
+    {
+      "idx": 0,
+      "hold": false,
+      "connected": true
+    },
+    {
+      "idx": 1,
+      "hold": false,
+      "connected": false
+    },
+    {
+      "idx": 2,
+      "hold": false,
+      "connected": false
+    },
+    {
+      "idx": 3,
+      "hold": false,
+      "connected": false
+    }
+  ],
+  "guard": {
+    "state": "confirmed",
+    "reason": "native completed",
+    "stop_count": 1,
+    "stop_inflight": false,
+    "stop_error": null,
+    "timer_max_gap": 0.057576749997679144
+  }
+}

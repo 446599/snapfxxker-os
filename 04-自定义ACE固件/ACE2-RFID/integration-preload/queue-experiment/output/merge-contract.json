@@ -1,0 +1,161 @@
+{
+  "base_image_sha256": "c132f10a9a91f4bf7a5a5917772a61ea123e74d4d7a8e9b7fb8cb65161a89750",
+  "image_sha256": "e568a39514a405c185995bdd8cf5cbcb90ad3fdc9bafa01f71e41333254d8114",
+  "elf_sha256": "0decbfb4887b811ecb6c032b3206eddffc115dc5a1bbcc94b4ef94feb55ab6cd",
+  "storage_magic": "0x45585434",
+  "storage_ready": "0x52445934",
+  "tail_bytes": 608,
+  "payload_bytes": 640,
+  "minimum_block": 648,
+  "offsets": {
+    "rf": 16,
+    "ex": 76,
+    "preload": 144,
+    "queue": 184
+  },
+  "queue_bytes": 424,
+  "baseline_ex_semantics": "ex+0 remains initialized in this branch; RF merge must adopt owner_task instead, with a NEW combined magic/ready version",
+  "proof_symbols": [
+    "ph_verified_reserved_ram",
+    "ph_verified_exclusive_startup",
+    "ph_verified_owned_failure_source",
+    "ph_verified_all_motion_writers",
+    "ph_verified_controller_quiescence",
+    "pq_verified_queue_lifetime",
+    "pq_verified_all_queue_sources"
+  ],
+  "queue_hooks": [
+    {
+      "address": "0x800abec",
+      "expected_bytes": "03f08efd",
+      "replacement_bytes": "12f0d1f9",
+      "symbol": "pq_preload_requeue_hook",
+      "target": "0x801cf92",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x800acfa",
+      "expected_bytes": "03f007fd",
+      "replacement_bytes": "12f04af9",
+      "symbol": "pq_preload_requeue_hook",
+      "target": "0x801cf92",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x800f76a",
+      "expected_bytes": "80f800c0",
+      "replacement_bytes": "0df0afbb",
+      "symbol": "pq_job_link_hook",
+      "target": "0x801cecc",
+      "branch_kind": "B.W",
+      "component": "queue"
+    },
+    {
+      "address": "0x800b030",
+      "expected_bytes": "1970bef1050f",
+      "replacement_bytes": "11f067bf00bf",
+      "symbol": "pq_job_unlink_hook",
+      "target": "0x801cf02",
+      "branch_kind": "B.W",
+      "component": "queue"
+    },
+    {
+      "address": "0x800aa82",
+      "expected_bytes": "0bf0d5fd",
+      "replacement_bytes": "12f05bfa",
+      "symbol": "pq_send_preload",
+      "target": "0x801cf3c",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x800b0de",
+      "expected_bytes": "0bf0a7fa",
+      "replacement_bytes": "11f037ff",
+      "symbol": "pq_send_cleanup",
+      "target": "0x801cf50",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x800e744",
+      "expected_bytes": "07f074ff",
+      "replacement_bytes": "0ef00ffc",
+      "symbol": "pq_send_requeue",
+      "target": "0x801cf66",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x800e79a",
+      "expected_bytes": "07f049ff",
+      "replacement_bytes": "0ef0effb",
+      "symbol": "pq_send_control",
+      "target": "0x801cf7c",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x8012a50",
+      "expected_bytes": "2de9f041",
+      "replacement_bytes": "0af0a6ba",
+      "symbol": "pq_enqueue_hook",
+      "target": "0x801cfa0",
+      "branch_kind": "B.W",
+      "component": "queue"
+    },
+    {
+      "address": "0x8016b38",
+      "expected_bytes": "f1f771ff",
+      "replacement_bytes": "06f040fa",
+      "symbol": "pq_receive_hook",
+      "target": "0x801cfbc",
+      "branch_kind": "BL",
+      "component": "queue"
+    }
+  ],
+  "extra_stock_aliases": {
+    "pq_stock_send_raw": "0x08016630",
+    "pq_stock_copy": "0x08008a1e",
+    "pq_stock_enqueue_resume": "0x08012a54",
+    "pq_stock_receive_resume": "0x08016b42",
+    "pq_stock_job_link_resume": "0x0800f76e",
+    "pq_stock_job_unlink_resume": "0x0800b036"
+  },
+  "tcb_contract": {
+    "current_pointer_address": "0x20001dd0",
+    "irq_must_be_zero": true,
+    "identity": "full aligned stock TCB value; lifecycle/ABA unproven",
+    "commit_return": "0x080167fb",
+    "sender_return": "pq_stock_send_return|1; checked only in proven stock task-send frame at SP+44"
+  },
+  "integration_rules": [
+    "Copy preload_queue.c/.h/.S and add both source files; do not overwrite the RF adapter/runtime changes.",
+    "Append queue at offset184 after ph state; preserve rf16/ex76/ph144; sizeof tail608/payload640 when RF adds no fields.",
+    "Use a NEW combined version, reject EXT1/2/3/4 and EXR1 predecessor objects; clear all tail and publish ready last.",
+    "Keep RF platform background slot getter false. pq_candidate is observation only, NOT physical tag identity, RF ownership, STOP permission or ph claim.",
+    "pq_preload_requeue calls rf_requeue_entry with no PRIMASK held. Preserve that RF gate and its owner_task/busy semantics.",
+    "Current receive candidate is per reader consumed generation; enqueuing sibling lane does not revoke it; command6 retains only same-job same-TCB context.",
+    "Unknown source, stale generation, queue corruption, pending exhaustion or missing metadata never manufacture an association. Stock queue bytes remain native.",
+    "Retain all production proof symbols, reset branch loop, NOFLASH trailer and normal INSERT branch bytes; check hook collision and <0x08024000.",
+    "Refresh test layouts/version, stock symbol addresses and byte verification after relinking. Re-run finite instruction and host suites on combined ELF; prior hashes cannot certify new image."
+  ],
+  "actual_failure_source_bound": false,
+  "physical_stop_proven": false,
+  "production_enabled": false,
+  "measurements": {
+    "max_added_mask_instructions_observed": 446,
+    "hardware_timing_bound": false
+  },
+  "deferred": [
+    "all queue/TCB/free/reuse/reset lifetimes and boot ABA",
+    "all generic helper sources and scheduler/IRQ interleavings",
+    "physical reader to spool to task association",
+    "terminal AUTH/READ classification vs ordinary tag/short failure/removal",
+    "safe retry/reinsert unlocking rather than permanent stop",
+    "all motor/timer/encoder writers and mechanical quiescence",
+    "heap/stack and realtime margin"
+  ]
+}

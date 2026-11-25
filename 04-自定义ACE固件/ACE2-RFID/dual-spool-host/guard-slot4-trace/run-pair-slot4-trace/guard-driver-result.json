@@ -1,0 +1,513 @@
+{
+  "rf_initial": {
+    "flags": [
+      1,
+      1
+    ],
+    "reader0": 0,
+    "reader1": 0
+  },
+  "before": {
+    "2": {
+      "context": {
+        "0": 3291322034,
+        "1": 3291322034,
+        "2": 2,
+        "3": 0,
+        "4": 288873,
+        "5": 1
+      },
+      "cmd13": {
+        "_code_absent": true,
+        "_code_present": false,
+        "_index_present": true,
+        "_unparsed": {
+          "11": [
+            {
+              "val": 288873,
+              "wt": 0
+            }
+          ]
+        },
+        "brand": "",
+        "code": 0,
+        "color": [
+          245,
+          90,
+          116
+        ],
+        "index": 2,
+        "rfid": 2,
+        "sku": "SME5DDA105",
+        "tag": {
+          "field2": 258,
+          "group6": [
+            1000,
+            175
+          ]
+        },
+        "type": "PLA Basic"
+      },
+      "native_uid_hint": "E5DDA105",
+      "uid_proven_physical": false
+    },
+    "3": {
+      "context": {
+        "0": 1134483518,
+        "1": 2143289344,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 1
+      },
+      "cmd13": {
+        "_code_absent": true,
+        "_code_present": false,
+        "_index_present": true,
+        "brand": "",
+        "code": 0,
+        "color": [
+          111,
+          202,
+          239
+        ],
+        "index": 3,
+        "rfid": 2,
+        "sku": "SM55F328E6",
+        "tag": {
+          "field2": 258,
+          "group6": [
+            1000,
+            175
+          ]
+        },
+        "type": "PLA Basic"
+      },
+      "native_uid_hint": "55F328E6",
+      "uid_proven_physical": false
+    }
+  },
+  "temporary_holds": [
+    1,
+    2,
+    3
+  ],
+  "guard": {
+    "state": "confirmed",
+    "reason": "ready and encoder stable; supervised stop",
+    "triggered": [],
+    "event_seq": 4,
+    "stop_count": 1,
+    "target": 3,
+    "stop_inflight": false,
+    "stop_error": null,
+    "gate": true,
+    "lane_states": [
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ],
+    "rfid_flags": [
+      0,
+      1
+    ],
+    "timer_max_gap": 0.06143724999856204,
+    "selftest_active": false,
+    "selftest_max_gap": null,
+    "selftest_count": 0,
+    "poll_timeouts": 2,
+    "poll_requests": 1841,
+    "poll_replies": 1839,
+    "last_request_id": 3786,
+    "last_reply_id": 3786,
+    "key_age": 0.06759199999214616,
+    "status_age": 0.16734083399933297,
+    "writer_queue": 0,
+    "callback_count": 10,
+    "poll_events": [
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1825,
+        "id": 3764,
+        "time": 99347.226082372
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1825,
+        "id": 3764,
+        "time": 99347.23831633
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1826,
+        "id": 3765,
+        "time": 99347.327475039
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1826,
+        "id": 3765,
+        "time": 99347.336739247
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1827,
+        "id": 3766,
+        "time": 99347.429753497
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1827,
+        "id": 3766,
+        "time": 99347.441394205
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1828,
+        "id": 3767,
+        "time": 99347.533058622
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1828,
+        "id": 3767,
+        "time": 99347.542770539
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1829,
+        "id": 3768,
+        "time": 99347.633804664
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1829,
+        "id": 3768,
+        "time": 99347.645715164
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1830,
+        "id": 3769,
+        "time": 99347.737558955
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1830,
+        "id": 3769,
+        "time": 99347.74839058
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1831,
+        "id": 3770,
+        "time": 99347.839192247
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1831,
+        "id": 3770,
+        "time": 99347.850521164
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1832,
+        "id": 3771,
+        "time": 99347.940464164
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1832,
+        "id": 3771,
+        "time": 99347.950745706
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1833,
+        "id": 3773,
+        "time": 99348.041257164
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1833,
+        "id": 3773,
+        "time": 99348.053072581
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1834,
+        "id": 3774,
+        "time": 99348.142372456
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1834,
+        "id": 3774,
+        "time": 99348.152460331
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1835,
+        "id": 3775,
+        "time": 99348.244107539
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1835,
+        "id": 3775,
+        "time": 99348.255810372
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1836,
+        "id": 3776,
+        "time": 99348.345220789
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1836,
+        "id": 3776,
+        "time": 99348.354561414
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1837,
+        "id": 3777,
+        "time": 99348.447253081
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1837,
+        "id": 3777,
+        "time": 99348.458559831
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1838,
+        "id": 3778,
+        "time": 99348.548053956
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1838,
+        "id": 3778,
+        "time": 99348.557873498
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1839,
+        "id": 3779,
+        "time": 99348.649126373
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1839,
+        "id": 3779,
+        "time": 99348.660320831
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1840,
+        "id": 3780,
+        "time": 99348.750325081
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1840,
+        "id": 3780,
+        "time": 99348.760070539
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1841,
+        "id": 3781,
+        "time": 99348.851438039
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1841,
+        "id": 3781,
+        "time": 99348.862769581
+      },
+      {
+        "kind": "request",
+        "method": "get_key_state",
+        "token": 1842,
+        "id": 3782,
+        "time": 99348.952843831
+      },
+      {
+        "kind": "reply",
+        "method": "get_key_state",
+        "token": 1842,
+        "id": 3782,
+        "time": 99348.961627373
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1843,
+        "id": 3785,
+        "time": 99349.054905873
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1843,
+        "id": 3785,
+        "time": 99349.064852581
+      },
+      {
+        "kind": "request",
+        "method": "get_key_state",
+        "token": 1844,
+        "id": 3786,
+        "time": 99349.156157956
+      },
+      {
+        "kind": "reply",
+        "method": "get_key_state",
+        "token": 1844,
+        "id": 3786,
+        "time": 99349.164605206
+      }
+    ],
+    "telemetry_result": null,
+    "trace_seq": 1840
+  },
+  "after": {
+    "2": {
+      "context": {
+        "0": 3291322034,
+        "1": 3291322034,
+        "2": 2,
+        "3": 0,
+        "4": 288873,
+        "5": 1
+      },
+      "cmd13": {
+        "_code_absent": true,
+        "_code_present": false,
+        "_index_present": true,
+        "_unparsed": {
+          "11": [
+            {
+              "val": 288873,
+              "wt": 0
+            }
+          ]
+        },
+        "brand": "",
+        "code": 0,
+        "color": [
+          245,
+          90,
+          116
+        ],
+        "index": 2,
+        "rfid": 2,
+        "sku": "SME5DDA105",
+        "tag": {
+          "field2": 258,
+          "group6": [
+            1000,
+            175
+          ]
+        },
+        "type": "PLA Basic"
+      },
+      "native_uid_hint": "E5DDA105",
+      "uid_proven_physical": false
+    },
+    "3": {
+      "context": {
+        "0": 2143289344,
+        "1": 2143289344,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 1
+      },
+      "cmd13": {
+        "_code_absent": true,
+        "_code_present": false,
+        "_index_present": true,
+        "brand": "",
+        "code": 0,
+        "color": [
+          111,
+          202,
+          239
+        ],
+        "index": 3,
+        "rfid": 2,
+        "sku": "SM55F328E6",
+        "tag": {
+          "field2": 258,
+          "group6": [
+            1000,
+            175
+          ]
+        },
+        "type": "PLA Basic"
+      },
+      "native_uid_hint": "55F328E6",
+      "uid_proven_physical": false
+    }
+  },
+  "quality": "pending_attribution",
+  "guard_left_armed": true,
+  "complete": true,
+  "hold_cleanup": {
+    "1": {
+      "observed_before": true,
+      "resume_error": "<HTTPError 400: '[multiACE] ACE 2 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=1 again'>",
+      "fw_hold": false
+    },
+    "2": {
+      "observed_before": true,
+      "resume_error": "<HTTPError 400: '[multiACE] ACE 3 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=2 again'>",
+      "fw_hold": false
+    },
+    "3": {
+      "observed_before": true,
+      "resume_error": "<HTTPError 400: '[multiACE] ACE 4 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=3 again'>",
+      "fw_hold": false
+    }
+  }
+}

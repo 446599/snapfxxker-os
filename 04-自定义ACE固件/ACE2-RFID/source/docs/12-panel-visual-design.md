@@ -1,0 +1,2118 @@
+# The ACE panel: visual design specification
+
+**Written 2026-08-31.** Companion to [`11-operator-interface.md`](11-operator-interface.md), which is
+the audit. That chapter establishes *what is broken and what is missing*, and its §0–§3 and §5 are
+settled input here. This chapter is the *build specification*: tokens, components, layouts at real
+pixel dimensions, and a traced control table.
+
+**Why a separate chapter rather than an extension.** Chapter 11 is evidence — measured findings with
+file:line citations, ranked. This is a contract — numbers two people can build the same screen from.
+Mixing them would bury the specification inside 40 KB of audit, and the audit's findings must stay
+citable on their own. Chapter 11 §4 remains the functional design; this supersedes it visually and
+extends its data table.
+
+A rendered proof of this specification lives at
+[`examples/ace-panel-mockup/index.html`](../examples/ace-panel-mockup/) — a single self-contained
+file with all three artboards, a theme toggle, and a state switcher.
+
+### The organising question — re-weighted 2026-08-31, after the owner opened `/ace/`
+
+> *"It's the same as the fake camera, and it's passive, so little value add to open it to only get
+> the same view as the camera which I can see from the Klipper web UI."*
+
+That is decisive, and it re-weights everything below. **A prettier read-only panel is not a
+deliverable.** The nginx logs show `/ace/` has never been opened voluntarily, and the reason is now
+on record: it duplicates a view he already has. The panel earns its existence only as a *control
+surface*.
+
+So the organising question for every pixel is not *what can I see here* but:
+
+> **What can I click here that I currently have to type?**
+
+The evidence pass counted **137 operator-facing messages naming a command with no button**, and
+**none of those commands has ever been run from the machine**. Closing that deficit is the
+deliverable. Three rules follow, and they override any layout instinct:
+
+1. **Status earns pixels only where it is the direct basis for the next click.** A number that does
+   not change what you press is scenery, and scenery is what the camera already gives him. The dryer
+   prose is cut. The path diagram survives *because it is the thing you click to act on a lane*
+   (§2.2); if it were only a picture it would shrink to a strip.
+2. **Controls come first in the layout, not after the pretty part.** §3.1's block order puts the
+   action rail and the lane tiles above the diagram, not below it.
+3. **The web panel gets the depth; the touchscreen gets sufficiency.** He debugs at the desk. The
+   touchscreen requirement is unchanged and non-negotiable — every action reachable, every prompt
+   answerable — but it is sized for *completeness*, not richness. §3.3 is a sufficiency spec.
+
+The single component that closes the 137-message deficit generically, rather than one button at a
+time, is the **action rail** (§2.12). It is the most important thing in this document.
+
+---
+
+## 0. Live machine state this specification was measured against
+
+Captured from `10.49.9.130:7125` on 2026-08-31. Every field path in §4 was verified present in this
+payload; nothing here is invented.
+
+```
+ace.current_index                   = -1            (nothing loaded)
+ace.target_index                    = -1
+ace_instance_0.connection_state     = "connected"   firmware "V1.1.3W"
+ace_instance_0.temp / .humidity     = 28 / 23
+ace_instance_0.dryer_status.status  = "stop"
+ace_instance_0.slots[2]             = ready, PLA, color [247,217,89], sku SM24, total 335g
+ace_preload_guard.staged            = {"2": 884.1}      path_busy = false
+ace_buffer_watch.inserted           = [false,true,true,false]   stale = false
+ace_buffer_watch.lane_empty         = [false,false,false,false]  <-- dead, never draw
+ace_hub_encoder.distance_mm         = 0.0    moving = false   mm_per_pulse = 0.9327
+mmu.filament_pos_per_gate           = [0,0,0,0,0,0]     <-- collapsed, do not draw as state
+mmu.filament_position_per_gate      = [0.0,0.0,884.1,0.0]
+mmu.gate_status                     = [0,1,1,0,1,1]
+mmu.manual_tools                    = [4,5]
+save_variables.ace_staged_mm        = [0.0,0.0,884.1,0.0]
+save_variables.ace_lane_pos         = ["gate","parked","parked","gate"]
+save_variables.ace_cal_hub_to_entry = 555.9
+save_variables.ace_park_to_entry    = 1490.0     -> lane tube 934.1
+hub_detect.filament_detected        = false     reading 4.8
+toolhead_entry.filament_detected    = false     enabled = FALSE
+toolhead_postgear.filament_detected = false     enabled = true
+print_stats.state                   = "standby"     idle_timeout.state = "Idle"
+mmu_machine.unit_0                  = "ACE 2 Pro" / Anycubic / V1.1.3W / 6 gates
+```
+
+### 0.1 Three facts this capture adds to chapter 11
+
+**A usable uncollapsed staged array already exists.** §2.1 recommends publishing a new uncollapsed
+per-gate position from the shim. That is still the right fix for the *macros*, but the panel does not
+have to wait for it: `save_variables.variables.ace_staged_mm` is live right now and reads
+`[0.0, 0.0, 884.1, 0.0]` — the true value, uncollapsed, already persisted. **The panel should read
+`ace_staged_mm` today and stop reading `filament_pos_per_gate` for state entirely.** That converts
+§5-Broken-#1 from a shim change plus a panel change into a panel change alone, and it is consistent
+with the standing rule that a UI reads `save_variables`, never the macro variable.
+
+**`toolhead_entry` is currently `enabled: false`.** A disabled switch reports
+`filament_detected: false` — which is indistinguishable, in every panel today, from *no filament*.
+That is a picture that lies, of exactly the kind §2.8 catalogues, and it is live right now. **A
+sensor with `enabled == false` must render as `sensor off`, never as a healthy empty reading**, and
+any predicate that consumes it must degrade to *unknown* rather than to *false*. This is a new
+component state, specified in §2.
+
+**The two per-gate arrays have different lengths.** `filament_pos_per_gate` is 6 long (gates 0–5);
+`filament_position_per_gate` is 4 long (ACE lanes only). A loop that walks `num_gates = 6` and
+indexes the mm array runs off the end at gates 4 and 5 and gets `undefined`, which `Number()` turns
+into `NaN` and a naive template prints as `NaNmm`. **Iterate ACE lanes over `0..3` and hand-fed gates
+over `mmu.manual_tools` — never over `num_gates`.**
+
+---
+
+## 1. The visual language
+
+### 1.1 What it is deliberately not
+
+The owner's word for the stock aesthetic is *"too Klipper-like"*: engineering-focused, utilitarian,
+unpolished. Named precisely, the thing to avoid is that Mainsail and Fluidd are **Material component
+sets with a printer poured into them** — Vuetify cards, elevation shadows, filled buttons in a brand
+primary, dense unlabelled icon rows, and colour used decoratively rather than semantically. Every
+value looks like every other value.
+
+This design goes the other way: an **instrument panel**.
+
+1. **Chrome is desaturated to near-neutral.** The only saturated colour on the page is *filament
+   colour*, which is data. Nothing competes with it.
+2. **Semantic colour is rationed** to six roles and is always redundant with shape or position, so
+   the panel survives being read by someone colour-blind, and survives being read at a glance.
+3. **Hairline dividers, not card shadows.** Depth comes from a four-step surface ramp plus a 1 px
+   border, not from elevation. Dark themes lit by shadow read as muddy; this one reads as etched.
+4. **Caps micro-labels over large tabular numerals.** A measurement is the biggest thing in its
+   block, its label the smallest. This is how a gauge is laid out and it is not how Material is.
+5. **Nothing that asserts a position is animated** (§1.6). This is the rule that separates it from
+   every other MMU front-end, and it is a correctness rule before it is a style one.
+
+### 1.2 Colour tokens
+
+Dark is the default — it is the printing context, and the owner keeps the UI open while printing.
+Light is a full sibling theme, not an afterthought: every pair below is measured in both.
+
+Theme selection, in this order: `[data-theme]` on `:root` wins; otherwise `prefers-color-scheme`;
+otherwise dark. **Every colour is defined on bare `:root` first** so that a token can never exist
+only inside a media query.
+
+```css
+:root {
+  /* ground */
+  --bg:          #0E1116;   /* page */
+  --surface-1:   #151A21;   /* card */
+  --surface-2:   #1C222B;   /* control rest, inset well */
+  --surface-3:   #242C37;   /* control hover */
+  --divider:     #2A333F;   /* decorative hairline INSIDE a card */
+  --border:      #677689;   /* control boundary — the WCAG 1.4.11 one */
+  --focus:       #5EC8D8;   /* focus ring */
+  /* ink */
+  --text:        #E7ECF3;
+  --text-dim:    #A6B2C4;
+  --text-faint:  #8B93A1;
+  /* semantic */
+  --ok:          #4ED88F;   /* loaded, healthy, present */
+  --staged:      #F5B942;   /* staged mid-bowden, in flight, needs attention not alarm */
+  --busy:        #7FA9F5;   /* path busy / operation in flight — informational, not a fault */
+  --fault:       #FF6B6B;   /* impossible sensor state, jam latched, disconnected */
+  --unknown:     #98A3B5;   /* stale, sensor disabled, indeterminate */
+  --destructive: #FF6B6B;   /* eject and friends — same hue as fault, by intent */
+  --accent:      #5EC8D8;   /* the one non-semantic accent: links, focus, active tab */
+}
+```
+
+Light theme redefines exactly these tokens and nothing else:
+
+```css
+:root[data-theme="light"], :root:not([data-theme="dark"]) {  /* under prefers-color-scheme: light */
+  --bg: #EEF1F6;  --surface-1: #FFFFFF;  --surface-2: #F4F7FB;  --surface-3: #E7ECF3;
+  --divider: #D3DBE6;  --border: #7B899B;  --focus: #0B6E7C;
+  --text: #141A22;  --text-dim: #4C5A6C;  --text-faint: #616B79;
+  --ok: #0E7A4A;  --staged: #8A5600;  --busy: #2B5FC9;  --fault: #B92626;
+  --unknown: #5E6B7D;  --destructive: #B92626;  --accent: #0B6E7C;
+}
+```
+
+> **Forward compatibility.** No component may reference a theme by string. Every rule reads a token.
+> A third theme (a high-contrast shop-floor variant, say) is added by defining the same 17 names
+> under a new `[data-theme]` value; no component changes. The mockup proves this by carrying its
+> whole palette in one block per theme.
+
+#### Measured contrast — dark
+
+Computed with the WCAG 2.1 relative-luminance formula. Body text requires 4.5:1; large text and UI
+boundaries require 3:1.
+
+| ink | hex | on `--bg` | on `--surface-1` | on `--surface-2` | on `--surface-3` | worst | AA body |
+|---|---|---|---|---|---|---|---|
+| `--text` | `#E7ECF3` | 15.93 | 14.72 | 13.47 | 11.87 | **11.87** | pass |
+| `--text-dim` | `#A6B2C4` | 8.81 | 8.14 | 7.45 | 6.57 | **6.57** | pass |
+| `--text-faint` | `#8B93A1` | 6.11 | 5.65 | 5.17 | 4.55 | **4.55** | pass |
+| `--ok` | `#4ED88F` | 10.39 | 9.61 | 8.79 | 7.74 | **7.74** | pass |
+| `--staged` | `#F5B942` | 10.72 | 9.90 | 9.06 | 7.98 | **7.98** | pass |
+| `--busy` | `#7FA9F5` | 8.01 | 7.40 | 6.78 | 5.97 | **5.97** | pass |
+| `--fault` | `#FF6B6B` | 6.81 | 6.30 | 5.76 | 5.08 | **5.08** | pass |
+| `--unknown` | `#98A3B5` | 7.42 | 6.86 | 6.28 | 5.53 | **5.53** | pass |
+| `--accent` | `#5EC8D8` | 9.66 | 8.93 | 8.17 | 7.20 | **7.20** | pass |
+
+| boundary | hex | on `--bg` | on `--surface-1` | on `--surface-2` | on `--surface-3` | worst | AA UI (3:1) |
+|---|---|---|---|---|---|---|---|
+| `--border` | `#677689` | 4.08 | 3.77 | 3.45 | 3.04 | **3.04** | pass |
+| `--focus` | `#5EC8D8` | 9.66 | 8.93 | 8.17 | 7.20 | **7.20** | pass |
+| `--divider` | `#2A333F` | 1.48 | 1.37 | 1.25 | 1.10 | **1.10** | n/a — decorative |
+
+#### Measured contrast — light
+
+| ink | hex | on `--bg` | on `--surface-1` | on `--surface-2` | on `--surface-3` | worst | AA body |
+|---|---|---|---|---|---|---|---|
+| `--text` | `#141A22` | 15.45 | 17.49 | 16.28 | 14.73 | **14.73** | pass |
+| `--text-dim` | `#4C5A6C` | 6.21 | 7.03 | 6.54 | 5.92 | **5.92** | pass |
+| `--text-faint` | `#616B79` | 4.77 | 5.40 | 5.03 | 4.55 | **4.55** | pass |
+| `--ok` | `#0E7A4A` | 4.75 | 5.38 | 5.01 | 4.53 | **4.53** | pass |
+| `--staged` | `#8A5600` | 5.44 | 6.16 | 5.73 | 5.19 | **5.19** | pass |
+| `--busy` | `#2B5FC9` | 5.18 | 5.86 | 5.45 | 4.94 | **4.94** | pass |
+| `--fault` | `#B92626` | 5.51 | 6.23 | 5.80 | 5.25 | **5.25** | pass |
+| `--unknown` | `#5E6B7D` | 4.79 | 5.42 | 5.04 | 4.57 | **4.57** | pass |
+| `--accent` | `#0B6E7C` | 5.25 | 5.94 | 5.53 | 5.00 | **5.00** | pass |
+
+| boundary | hex | on `--bg` | on `--surface-1` | on `--surface-2` | on `--surface-3` | worst | AA UI (3:1) |
+|---|---|---|---|---|---|---|---|
+| `--border` | `#7B899B` | 3.15 | 3.56 | 3.32 | 3.00 | **3.00** | pass |
+| `--focus` | `#0B6E7C` | 5.25 | 5.94 | 5.53 | 5.00 | **5.00** | pass |
+| `--divider` | `#D3DBE6` | 1.23 | 1.40 | 1.30 | 1.18 | **1.18** | n/a — decorative |
+
+Nothing fails. The generator that produced both tables is committed alongside the mockup so the
+published numbers cannot drift from the CSS.
+
+**The two `--divider` rows are the only sub-3:1 pairs in the system, and they are deliberate.** WCAG
+1.4.11 applies to boundaries *required to identify a component*. `--divider` never identifies
+anything — it is a hairline rule inside an already-bordered card, and removing it loses no
+information. Every boundary that does carry meaning uses `--border`. Stating this explicitly so
+nobody "fixes" `--divider` into a heavy line and wrecks the density.
+
+#### Semantic colour is never the only channel
+
+| role | colour | redundant channel |
+|---|---|---|
+| loaded | `--ok` | filled dot + the word `LOADED` in the tile header |
+| staged | `--staged` | partial fill bar with a numeric `884 / 934 mm` |
+| empty | `--text-faint` | dashed tile border, em-dash in place of a value |
+| stale / unknown | `--unknown` | `?` glyph in the dot, the literal word `unknown`, 45° hatch fill |
+| fault | `--fault` | banner with a heading, plus the offending reading spelled out |
+| busy | `--busy` | 2 px indeterminate rule under the header, plus the owning lane named |
+
+### 1.3 Filament colour is data, not theme
+
+`ace_instance_0.slots[i].color` is arbitrary RGB read off the spool. It can be `#FFFFFF`, it can be
+`#101010`, it can be within a few points of either theme's card colour. Four rules:
+
+1. **`[0,0,0]` means absent, not black.** Already handled correctly in `ace_index.html:rgb()` — keep
+   it. An absent swatch renders as a dashed `--border` ring over `--surface-2`, with no fill.
+2. **The swatch always carries a boundary, and the boundary is never the filament colour.** A 1 px
+   inset `rgba(0,0,0,.35)` (dark) / `rgba(255,255,255,.55)` (light) hairline, plus a 1 px outer ring
+   in `--border`. That outer ring is the 3:1 boundary, so a `#151A21` spool on a `#151A21` card is
+   still a visible object. Measured: `--border` clears 3:1 against all four surfaces in both themes.
+3. **Never put text on a swatch on the web.** Labels sit adjacent, on a surface token, so their
+   contrast is the measured table above and not a function of what spool is loaded. This eliminates
+   the whole class of failure rather than mitigating it.
+4. **Where text on colour is unavoidable** — the KlipperScreen lane tile's `T2` chip, which is large
+   text and therefore governed by 3:1 — pick the ink by max contrast, not by a hue guess:
+
+   ```js
+   // relative luminance; the crossover where black and white contrast equally is L = 0.1791
+   const ink = relLum(rgb) > 0.1791 ? '#0B0E12' : '#F5F8FC';
+   ```
+
+   and then **verify**: if `contrast(rgb, ink) < 3.0` the chip does not tint at all — it falls back
+   to `--surface-2` with a 3 px left rule in the filament colour. A mid-grey spool (`#808080`,
+   best-case ink contrast 4.90) passes; a colour that does not, degrades instead of lying.
+
+   Everywhere else the filament colour appears as a **fill or a rule, never as a text background**:
+   the lane-tile left rule (3 px), the path diagram's tube stroke, and the swatch.
+
+### 1.4 Type
+
+No webfonts. The mockup is a single file that must run from `file://` with no CDN, and a font that
+fails to load is a layout that shifts. Two stacks:
+
+```css
+--font-ui:   ui-sans-serif, -apple-system, "Segoe UI Variable Text", "Segoe UI",
+             Roboto, "Helvetica Neue", Arial, sans-serif;
+--font-num:  ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono",
+             "DejaVu Sans Mono", Consolas, monospace;
+```
+
+Every numeric run — mm, °C, %RH, g, gate indices, times — carries
+`font-variant-numeric: tabular-nums` so a changing value does not reflow its neighbours. This is the
+single highest-value typographic decision on a live-updating panel and stock Mainsail does not make
+it.
+
+| level | size / line-height | weight | tracking | colour | used for |
+|---|---|---|---|---|---|
+| `measure-xl` | 30 / 32 px | 600 | −0.4 px | `--text` | the one number a card exists for: `884` mm, `28` °C |
+| `measure` | 20 / 24 px | 600 | −0.2 px | `--text` | secondary numerics inside a tile |
+| `title` | 17 / 22 px | 600 | +0.2 px | `--text` | page title, dialog heading |
+| `tile-head` | 15 / 20 px | 650 | 0 | `--text` | `T2 · Bambu Lab Yellow PLA` |
+| `body` | 14 / 20 px | 400 | 0 | `--text` | prose, control labels |
+| `body-strong` | 14 / 20 px | 600 | 0 | `--text` | primary button label |
+| `meta` | 12.5 / 17 px | 400 | 0 | `--text-dim` | `spool 24 · 335 g` |
+| `reason` | 12.5 / 17 px | 400 | 0 | `--text-faint` | the disabled-because line |
+| `micro` | 10 / 12 px | 650 | +0.14 em, uppercase | `--text-faint` | section labels: `PATH`, `LANES`, `DRYER` |
+| `unit` | 12 / 12 px | 500 | 0 | `--text-dim` | the `mm` after a `measure-xl` |
+
+**12.5 px is the floor for any text that carries meaning.** On the phone artboard `meta` and `reason`
+step up to 13.5 px; `micro` stays 10 px because it is a label whose content is also encoded by
+position. Nothing below 10 px exists in the system.
+
+### 1.5 Space, radius, border, elevation
+
+```css
+--sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;  --sp-5: 12px;
+--sp-6: 16px; --sp-7: 20px; --sp-8: 24px; --sp-9: 32px; --sp-10: 40px;
+
+--r-chip: 6px;    /* swatch, badge */
+--r-ctl:  10px;   /* button, input */
+--r-card: 14px;   /* card, tile */
+--r-pill: 999px;  /* status pill */
+```
+
+Everything lands on a **4 px grid**; the 2 px and 6 px steps exist only for optical corrections
+(icon nudges, hairline offsets).
+
+- **Card:** `background --surface-1`, `border 1px solid --divider`, `radius --r-card`,
+  `padding --sp-6`.
+- **Control:** `background --surface-2`, `border 1px solid --border`, `radius --r-ctl`.
+- **Elevation, dark:** none. No `box-shadow` anywhere. Depth is the surface ramp.
+- **Elevation, light:** exactly one shadow, on cards only —
+  `0 1px 2px rgba(20,26,34,.05), 0 6px 18px rgba(20,26,34,.05)`. Light surfaces need a little
+  separation because the surface ramp is compressed at the top end; dark does not.
+- **Focus:** `outline: 2px solid --focus; outline-offset: 2px`. Never removed, never replaced by a
+  colour change alone. Applied via `:focus-visible`.
+- **Nesting rule:** a bordered thing never sits directly inside another bordered thing sharing an
+  edge. Controls inside a card are separated from the card border by at least `--sp-5`.
+
+### 1.6 Motion
+
+| what | duration | easing | notes |
+|---|---|---|---|
+| hover / press — background, border, colour | 110 ms | `ease-out` | the only routine transition |
+| button pressed | 60 ms | `ease-out` | translateY(1px), no scale |
+| disclosure (tile expand, dialog in) | 180 ms | `cubic-bezier(.2,.7,.3,1)` | height + opacity |
+| dialog scrim | 140 ms | `ease-out` | opacity only |
+| theme change | 200 ms | `ease-out` | `background-color`, `color`, `border-color` only |
+| in-flight control | 1.6 s loop | `linear` | a 2 px indeterminate rule along the button's bottom edge |
+| jam banner arrival | 240 ms | `cubic-bezier(.2,.7,.3,1)` | slide + fade, **once**; it never pulses |
+
+**Explicitly not animated, and this is a correctness rule, not a taste one:**
+
+- the filament fill length in the path diagram;
+- the staged-mm figure, the encoder distance, temperature, humidity;
+- the sensor dots;
+- the lane fill bar.
+
+The reason is §2.4 of chapter 11. A tweened position claims the filament passed through every
+intermediate value. Status arrives as discrete snapshots; the values in between were never measured.
+Tweening them invents motion that did not happen, and a picture that lies is worse than no picture,
+because it is believed. **The path redraws instantly at each `notify_status_update`.** The only thing
+permitted to move is a *marker* driven by `ace_hub_encoder.moving == true` — a small chevron that
+pulses to say "the encoder is turning right now", which is a fact, and which sits beside the tube
+rather than being the tube.
+
+`@media (prefers-reduced-motion: reduce)` sets every duration above to `1ms` except the two opacity
+fades, and stops the in-flight rule (it becomes a static `--busy` bar).
+
+### 1.7 The one-line summary
+
+> Klipper front-ends are Material component sets with a printer poured into them. This is an
+> instrument panel: chrome desaturated to near-neutral so the only saturated colour on screen is
+> filament colour, semantic colour rationed to six roles and never the sole channel, hairline etching
+> instead of elevation shadows, 10 px caps micro-labels beneath 30 px tabular numerals — and nothing
+> that asserts a position is ever animated.
+
+---
+
+## 2. Component inventory
+
+Every component below is specified in seven states. Where a state is *impossible* for a component
+that is said, rather than left blank — a blank is indistinguishable from an omission.
+
+The seven: **default · hover · pressed · disabled-with-reason · in-flight · fault · stale/unknown.**
+
+Two system-wide rules govern the last two:
+
+- **`ace_buffer_watch.stale == true` collapses every field derived from it to *unknown*, never to
+  *empty*.** Unknown renders as `--unknown` ink, a `?` in place of the dot, a 45° hatch instead of a
+  fill, and the literal word `unknown`. The panel says it does not know; it does not guess *empty*,
+  which is the guess that gets a lane ejected.
+- **A `filament_switch_sensor` with `enabled == false` is *unknown*, not *false*.** Live today for
+  `toolhead_entry` (§0.1). Rendered as a hollow dot with a diagonal slash and the label `sensor off`.
+
+### 2.1 Lane tile
+
+Desktop 283 × 268 px. The only component that owns a filament colour.
+
+```
+ ┌─┬───────────────────────────────────────────┐   ← 1px --divider, radius 14
+ │▌│  ▪ T2                            [ STAGED ]│   ← 3px filament rule (left, full height)
+ │▌│  Bambu Lab Yellow PLA                      │   ← tile-head 15px, ellipsis at 1 line
+ │▌│  PLA · spool 24 · 335 g                    │   ← meta 12.5px --text-dim
+ │▌│                                            │
+ │▌│  STAGED                                    │   ← micro 10px caps
+ │▌│  884 / 934 mm                              │   ← measure-xl 30px + unit 12px
+ │▌│  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░  94.6 %   │   ← 6px bar, radius 3
+ │▌│                                            │
+ │▌│  ┌──────────┐  ┌──────────┐                │
+ │▌│  │  Park    │  │  Retract │                │   ← 40px tall, --sp-4 gap
+ │▌│  └──────────┘  └──────────┘                │
+ │▌│  ┌──────────┐  ┌──────────┐                │
+ │▌│  │  Load    │  │  Eject   │                │   ← Eject is --destructive
+ │▌│  └──────────┘  └──────────┘                │
+ │▌│  T2 already owns the path                  │   ← reason 12.5px --text-faint
+ └─┴───────────────────────────────────────────┘
+```
+
+Anatomy, top to bottom: `--sp-5` padding all round, plus `--sp-5` extra on the left for the rule.
+Swatch 20 × 20 `--r-chip`. Header row 22 px. Name 20 px. Meta 17 px. Gap `--sp-6`. Micro 12 px.
+Measure 32 px. Bar 6 px + `--sp-3`. Gap `--sp-6`. Two button rows 40 px each + `--sp-4` gap. Reason
+17 px.
+
+| state | left rule | header badge | measure block | buttons | reason line |
+|---|---|---|---|---|---|
+| **empty** (`inserted[i] == false`, not stale) | `--divider`, and the tile border becomes 1 px **dashed** `--divider` | `EMPTY` in `--text-faint` on `--surface-2` | `—` in `--text-faint`, no bar | Load/Park/Retract disabled; Eject disabled | `no filament in lane 0` |
+| **present, at gate** (`inserted`, `ace_staged_mm[i] == 0`) | filament colour | `AT GATE` in `--text-dim` | `0 / 934 mm`, empty bar | Load enabled, Eject enabled, Park/Retract disabled | (none) |
+| **staged** (`ace_staged_mm[i] > 0`, not the path owner) | filament colour | `STAGED` in `--staged` | mm + fill in filament colour | Retract enabled, Eject enabled, Load enabled | (none) |
+| **loaded** (`ace.current_index == i`) | filament colour, **4 px** not 3 | `LOADED` in `--ok`, filled dot | mm + full bar | Park enabled, Eject enabled; Load disabled | `T2 is already loaded` |
+| **stale / unknown** (`ace_buffer_watch.stale`) | `--unknown` | `UNKNOWN` in `--unknown`, `?` dot | `unknown` word, bar becomes 45° hatch in `--unknown` | **all four disabled** | `lane sensors last read 41 s ago — state unknown` |
+| **fault** (jam latched on this tool, or an orphaned state) | `--fault`, 4 px | `JAM` / `ORPHANED` in `--fault` | last known mm, greyed to `--text-faint` | only `Eject (force)` and `Clear jam` enabled | the fault sentence (§2.6) |
+| **hover** (tile) | unchanged | unchanged | unchanged | — | tile background `--surface-1` → mix with `--surface-2` at 40 % |
+| **in-flight** (this lane is `ace_preload_guard` path owner and an op is running) | filament colour | `MOVING` in `--busy` + 2 px indeterminate rule under the header | mm updates, no tween | all disabled | `T2 · retracting — 884 mm` |
+
+Notes that are easy to get wrong:
+
+- The percentage beside the bar is `ace_staged_mm[i] / laneTube` where `laneTube` is
+  `ace_cal_park_to_hub[i]` if non-zero, else `ace_park_to_entry − ace_cal_hub_to_entry` (= 934.1
+  today, because `ace_cal_park_to_hub` is `[0,0,0,0]`). **If neither is available the bar is not
+  drawn and the tile shows the raw mm only** — an unscaled bar is a lie about geometry.
+- Buttons keep their **position** in every state. A control that moves between states cannot be
+  learned. Only its enablement and label change.
+- `Retract` and `Park` occupy the same slot as each other across states because they are the same
+  gesture at two scales; `Load` and `Eject` are fixed.
+
+### 2.2 Shared-path diagram
+
+One SVG, `viewBox="0 0 900 300"`, rendered into a 12-column card. It is the component most able to
+lie, so it has the strictest rules.
+
+```
+  T0  ○──────────────────────────╮
+  T1  ●──────────────╌╌╌╌╌╌╌╌╌╌╌╌┤
+  T2  ●━━━━━━━━━━━━━━━━━━━━━━━━╸ ┤━━━━━━━━━━━●─────────○────────○
+  T3  ○──────────────────────────╯  hub    entry    gears    melt
+                                    ▲ 555.9 mm measured
+```
+
+| element | geometry | source | fault / unknown rendering |
+|---|---|---|---|
+| lane tube | horizontal run 56 → 340 px, then a quadratic into the hub at (400, 150) | static | — |
+| lane fill | filament colour, `stroke-width 8`, length = `ace_staged_mm[i] / laneTube` of the run | `save_variables.ace_staged_mm` | hatch pattern in `--unknown` when `stale` |
+| lane end cap | 6 px dot at the fill end | — | `?` glyph when unknown |
+| shared run | 400 → 860 px, `--surface-3`, `stroke-width 10` | static | — |
+| shared fill | from the hub to the tip, in the **owning lane's** colour | owner = index of the lane where `ace_staged_mm[i] >= laneTube`, else `ace.current_index`; **never** `filament_pos_per_gate.findIndex(p => p >= 2)` (that is the §2.1 bug — it returns −1 and indexes `slots[-1]`) | `--unknown` when no owner can be determined but a sensor is lit |
+| hub dot | (400, 150) | `filament_switch_sensor hub_detect.filament_detected`; analog `.reading` in the tooltip | slashed when `.enabled == false` |
+| entry dot | (686, 150) | `toolhead_entry` | **slashed today** — `enabled: false` |
+| gears dot | (778, 150) | `toolhead_postgear` | — |
+| melt dot | (860, 150) | `mmu.in_melt_zone` | — |
+| encoder marker | small chevron above the shared run at the hub | `ace_hub_encoder.moving` — the **only** animated element in the diagram | absent when false |
+
+**The truth-table rule.** `entry` and `postgear` are read as a pair, not independently:
+
+| entry | postgear | render |
+|---|---|---|
+| 0 | 0 | nothing at the toolhead — normal |
+| 1 | 0 | tip in the gears, short of postgear — normal |
+| 1 | 1 | through the gears — normal |
+| **0** | **1** | **FAULT.** Impossible on a continuous strand. Banner: *"Broken strand or a dead switch: post-gear sees filament but entry does not."* Both dots go `--fault`; **no fill is drawn on the shared run**, because the panel cannot say where the filament is. |
+
+Chapter 11 §2.8 flags that `ace_index.html:302-306` tests `postOn` before `entryOn` with no
+cross-check and draws that row as healthy. This table is the fix.
+
+**When calibration is missing** (`ace_cal_hub_to_entry == 0`) the diagram does not draw to scale and
+does not pretend to: the tubes render as equal-length dashed rules, the caption reads *"lane lengths
+are not to scale — path is not calibrated"*, and a **`Calibrate path` button sits in the caption**,
+replacing today's `ace_index.html:319` sentence that tells the operator to type
+`ACE_CALIBRATE_PATH` on a page with no way to run it.
+
+### 2.3 Status pill
+
+Height 22 px, `--r-pill`, `padding 0 10px`, `micro` type, 1 px border. Optional 6 px leading dot.
+
+| variant | fill | border | ink | dot | used for |
+|---|---|---|---|---|---|
+| neutral | `--surface-2` | `--border` | `--text-dim` | none | `fw V1.1.3W` |
+| ok | `--surface-2` | `--ok` at 55 % | `--ok` | filled `--ok` | `connected`, `path clear` |
+| staged | `--surface-2` | `--staged` at 55 % | `--staged` | filled | `staged` |
+| busy | `--surface-2` | `--busy` at 55 % | `--busy` | filled + 1.6 s indeterminate rule | `path busy · T2` |
+| fault | `--surface-2` | `--fault` | `--fault` | filled | `disconnected`, `jam` |
+| unknown | `--surface-2` | `--border` dashed | `--unknown` | `?` glyph | `stale` |
+
+Hover/pressed/in-flight/disabled do not apply — a pill is never interactive. Said explicitly so
+nobody makes one clickable and inherits no pressed state.
+
+### 2.4 Action button
+
+Three ranks. Heights: 36 px (bar), 40 px (in a lane tile), 48 px (phone), 52 px (KlipperScreen).
+Minimum hit area 44 × 44 px on the web, **48 × 48 px on KlipperScreen** (§3.3).
+
+| rank | rest | hover | pressed | focus |
+|---|---|---|---|---|
+| **secondary** (default) | `--surface-2` / border `--border` / ink `--text` | bg `--surface-3`, border `--focus` at 50 % | bg `--surface-2`, `translateY(1px)` | 2 px `--focus`, offset 2 |
+| **primary** | `--surface-2`, border `--accent`, ink `--accent`, 2 px left rule `--accent` | bg `--surface-3` | as above | as above |
+| **destructive** | `--surface-2`, border `--destructive` at 60 %, ink `--destructive` | bg = `--destructive` at 12 % over `--surface-2`, border full `--destructive` | as above | as above |
+
+Destructive buttons are **never adjacent to their safe counterpart without a separator**: in the lane
+tile `Eject` sits on the second row, diagonal from `Park`. Chapter 11 §4.2 makes this point in prose;
+this is the geometry that enforces it.
+
+**Disabled-with-reason** is the state that matters most, and it is a *pair*: the control plus a
+`reason` line. Never a tooltip alone — the touchscreen has no hover, and the phone has no hover.
+
+```
+┌──────────┐
+│  Load    │   opacity 1.0 (NOT dimmed to invisibility)
+└──────────┘   bg --surface-1, border 1px dashed --border, ink --text-faint
+ no filament in lane 0        ← reason, 12.5px --text-faint, directly beneath
+```
+
+- `aria-disabled="true"` and `tabindex="-1"`, but the element stays in the DOM and stays **readable**:
+  ink is `--text-faint`, which clears 4.5:1 on every surface. The stock pattern of `opacity: .35` —
+  which `ace_index.html` uses today — takes `--text` down to roughly 3.6:1 on `--surface-1` and fails
+  AA. **Disabled is a dashed border and a faint ink, not an opacity.**
+- The reason string is **verbatim from §4.2's control table**, not generated. It names the state, not
+  the rule: *"no filament in lane 0"*, not *"predicate failed"*.
+- The gcode string is still present in `data-gcode`, so the control is inspectable and one line from
+  being wired.
+
+**In-flight**: label is replaced by the present participle (`Loading…`), a 2 px `--busy` indeterminate
+rule runs along the bottom edge, and the button is `aria-disabled`. Every *other* motion control on
+the page simultaneously enters disabled-with-reason carrying `path busy — T2 is loading`.
+
+**Fault**: a button never renders "fault". The banner does. A button in a fault state is either
+disabled-with-reason or, for the recovery controls, plain enabled — deliberately, because those are
+the ones you need.
+
+### 2.5 Fault banner
+
+Full width of its container, `--r-card`, `background: --fault at 10 % over --surface-1`, 1 px border
+`--fault`, 3 px left rule `--fault`, `padding --sp-5 --sp-6`.
+
+```
+┌─┬─────────────────────────────────────────────────────────────────────┐
+│▌│ SENSOR FAULT                                                        │  micro, --fault
+│▌│ Post-gear sees filament but entry does not.                         │  body-strong
+│▌│ That is impossible on a continuous strand: broken filament, or one  │  body, --text-dim
+│▌│ of the two switches has failed. entry=0 · post-gear=1 · hub=0        │  meta, --font-num
+│▌│  ┌────────────┐ ┌──────────────────────┐ ┌───────────────────────┐  │
+│▌│  │   Audit    │ │ Query both sensors   │ │ Clear op              │  │
+│▌│  └────────────┘ └──────────────────────┘ └───────────────────────┘  │
+└─┴─────────────────────────────────────────────────────────────────────┘
+```
+
+Rules: a heading, a plain-language sentence, **the readings that produced it**, and at least one
+button. A banner that states a fault and offers nothing is the failure chapter 11 §3.1 catalogues 23
+times. The banner never pulses and never auto-dismisses; it clears when the condition clears.
+
+States: default (as drawn) · hover/pressed (n/a, the container is not interactive) ·
+disabled (n/a) · in-flight (its buttons carry the button in-flight state) ·
+**stale** (border becomes dashed `--unknown`, heading becomes `SENSOR FAULT — READINGS STALE`, and
+the buttons that would move filament go disabled-with-reason).
+
+### 2.6 Jam banner
+
+Same shell as the fault banner, distinguished by heading, by naming the tool, and by carrying the
+one button chapter 11 §3.1 calls the purest example of the missing-button failure.
+
+```
+JAM LATCHED ON T2
+The buffer stopped moving while T2 was feeding. Motion is blocked until it is cleared.
+jam_tool=2 · last_event="offrest" · armed=false · off-rest 3.4 s
+  [ Clear jam on T2 ]   [ Audit ]   [ Eject T2 (force) ]
+```
+
+`Clear jam on T2` → `ACE_BUFFER_DISARM`. Today `ace_ui.cfg:80` prints that command name as text
+inside a dialog that is already open and already knows the tool number.
+
+**Flagged for QA — do not decide from this document.** `ace_buffer_watch.jam` has **zero motion gates
+anywhere in the config tree**; its only two consumers are the display lines at `ace_ui.cfg:79-80`.
+Making the panel disable motion controls while a jam is latched would therefore be *new* friction
+invented by the UI, not existing friction surfaced — and `ace_unload.cfg:41` records that buffer-watch
+gating around unload was tried and removed on 2026-08-20 because a healthy extraction trips it.
+**This design does not block on `jam`.** The banner appears above the lane tiles, the affected tile
+takes the fault treatment, and the controls stay live — because the operator with a latched jam is
+precisely the one who needs to move something. Whether a latched jam *should* block the destructive
+controls is a QA call.
+
+### 2.7 Dryer strip
+
+Chapter 11 §3.4: the dryer currently occupies a full card, four large numbers and a paragraph of
+prose, for a subsystem that is idle almost always and that the page cannot control. It collapses to
+one 44 px strip inside the header card, with controls.
+
+```
+ DRYER   28 °C · 23 %RH · 5.6 g/m³ · idle          [ Dry 4 h ▾ ]  [ Auto-dry ]  [ Roll ▾ ]
+```
+
+- `28`, `23`, `5.6` in `measure` (20 px) with `unit` suffixes; `DRYER` in `micro`.
+- Absolute humidity (Magnus, already implemented at `ace_index.html:143`) keeps its place because it
+  is the honest number — but the paragraph explaining *why* moves into this document. The panel earns
+  it with a `(i)` disclosure instead, opened on demand.
+- **Running**: the strip gains a determinate progress rule using `remain_time / duration`, and the
+  `Dry` button becomes `Stop drying` (destructive rank). `mode` reads e.g. `drying 45 °C · 2 h 14 m
+  left`.
+- **Unknown**: `ace_instance_0.temp == null` → `— °C`, controls disabled-with-reason
+  `no reading from the ACE`.
+- **Fault**: `connection_state != "connected"` → whole strip disabled, reason `ACE disconnected`.
+- Dry-roll (`ACE_DRYROLL_*`) lives behind the `Roll ▾` split-button because it *moves filament* and
+  therefore obeys the same path-busy and print-state predicates as the lane controls. It is not a
+  settings toggle. Feed assist is motion; so is rolling.
+
+### 2.8 Hand-fed strip (gates 4–5)
+
+From `mmu.manual_tools == [4,5]`. **Must not look like an ACE lane**, per the standing constraint.
+Full-width, 84 px, visually subordinate: `--surface-2` ground rather than `--surface-1`, no left
+filament rule, a small `HAND-FED` micro-label, and **no ACE motion controls at all** — there is no
+actuator to command.
+
+```
+ HAND-FED GATES                                     these lanes are loaded by hand
+ ┌───────────────────────┐  ┌───────────────────────┐
+ │ ▪ G4   present        │  │ ▪ G5   present        │      [ Assign spool… ]
+ └───────────────────────┘  └───────────────────────┘
+```
+
+Per gate: `mmu.gate_status[i]` (1 = present), `mmu.gate_material[i]`, `mmu.gate_filament_name[i]`,
+`mmu.gate_spool_id[i]`, `mmu.gate_color_rgb[i]`. **Do not index
+`mmu.filament_position_per_gate` here** — it is 4 long (§0.1). The only control is `Assign spool…`,
+because spool identity is the only thing software owns on a hand-fed gate.
+
+States: present · absent (`gate_status == 0`, dashed) · unknown (`gate_status == -1` if it ever
+appears) · fault (n/a) · in-flight (n/a) · hover/pressed (only on `Assign spool…`).
+
+### 2.9 Spool picker
+
+Opened by `Assign spool…` on any lane or hand-fed gate. A sheet (desktop: centred modal 520 px wide;
+phone: bottom sheet, full width, 80 vh; KlipperScreen: **not present** — §6).
+
+Data source is real and same-origin: `POST /server/spoolman/proxy` with
+`{"request_method":"GET","path":"/v1/spool"}`, verified live 2026-08-31. Each row:
+
+| element | source |
+|---|---|
+| swatch | `filament.color_hex` (null → dashed empty swatch, never black) |
+| name | `filament.name` |
+| vendor · material | `filament.vendor.name` · `filament.material` |
+| remaining | `remaining_weight` g, in `--font-num` |
+| current-lane marker | `mmu.gate_spool_id[i] == spool.id` |
+
+Rows with `archived == true` are hidden. Search filters on name + vendor + material. Confirm sends
+`MMU_GATE_MAP GATE={i} SPOOLID={id}`.
+
+States: default · hover (row `--surface-2`) · pressed · **disabled-with-reason** (the whole sheet's
+confirm, when `spoolman_connected == false`, reason `Spoolman is not reachable`) · in-flight (confirm
+shows `Assigning…`) · fault (proxy returns an error → inline `--fault` row with the message and a
+`Retry`) · **stale** (list older than 60 s while the sheet is open → a `--unknown` pill reading
+`list may be out of date` plus `Refresh`).
+
+### 2.10 Toolhead column
+
+A vertical stack of four sensor rows plus a verdict. 160 px wide on KlipperScreen, a 3-column card on
+desktop.
+
+| row | source | states |
+|---|---|---|
+| hub | `filament_switch_sensor hub_detect` | on / off / **sensor off** (`.enabled == false`) — analog `.reading` shown in `--font-num` |
+| entry | `toolhead_entry` | as above — **currently `sensor off`** |
+| gears | `toolhead_postgear` | as above |
+| melt | `mmu.in_melt_zone` | derived, no switch: labelled `derived` in `micro` so nobody mistakes it for a reading |
+| verdict | `mmu.cold_unload_ok` | `cold pull is legal` in `--ok`, or `must heat first` in `--staged`, or `unknown` when any input sensor is disabled or stale |
+
+A sensor row is 32 px: 10 px dot, label, then reading. The dot: filled `--ok` when true, hollow
+`--border` when false, hollow with a 45° slash in `--unknown` when disabled, `--fault` filled when
+the row participates in the impossible pair (§2.2).
+
+**The verdict never renders as a bare `true`.** If any of its inputs is disabled or stale, it reads
+`unknown — entry sensor is off`, because a wrong "cold pull is legal" is how filament gets ground.
+
+### 2.11 Prompt dialog
+
+Two renderings of the same `action:prompt_*` stream. The web version accumulates every `prompt_text`;
+KlipperScreen keeps only the last (chapter 11 §2.2). Design rules in §6.
+
+Web: modal 480 px, `--r-card`, scrim `rgba(6,8,12,.62)`, heading in `title`, body lines in `body`,
+buttons in a right-aligned row wrapping at 3. KlipperScreen: `Gtk.Dialog`, one 26 px label line,
+buttons at 4 per row, 52 px tall.
+
+States: default · hover/pressed on its buttons · **disabled-with-reason** (a button whose predicate
+has since gone false — e.g. `Resume` after the print was cancelled — greys with a reason line rather
+than disappearing, so the dialog does not reflow under a moving thumb) · in-flight (the pressed
+button shows the participle; the dialog stays open until `prompt_end`) · fault (a `--fault` strip
+above the buttons carrying the error) · **stale** (the dialog was opened more than 5 minutes ago and
+its underlying state has changed: a `--unknown` strip reads `state changed since this was
+opened — re-check before acting`, and motion buttons go disabled-with-reason).
+
+### 2.12 The action rail — the component that closes the 137-message deficit
+
+Every one of those 137 messages is the machine having already worked out what should happen next and
+then declining to offer it. Adding 137 buttons by hand is a year of work and a cluttered screen. The
+rail solves it **generically**: it watches what the machine says, and turns any command named in that
+text into a button.
+
+**Mechanism.** Subscribe to Moonraker's `notify_gcode_response` and seed from
+`GET /server/gcode_store?count=200`. For each message, match against a manifest of known commands and
+emit a button per hit:
+
+```js
+// The manifest is the ~40 ACE/MMU commands, longest-first so ACE_LANE_UNLOAD_ABORT
+// wins over ACE_LANE_UNLOAD. Arguments are lifted from the SAME message, so
+// "run MMU_RECOVER GATE=2" produces a button that sends GATE=2, not a bare command.
+const HIT = new RegExp("\\b(" + MANIFEST.join("|") + ")\\b((?:\\s+[A-Z_]+=[^\\s]+)*)");
+```
+
+Each rail item carries: **the button**, **the sentence that named it** (truncated to one line, full
+text on hover/expand), **a timestamp**, and **the same enabled-when predicate the control table gives
+that command** — so a rail button for `ACE_LANE_EJECT T=2` greys with the same reason as the tile
+button, and the rail never becomes a back door around a guard.
+
+**Rules that keep it from becoming noise:**
+
+| rule | why |
+|---|---|
+| Dedupe by `command + args`; keep the newest, show a count badge | the same message fires five times during one bad swap |
+| Cap at 6 items; oldest fall off | a rail longer than the screen is a log, and he has a console for logs |
+| A command already offered by a visible enabled control is **not** added | no duplicate buttons for `Load`/`Eject`/`Audit` when the tile shows them |
+| Items expire after 15 minutes, or immediately when their predicate becomes trivially satisfied (`Clear op` disappears once `ace_op` is empty) | a stale suggestion is worse than none |
+| A command not in the manifest renders as **text with a copy affordance**, never as a button | never dispatch a string the panel does not understand |
+| Messages of `type: "command"` (echoes of what was typed) are ignored; only `type: "response"` | otherwise the rail suggests what you just ran |
+
+**Appearance.** Full-width strip directly beneath the header, above everything else. `--surface-2`
+ground, `--r-card`, 1 px `--divider`, min-height 0 — **it is absent when empty and reserves no
+space.** Each item is a 36 px row: a 3 px left rule in `--staged` (or `--fault` when the message was
+`TYPE=error`), the button at its natural width, then the sentence in `t-meta`, truncated.
+
+```
+┌─┬──────────────────────────────────────────────────────────────────────────────┐
+│▌│ [ MMU_RECOVER GATE=2 ]   filament is at the toolhead but no lane owns it…  2m │
+│▌│ [ ACE_CLEAR_OP ]         toolchange T2→T1 interrupted; open intent recorded 2m│
+│▌│ [ ACE_AUDIT ]            run ACE_AUDIT to see where the filament is        2m │
+└─┴──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**States:** default · hover/pressed on its buttons · disabled-with-reason (predicate from §4.3) ·
+in-flight (participle + `--busy` rule) · fault (item's left rule `--fault`) · **stale** (the message
+is older than 15 min and has not been superseded → the row dims to `--text-faint` and the button
+becomes disabled-with-reason `this suggestion is {n} minutes old — re-check the state first`) ·
+**empty (the component does not render at all)**.
+
+**Why this is the highest-value component here.** It is the only one whose payoff scales with the
+number of error messages rather than with implementation effort, it needs no macro changes, and it
+degrades safely: an unknown command is text, a guarded command is guarded. It also *measures itself* —
+if the rail is usually empty the machine is behaving, and if it is usually full that is the backlog,
+visible.
+
+**It does not replace the per-lane controls.** A rail is reactive; it only offers what has already
+gone wrong. The lane tiles are how you act before anything says anything.
+
+---
+
+## 3. Layouts, at real pixel dimensions
+
+Three artboards, all present in the mockup. Grid is 12 columns everywhere; only the gutter and the
+column span change.
+
+### 3.1 Desktop / wide browser — 1440 × N, content 1240
+
+Page: `--bg`, `padding: 24px`, content `max-width: 1240px`, centred. Grid: 12 × 82.9 px columns,
+20 px gutter (`grid-template-columns: repeat(12, minmax(0,1fr)); gap: 20px`).
+
+**Block order is controls-first.** The diagram used to sit above the lane tiles; it now sits below
+them. What is above the fold is what you can press.
+
+| # | block | span | height | contents |
+|---|---|---|---|---|
+| 1 | header card | 12 | 108 | row A (56 px): `ACE 2 Pro` title · connection · path · **audit verdict** · open-intent · job pills · right-aligned `STOP ALL` (destructive, 36 px, 150 px). Row B (44 px, above a `--divider`): dryer strip (§2.7) with its three controls |
+| 2 | banners | 12 | 0 or 96 each | fault, then jam, then open intent. Absent when clear — they reserve no space |
+| 3 | **action rail** | 12 | 0 or 36 per item | §2.12. Directly under the header because it is the answer to "what does the machine want me to type". Absent when empty |
+| 4 | **lane tiles** | 3 each | 268 | four §2.1 tiles across — **promoted above the diagram** |
+| 5 | path card | 8 | 260 | `PATH` micro-label, the SVG (§2.2) at 760 × 200, caption, `Calibrate path` in the caption when uncalibrated. **Each lane's run is a click target** that scrolls to and highlights that lane's tile; without that behaviour this block drops to a 96 px strip |
+| 6 | toolhead card | 4 | 260 | §2.10, four sensor rows + cold-pull verdict, plus `Audit` and `Query sensors` |
+| 7 | hand-fed strip | 12 | 84 | §2.8 |
+| 8 | recovery bar | 12 | 60 | `Audit` · `Recover` · `Clear op` · `Unlock toolchange` · `Reconcile target` · `Clear suppression` — every one of them a command an error message names today |
+
+Above the fold at 1440 × 900: header 108 + rail (0–108) + lane tiles 268 = 376 to 484 plus gutters.
+**All four lane tiles, every lane control, the recovery rail and `STOP ALL` are visible without
+scrolling, and the diagram is what you scroll to.** That inverts the current panel, which spends its
+first screen on a picture and a dryer paragraph and offers nothing to press.
+
+Breakpoints, and what collapses:
+
+| width | lane tiles | path + toolhead | other |
+|---|---|---|---|
+| ≥ 1180 | 4 across (span 3) | side by side (8 / 4) | as above |
+| 900–1179 | **2 × 2** (span 6) | stacked, path 12 then toolhead 12 (height 180, rows become a 2 × 2 grid) | action bar wraps to two rows |
+| 700–899 | 2 × 2 (span 6) | as above | header rows A and B stack; `STOP ALL` moves to a full-width row |
+| < 700 | phone layout (§3.2) | — | — |
+
+The tile never narrows below 268 px; below that it becomes the phone tile, which is a different
+component, not a squeezed one.
+
+### 3.2 Phone portrait — 390 × 844 (safe area 390 × 780)
+
+Single column. `padding: 12px`, content 366 px. Two sticky elements, because a phone in a hand
+scrolls and the two things you must never lose are *what state is it in* and *how do I stop it*.
+
+| # | block | height | behaviour |
+|---|---|---|---|
+| 1 | sticky header | 56 | `ACE 2 Pro` · state pill · theme toggle. Backdrop `--bg` at 92 % with a `--divider` bottom edge |
+| 2 | banners | 96 each | as desktop |
+| 2b | **action rail** | 44 per item, max 3 | §2.12, immediately under the header. On a phone it is capped at 3 items and the sentence wraps to two lines |
+| 3 | lane tiles ×4 | see row 5 | **promoted above the diagram**, same inversion as desktop |
+| 4 | path card | 236 | the SVG rotates to a **vertical rail** 300 × 280: four lane stubs across the top feeding a vertical shared run. Same rules, same sources |
+| 4 | toolhead row | 76 | the four sensor dots on one row with labels beneath, verdict on a second line |
+| 5 | lane tiles ×4 | 116 collapsed / 244 expanded | collapsed = swatch, `T2 · Bambu Lab Yellow PLA`, badge, `884 / 934 mm`, bar. Tap anywhere on the tile to expand the four buttons. **One tile expanded at a time**; expanding scrolls it to just below the sticky header |
+| 6 | hand-fed strip | 108 | two stacked rows |
+| 7 | sticky action bar | 64 + safe-area inset | `Audit` · `Recover` · `Clear op` · `⋯` (opens a sheet with the rest). `STOP ALL` is a **destructive 56 px pill pinned to the right of this bar** — always reachable, one thumb, no scroll |
+
+Type steps up: `meta` and `reason` 12.5 → 13.5 px; `measure-xl` 30 → 26 px (the number is narrower on
+a 366 px column and 30 px wraps `884 / 934 mm`). Buttons are 48 px tall, full width of their half
+column (175 px), so every hit area is ≥ 48 × 48.
+
+Landscape phone falls through to the 700–899 desktop breakpoint; it is not a separate design.
+
+### 3.3 KlipperScreen — 800 × 480 landscape, one screen, no scrolling
+
+**This screen is sized for sufficiency, not for depth.** The owner debugs at the desk, not at the
+machine; the touchscreen's finding that it sent one command in three weeks reflects where he stands
+at least as much as it reflects the UI. The requirement here is unchanged and non-negotiable —
+**every action reachable and every prompt answerable without a browser** — but the design effort and
+the richness belong on the web panel. Read §3.3 as a completeness checklist and §3.1 as the design.
+
+Hard constraint: everything fits in 480 px vertical and nothing scrolls. The arithmetic, exactly:
+
+```
+  8  padding-top
+ 48  header bar
+  6  gap
+ 26  context line  (jam / fault / path-busy — always present, reads "path clear" when clear)
+  6  gap
+300  lane row
+  6  gap
+ 72  footer bar
+  8  padding-bottom
+───
+480
+```
+
+Horizontal, exactly:
+
+```
+  8  padding-left
+148  T0    ┐
+  8        │
+148  T1    │
+  8        ├ 4 lane tiles + 4 gaps of 8 = 624
+148  T2    │
+  8        │
+148  T3    ┘
+  8
+160  toolhead column
+  8  padding-right
+───
+800
+```
+
+**Minimum touch target: 48 × 48 px, held everywhere.** The narrowest interactive element in the
+layout is a lane-tile button at 132 × 52 (148 tile − 2 × 8 padding). The header's `STOP ALL` is
+148 × 48. Footer buttons are 150 × 72 (five across: `150 × 5 + 8 × 4 = 782`, with the last at 152 to
+fill 784).
+
+Lane tile at 148 × 300, top to bottom:
+
+```
+ ┌──────────────┐
+ │ ▪ T2  LOADED │  36  swatch 18 + label + badge (badge wraps to its own 18px line if needed)
+ │ Bambu Yellow │  22  name, 13px, 1 line, ellipsis
+ │ PLA · 335 g  │  18  meta, 11px
+ │              │
+ │     884      │  38  measure, 26px tabular
+ │   / 934 mm   │  16  unit
+ │ ▓▓▓▓▓▓▓▓░░░  │  10  bar (6px + 4 gap)
+ │              │
+ │ ┌──────────┐ │  52  Park / Load  (primary)
+ │ └──────────┘ │   8
+ │ ┌──────────┐ │  52  Eject        (destructive)
+ │ └──────────┘ │
+ │ reason line  │  30  two lines at 11px if needed
+ └──────────────┘
+   36+22+18+8+38+16+10+8+52+8+52+30 = 298, +2 border = 300
+```
+
+Two buttons per tile, not four: at 148 px wide, four buttons means two columns of 66 px, which
+fails 48 px only on paper and fails a gloved thumb in practice. **`Retract` and the rest live behind
+the footer's `More ▸`**, which opens a full-screen sheet — the tile keeps the two actions that are
+worth a dedicated target.
+
+Footer, five buttons: `Audit` · `Recover` · `Clear op` · `Dryer` · `More ▸`.
+
+Header, left to right: `ACE 2 Pro` (17 px) · connection dot · `28 °C 23 %` · spacer · `STOP ALL`
+(destructive, 148 × 48, right-aligned, always in the same place).
+
+Toolhead column, 160 × 300: `TOOLHEAD` micro-label, four 32 px sensor rows (§2.10), a `--divider`,
+then the verdict in two lines of 13 px. No controls — every control on this screen is in a tile, the
+header, or the footer, so a thumb has three fixed places to look.
+
+**What is deliberately absent from this screen**, and why, is §6.
+
+---
+
+## 4. Every element traced, both directions
+
+### 4.1 The predicate vocabulary
+
+Every enabled-when expression in §4.3 is written from these, so the predicates are auditable rather
+than prose. All paths verified live 2026-08-31.
+
+| name | expression in live field names |
+|---|---|
+| `CONNECTED` | `ace_instance_0.connection_state == "connected"` |
+| `FRESH` | `ace_buffer_watch.stale == false` |
+| `PRESENT(i)` | `FRESH and ace_buffer_watch.inserted[i] == true` |
+| `STAGED(i)` | `save_variables.variables.ace_staged_mm[i] > 0` |
+| `LOADED(i)` | `ace.current_index == i` |
+| `CUR` | `ace.current_index` (−1 = none) |
+| `TGT` | `ace.target_index` (−1 = no change in flight) |
+| `PATH_FREE` | `ace_preload_guard.path_busy == false` |
+| `NO_OP` | `save_variables.variables.ace_op == ""` |
+| `PRINTING` | `print_stats.state in ("printing", "paused")` |
+| `SENSORS_OK` | `toolhead_entry.enabled and toolhead_postgear.enabled` — **false right now** |
+| `AT_TOOLHEAD` | `toolhead_entry.filament_detected or toolhead_postgear.filament_detected` |
+| `IMPOSSIBLE` | `SENSORS_OK and not toolhead_entry.filament_detected and toolhead_postgear.filament_detected` |
+| `EJECTING` | `printer["gcode_macro ACE_LANE_EJECT"].running == 1` |
+| `EJECT_TOOL` | `printer["gcode_macro ACE_LANE_EJECT"].tool` |
+| `JAM` | `ace_buffer_watch.jam == true`, tool `ace_buffer_watch.jam_tool` |
+| `AUDIT_OK` | `printer["gcode_macro ACE_AUDIT"].ok == 1` |
+| `AUDIT_RUN` | `printer["gcode_macro ACE_AUDIT"].toolhead != ""` |
+| `HOT` / `PARKED` | `save_variables.variables.filament_loaded_hot == 1` / `.filament_parked == 1` |
+| `PATH_CLEAR_FOR_CAL` | `not hub_detect.filament_detected and not toolhead_entry.filament_detected and not toolhead_postgear.filament_detected` |
+| `SPOOLMAN` | `mmu.spoolman_support != "" and /server/spoolman/status → spoolman_connected` |
+| `DRYING` | `ace_instance_0.dryer_status.status != "stop"` |
+| `AUTODRY` | `printer["gcode_macro ACE_AUTODRY"].active == 1` — **1 right now** |
+| `ROLLING` | `save_variables.variables.ace_dryroll_active == 1` |
+| `SUPPRESSED` | `printer["gcode_macro _ACE_SUPPRESSION_ARM"].armed_swapping == 1 or .armed_parking == 1` |
+
+**`AUDIT_RUN` is load-bearing.** `printer["gcode_macro ACE_AUDIT"]` reads `{ok: 1, why: "",
+toolhead: ""}` on a fresh boot — `ok` defaults to `1` before the audit has ever executed. Rendering
+that as a green *coherent* is a picture that lies. **The verdict shows `not run yet` in `--unknown`
+until `toolhead != ""`**, and the `Run audit` button takes primary rank while that is the case.
+
+### 4.2 Element → field path
+
+Extends chapter 11 §4.3. Rows marked **new** are elements this specification introduces; rows marked
+**corrected** replace a mapping in §4.3 that does not hold.
+
+| Element | Source |
+|---|---|
+| **Header** | |
+| unit name / vendor / firmware | **new** — `mmu_machine.unit_0.{name,vendor,version}`; fall back to `ace_instance_0.firmware` |
+| connection pill | `ace_instance_0.connection_state`, `.status` |
+| transport detail (tooltip) | **new** — `ace_instance_0.{model,usb_port,protocol}` |
+| path pill | `ace_preload_guard.path_busy` → `path busy · T{owner}` / `path clear` |
+| audit verdict pill | **new** — `printer["gcode_macro ACE_AUDIT"].{ok,why,toolhead}`, gated on `AUDIT_RUN` |
+| open-intent pill | **new** — `save_variables.variables.ace_op` (non-empty ⇒ `--fault`) |
+| in-flight pill | **new** — `ace.target_index != -1` ⇒ `toolchange T{cur}→T{tgt} in flight` |
+| job pill | `print_stats.{state,filename}`, `idle_timeout.state` |
+| suppression state | **new** — `printer["gcode_macro _ACE_SUPPRESSION_ARM"].{armed_swapping,armed_parking,seconds}` |
+| **Dryer strip** | |
+| temp / RH | `ace_instance_0.temp`, `.humidity` |
+| absolute humidity | Magnus from the two above (already implemented, `ace_index.html:143`) |
+| mode / target / remaining | `ace_instance_0.dryer_status.{status,state_detail,target_temp,duration,remain_time}` |
+| dryer progress rule | **new** — `1 − remain_time / duration`, drawn only when `duration > 0` |
+| auto-dry state | **new** — `printer["gcode_macro ACE_AUTODRY"].{active,target_rh,temp,interval}`; persisted seed `save_variables.variables.ace_autodry_*` |
+| dry-roll state | **new** — `save_variables.variables.{ace_dryroll_active,ace_dryroll_mode[i],ace_dryroll_pos[i]}`; policy `printer["gcode_macro _ACE_DRYROLL_VARS"].{interval,allow_printing}` |
+| **Lane tile** | |
+| swatch | `ace_instance_0.slots[i].color` — `[0,0,0]` = absent; fall back `mmu.gate_color_rgb[i]` |
+| lane present | `ace_buffer_watch.inserted[i]`, **unknown when `.stale`** — never `lane_empty` |
+| lane under tension | `ace_buffer_watch.at_rest[i]` |
+| ACE-reported slot word | `ace_instance_0.slots[i].status` (`empty` / `ready` / `feeding` / `shifting`) |
+| **staged mm** | **corrected** — `save_variables.variables.ace_staged_mm[i]`. §4.3 read `mmu.filament_position_per_gate[i]`; that array is 4 long while `num_gates` is 6, and it is a mirror rather than the source. `ace_staged_mm` is the persisted truth (§0.1) |
+| lane tube length | `save_variables.variables.ace_cal_park_to_hub[i]` if non-zero, else `ace_park_to_entry − ace_cal_hub_to_entry` (= 934.1) |
+| **lane state word** | **corrected** — derived in the panel from `PRESENT / STAGED / LOADED / AT_TOOLHEAD`. **Not** `mmu.filament_pos_per_gate` (collapsed, §2.1) and **not** `save_variables.ace_lane_pos` (holds the never-written value `parked`, §2.3) |
+| material / family | `mmu.gate_material[i]`, `mmu.gate_material_family[i]`; fall back `slots[i].material` |
+| spool name / id | `mmu.gate_filament_name[i]`, `mmu.gate_spool_id[i]` |
+| spool weight / sku | `ace_instance_0.slots[i].{total,current,sku}` |
+| print temp hint | **new** — `mmu.gate_temperature[i]`; range `slots[i].extruder_temp.{min,max}` |
+| RFID present | **new** — `ace_instance_0.slots[i].rfid` (drives the `Scan tags` affordance) |
+| consumed | **new** — `mmu.gate_consumed_mm[i]` |
+| **Path diagram** | |
+| lane fill fraction | `ace_staged_mm[i] / laneTube` |
+| shared-run owner | **corrected** — the lane where `ace_staged_mm[i] >= laneTube`, else `ace.current_index`. §4.3 and `ace_index.html:296` use `filament_pos_per_gate.findIndex(p => p >= 2)`, which returns −1 and indexes `slots[-1]` |
+| shared-run tip | sensor ladder (hub → entry → gears → melt); `ace_hub_encoder.distance_mm ÷ ace_cal_hub_to_entry` refines it between the hub and entry |
+| encoder motion marker | **new** — `ace_hub_encoder.moving`, `.pulses`, `.mm_per_pulse` (subscribed and unused today, §2.8) |
+| hub dot | `filament_switch_sensor hub_detect.filament_detected` + analog `.reading`; **`.enabled`** |
+| entry / gears dots | `filament_switch_sensor toolhead_entry` / `toolhead_postgear` `.filament_detected` + **`.enabled`** |
+| melt dot | `mmu.in_melt_zone` — labelled `derived`, no switch behind it |
+| calibration caption | `save_variables.variables.{ace_cal_hub_to_entry,ace_cal_park_to_entry,ace_cal_when,ace_cal_mm_per_pulse}` |
+| **Toolhead column** | |
+| cold-pull verdict | `mmu.cold_unload_ok` — see the QA flag in §4.4 |
+| hot / parked flags | `save_variables.variables.{filament_loaded_hot,filament_parked}` |
+| melt-zone length | `save_variables.variables.meltzone_mm` (22.0) |
+| cut geometry | **new** — `save_variables.variables.{crossbow_blade_to_nozzle,crossbow_postgear_to_blade,ptfe_postgear_to_nozzle}` |
+| **Banners** | |
+| jam | `ace_buffer_watch.{jam,jam_tool,last_event,offrest_seconds,armed,armed_tool}` |
+| sensor fault | the entry/post truth table (§2.2) plus `.enabled` on both |
+| eject in progress | `printer["gcode_macro ACE_LANE_EJECT"].{running,tool,do_home}` |
+| **Hand-fed strip** | `mmu.manual_tools`, `mmu.gate_status[i]`, `mmu.gate_material[i]`, `mmu.gate_filament_name[i]`, `mmu.gate_spool_id[i]`, `mmu.gate_color_rgb[i]` — **never** `filament_position_per_gate` (§0.1) |
+| **Spool picker** | `POST /server/spoolman/proxy {"request_method":"GET","path":"/v1/spool"}`; connection from `GET /server/spoolman/status` |
+| **Panel health** | **new** — `GET /ace/status.json`, written by `patch_mainsail.py` (§5.3) |
+
+Deleted from the panel by this specification: `mmu.filament_pos_per_gate` (collapsed),
+`ace_buffer_watch.lane_empty` (dead), `save_variables.ace_lane_pos` (holds a value nothing writes),
+`mmu.bowden_progress` (hardcoded `-1`, and load-shaped by construction — chapter 11 §2.4).
+
+### 4.3 Control table
+
+Every control the panel offers. **`gcode`** is the exact string sent. **`enabled-when`** is written in
+the §4.1 vocabulary. **`disabled reason`** is the verbatim string rendered beneath the control — the
+first matching row wins, and the strings are quoted here so they can be lifted into the
+implementation unchanged.
+
+Where the reason echoes a macro's own refusal, the macro's wording is used, because the operator
+should not have to learn two vocabularies for the same fact.
+
+#### Per-lane controls (lane tile, both surfaces)
+
+| Control | gcode | enabled-when | disabled reason (first match) |
+|---|---|---|---|
+| **Load** | `T{i}` | `CONNECTED and PRESENT(i) and not LOADED(i) and CUR == -1 and PATH_FREE and NO_OP and TGT == -1 and not EJECTING` | `not CONNECTED` → `the ACE is disconnected` · `not FRESH` → `lane sensors are stale — state is unknown` · `not PRESENT(i)` → `no filament in lane {i}` · `LOADED(i)` → `T{i} is already loaded` · `CUR >= 0` → `T{CUR} is loaded — park or eject it first` · `EJECTING` → `an eject is running on T{EJECT_TOOL}` · `not PATH_FREE` → `the shared path is busy` · `TGT != -1` → `toolchange T{CUR}→T{TGT} is still in flight — reconcile it first` · `not NO_OP` → `open intent: {ace_op} — recover before moving filament` |
+| **Park** (swap-ready) | `ACE_LANE_PARK T={i}` | `CONNECTED and LOADED(i) and AT_TOOLHEAD and PATH_FREE and NO_OP and not EJECTING` | `not LOADED(i)` → `T{i} is not the loaded lane` · `not AT_TOOLHEAD` → `nothing at the toolhead to park` · others as above |
+| **Retract → gate** | `ACE_LANE_PARK T={i} FORCE=1` | `CONNECTED and STAGED(i) and not LOADED(i) and not AT_TOOLHEAD and PATH_FREE and NO_OP and not EJECTING` | `not STAGED(i)` → `T{i} is already back at the gate` · `LOADED(i)` → `T{i} is loaded — use Park` · `AT_TOOLHEAD` → `filament is still at the toolhead — clear it first` |
+| **Eject** | `ACE_LANE_EJECT T={i}` | `CONNECTED and not EJECTING and (PRESENT(i) or AT_TOOLHEAD) and not (AT_TOOLHEAD and CUR >= 0 and CUR != i) and PATH_FREE` | `EJECTING and EJECT_TOOL != i` → `an eject is already running on T{EJECT_TOOL} — eject lanes one at a time` · `not PRESENT(i) and not AT_TOOLHEAD` → `T{i} is already empty and the path is clear` · `AT_TOOLHEAD and CUR >= 0 and CUR != i` → `the toolhead holds T{CUR}, not T{i}. Unload T{CUR} first.` |
+| **Eject (force)** | `ACE_LANE_EJECT T={i} FORCE=1` | shown **instead of** Eject when `AT_TOOLHEAD and (CUR == -1 or (not HOT and not PARKED))`, and enabled under the same terms except those two | caution line, always visible, never a disable: `no lane is recorded as loaded — confirm by eye that this strand is T{i}'s before forcing` |
+| **Abort eject** | `ACE_LANE_UNLOAD_ABORT` | `EJECTING` | `no eject is running` |
+| **Assign spool…** | `MMU_GATE_MAP GATE={i} SPOOLID={id}` | `SPOOLMAN` — **deliberately not gated on `PATH_FREE`, `PRINTING` or `TGT`**: `MMU_GATE_MAP` is metadata only and never moves filament (`ace_mmu_shim.py:1180`) | `not SPOOLMAN` → `Spoolman is not reachable` |
+| **Calibrate path** | `ACE_CALIBRATE_PATH T={i} FROM_PARK=1` | `CONNECTED and PATH_CLEAR_FOR_CAL and slots[i].status == "ready" and PATH_FREE and not PRINTING` | `hub_detect.filament_detected` → `hub_detect already shows filament — clear the path first` · same for `toolhead_entry` / `toolhead_postgear` · `slots[i].status != "ready"` → `lane T{i} is '{status}', not ready` · `PRINTING` → `not while a print is running` |
+| **Plan swap to T{i}** | `ACE_PLAN_SWAP TOOL={i}` | `PRINTING and PRESENT(i) and not LOADED(i) and i not in mmu.manual_tools` | `not PRINTING` → `only during a print — otherwise just Load` · `i in manual_tools` → `T{i} is hand-fed — the machine cannot feed it` · `LOADED(i)` → `T{i} is already loaded` |
+
+#### Global controls (header, footer, banners)
+
+| Control | gcode | enabled-when | disabled reason |
+|---|---|---|---|
+| **STOP ALL** | `ACE_STOP_ALL` **(new macro — §4.5)** | **always.** No predicate, in any state, including disconnected, stale and fault | — |
+| **Run audit** | `ACE_AUDIT` | always | — |
+| **Recover** | `MMU_RECOVER GATE={i}` from a lane tile; `MMU_RECOVER` from the footer | `CONNECTED` | `not CONNECTED` → `the ACE is disconnected` |
+| **Clear op** | `ACE_CLEAR_OP` | `not NO_OP` | `no open intent recorded` |
+| **Unlock toolchange** | `MMU_UNLOCK` | `TGT != -1` | `no toolchange is in flight` |
+| **Reconcile target** | `ACE_RECONCILE_TARGET` | `TGT != -1` | `no toolchange marker to resolve` |
+| **Clear suppression** | `_ACE_SUPPRESSION_DISARM` | **always.** Deliberately not gated on `SUPPRESSED` — the reason you press it is that the state model is wrong, and it has no refusals | state line beneath, always visible: `suppression: armed (swapping)` / `armed (parking)` / `clear` |
+| **Clear jam on T{n}** | `ACE_BUFFER_DISARM` | `JAM` | `no jam is latched` |
+| **Buffer state** | `ACE_BUFFER_STATE` | always | — |
+| **Scan tags** | `ACE_SCAN_TAGS` | `CONNECTED and any(slots[i].status != "empty")` | `every lane reads empty — nothing to scan` |
+| **Preload guard status** | `ACE_PRELOAD_GUARD_STATUS` | always | — |
+| **Printer state** | `PRINTER_STATE` | always | — |
+| **Normalize lanes** | `ACE_LANE_NORMALIZE ALL=1` | `CONNECTED and PATH_CLEAR_FOR_CAL and not PRINTING` | `{sensor} shows filament — clear the path before parking` · `not while a print is running` |
+| **Select bypass** | `MMU_SELECT_BYPASS` | `AT_TOOLHEAD or hub_detect.filament_detected` | `no filament at the hub or the toolhead — nothing to mark as bypass` |
+| **Clear bypass** | `MMU_SELECT_BYPASS CLEAR=1` | `save_variables.variables.ace_bypass_loaded == 1` | `no bypass is selected` |
+| **Dry {preset}** | `ACE_DRY MATERIAL={family}` or `ACE_DRY TEMP={t} MINUTES={m}` | `CONNECTED and not DRYING` | `not CONNECTED` → `the ACE is disconnected` · `DRYING` → `the dryer is already running` |
+| **Stop drying** | `ACE_DRY_OFF` | `DRYING or AUTODRY` | `the dryer is idle and auto-dry is off` |
+| **Auto-dry** | `ACE_AUTODRY MATERIAL={family}` | `CONNECTED and not AUTODRY` | `auto-dry is already holding {target_rh} %RH` |
+| **Roll: start** | `ACE_DRYROLL_START` | `CONNECTED and AUDIT_RUN and AUDIT_OK and not (PRINTING and _ACE_DRYROLL_VARS.allow_printing == 0)` | `not AUDIT_OK` → `state is not coherent: {ACE_AUDIT.why}` · `not AUDIT_RUN` → `run an audit first — coherence has not been checked` · printing case → `rolling is disabled during a print` |
+| **Roll: stop** | `ACE_DRYROLL_STOP` | `ROLLING` | `rolling is not active` |
+| **Roll: mode** | `ACE_DRYROLL_MODE T={i} MODE={off\|sweep\|spin}` | `CONNECTED` | `the ACE is disconnected` |
+| **Cleanup stale vars** | `ACE_CLEANUP_STALE_VARS` then `ACE_CLEANUP_STALE_VARS CONFIRM=1` | `not PRINTING` | `not while a print is running` |
+| **Reset shared bus** | `ACE_RESET_SHARED_BUS_BINDINGS` | `not PRINTING` | `not while a print is running` |
+
+Two entries in that table are **friction preserved on purpose**, and they are called out so a future
+pass does not tidy them away:
+
+- **`ACE_CLEANUP_STALE_VARS` stays two-step.** Its own docstring says CONFIRM exists "because stale
+  `ace_inventory_N` keys hold user-entered spool data that cannot be rebuilt". The panel shows the
+  dry-run list, then a separate destructive confirm. It is not a single button.
+- **`Eject (force)` never becomes the default.** It appears only in the two states the macro itself
+  allows FORCE to override, it keeps the destructive rank, and it carries the "confirm by eye"
+  caution permanently — not as a dismissible toast. `ACE_LANE_EJECT`'s own refusal is three lines
+  long for a reason.
+
+Two more are **new gating this specification adds**, and both are conservative rather than permissive:
+`Load` requires `CUR == -1` (the macro would accept a direct swap, but a panel that offers Load on
+lane 3 while lane 2 is loaded invites a toolchange the operator did not mean), and every motion
+control requires `FRESH`.
+
+### 4.4 Flagged for QA — not decided here
+
+1. **`mmu.cold_unload_ok` has zero consumers and `mmu.in_melt_zone` has one, and it is advisory.**
+   The heat-vs-cold decision — the single most damaging call on this machine — is re-derived
+   independently, in duplicated Jinja, inside both `ACE_LANE_EJECT` (`ace_unload.cfg:156`) and
+   `ACE_LANE_PARK` (`ace_toolchange.cfg:229`), from `filament_loaded_hot` + `filament_parked` +
+   post-gear. The shim publishes an answer nobody reads. **Which of the two is authoritative is a QA
+   call, not a UX one.** Until it is settled, the panel displays *both*: `mmu.cold_unload_ok` labelled
+   `driver says`, and the flag-derived verdict labelled `state says`, and when they disagree it draws
+   a `--staged` warning rather than picking a winner. A panel that picks one and is wrong is worse
+   than a panel that shows the disagreement.
+2. **Whether a latched jam should block the destructive controls** (§2.6).
+3. **Manual jog** — `ACE_RAW_FEED` and `FORCE_MOVE STEPPER=extruder`. Left flagged exactly as
+   chapter 11 §4.4 left it. **This specification does not draw a manual-jog screen.**
+4. **`Load` requiring `CUR == -1`** — see above. If the intent is that the panel should offer a
+   direct lane-to-lane toolchange, that predicate loosens to `CUR != i`.
+
+### 4.5 The one new command this design requires
+
+`ACE_STOP_ALL`. There is no single command that stops the ACE, and the panel must not send four
+lines of gcode to make one button work.
+
+```
+[gcode_macro ACE_STOP_ALL]
+description: Stop every ACE motion at once: feed, retract, and feed assist on all four lanes
+gcode:
+    {% for i in range(4) %}
+        ACE_STOP_FEED T={i}
+        ACE_STOP_RETRACT T={i}
+        ACE_DISABLE_FEED_ASSIST T={i}
+    {% endfor %}
+    ACE_LANE_UNLOAD_ABORT
+    RESPOND MSG="[ACE] all motion stopped: feed, retract and assist disabled on T0-T3"
+```
+
+Three notes. `ACE_STOP_FEED` and `ACE_STOP_RETRACT` swallow their own exceptions
+(`commands.py:659,700`), so they cannot abort the loop. `ACE_DISABLE_FEED_ASSIST` genuinely raises on
+an invalid slot (`commands.py:897`) — `0..3` are always valid on this machine, so the loop is safe,
+but the range must not be widened to `num_gates`, because gates 4 and 5 are hand-fed and have no
+actuator. And `ACE_LANE_UNLOAD_ABORT` is included because a running eject is ACE motion; **feed
+assist is motion, and so is an eject in progress.**
+
+Size: XS. It is a prerequisite for the touchscreen's most important button.
+
+---
+
+## 5. Delivery
+
+### 5.0 The placement question is already answered — verified 2026-08-31
+
+The owner asked for the panel to be *"integrated as a card inside the Klipper web UI directly"*
+rather than a separate URL. **It already is.** Verified read-only against the live machine:
+
+```
+GET http://10.49.9.130:7125/server/webcams/list
+{ "name": "ACE Panel", "enabled": true, "service": "iframe",
+  "stream_url": "/ace/", "snapshot_url": "/ace/",
+  "aspect_ratio": "4:3", "location": "printer", "source": "database",
+  "uid": "bb4cd0ee-e7c7-40db-ad99-98a0c7bb30ed" }
+```
+
+and in the live v2.19.0 bundle (`mainsail/assets/index-jNhnvCHe.js`):
+
+- `service === "iframe"` dispatches to Mainsail's `html-iframe-async` component — a first-class entry
+  in the webcam service dropdown (`Settings.WebcamsTab.HtmlIframe`), not a hack;
+- `hasAspectRatio(){ return ["iframe"].includes(this.webcam.service) }` — **aspect ratio is an
+  iframe-only setting**, free text with a validator, editable from Mainsail's own settings UI. That
+  is the card's height mechanism, and it is under our control.
+
+**Three things follow, and they matter more than the styling.**
+
+1. **His "it's the same as the fake camera" is literal, not a simile.** The panel *is* a fake camera
+   entry, already sitting on his dashboard. He was not describing a page he has to navigate to; he
+   was describing a card he already has that shows him nothing he can press. **Placement was never
+   the problem. Passivity was.** That makes §0's re-weighting the whole job.
+2. **Chapter 11 §3.3's "Nothing in either Mainsail links to `/ace/`" is wrong** and the work item
+   "link `/ace/` from Mainsail via `patch_mainsail.py`" is dead. There is no link to add.
+3. **No bundle patching is needed for placement, now or ever.** The registration lives in Moonraker's
+   `webcams` namespace — the database — which a Mainsail `update_manager type: web` extraction cannot
+   touch, and **both :80 and :82 read the same Moonraker**, so it is already on both instances. This
+   is a data-level insertion, not regex surgery, and it is strictly better than the dashboard-layout
+   route: the dashboard column order *is* also persisted in the DB (`mainsail` namespace,
+   `widescreenLayout1/2/3`, arrays of `{name, visible}`), but a name there only renders if the bundle
+   already knows that component — so the DB alone would not have been enough. The webcam route
+   sidesteps that entirely.
+
+#### 5.0.1 Is the card actually interactive? Yes — verified from the component source
+
+This was a gate: if Mainsail overlaid chrome on the iframe or swallowed pointer events, the whole
+control-surface plan would die at placement. It does not. `assets/HtmlIframe-vUGZiy4a.js` is ~1 KB
+and this is its entire render:
+
+```js
+t('div', {staticClass:'webcamBackground', style: wrapperStyle},
+  [ t('iframe', {staticClass:'webcamImage', style: iframeStyle,
+                 attrs:{src: url, title: camSettings.name}}) ])
+```
+
+| question | answer, from the source |
+|---|---|
+| `sandbox` attribute? | **No.** Scripts, forms and same-origin access all work. |
+| overlay, `pointer-events`, click-to-expand on the container? | **None.** The host `<div class="webcamBackground">` carries only the wrapper's aspect-ratio style; the panel's only chrome (title, collapse chevron, camera-selector menu) sits in the header *above* the frame. |
+| idle / power-saving blanking? | **No.** The component never reads `target_fps` or `target_fps_idle` and has no visibility logic — those fields apply to the mjpeg services. The panel does not blank when the printer is idle, which is exactly when a lane needs fixing. |
+| aspect ratio format | `/^(\d+)\s*[:/]\s*(\d+)$/` — **any integer `W:H` or `W/H`**, defaulting to `16/9` when blank or unparseable. |
+| rotation / flip | applied as a CSS `transform` **on the iframe**. Harmless for a camera, ruinous for a control panel. **Keep `rotation: 0`, `flip_*: false` on this entry, always.** |
+
+**The one real cost of the webcam route, and it is not a blocker.** `WebcamPanel` shows **one camera
+at a time**, chosen from a menu in its header, and the selection is stored per *page*
+(`gui.view.webcam.currentCam[currentPage]`, `"dashboard"` or `"page"`) — **not per panel**. So:
+
+- Two webcam cards on the dashboard is not a workaround. A layout entry named `webcam_ace` does
+  render a second panel (`extractPanelName(e) = e.split("_")[0] + "-panel"`,
+  `extractPanelId(e) = e.split("_")[1]`), but both panels read the same `currentCam["dashboard"]`
+  and would show the same feed.
+- The `All` grid does render both at once, but each cell is `col-12 col-md-6` — a **viewport**
+  breakpoint, not a container one — so on a desktop viewport they sit side by side at half the
+  column, ~300 px each. Too small for a control surface. Checked, and rejected.
+- **The dashboard and the `/cam` page keep independent selections**, because the key is
+  `currentPage`. That is the lever.
+
+**Recommendation: pin the dashboard webcam card to `ACE Panel`, and put the Arducam on `/cam`.** He
+watches the camera occasionally and deliberately; he needs the lane controls in his eyeline while he
+works, and the panel is the thing he is currently having to leave in order to type a command. If he
+would rather keep the camera on the dashboard, the fallback is `/cam` pinned to `ACE Panel` plus the
+sidebar entry (§5.3) — one click, but a page change, and that reintroduces a smaller version of the
+problem this whole section exists to remove.
+
+**Not recommended: registering a real, non-webcam dashboard card.** That means injecting a Vue
+component into the minified bundle — the same class of regex surgery as §2.7's nozzle dot, redone
+every Mainsail release, failing silently. The webcam route gets the same placement from a database
+record that no update can touch. **A verified second-best beats an unverified best.**
+
+**And, stated once so nobody re-litigates it: KlipperScreen cannot host an iframe.** It is a
+GTK/Python application, not a browser. **The touchscreen is a separate build regardless of how the
+web surface is delivered**, which is why §3.3 is a sufficiency spec and §6.1 is a split rather than a
+port.
+
+#### 5.0.2 The size constraint
+
+The card is sized by aspect ratio at the dashboard column's width — roughly **420 × 315 to
+620 × 465 at `4:3`**. That is not the 1240 px artboard. So:
+
+| where | size | what it must do |
+|---|---|---|
+| **dashboard card** (the surface he actually looks at) | ~600 × 400 at `3:2` — **change the ratio from `4:3`; recommend `3:2` or `16:10`** | header, action rail, four lane tiles in a 2 × 2 grid, `STOP ALL`. **Every control reachable; no diagram.** |
+| **card fullscreen / the `/webcam` page** | viewport width | the full §3.1 layout, diagram included |
+| **`/ace/` opened directly** | viewport width | same as fullscreen |
+
+One page, three widths, chosen by a `ResizeObserver` on `document.documentElement` — **not by
+media queries**, because inside an iframe the media query sees the iframe's width, which is what we
+want here but is worth stating so nobody "fixes" it later. The card-size layout is §3.1's
+900–1179 px breakpoint with the path card dropped, and it is the layout that must be designed first
+because it is the one he sees.
+
+### 5.1 The decision
+
+**Keep `/ace/` as a single hand-written `ace_index.html`, served where it already is, and keep the
+iframe-webcam registration.** Do not introduce a build step. Do not add a bundle patch for placement.
+Change `aspect_ratio` from `4:3` to a wider ratio and design the card-size layout first.
+
+### 5.2 The two options, costed honestly
+
+**Option A — extend `ace_index.html` (recommended).**
+
+The specified panel is roughly 60–90 KB of inline HTML, CSS and JS, up from 14.7 KB. It stays one
+file with no dependencies, which buys three things that matter here:
+
+- `patch_mainsail.py`'s restore is a single `shutil.copy`. It keeps working unchanged.
+- The panel can be edited over SSH, from a phone, at 2 am, with a spool in the other hand. That is
+  not a hypothetical on this machine.
+- No CDN, so the CSP-free same-origin story stays trivial and the panel works with the printer
+  offline.
+
+Cost: no component model, no type checking, and a single file that a careless edit can break
+wholesale. Mitigations that are part of this slice — a `<template>`-per-component structure, one
+`render()` driven by a single merged state object (the existing pattern), and the state switcher from
+the mockup retained behind `?mock=1` so every state can be exercised without waiting for the machine
+to enter it.
+
+**Option B — rebuild as a small structured app (Vite + Preact/Vue, ~200 KB output).**
+
+Better component ergonomics, worse everywhere else:
+
+- **It breaks the 15-minute cron restore as written.** The output is a hashed bundle plus an assets
+  directory, so `restore_panel()` becomes a tree sync, and the source of truth moves from a file the
+  printer holds to a build artefact the printer cannot regenerate. A Mainsail update that wipes
+  `/home/simon/mainsail` would restore whatever was last built and copied — which may be older than
+  the source in git.
+- **It puts a build machine in the loop.** Changing a button label needs node and a deploy, on a
+  machine where the fix often needs to happen while standing at the printer.
+- It does not survive a Mainsail update any better: neither option couples to Mainsail internals.
+  The nozzle-dot bundle patch is a separate concern (§5.3) and is unaffected by either choice.
+
+The one argument for B is that the specified panel is genuinely more complex than the current one.
+It is not enough. **Recommend A.**
+
+### 5.3 A sidebar entry as well — optional, and not the answer to placement
+
+§5.0 settles placement: the card exists. This is a small extra for reaching the *full-width* layout
+without going through the card's fullscreen control, and it is worth four lines because it costs
+four lines.
+
+Mainsail reads a **user navigation file** at `~/printer_data/config/.theme/navi.json`. Confirmed in
+the live v2.19.0 bundle (`mainsail/assets/index-jNhnvCHe.js`):
+
+```js
+sidebarNaviFileChanged(e){ this.customNaviLinks=[],
+  e&&(await fetch(e).then(e=>e.json()).catch(e=>{
+      throw window.console.error(`Unable to parse .theme/navi.json.`),e
+  })).forEach(e=>{ this.customNaviLinks.push({
+      title: e.title ?? `Unknown`, icon: e.icon ?? da,
+      href: e.href ?? `#`, target: e.target, position: e.position ?? 999 }) }) }
+```
+
+So:
+
+```json
+[ { "title": "ACE", "href": "/ace/", "icon": "mdi-printer-3d-nozzle", "position": 45 } ]
+```
+
+Why it is worth having anyway:
+
+- `~/printer_data/config/.theme/` is **outside** `/home/simon/mainsail`, so a Mainsail
+  `update_manager type: web` extraction cannot wipe it. **It needs no cron, no patcher, no regex.**
+- It is a documented Mainsail feature reading a JSON file, not a regex against minified JS. It cannot
+  fail silently in the way §2.7 describes; if the JSON is malformed Mainsail logs it to the console.
+- The directory already exists on this machine (`custom.css`, 7.6 KB, under its own git repo), so the
+  mechanism is already proven to load here.
+- It applies to both instances, because both read their own config directory.
+
+Effort: **XS.** One file, four lines.
+
+### 5.3.1 The panel half of `patch_mainsail.py` can be deleted outright
+
+The page still has to be reachable under Mainsail's static root, and today that is a 15-minute cron
+`shutil.copy` that fails silently. **An nginx alias removes the copy entirely.** Verified by
+inspection of the live host:
+
+- `/etc/nginx/sites-available/mainsail` has `root /home/simon/mainsail;` and a catch-all
+  `location / { try_files $uri $uri/ /index.html; }`. There is no existing `/ace/` location, so a new
+  one takes precedence cleanly.
+- The traversal permissions work: `/home/simon` is `drwx--x--x` (others may traverse but not list),
+  and `printer_data`, `config`, `panel` are all `drwxr-xr-x` with `ace_index.html` at `-rw-r--r--`.
+  nginx's `www-data` can reach and read it.
+
+```nginx
+location /ace/ {
+    alias /home/simon/printer_data/config/panel/;
+    index ace_index.html;
+    try_files $uri /ace/ace_index.html;
+}
+```
+
+The page would then be **served from where it actually lives**, survive every Mainsail update by
+construction, and need no restore, no cron entry and no silent-failure mode. `patch_mainsail.py`
+drops to only its MMU-card nozzle-dot injection — a much smaller thing to keep alive — and one known
+defect (§2.7) disappears rather than being mitigated.
+
+**Not applied.** This pass does not edit the live printer, and the change needs `nginx -t` plus a
+reload. It is verified as achievable, not as done.
+
+### 5.3.2 What remains of the bundle patch
+
+**The bundle patch is demoted, not deleted.** It still owns the nozzle dot inside Mainsail's own MMU
+card, which nothing else can add. But it stops being the only route to `/ace/`, and it must stop
+failing silently:
+
+- `patch_bundle()` returns `"no MMU bundle found"` both when there is no bundle and when the regex
+  missed a reshaped one, and `main()` returns 0 either way. Split those into distinct returns and
+  exit non-zero on the second.
+- Write `~/printer_data/config/panel/patch_status.json` on every run — `{ran, ok, site, bundle,
+  message, when}` — and copy it to `<site>/ace/status.json`. **The panel reads it and shows a
+  `--fault` pill reading `Mainsail patch failed — nozzle dot missing` when `ok` is false.** The
+  monitoring for a silent failure belongs on the screen the owner already has open.
+- Correct the docstring: the trigger is `crontab` `*/15 * * * *` plus `@reboot sleep 60`. The
+  `ace-panel-patch.path` unit it names does not exist.
+
+### 5.4 The phone
+
+`/ace/` gains a `manifest.webmanifest` and an apple-touch icon inside its own directory. Installed to
+the home screen it opens standalone, on the same origin, with no address bar — which is the closest
+thing to an ACE app the machine can have, and it costs one JSON file and one PNG. XS.
+
+---
+
+## 6. Web and touchscreen: the split, and the prompt rules
+
+### 6.1 Where the hands are
+
+| | Web `/ace/` | KlipperScreen |
+|---|---|---|
+| posture | desk or phone, both hands, time to read, a keyboard within reach | standing at the machine, gloves on, often mid-print, one thumb, no keyboard |
+| what it is for | understanding and configuring | acting and recovering |
+
+**Hard requirement, non-negotiable: the touchscreen is fully self-sufficient, including answering
+prompts.** A prompt raised while the owner is at the machine must be answerable at the machine. He
+has called it out as actively annoying when a dialog on the web blocks the touchscreen.
+
+**On the touchscreen, because it is where you are when you need it:**
+see all four lanes and where their filament is · Load · Park · Eject · Eject (force) · **STOP ALL** ·
+Clear jam · Run audit and see its one-line verdict · Recover · Clear op · Clear suppression · dryer
+on/off · **every prompt the machine can raise.**
+
+**Web only, and why each:**
+
+| Web only | Why |
+|---|---|
+| spool picker | a searchable list of dozens, plus a text filter. A keyboard task |
+| material / colour / temperature editing | Spoolman is the better source of truth, and `acepro.py` needs three nested sub-screens and a numeric keypad to do it badly |
+| `ACE_CALIBRATE_PATH`, `ACE_LANE_NORMALIZE` | minutes long, needs a verified-clear path, done quarterly |
+| full audit output, `ACE_PRELOAD_GUARD_STATUS`, `ACE_BUFFER_STATE` | multi-line diagnostics. The touchscreen gets the verdict, not the transcript |
+| swap history and timings (`ace_swap_timing`) | retrospective, never urgent |
+| endless-spool and RFID-sync configuration | set once |
+| `ACE_CLEANUP_STALE_VARS` | destroys unrecoverable user data, deliberately two-step |
+| `ACE_RESET_SHARED_BUS_BINDINGS` | recovery from a bus fault, done with a laptop open |
+
+The test, unchanged from chapter 11: **you just opened the ACE lid, or you are watching a swap go
+wrong.** If it is neither, it is web.
+
+### 6.2 Prompt design rules
+
+Derived from the measured KlipperScreen constraints (chapter 11 §4.6). These are the rules; §6.3 is
+a worked example.
+
+1. **The LAST `prompt_text` carries the decision.** KlipperScreen keeps only that one
+   (`prompts.py:37` overwrites rather than appends). Everything before it is web-only detail.
+2. **Cap the dialog at three `prompt_text` lines.** More is Mainsail-only noise, and it costs nothing
+   to send the rest to the console with `RESPOND MSG=`.
+3. **The last line follows a fixed priority ladder** (§6.3), so the operator learns where to look
+   instead of reading whatever happened to be emitted last.
+4. **Four buttons per group, two groups maximum.** `set_max_children_per_line(min(4, n))`.
+5. **A button payload may carry parameters** — `ACE_LANE_EJECT T=2 FORCE=1` works today — **but must
+   contain no colon.** The action line is split on `:`, so a payload with its own `MSG=` and a colon
+   silently does nothing. Three buttons shipped with that bug in August 2026.
+6. **Every button label names its lane and its verb** (`T2 park`, never `Park`). On the touchscreen
+   the label is the *only* context; the text line is one line and it is about something else.
+7. **A destructive button never shares a group row with its safe counterpart.** Row one is the safe
+   actions, row two is the destructive ones. Always the same way round.
+8. **A dialog that names a command in its text must offer that command as a button in the same
+   dialog.** The dialog is already open and already knows the tool number.
+9. **Never ask what the sensors answer.** Derive it, state the conclusion, and prompt only for a
+   genuine decision — two clear options, each saying what it will do.
+10. **Always `prompt_end` before `prompt_begin`,** or the dialog never renders and the lines land in
+    the console as raw text.
+
+### 6.3 Worked example: `ACE_LANES` rewritten
+
+**What it does today** (`ace_ui.cfg:20-128`, read live). The idle branch emits **10 or 11
+`prompt_text` lines**, four eject buttons, an optional park button, and three footer buttons. On
+KlipperScreen the operator sees the *last* line — typically `T3: empty` — above **four destructive
+EJECT buttons and nothing to choose between them.** There is no Load button anywhere in the dialog
+built for lane actions, and the jam line prints the string `ACE_BUFFER_DISARM` instead of offering it.
+
+**And the busy branch crashes.** `ace_ui.cfg:48` reads
+`printer['gcode_macro ACE_LANE_EJECT'].steps`. `ACE_LANE_EJECT` declares only `tool`, `running` and
+`do_home` (`ace_unload.cfg:78-82`); `steps` was removed with the macro-side chunk loop on 2026-08-27
+and the UI reference was not. The Jinja render raises `UndefinedError`, so **the dialog does not
+appear at all while an eject is running — the one state where its Abort button is the point.** The
+same dangling reference sits in `ace_unload.cfg:110`'s refusal message. Fixing both is part of this
+rewrite, not a follow-up.
+
+**The rewrite.** Three text lines, ending with the decision. Two button rows, safe then destructive.
+Lane state moves into the labels, where the touchscreen can see it.
+
+```
+    RESPOND TYPE=command MSG="action:prompt_end"
+    RESPOND TYPE=command MSG="action:prompt_begin ACE Lanes"
+
+    # Line 1 - all four lanes on one line. Web reads it; the touchscreen discards it.
+    RESPOND TYPE=command MSG="action:prompt_text T0 empty · T1 at gate · T2 staged 884/934mm · T3 empty"
+
+    # Line 2 - the shared path and the sensors, including any that are switched OFF.
+    RESPOND TYPE=command MSG="action:prompt_text path clear · toolhead empty · entry sensor OFF · postgear no"
+
+    # Line 3 - THE DECISION. Priority ladder below. This is the only line the touchscreen shows.
+    RESPOND TYPE=command MSG="action:prompt_text T2 is staged 50mm short of the hub. Cold pull is legal."
+
+    # Row 1: safe actions, one per lane, label carries the state.
+    RESPOND TYPE=command MSG="action:prompt_button_group_start"
+    RESPOND TYPE=command MSG="action:prompt_button T0 empty|ACE_LANES|secondary"
+    RESPOND TYPE=command MSG="action:prompt_button T1 load|T1|primary"
+    RESPOND TYPE=command MSG="action:prompt_button T2 retract|ACE_LANE_PARK T=2 FORCE=1|warning"
+    RESPOND TYPE=command MSG="action:prompt_button T3 empty|ACE_LANES|secondary"
+    RESPOND TYPE=command MSG="action:prompt_button_group_end"
+
+    # Row 2: destructive and recovery. Never mixed with row 1.
+    RESPOND TYPE=command MSG="action:prompt_button T1 eject|ACE_LANE_EJECT T=1|error"
+    RESPOND TYPE=command MSG="action:prompt_button T2 eject|ACE_LANE_EJECT T=2|error"
+    RESPOND TYPE=command MSG="action:prompt_button Audit|ACE_AUDIT|info"
+    RESPOND TYPE=command MSG="action:prompt_button STOP ALL|ACE_STOP_ALL|error"
+
+    RESPOND TYPE=command MSG="action:prompt_footer_button Refresh|ACE_LANES|info"
+    RESPOND TYPE=command MSG="action:prompt_footer_button Close|PROMPT_CLOSE|secondary"
+    RESPOND TYPE=command MSG="action:prompt_show"
+```
+
+**The priority ladder for line 3.** First match wins. This is the whole design of the dialog: the
+operator always reads one line, and it is always the most urgent true thing.
+
+| # | condition | line 3 |
+|---|---|---|
+| 1 | `JAM` | `JAM latched on T{jam_tool}. Clear it before anything moves.` |
+| 2 | `IMPOSSIBLE` | `FAULT: post-gear sees filament, entry does not. Broken strand or a dead switch — move nothing.` |
+| 3 | `EJECTING` | `Eject running on T{EJECT_TOOL}. Abort it, or wait.` |
+| 4 | `AT_TOOLHEAD and CUR == -1` | `Filament at the toolhead that no lane claims. Force-eject only once you can see whose it is.` |
+| 5 | `not NO_OP` | `Open intent: {ace_op}. Recover before moving filament.` |
+| 6 | `TGT != -1` | `Toolchange T{CUR}→T{TGT} never finished. Reconcile it before printing.` |
+| 7 | `AT_TOOLHEAD and not HOT and not PARKED` | `Sensors show filament but the state says unloaded. Audit before moving anything.` |
+| 8 | `CUR >= 0 and HOT` | `T{CUR} is loaded, tip in the melt zone. Park to swap; eject to change the spool.` |
+| 9 | `CUR >= 0` | `T{CUR} is loaded and parked cold. A cold pull is legal.` |
+| 10 | `any STAGED(i)` | `T{i} is staged {gap}mm short of the hub. Cold pull is legal.` |
+| 11 | `any PRESENT(i)` | `Nothing loaded. T{i} is at the gate and ready to load.` |
+| 12 | else | `No filament in any lane. Insert a spool, then Load.` |
+
+Rows 2, 5, 6 and 7 all end in *stop and check*, and none of them exists in the dialog today.
+
+**Buttons are built dynamically**, four per row maximum:
+
+- Row 1, per lane: `T{i} load` when `Load` is enabled · `T{i} park` when loaded and at the toolhead ·
+  `T{i} retract` when staged · `T{i} empty` (secondary, re-renders the dialog) otherwise.
+- Row 2: `T{i} eject` for each ejectable lane (or `T{i} force` in the orphan case), then `Audit`, then
+  `STOP ALL` — trimmed from the right if more than four are needed, because `STOP ALL` and `Audit`
+  yield to a lane that genuinely needs ejecting.
+- **When the ladder returns row 1 or 2** (jam, impossible pair) the rows collapse to exactly two
+  buttons: `Clear jam on T{n}` / `Audit`, or `Audit` / `Query sensors`. In a fault the dialog stops
+  offering choices and offers the next step.
+
+Net effect: **10–11 text lines → 3; the touchscreen goes from one arbitrary line and four destructive
+buttons, to one decisive line and a safe row above a destructive row.** And `Load` exists.
+
+---
+
+## 7. Sized and sequenced
+
+Ordered so the panel becomes **clickable** before it becomes handsome, and so the card carries the
+floor before the page carries the depth. The earlier ordering put the visual language third; that was
+written before the owner called the panel *"passive, so little value add to open it"*. Controls lead.
+
+### 7.1 The panel
+
+| # | Slice | Size | What he sees after it |
+|---|---|---|---|
+| **0** | Settings only: set the ACE Panel webcam's `aspect_ratio` to `3:2`, pin the **dashboard** card to `ACE Panel` and the `/cam` page to the Arducam, add the `.theme/navi.json` entry (§5.0, §5.3) | **XS** | The card he already has gets a shape that fits four lanes side by side, plus a sidebar route to the full page. **No code.** |
+| **1** | **The action rail** (§2.12) bolted onto the existing panel: the command manifest, argument lifting, and the §4.3 predicates | **S–M** | **The first thing he can click.** Every message that says *"run `MMU_RECOVER GATE=2`"* becomes that button with the sentence beside it. Lands before any restyling. |
+| **2** | Truth pass: read `ace_staged_mm`; delete `laneState()`'s "in ACE, not fed"; fix the shared-run owner; draw entry=0/post=1 as a fault; render `enabled:false` as `sensor off`; drop `lane_empty` | **S** | The panel stops contradicting itself about lane 2 — and the controls in slice 3 stop being gated on a lie. |
+| **3** | **Card lane controls + recovery bar**: Load / Park / Retract / Eject / Eject (force), `Audit`, `Recover`, `Clear op`, `Unlock`, `Reconcile`, `Clear suppression`, and the fault / jam / orphan / open-intent banners — all with §4.3's predicates and verbatim reasons | **L** | **The floor.** Every fault has a way out on the card, and the console stops being necessary for the common path. `_ACE_SUPPRESSION_DISARM` stops being invisible. |
+| **4** | `ACE_STOP_ALL` (§4.5) + the `ACE_LANES` rewrite (§6.3), including the `.steps` crash that stops the dialog rendering during an eject | **S** | One control that stops everything, on both surfaces. The touchscreen dialog gains a Load button and one decisive line. |
+| **5** | **The tip ladder** with the four confidence tiers (§9.2) | **M** | *"Show me clearly where the tips are in each lane"* — answered, and answered honestly: a dot only where a sensor pins it, a band where it does not. |
+| **6** | The visual language: tokens, type, spacing, theme, header, lane tiles as objects, hand-fed strip | **M** | **The panel looks like the mockup.** Fifth-and-a-half on purpose: it arrives on a surface that already does things. |
+| **7** | **Dryer control region** (§10): mode, target, progress, preset chips, start/stop, the fault banner, the runtime-vs-persisted warning | **S** | Drying starts and stops from the dashboard, in one 44 px strip instead of a quarter of the page saying nothing. |
+| **8** | **The page** (§11.6): lane detail with all six destination chips, jog with the segment interlock, RFID, the derivation view, the live truth table, operation history, diagnostics | **L** | *"Instead of having to use macros from Klipper"* — completed. The page earns its trip by showing its working. |
+| **9** | nginx alias for `/ace/` (§5.3.1) + patcher hardening + the panel's health pill | **XS** | The cron copy and its silent failure mode are deleted rather than mitigated; a red pill appears when a Mainsail update breaks the nozzle dot. |
+| **10** | Spool picker → `MMU_GATE_MAP` (§2.9) | **M** | Assigning a spool is a list with swatches and weights, not a command named in four error messages. |
+| **11** | **KlipperScreen sufficiency pass** (§3.3): either fix `acepro.py` (the `TR` command that does not exist, the dead `ace_pro_control` lock) or build the layout fresh | **M** | The machine gains a control panel at all. Scoped to completeness, not richness. |
+| **12** | `manifest.webmanifest` + icon in `/ace/` | **XS** | An ACE icon on the phone home screen that opens standalone. |
+| **13** | Stub-or-hide the 13 unimplemented `MMU_*` commands the Mainsail card sends (chapter 11 §2.9) | **M** | The Happy-Hare card stops offering buttons that error, and one that fails silently. |
+
+Slices 0–1 are a single session, and slice 1 alone changes the panel's reason to exist. Slice 3 is
+the floor. Slice 6 is the one that answers *"I really insist on having something nice done"* —
+deliberately after the panel has something to be nice *about*.
+
+### 7.2 The macro and driver backlog this design exposed
+
+None of these is UI work, and the panel is honest without them — but each one converts a
+disabled-with-a-reason into a working control, or a reckoned number into a measured one.
+
+| Item | Size | Why it matters |
+|---|---|---|
+| **Publish `GET_FEED_INFO` (cmd 76)** per slot: `{motor_counts, magnitude_mm, moved_mm}` | **S** | The ACE measures its own feed — a 723 mm retract reported 733 mm delivered — and **nothing polls it**. This turns the ACE → hub run from dead reckoning into measurement, which is **the single largest available improvement to the display the owner asked for**. |
+| **Publish `_responsible_lane()`** from `ace_preload_guard.get_status` | **XS** | Every *"the shared path is busy"* reason could name the lane instead of admitting it cannot. |
+| **Three destination wrapper macros**: park-at-gate-still-gripped, park-on-hub, feed-to-entry | **S** | Lights up the three destination chips that are disabled today (§9.3). |
+| **A guarded extruder-jog macro** | **S** | `FORCE_MOVE` has no guard of any kind. Resolves the one jog question still flagged to QA (§9.4). |
+| **A synchronised jog** for the gears segment | **M** | The one case where both actuators must move together, deliberately not offered as two buttons. |
+| Publish the uncollapsed per-gate position (chapter 11 §2.1) | **S** | Largely obviated for the panel by `ace_staged_mm`, but `ACE_LANES` and the other dialogs still read the collapsed value. |
+| Fix `ace_ui.cfg:48` / `ace_unload.cfg:110` — the `.steps` variable `ACE_LANE_EJECT` no longer declares | **XS** | Folded into slice 4. It stops `ACE_LANES` rendering during an eject, which is when its Abort button is the point. |
+
+---
+
+Sections 9-11 extend this list with the required control set, the dryer region and the two-surface
+split; the slice table above already accounts for all three.
+
+---
+
+## 9. The required control set, and the lane frame that carries it
+
+**Added 2026-08-31**, after the owner specified what the panel must let him do. His words:
+
+> *"The panel needs to give me the option to control not only lane load/unload/park at ACE edge, at
+> hub, at entry, at post / eject, also jog forward/back any lanes, trigger RFID find, RFID write,
+> show me clearly where the tips are in each lane, etc."*
+
+This is the acceptance test. **Can he do each of these, for any lane, without typing anything?** It
+supersedes any control set inferred earlier in this document; §4.3's table is extended by §9.4 rather
+than replaced.
+
+### 9.1 The organising decision: the lane is the object, the path is its state
+
+Four requirements — park-at-a-named-point, jog, RFID, and *"show me clearly where the tips are"* —
+collapse into one component if the lane tile stops being a status card with buttons bolted on and
+becomes a **path ladder you act on**.
+
+```
+ ┌─┬───────────────────────────────────────────────────────────┐
+ │▌│ ▪ T2  Bambu Lab Yellow PLA                    STAGED  ⌾RFID│
+ │▌│                                                            │
+ │▌│  edge ●━━━━━━━━━━━━━━━━━━━━━━━◐┄┄┄┄┄┄┄○ entry  ○ gears ○ melt│
+ │▌│       │                       │ 884 ±20                   │
+ │▌│  ┌────┴───┐ ┌──────┐ ┌───────┴┐ ┌──────┐ ┌──────┐          │
+ │▌│  │  edge  │ │ hub  │ │ entry  │ │ gears│ │ load │          │
+ │▌│  └────────┘ └──────┘ └────────┘ └──────┘ └──────┘          │
+ │▌│  jog  [ − ] [ + ]  step 25 mm      [ eject ]  [ tag ▾ ]    │
+ │▌│  50 mm short of the hub · reckoned, no sensor in this run  │
+ └─┴───────────────────────────────────────────────────────────┘
+```
+
+The ladder is the display requirement. The row of destination buttons sits **directly beneath the
+stop each one drives to**, so the control is spatially the same object as the state. Pressing `hub`
+means *move this tip to that mark*, and the mark is right above the button.
+
+### 9.2 Tip position, and the honesty constraint
+
+This is the hard part, and it is where the current panel already fails: it prints *"in ACE, not fed"*
+beside a diagram it draws 94.6 % full. **Position is derived, and it is only partially knowable.**
+Confidence is therefore a first-class visual property, not a footnote.
+
+Five landmarks, four segments, and each has a different epistemic status. **The uninstrumented run is
+the one between the ACE and the hub — not, as one might assume, the long bowden past it.**
+
+| segment | what is actually known | tier |
+|---|---|---|
+| **ACE edge → hub** | **Nothing is instrumented here at all.** `ace_preload_guard.py:59` says so outright: *"Nothing between the ACE and the hub is instrumented, so a lane pushed part-way down its bowden is invisible to every sensor."* `staged` is host-side commanded-length arithmetic (`_track`, `:877`) with **no absolute reference**, corrected only when the tip trips `hub_detect`. On 2026-08-21 it was ~290 mm out and reported a lane Unloaded with 717 mm in its tube. | **reckoned**, and it is the weak one |
+| **hub → entry** | **Measured.** The guard zeroes the hub encoder on `hub_detect`'s rising edge (`:622`), so `ace_hub_encoder.distance_mm` is literally millimetres past the hub, over a calibrated 555.9 mm (596 pulses × 0.93266). | **measured** |
+| **entry → gears** | Two real switches 20 mm apart. Position within is reckoned, but the run is short. | measured at both ends |
+| **gears → melt** | **No switch at all.** `mmu.in_melt_zone` is *derived* from state flags. | **inferred** |
+
+`hub_detect` itself is synthetic — an ADC threshold on `temperature_sensor rdm_detect` polled at
+~0.3 s, which is **up to ~18 mm of lag at 60 mm/s** (`ace_hub_detect.py:11`). That is the tolerance on
+the one landmark that re-anchors everything else, and it is a real number the band can be drawn from
+rather than a guess.
+
+Four confidence tiers, each drawn differently, and the drawing is not decoration — it is what stops
+the picture lying:
+
+| tier | when | drawn as | label |
+|---|---|---|---|
+| **measured** | a switch at that landmark is lit and enabled, or the encoder covers the run | solid 8 px fill to a solid dot | the landmark name |
+| **reckoned** | `staged` arithmetic — i.e. anywhere in the ACE → hub run | solid fill, then a **± band** in the lane colour at 45 % | `884 ±18 mm · reckoned` |
+| **inferred** | a segment with neither switch nor encoder — past the gears | **hatched band spanning the whole segment**, no dot | `somewhere past the gears` |
+| **unknown** | `ace_buffer_watch.stale`, or a bounding sensor has `enabled == false` | whole ladder hatched in `--unknown` | `unknown` |
+
+Rules that follow, and they are absolute:
+
+1. **Never draw a dot in an inferred segment.** A dot is a claim of position. The band is the claim
+   the sensors actually support.
+2. **The ± band is drawn even when small.** Hiding it at 5 mm teaches the reader that a solid edge
+   means certainty, which then makes the 18 mm case unreadable.
+3. **A disabled sensor collapses both segments it bounds to *unknown*, not to *clear*.** Live today
+   `toolhead_entry.enabled == false`, so the hub → entry and entry → gears runs are both unknown right
+   now and the panel must say so.
+4. **`mmu.in_melt_zone` is labelled `derived` wherever it appears.**
+5. **`staged` is a floor, never a measurement.** `ace_mmu_shim.py:499` — *"treat it as a floor on where
+   filament is, never as a measurement."* The panel's word for it is `at least`, not `at`.
+
+**Work item this exposes, and it is a good one.** `GET_FEED_INFO` (cmd 76) is in the ACE2 catalog and
+already decoded to `{motor_counts, magnitude_mm, moved_mm}` per slot — **values measured by the ACE
+itself**, not echoes of the command (a 723 mm retract reported 733 mm delivered). **Nothing polls it
+and no status field exposes it.** Publishing it would turn the ACE → hub run from reckoned into
+measured, which is the single largest available improvement to the headline display the owner asked
+for. Sized **S** in the driver, and it is the only way `staged` stops being dead reckoning.
+
+### 9.3 Destination controls — and the three that have no command
+
+Five landmarks; the operator gets a button per reachable one, on every lane. **Surveying the macro
+set for what actually lands a tip at each destination produced an uncomfortable result, and it is
+better found here than after shipping four buttons that lie about where they go.**
+
+| Chip | Command | Where the tip actually ends | Verdict |
+|---|---|---|---|
+| **`stage`** | `ACE_LANE_NORMALIZE T={i}` | **50 mm short of the hub** (`park_offset_mm: 50`), on the lane side | Exists. **Label it `stage`, not `edge` and not `hub`** — those would both be lies. |
+| **`park`** | `ACE_LANE_PARK T={i} FORCE=1` | **~723 mm back from entry**, behind the hub, still gripped (`clear_hub_mm: 723`) | Exists, and is the real "clear of the hub" destination. |
+| **`load`** | `T{i}` | **the nozzle** | Exists. |
+| **`gears`** | `T{i}` then `FILAMENT_PARK` | on `toolhead_postgear`, cold side | Exists only as a **two-macro sequence** that goes to the nozzle first and retracts. Offered as one chip labelled `load → park at gears`, so the route is not concealed. |
+| **`eject`** | `ACE_LANE_EJECT T={i}` | out of the lane, needs hand re-insertion | Exists. |
+| ~~`ACE edge`~~ | — | — | **No command.** Eject overshoots past the INSERT switch and leaves the lane `empty`; `ACE_LANE_RANGE` finds the boundary and immediately feeds back. **Disabled, reason: `no command parks a tip at the gate and leaves it gripped`.** |
+| ~~`hub`~~ | — | — | **No command.** `ACE_LANE_NORMALIZE` deliberately backs off 50 mm. **Disabled, reason: `no command parks a tip on the hub — stage stops 50 mm short`.** |
+| ~~`entry`~~ | — | — | **No plain command.** `ACE_MEASURE_BOWDEN` does land the tip at entry, but it is a *calibration* command that overwrites `ace_park_to_entry`; using it as a jog target would corrupt the calibration. **Disabled, reason: `no plain feed-to-entry command — ACE_MEASURE_BOWDEN would overwrite the calibration`.** |
+
+**Three of the five requested destinations have no macro behind them.** That is a macro-layer backlog
+item (**S**, three wrapper macros), not a UI failure, and the panel renders them **disabled with the
+reason** rather than omitting them — because an omission reads as *"not possible on this machine"*,
+which is a different and wrong claim. The chip stays in its place and lights up the day the macro
+lands.
+
+**Single-occupancy is the frequent, concrete instance of disabled-with-a-reason** — and it comes with
+its own honesty problem. The guard's refusals are exact and reusable:
+
+- `T{n} already staged in the shared path (~{mm}mm)` — `ace_preload_guard.py:868`
+- `T{n} is loaded; feeding T{m} would collide at the hub` — `:871`
+- `BYPASS is loaded - hand-fed filament occupies the toolhead. Unload it before feeding a lane` — `:851`
+
+**But no live field says which lane is at the hub.** `_responsible_lane()` is private and unpublished;
+`get_status` exposes only `{enabled, commands_guarded, trips, refusals, staged, path_busy}`. The
+guard's own comment (`:547`): *"The hub sensor says SOMETHING is there, never which lane — that is the
+one thing four lanes merging into one tube destroys. Attribution is therefore by elimination... and it
+gives up rather than guessing."*
+
+So the panel attributes by the same elimination (`ace.current_index` → `ace_preload_guard.staged` →
+`ace_lane_pos`) and, **when it cannot attribute, says so**: `the shared path is occupied — which lane
+cannot be determined`. It never names a lane it inferred. **Work item: publish `_responsible_lane()`**
+(XS) and the reason string gets a name in every case.
+
+### 9.4 Jog — the position, and the survey settled it
+
+`ACE_RAW_FEED` and `FORCE_MOVE STEPPER=extruder` were the two most-typed commands in the sampled
+window, 17 each. The owner has asked for jog by name, so the question is not whether to expose it but
+how to protect it. **The command survey answered it, and the answer is better than the interlock I
+was going to propose.**
+
+**`ACE_RAW_FEED` is not wrapped by the preload guard at all.** The guard wraps exactly:
+
+```python
+GUARDED_COMMANDS = ("ACE_FEED", "ACE_SMART_LOAD", "ACE_CHANGE_TOOL")     # refusable
+TRACKED_COMMANDS = ("ACE_RETRACT", "ACE_FULL_UNLOAD", "ACE_SMART_UNLOAD") # bookkeeping only
+```
+
+plus the `T0`–`T3` macros. `ACE_RAW_FEED`, `ACE_RAW_STOP`, `ACE_RAW_CMD`, `ACE_TANDEM_EXTRACT`,
+`ACE_LANE_NORMALIZE`, `ACE_CALIBRATE_PATH` and `FORCE_MOVE` are **not wrapped**: no veto, **and no
+`staged` update.**
+
+That second half is decisive. A jog on `ACE_RAW_FEED` moves filament *and silently desynchronises the
+only estimate the machine has of where the tip is* — so a jog button built on it would corrupt the
+very display §9.2 exists to make honest. Its own header says what it is: *"Raw ACE 2 protocol sender
+for experiments. Diagnostic only. Added 2026-08-28."*
+
+**Decision: the panel's ACE-side jog sends `ACE_FEED` and `ACE_RETRACT`, never `ACE_RAW_FEED`.**
+
+| | |
+|---|---|
+| forward | `ACE_FEED T={i} LENGTH={step} SPEED={speed}` — guarded **and** tracked; `staged` increments |
+| back | `ACE_RETRACT T={i} LENGTH={step} SPEED={speed}` — tracked; `staged` decrements |
+| **never** | `FORCE=1`. That is the documented guard bypass (`ace_preload_guard.py:17`) and the panel has no business sending it. |
+
+So the guard the operator already relies on stays in the loop, the tip display stays true, and the
+refusal comes back as the panel's own disabled-reason on the next render. This is strictly better than
+a confirm dialog, which protects nothing.
+
+The remaining protections:
+
+| protection | rule |
+|---|---|
+| **Mutual exclusion by segment** | The panel derives which actuator owns the tip's segment and enables **only that one**. ACE-side jog between the ACE edge and the gears; extruder-side only once post-gear is lit. **Never both**, and the disabled one states why: `the tip is in the ACE's segment — the extruder cannot reach it`. This is the standing segment-ownership rule made into an interlock, and it targets the actual failure mode: the two actuators moving out of step. |
+| **Bounded step** | Fixed values — 1 / 5 / 25 / 100 mm. No free numeric entry. Speed is fixed at a safe constant, not exposed: the firmware rejects ≥ 110 mm/s with `PARAM_ERROR` and the parser would happily accept 120. |
+| **No latching motion** | One press, one step. Continuous requires press-and-hold and stops on release. |
+| **Gated like every other motion control** | `PATH_FREE`, `FRESH`, `NO_OP`, not `EJECTING`. Jog is motion. |
+| **Never in an unknown segment** | If the tip's segment is *inferred* or *unknown* (§9.2), **both directions** are disabled: `the tip's position is not known — audit first`. Jogging blind is how the actuators get out of step. |
+| **A visible stop** | `STOP ALL` is on screen whenever jog is. |
+
+**Flagged for QA — one question remains, and it is the extruder half.** `FORCE_MOVE` has **no guard
+whatsoever**: no ACE awareness, no temperature check, no path check, and it invalidates kinematics by
+design. There is no tracked equivalent to switch to, the way there was on the ACE side. This design
+offers extruder-side jog **only when `toolhead_postgear` is lit and the ACE side is consequently
+disabled**, and asks QA whether that is sufficient or whether the extruder half should be routed
+through a new guarded macro before it appears on a card. **The synchronised case — feeding through
+the gears, where both actuators must move together — is deliberately not offered at all.** If that gap
+matters in practice the answer is a macro that owns the synchronisation, not two buttons and a steady
+hand.
+
+### 9.5 RFID — one control exists, and the other does not
+
+**`Re-read tag`, per lane** — `ACE_SCAN_TAG T={i}` (`ace_rfid_scan.py:37`); the all-lanes form
+`ACE_SCAN_TAGS` sits in the header. Disabled when the slot reads empty, reason
+`T{i} is empty — nothing to read`; the all-lanes form carries the driver's own
+`every lane reads empty — nothing to scan`.
+
+**And the label must not say "scan", because it does not scan.** `ace_preload_guard.py:492`:
+
+> *"ACE_SCAN_TAG is a FETCH, not a scan: it retrieves whatever the ACE has already decoded and cannot
+> make it read anything. The read itself is firmware-side and happens whenever the spool ROTATES past
+> the fixed antenna in the slot bay — at least one revolution, ~600 mm on a full spool."*
+
+A button labelled `Scan` that silently returns nothing because the spool has not turned is precisely a
+control that lies about what it did. So: **`Re-read tag`**, with the meta line *"fetches what the ACE
+has already decoded — the ACE only reads while the spool turns"*. It also publishes **no status
+object**, so the panel cannot show progress: it shows an in-flight state for a fixed interval, then
+re-reads the slots, and says so.
+
+**`Write tag` cannot be built. There is no write path in this firmware.** The ACE2 command catalog
+contains exactly four RFID opcodes and every one is a read or reader-configuration:
+`GET_FILAMENT_INFO` (13), `SET_RFID_ENABLE` (14), `FILAMENT_IDENTIFY` (68), `RFID_TEST` (69). There is
+no `SET_FILAMENT_INFO` and no write opcode anywhere in `~/ACEPRO/` or `~/klipper/klippy/extras/`.
+
+Per the rule in §9.3, the control is **present and disabled with the reason**, not omitted:
+`this firmware has no tag-write command`. That is an honest answer to a request, and it is also a
+protocol-research question rather than a UI one — it belongs in
+[`03-rfid-and-tags.md`](03-rfid-and-tags.md), not in a backlog of buttons.
+
+What the panel *can* offer instead, and does: **`Assign spool…`** writes the same facts to
+`mmu.gate_*` via `MMU_GATE_MAP`, which is what the tag would have supplied. `slots[i].rfid` is a
+**boolean** — "this slot has a readable tag" — not a payload, and the decoded fields it gates
+(`sku, brand, rgba, extruder_temp, hotbed_temp, diameter, total, current`) are already in
+`slots[i]`, so the tile shows them and marks them `from tag`.
+
+### 9.6 Hand-fed gates 4–5 — what must be absent
+
+`mmu.manual_tools == [4,5]`. The machine has **no actuator** on these lanes: it cannot load, park,
+eject or jog them. Therefore:
+
+- The destination row, the jog row, `Load` and `Eject` are **absent**, not disabled — there is no
+  state in which they could become available, and a permanently greyed control is noise.
+- What remains: presence, material, spool, `Assign spool…`, and `Write tag` if a tag is present.
+- The strip states why in one line: `hand-fed — the machine cannot move these lanes`.
+
+This is the one place where *absent* beats *disabled-with-a-reason*: the rule exists so a control
+that could work in another state is not hidden. Here no such state exists.
+
+### 9.7 Target sizes, restated for the card
+
+The dashboard card is a **pointer** surface at ~600 × 400 (§5.0.2), and the tile is ~285 × 165. The
+destination chips are 28 px tall.
+
+- **In-card, minimum target 28 × 28 px** — clears WCAG 2.2 SC 2.5.8 (Target Size Minimum, AA,
+  24 × 24). Stated so it is a decision and not an accident.
+- **Phone and KlipperScreen: 48 × 48**, unchanged. There the destination row wraps to two rows of
+  three and the tile is taller, because a thumb is not a mouse.
+
+---
+
+## 10. The dryer as a control region
+
+**Added 2026-08-31.** *"Also need full integrated dryer support with the various modes, with the
+proper guards in place."*
+
+The dryer is the clearest instance of the failure this whole chapter exists to fix: the current card
+spends four large numbers and a paragraph of prose on it and **cannot start or stop anything**. It is
+display without control, and the numbers earn their pixels only as the basis for the button beside
+them.
+
+### 10.1 The real command set, enumerated from `ace.cfg` rather than assumed
+
+| Command | Definition | Parameters | What it does |
+|---|---|---|---|
+| `ACE_DRY` | `ace.cfg:193` | `MATERIAL=` **or** `TEMP=` / `MINUTES=` | One-shot. Resolves the preset, then calls `ACE_START_DRYING TEMP={t} DURATION={m}`. Defaults 45 °C / 120 min with no preset. |
+| `ACE_AUTODRY` | `ace.cfg:218` | `MATERIAL=` **or** `TARGET_RH=` / `TEMP=` / `INTERVAL=` | Humidity hold. Sets four runtime variables **and persists all four** to `save_variables`, then arms `_ACE_AUTODRY_TICK`. Defaults 20 %RH / 45 °C / 10 min. |
+| `ACE_DRY_OFF` | `ace.cfg:~205` | none | **Stops both.** Clears the runtime `active`, clears `ace_autodry_active`, cancels the tick, calls `ACE_STOP_DRYING`. |
+| `ACE_DRY_PRESETS` | `ace.cfg:~185` | none | Prints the table to the console. |
+| `ACE_AUTODRY_STATUS` | `ace.cfg:253` | none | Prints controller state to the console. |
+| `_ACE_DRY_PRESETS` | `ace.cfg:166` | — | Storage only. `variable_table`, readable live as `printer["gcode_macro _ACE_DRY_PRESETS"].table`. |
+
+**`ACE_DRY_OFF` stops auto-dry as well as the heater.** A `Stop drying` button that silently disarms
+a humidity hold he set yesterday is a surprise, so the control is labelled with what it does:
+`Stop drying` with the meta line `also cancels auto-dry`.
+
+**The presets are live data, not a hard-coded list.** Eight materials, read at render time from
+`_ACE_DRY_PRESETS.table`:
+
+```
+PLA  45 °C  20 %  240 min      TPU  45 °C  15 %  300 min
+PETG 55 °C  20 %  240 min      PA   55 °C  10 %  480 min
+ABS  55 °C  15 %  240 min      PC   55 °C  10 %  360 min
+ASA  55 °C  15 %  240 min      PVA  45 °C  15 %  240 min
+```
+
+The panel renders whatever is in that table. Adding a material to the config adds a chip; nothing in
+the UI hard-codes a material name or a temperature.
+
+**No free-text temperature field, anywhere.** The config's own comment says why: *"Capped at 55C: the
+driver permits 60 but 55 is what is proven here."* A number he can type is a number he can type
+wrong, and the filament pays. The panel offers preset chips and nothing else. The advanced form in
+the fullscreen variant offers the same chips plus a duration stepper — **still no free temperature**.
+
+### 10.2 One sensor, five readers — and they already disagree
+
+Five objects report the same physical HTU21D. Queried live, in one call, 2026-08-31:
+
+| object | temperature | humidity |
+|---|---|---|
+| `htu21d ace_temp` | 28.0 | 22.0 |
+| `temperature_ace ace_temp` | 28.0 | 22.0 |
+| `ace_humidity_display ace_temp` | 28.0 | 22.0 |
+| `temperature_sensor ace_temp` | 28.0 | **absent** |
+| **`ace_instance_0`** | **28** | **23** |
+
+**They do not agree.** Four read 22 %; `ace_instance_0` reads 23 %. The first four are Klipper-side
+reads of the HTU21D; `ace_instance_0` carries the value the ACE itself reports over RS485. Different
+sample, different rounding, same physical sensor. A panel that shows one while the machine acts on
+the other is the §2.1 lie in a new costume, and this time it is a whole percentage point at the exact
+threshold the controller compares against.
+
+**Decision: the panel reads `ace_instance_0.temp` and `ace_instance_0.humidity`, everywhere.**
+
+The reason is not precision, it is agreement: `_ACE_AUTODRY_TICK` reads `a.humidity` from
+`ace_instance_0`. **That is the number the controller decides on**, so it is the number that explains
+why the dryer just switched on. Showing 22 while the hold is triggering at 23 would make the panel
+contradict the machine's own decision — which is the exact class of bug being removed, not
+introduced. `temperature_sensor ace_temp` is disqualified outright: it publishes no humidity at all.
+
+### 10.3 The dryer region
+
+**Unit-level, not per-lane.** It has one heater and one box; it must never be drawn as a fifth lane
+or placed in the lane grid. It gets its own strip.
+
+**In-column (~600 × 400 card) — the compact form, and it is genuinely compact:**
+
+```
+ DRYER   auto-dry · holding ≤ 20 %      23 %RH  ▸ 20      45 °C      [ stop ]
+         ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░  3 % above target
+```
+
+44 px, one row plus a 4 px progress rule. Exactly three things, because **the single figure that
+changes a decision is progress toward target** — everything else is scenery at card size:
+
+1. **Which mode is running**, and its target (`auto-dry · holding ≤ 20 %` / `one-shot · 45 °C`).
+2. **The one live figure**: current RH against target for auto, remaining time for one-shot.
+3. **Start or stop.** Idle shows a `dry ▾` split control whose menu is the preset chips; running
+   shows `stop`.
+
+Everything else — preset editing, duration steppers, the timed-vs-hold explanation, absolute
+humidity, history — lives in the fullscreen variant. **Start, stop, mode and target are reachable
+in-column**, because a dry he cannot start from the dashboard is a dry he types.
+
+**Fullscreen / `/ace/` direct — the roomy form:** the same strip, plus the eight preset chips
+inline, a duration stepper for one-shot, absolute humidity (Magnus, already implemented) with its
+`(i)` explanation, and the auto-dry parameters (hysteresis, interval) as read-only text with an
+`edit` that re-issues `ACE_AUTODRY`.
+
+### 10.4 Guards
+
+| Guard | Rule | Reason string |
+|---|---|---|
+| **Heater fault** | `dryer_status.status == "error"` ⇒ **a `--fault` banner, never a "drying" pill.** The banner carries `state_detail` verbatim, and says the hold has been dropped. `_ACE_AUTODRY_TICK` sets `active = 0` and reports `ACE auto-dry ABORTED: dryer reports {state_detail}` — the panel must show the abort, not the intent. | banner: *"Dryer fault: {state_detail}. Heating has stopped and the humidity hold has been cancelled."* |
+| **Disconnected** | `connection_state != "connected"` ⇒ every dryer control disabled | `the ACE is disconnected` |
+| **No reading** | `ace_instance_0.humidity` is null/undefined ⇒ auto-dry start disabled; the tick itself already refuses on this | `no humidity reading — auto-dry cannot hold a target it cannot measure` |
+| **Already running** | `Dry` disabled while `dryer_status.status != "stop"` | `the dryer is already running` |
+| **Auto-dry already holding** | `Auto-dry` disabled while `ACE_AUTODRY.active == 1` | `auto-dry is already holding ≤ {target_rh} %RH` |
+| **Stop is never disabled** while anything is running | `Stop drying` enabled whenever `status != "stop"` **or** `active == 1` | — |
+| **Runtime vs persisted disagreement** | `ACE_AUTODRY.active` (RAM) is the truth for *is it holding now*; `save_variables.ace_autodry_active` is the recorded *intent*. When they differ, the strip shows `--staged` text: *"auto-dry was armed but is not running — a Klipper restart drops the hold"* | — |
+
+That last row is not hypothetical. `ACE_AUTODRY`'s own comment records it: *"gcode_macro variables
+live in RAM and reset on every Klipper restart... Happened five times on 2026-08-21 during unrelated
+deploys; the visible symptom was a dry that 'finished' 8 % RH above target."* `_ACE_AUTODRY_RESUME`
+exists to repair it — and the window between the restart and the resume is exactly when a panel
+showing the persisted value alone would lie.
+
+### 10.5 Two decisions recorded, not invented
+
+**The drying rotisserie stays off the panel.** `ACE_DRYROLL_START` / `ACE_DRYROLL_MODE` are removed
+from §4.3's control table by this section. The reason: **it commands lane motion, and it is blocked
+by QA and must never run during a print.** Exposing dryer controls invites starting the roller
+alongside them, and a control that can move filament mid-print does not belong on a card he clicks
+while a print is running. If a safe gated form is wanted, it goes to QA as a proposal — it does not
+ship on a UX judgement. *(This deletes a control this document previously specified. Prefer removing
+to adding.)*
+
+**Drying during a print is not gated by this design, and the question goes to QA.** The evidence:
+`_ACE_AUTODRY_TICK` contains **no print-state check at all**, unlike `_ACE_DRYROLL_BODY`, which has
+three. Auto-dry is running on the machine right now and the machine prints. So the existing,
+deliberate behaviour is that drying continues through a print, and inventing a gate here would
+contradict the controller rather than guard it. **What is flagged to QA:** whether starting a
+*one-shot* 55 °C dry while a lane is loaded and feeding is different from a 45 °C auto-dry burst, and
+whether that case wants a gate. Until answered, the panel gates neither and never gates `Stop`.
+
+---
+
+## 11. Two surfaces: the card and the page
+
+**Added 2026-08-31.** *"I'm open to suggestions in how this is to be presented to the user (separate
+page would need to be very enticing) so maybe the basics in the Klipper card, full control in
+dedicated page instead of having to use macros from Klipper."*
+
+The parenthesis is the whole design problem. **He already has a separate page and never opens it.**
+
+### 11.1 What the page is for — one sentence
+
+> **The card asserts; the page shows its working.**
+
+The page is where the machine explains itself: every figure the card states, traced back to the
+sensor edge or the reckoning behind it; the last operations and what each one actually moved; and
+every recovery command in one place.
+
+That is aimed squarely at what he actually does at a desk — debugging — and it is the one thing a
+camera view can never be. It is also not "the card, bigger", which is the failure mode that produces
+a page nobody opens twice.
+
+The concrete content that only the page can carry:
+
+- **The derivation behind every number.** The card says `T2 · at least 884 mm · reckoned ±18`. The
+  page says *why*: `staged` last re-anchored at the hub 41 minutes ago, `+1240 mm` of `ACE_FEED` and
+  `−356 mm` of `ACE_RETRACT` counted since, encoder at 0 pulses because the hub has not tripped, and
+  the three commands in the tree that can move this number without telling it.
+- **The sensor truth table, live**, with the impossible row highlighted and each cell's `enabled` bit
+  shown — the thing that makes `entry = 0 / post = 1` legible instead of alarming.
+- **The last N operations**, from `gcode_store` plus `ace_swap_timing`, each with what it moved and
+  what the tip position was before and after.
+- **Every recovery command in one place**, including the ones no error message names.
+
+### 11.2 The architecture — one file, two layouts
+
+**Evaluated first: is Mainsail's own fullscreen/webcam-page view enough?** Partly, and it is worth
+knowing what it does give:
+
+- `/cam` is a real route (`{name:"webcam", path:"/cam", fullscreen:true, showInNavi:true,
+  position:20}`) and it is **already in his sidebar**. It renders the same `WebcamPanel` with
+  `currentPage: "page"`, which has an **independent camera selection** from the dashboard — so the
+  page can be pinned to the ACE panel while the dashboard card is too.
+- The aspect-ratio lock stops biting, because height follows width: at a 1600 px viewport and `3:2`
+  the iframe is ~1600 × 1067. That is a genuine full page.
+
+**But it fails the deep-link requirement.** The card cannot hand `/cam` a lane and a state — the
+selection is a store value, not a route parameter, and there is no channel from inside the iframe to
+Mainsail's router. A `postMessage` handshake would need a bundle patch on the receiving side, which
+is the fragile route §5.0.1 rejects.
+
+**Decision: one file, two layouts, and the page is `/ace/` opened directly.**
+
+| | |
+|---|---|
+| **layout selection** | a `ResizeObserver` on `document.documentElement`, **not media queries** — inside an iframe a media query sees the iframe, which is what we want, but saying so stops someone "fixing" it later. Under 760 px wide ⇒ card layout. Over ⇒ page layout. Phone portrait is its own branch below 520 px. |
+| **deep link** | the URL hash: `/ace/#lane=2&view=jog`, `#view=derivation&lane=2`, `#view=recovery`. Parsed on load and on `hashchange`. |
+| **the doorway** | every card control that belongs on the page is an **`<a target="_blank" href="/ace/#…">`**. From inside an iframe that opens a real new tab — **no postMessage, no bundle patch, no remembered URL.** The card is literally the doorway and the door knows which room. |
+| **artefacts** | **one.** One file, one deploy, one nginx alias (§5.3.1), one webcam record. The page and the card cannot drift apart because they are the same document. |
+
+The `.theme/navi.json` entry (§5.3) gives a sidebar route to the same page for when he starts there
+rather than at the card.
+
+### 11.3 The floor rule, and how it is enforced
+
+> **If the card cannot get him out of a fault, it has failed, whatever the page offers.**
+
+Enforced as a rule on the surface assignment, not as good intentions: **every control that appears in
+a banner, in the action rail, or in the §6.3 priority ladder's top seven rungs is card-resident, by
+construction.** Those three lists are exactly the machine's own account of "something is wrong and
+here is what to do", so if a control appears in one of them it is on the card. No exceptions, and no
+judgement call at design time.
+
+### 11.4 Surface assignment — every control
+
+`C` = card. `P` = page. `C+P` = both, because it is needed in a hurry *and* has depth behind it.
+
+| Control | Surface | Why |
+|---|---|---|
+| **STOP ALL** | **C+P** | Safety. Present on every surface, always enabled, never gated. |
+| Lane tip position + confidence | **C+P** | The headline display and the basis for every next click. The page adds the derivation. |
+| **Load** `T{i}` | **C** | The commonest action. One press, no depth to add. |
+| **Park** / **Retract** | **C** | Resolves "toolhead is occupied", which blocks everything else. |
+| **Eject** / **Eject (force)** | **C** | Force-eject is the *only* way out of an orphaned lane. Floor rule. |
+| **Abort eject** | **C** | Appears while an eject runs; that is a fault-shaped state. |
+| **Clear jam on T{n}** | **C** | Banner control. Floor rule. |
+| **Recover** `MMU_RECOVER GATE={i}` | **C** | Named in three error messages; the answer to a state mismatch. Floor rule. |
+| **Clear op** `ACE_CLEAR_OP` | **C** | Banner control; an open intent blocks all motion. Floor rule. |
+| **Unlock toolchange** / **Reconcile target** | **C** | Ladder rung 6. Floor rule. |
+| **Clear suppression** | **C** | Ladder-adjacent, and the sharpest single finding in chapter 11. Floor rule. |
+| **Run audit** (verdict + one-line why) | **C** | Verdict on the card; the **full multi-line output on the page**. |
+| **Action rail** | **C** | It exists to surface what just went wrong. Card by definition. |
+| **Dryer: mode, target, progress, start, stop** | **C** | *"A dry he cannot start from the dashboard is a dry he types."* |
+| **Assign spool…** (picker) | **P** | A searchable list of dozens and a text filter. Keyboard work; nothing breaks while he walks to a desk. |
+| **Destination chips** (`stage`, `park`, `gears`, and the three disabled ones) | **P**, with `stage`/`park` also on **C** | `park` clears the toolhead, which is fault recovery — card. The rest is deliberate positioning, done at a desk. |
+| **Jog ± and step selector** | **P** | Never a mid-print reflex. It needs the segment-ownership interlock, the step selector and the tip-confidence readout all visible together — which is exactly the room the card does not have. |
+| **Re-read tag** | **P** | Diagnostic; nothing is blocked while it is not done. |
+| **Write tag** (disabled, no firmware support) | **P** | An explanation, not a control. |
+| **Calibrate path**, **Normalize lanes** | **P** | Minutes long, quarterly, needs a verified-clear path. |
+| **Dryer presets, duration, auto-dry parameters, absolute humidity** | **P** | Scheduling detail. The mode and the target are on the card. |
+| **Derivation view**, **sensor truth table**, **operation history** | **P** | This is what the page is *for* (§11.1). |
+| **Preload guard status**, **buffer state**, **printer state** | **P** | Multi-line diagnostics. |
+| **Cleanup stale vars**, **Reset shared bus** | **P** | Destructive or rare; two-step by design. |
+| **Select / clear bypass** | **P** | Rare, and it has a prose explanation attached. |
+| ~~Drying rotisserie~~ | **neither** | Removed by §10.5. QA-blocked. |
+
+**Floor-rule check.** Walking the §6.3 ladder's top seven rungs — jam, impossible sensor pair, eject
+running, orphaned strand, open intent, interrupted toolchange, state-vs-sensor mismatch — each one's
+answer is `Clear jam`, `Audit`+`Query sensors`, `Abort eject`, `Eject (force)`, `Clear op`,
+`Reconcile`/`Unlock`, `Recover`. **All seven are card-resident.** The floor holds.
+
+**The one place it is close.** A *stale calibration* makes the tip display untrustworthy, and
+`Calibrate path` is page-only. That is deliberate: a bad calibration is not a fault you resolve
+mid-print with gloves on — the card's honest response is to stop drawing to scale and say so (§2.2),
+and the fix is a desk job. **Flagged so it is a decision on record rather than an oversight.**
+
+### 11.5 Card layout, ~600 × 400 at `3:2`
+
+The density fight is over: the card carries the floor and nothing else.
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│ ACE 2 Pro   ● conn   coherent   path clear            [ STOP ALL ] │  40
+├───────────────────────────────────────────────────────────────────┤
+│ ▌ [ MMU_RECOVER GATE=2 ]  filament at the toolhead, no lane owns…  │  36  (rail, absent when empty)
+├─────────────────────────────┬─────────────────────────────────────┤
+│ ▌T0  empty                  │ ▌T1  Unknown              AT GATE   │
+│  ●┄┄┄┄┄┄┄┄┄┄┄┄○───○──○      │  ●━━━┄┄┄┄┄┄┄┄┄○───○──○              │ 118
+│  —                          │  at least 0 mm                      │
+│  [ load ] [ eject ]  ⟶      │  [ load ] [ eject ]  ⟶              │
+├─────────────────────────────┼─────────────────────────────────────┤
+│ ▌T2  Bambu Yellow PLA STAGED│ ▌T3  empty                          │
+│  ●━━━━━━━━━━━━━◐┄┄○───○──○  │  ●┄┄┄┄┄┄┄┄┄┄┄┄○───○──○              │ 118
+│  at least 884 ±18 · reckoned│  —                                  │
+│  [ park ] [ eject ]  ⟶      │  [ load ] [ eject ]  ⟶              │
+├─────────────────────────────┴─────────────────────────────────────┤
+│ DRYER  auto · hold ≤20%   23%▸20   45°C  ▓▓▓▓▓▓▓░░░  [ stop ]     │  44
+└───────────────────────────────────────────────────────────────────┘
+   40 + 36 + 118 + 118 + 44 + gaps = 368 … 400 at 3:2 with 600 width
+```
+
+Each tile is ~285 × 118: the ladder, one line of position with its confidence, two buttons, and the
+**`⟶` doorway** — an anchor to `/ace/#lane={i}` that opens the page focused on that lane. Recovery
+controls are not drawn as a permanent bar; they arrive as banners and rail items, which is when they
+are needed and is why the card fits.
+
+At `4:3` (the current setting) the same content is 600 × 450 and the tiles get 143 px each, which is
+also fine. **`3:2` is the recommendation, not a requirement** — the layout is driven by the
+`ResizeObserver`, so it degrades rather than breaking. Set it in **Mainsail → Settings → Webcams →
+ACE Panel → Aspect ratio**, value `3:2`.
+
+### 11.6 Page layout — what the room is spent on
+
+The §3.1 layout, plus three things that exist only here:
+
+| block | contents |
+|---|---|
+| **Lane detail** (deep-link target) | the full §9.1 lane frame for one lane: ladder, all five destination chips including the three disabled ones with their reasons, jog with the step selector and the segment-ownership interlock, `Re-read tag`, `Assign spool…`, and the per-lane calibration constants |
+| **Derivation** | for the selected lane: how `staged` reached its current value — the re-anchor time, the counted feeds and retracts since, the encoder state, and the commands that can move it untracked. The card's `±18` becomes a sentence about `hub_detect`'s 0.3 s poll |
+| **Truth table** | all six sensor bits live, with `enabled` shown per sensor and the impossible row called out |
+| **History** | `gcode_store` filtered to ACE traffic, plus `ace_swap_timing.last`, each row with what moved |
+| **Diagnostics & maintenance** | audit output in full, preload-guard status, buffer state, calibration, normalize, cleanup, bypass |
+
+---
+
+---
+
+**Ends.** The rendered proof is at [`examples/ace-panel-mockup/index.html`](../examples/ace-panel-mockup/)
+- four artboards, eleven states, a theme toggle, and two executable checks that hold the acceptance
+criteria: `node acceptance.js` (1702 checks) and `node render-check.js` (44 artboards).

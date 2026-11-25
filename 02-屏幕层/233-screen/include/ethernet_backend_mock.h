@@ -1,0 +1,83 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include "ethernet_backend.h"
+
+#include <atomic>
+#include <memory>
+#include <string>
+
+/**
+ * @brief Mock Ethernet backend for simulator and testing
+ *
+ * Provides fake Ethernet functionality with static data:
+ * - Always reports interface as available
+ * - Returns fixed IP address (192.168.1.150)
+ * - Connected status
+ * - Fake MAC address
+ *
+ * Perfect for:
+ * - macOS/simulator development
+ * - UI testing without real Ethernet hardware
+ * - Automated testing scenarios
+ * - Fallback when platform backends fail
+ */
+class EthernetBackendMock : public EthernetBackend {
+  public:
+    EthernetBackendMock();
+    ~EthernetBackendMock() override;
+
+    // ========================================================================
+    // EthernetBackend Interface Implementation
+    // ========================================================================
+
+    bool has_interface() override;
+    EthernetInfo get_info() override;
+    /// Fires after each set_connected_state() that changes the link.
+    std::unique_ptr<helix::ethernet::LinkEvents> open_link_events() override;
+
+    /// In memory, one config for the process (helix::net::mock_ipv4_store).
+    /// HELIX_MOCK_IPV4_APPLY_FAIL=1 makes applies fail.
+    bool supports_ipv4_config() const override {
+        return true;
+    }
+    helix::net::Ipv4Result get_ipv4_config(helix::net::Ipv4Config& out) override {
+        return helix::net::mock_ipv4_store(helix::net::Ipv4Link::Ethernet).get(out);
+    }
+    helix::net::Ipv4Result prepare_ipv4_change(const helix::net::Ipv4Config&,
+                                               helix::net::Ipv4Snapshot& out) override {
+        out = helix::net::mock_ipv4_snapshot(helix::net::Ipv4Link::Ethernet);
+        return helix::net::Ipv4Result::success();
+    }
+    helix::net::Ipv4Result apply_ipv4_config(const helix::net::Ipv4Snapshot&,
+                                             const helix::net::Ipv4Config& config) override {
+        return helix::net::mock_ipv4_store(helix::net::Ipv4Link::Ethernet).apply(config);
+    }
+
+    /// Test helper — drive connected state directly, mirroring
+    /// WifiBackendMock::set_connected_state. The interface itself stays
+    /// present (has_interface() is a hardware-presence question, not a link
+    /// one); only get_info()'s connected/status reflect this.
+    void set_connected_state(bool connected) {
+        if (connected_.exchange(connected) != connected) {
+            ++*link_generation_;
+        }
+    }
+
+    /// Test helper — the link state mocks constructed from now on start with,
+    /// for owners that build their EthernetManager and probe it at once.
+    static void set_default_connected(bool connected) {
+        default_connected_ = connected;
+    }
+
+  private:
+    std::string real_mac_; ///< Real MAC from system for realistic demo display
+    static inline bool default_connected_ = true;
+    /// Set by tests on the main thread, read by get_info() on executor threads.
+    std::atomic<bool> connected_{default_connected_};
+    /// Bumped on each link change; shared so an event feed may outlive us.
+    std::shared_ptr<std::atomic<unsigned>> link_generation_ =
+        std::make_shared<std::atomic<unsigned>>(0);
+};

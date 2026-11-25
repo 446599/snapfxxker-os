@@ -1,0 +1,327 @@
+# 07 - Filament & AMS
+
+Multi-filament support is one coordinator, many systems: `AmsState` (a `::instance()` singleton from chapter 05's census) owns a registry of `AmsBackend` objects, one concrete class per filament system, and never names a vendor. Backends subscribe to their own Moonraker objects and emit string events from background threads; `AmsState` marshals those to the main thread, reads backend state there, and writes change-gated LVGL subjects.
+
+Two neighbors complete the picture. A tool holds no spool of its own: its spool is the spool of the lane that feeds it (`AmsState::lane_feeding_tool()`), so `ToolState` keeps only topology, offsets and the mounted tool. Spoolman itself is a separate manager, not a backend. Under all of it sits the lane model: every reading about a lane is filed as a per-source record and resolved on read.
+
+This chapter is the map: the contract, the event pipeline, the lane model and the persistence rules. Per-backend protocols, the filament-op dispatch ladder, endless spool, dryers and the add-a-backend recipe belong to [`../FILAMENT_MANAGEMENT.md`](../FILAMENT_MANAGEMENT.md) and the `FILAMENT_BACKEND_*.md` leaves. Chapter 02 owns the subject machinery and chapter 03 the threading contracts applied here.
+
+```mermaid
+flowchart TB
+    PO["PrinterDiscovery::parse_objects()<br/>detected_ams_systems_ - real MMU wins,<br/>then native Snapmaker, then tool changer"]
+
+    subgraph AMS["AmsState - ::instance(), vendor-neutral, main thread only"]
+        INIT["init_backends_from_hardware()<br/>AmsBackend::create() per detected system"]
+        kReg["AmsBackendRegistry<br/>backends, consumption sinks, index-captured event routing"]
+        EV["on_backend_event(index, ...)<br/>posts only - no locks, no subjects"]
+        SYNC["sync_backend(i) / update_slot_for_backend(i, s)<br/>sync_from_backend(): named steps, change-gated writes"]
+        B0["primary backend index 0<br/>flat slot_colors_[] / slot_statuses_[] arrays"]
+        B1["secondary backends index 1+<br/>BackendSlotSubjects + SubjectLifetime token"]
+    end
+
+    CONC["9 concrete backends, one file each:<br/>Happy Hare, AFC, ACE, CFS, AD5X IFS, Snapmaker,<br/>QIDI Box, OpenAMS, Tool Changer<br/>- all on the AmsSubscriptionBackend NVI base"]
+
+    LANE["Lane model: LaneSourceStore<br/>one record per source, resolve() on read"]
+
+    TS["ToolState - ::instance()<br/>tools, topology, offsets; a tool's spool<br/>is its lane's (lane_feeding_tool())"]
+
+    SM["SpoolmanManager - works with no AMS present<br/>files fetched spools as lane Spoolman records"]
+    SPOOL["Spoolman server via<br/>server.spoolman.proxy"]
+
+    UI["AMS panels, filament panel, home AMS widget<br/>- XML binds subjects only"]
+
+    PO -->|"init_subsystems_from_hardware()"| INIT
+    INIT --> kReg
+    kReg --> CONC
+    CONC -->|"string events from bg threads"| EV
+    CONC <-->|"ingest() readings, resolve() on parse"| LANE
+    EV -->|"queue_update - main thread,<br/>shutdown-flag guarded"| SYNC
+    SYNC --> B0
+    SYNC --> B1
+    B0 --> UI
+    B1 --> UI
+    B0 -->|"tool topology"| TS
+    SM -->|"Spoolman records"| LANE
+    SPOOL --- SM
+```
+
+## Key files
+
+| File | Role |
+|------|------|
+| [`include/ams_backend.h`](../../../include/ams_backend.h) | The `AmsBackend` contract: lifecycle, events, state queries, `BackendTraits`, capability virtuals, `create()` factories |
+| [`include/ams_subscription_backend.h`](../../../include/ams_subscription_backend.h) | `AmsSubscriptionBackend`: the NVI base every real backend derives from - final entry points, `do_*` hooks, subscription ownership, the one-in-flight op claim, resync |
+| [`include/ams_types.h`](../../../include/ams_types.h) | `AmsType` enum (systems + `NONE`): the only vendor taxonomy generic code sees; `kAmsTypeTraits`, one row of names and per-type facts per value |
+| [`src/printer/ams_backend.cpp`](../../../src/printer/ams_backend.cpp) | `AmsBackend::create(AmsType, ...)`: the one switch mapping enum to class |
+| [`include/ams_state.h`](../../../include/ams_state.h) | `AmsState` singleton: thread-safety note, `BackendSlotSubjects`, the fixed subject set |
+| [`src/printer/ams_state.cpp`](../../../src/printer/ams_state.cpp) | Backend creation, event routing, `sync_from_backend()` and its steps, the ToolState spool bridge |
+| `src/printer/ams_state_*.cpp` | The rest of `AmsState`, one file per concern: `subjects`, `tool_mapping`, `external_spool`, `dryer`, `clog`, `buffer` |
+| [`include/ams_backend_registry.h`](../../../include/ams_backend_registry.h) | `AmsBackendRegistry`: the backend list, consumption sinks, and the queries safe off the main thread |
+| [`include/ams_runout_grace.h`](../../../include/ams_runout_grace.h) | `RunoutGrace`: post-unload and per-slot windows during which an empty sensor is not a runout |
+| [`include/ams_remap.h`](../../../include/ams_remap.h) | `can_remap()` / `remap_is_persistent()`: the remap questions generic code asks |
+| [`include/tool_state.h`](../../../include/tool_state.h) | `ToolInfo` (topology, heaters, offsets; no spool), `SubjectLifetime` |
+| [`include/spoolman_manager.h`](../../../include/spoolman_manager.h) | `SpoolmanManager`: weight polling, circuit breaker, identity cache, lane filing - no AMS required |
+| [`include/ams_error.h`](../../../include/ams_error.h) | `AmsError`/`AmsResult`: the immediate refusal-or-accepted answer every backend op returns |
+| [`include/filament_op_dispatch.h`](../../../include/filament_op_dispatch.h) | The tier planner deciding which UI surface owns a filament operation |
+| [`src/printer/printer_discovery_parse.cpp`](../../../src/printer/printer_discovery_parse.cpp) | `register_detected_ams_systems()`: the detection-priority ladder |
+| [`include/ams_environment_zone.h`](../../../include/ams_environment_zone.h) | `EnvironmentZone`: the filament-box model every backend's environment hardware collapses into ([`../FILAMENT_ENVIRONMENT_ZONES.md`](../FILAMENT_ENVIRONMENT_ZONES.md)) |
+| [`include/lane_observation.h`](../../../include/lane_observation.h) | `Observation` and `ObservationSource`: one reading from one source, every field optional |
+| [`include/lane_sources.h`](../../../include/lane_sources.h) | `LaneSources`: one `Observation` slot per source, whole-record replacement on `apply()` |
+| [`include/lane_resolver.h`](../../../include/lane_resolver.h) / [`src/printer/lane_resolver.cpp`](../../../src/printer/lane_resolver.cpp) | `ResolvedLane` and `resolve()`: the precedence table as code |
+| [`include/lane_source_store.h`](../../../include/lane_source_store.h) | `LaneId` and the lane address space; `ingest()` and `file_pending()`, the two funnels into the store; the Pending timeout and echo rule |
+| [`include/lane_translation.h`](../../../include/lane_translation.h) / [`src/printer/lane_translation.cpp`](../../../src/printer/lane_translation.cpp) | Turning a human edit or a `lane_data` record into an `Observation`; the field roster and the spool-owned identity rule |
+| [`include/filament_slot_override_store.h`](../../../include/filament_slot_override_store.h) | The lane record store: RFC 0001 record shape, the writer rule, the AFC / Happy Hare extras narrowing, the shared persist helpers |
+
+## How it works
+
+### The contract: interface, NVI base, nine concretes
+
+`AmsBackend` ([`include/ams_backend.h`](../../../include/ams_backend.h)) is the vendor-neutral surface: `start()`/`stop()` lifecycle, a string-event system (`EVENT_STATE_CHANGED`, `kEventSlotChanged`, `kEventLoadComplete`, ... starting at `include/ams_backend.h#EVENT_STATE_CHANGED`), state queries, filament operations, and capability questions. The constant ones are fields of one `BackendTraits` struct (`include/ams_backend.h#BackendTraits`): each backend declares a `constexpr kTraits` and the named predicates read it, so the mock's personas copy the real answers instead of restating them. The ones that depend on state stay virtuals (`manages_active_spool()`, `supports_per_tool_spool_assignment()`, `get_remap_strategy()`, ...). The static `sensor_belongs_to_backend()` dispatcher (`src/printer/ams_backend.cpp#sensor_belongs_to_backend`) keeps each backend's filament-sensor name patterns in its own file (#1054).
+
+No real backend implements the interface directly: all nine derive from `AmsSubscriptionBackend` ([`include/ams_subscription_backend.h#AmsSubscriptionBackend`](../../../include/ams_subscription_backend.h)), a non-virtual-interface base that makes `start()`/`stop()` and the load/unload/select/change operations `final` and dispatches to `do_*` hooks. That base is where shared discipline lives: it owns the `SubscriptionGuard` for the backend's Moonraker subscription (`include/ams_subscription_backend.h#subscription_`) and runs the print-active gate *plus a test-and-set in-flight claim* in the public entry points, so no backend can skip the gate and two surfaces cannot start concurrent ops on the same backend.
+
+| Backend | File | System |
+|---------|------|--------|
+| `AmsBackendHappyHare` | [`include/ams_backend_happy_hare.h`](../../../include/ams_backend_happy_hare.h) | Happy Hare MMU (mmu object, MMU_GATE_MAP) |
+| `AmsBackendAfc` | [`include/ams_backend_afc.h`](../../../include/ams_backend_afc.h) | AFC-Klipper-Add-On (lanes, hubs, `lane_data`) |
+| `AmsBackendAce` | [`include/ams_backend_ace.h`](../../../include/ams_backend_ace.h) | Anycubic ACE Pro (ValgACE/BunnyACE/DuckACE) |
+| `AmsBackendCfs` | [`include/ams_backend_cfs.h`](../../../include/ams_backend_cfs.h) | Creality Filament System (K1 and K2 families) |
+| `AmsBackendAd5xIfs` | [`include/ams_backend_ad5x_ifs.h`](../../../include/ams_backend_ad5x_ifs.h) | FlashForge AD5X Intelligent Filament Switching |
+| `AmsBackendSnapmaker` | [`include/ams_backend_snapmaker.h`](../../../include/ams_backend_snapmaker.h) | Snapmaker U1 native SnapSwap |
+| `AmsBackendQidi` | [`include/ams_backend_qidi.h`](../../../include/ams_backend_qidi.h) | QIDI Box (PLUS4/Q2/MAX4) |
+| `AmsBackendOpenAms` | [`include/ams_backend_openams.h`](../../../include/ams_backend_openams.h) | klipper_openams through its `oams_manager` API |
+| `AmsBackendToolChanger` | [`include/ams_backend_toolchanger.h`](../../../include/ams_backend_toolchanger.h) | viesturz/klipper-toolchanger, and multi-hotend printers with no filament system |
+
+Each has a leaf doc (`FILAMENT_BACKEND_*.md`). The Snapmaker, Happy Hare and CFS backends parse each status frame into a struct of optionals before taking their lock, then apply it in named steps; [`../FILAMENT_MANAGEMENT.md`](../FILAMENT_MANAGEMENT.md) § "Status Frame Shape" has the pattern.
+
+`AmsType` ([`include/ams_types.h#AmsType`](../../../include/ams_types.h)) enumerates them plus `NONE`. The single place an `AmsType` becomes a class is `AmsBackend::create(AmsType, api, client)` ([`src/printer/ams_backend.cpp#"std::unique_ptr<AmsBackend> AmsBackend::create(AmsType detected_type, IMoonrakerAPI* api,"`](../../../src/printer/ams_backend.cpp)); mock mode (`RuntimeConfig::should_mock_ams()`) short-circuits to `AmsBackendMock`. This is chapter 06's vendor rule working as dispatch: another system means one new subclass plus one enum value, factory case, detection entry and `kAmsTypeTraits` row, with no edits to generic code.
+
+What generic code needs to know about a type *without naming it* is that row ([`include/ams_types.h#AmsTypeTraits`](../../../include/ams_types.h), looked up by `ams_type_traits()`): the display name (`ams_type_to_string()`), the setup wizard's product name, the telemetry slug (`ams_type_telemetry_slug()`, a published schema), the `hardware/expected` entry the hardware validator warns on (`ams_type_for_expected_hardware()`, persisted in users' settings), which rows of its own the buffer status modal shows (`AmsBufferRows`), and the clog meter's label for the buffer fault counter. The telemetry slug and expected-hardware entry are never renamed.
+
+Detection feeding that factory is a priority ladder, `PrinterDiscovery::register_detected_ams_systems()` ([`src/printer/printer_discovery_parse.cpp#register_detected_ams_systems`](../../../src/printer/printer_discovery_parse.cpp)): a real MMU (Happy Hare, AFC, AD5X IFS, CFS, ACE, QIDI Box, OpenAMS) always wins, then native Snapmaker hardware, then a tool changer or several hotends with nothing managing them. `init_subsystems_from_hardware()` ([`src/printer/printer_discovery.cpp#init_subsystems_from_hardware`](../../../src/printer/printer_discovery.cpp)) hands the snapshot to `AmsState::init_backend_from_hardware()`, whose `init_backends_from_hardware()` ([`src/printer/ams_state.cpp#init_backends_from_hardware`](../../../src/printer/ams_state.cpp)) skips mock mode, skips if backends already exist, creates and `start()`s one backend per detected system, then syncs immediately so the `ams_slot_count` gate lights up without waiting for the first async event.
+
+Commands flow out through the same contract, asynchronously. UI surfaces call the NVI entry points (`load_filament(slot)`, `unload_filament(slot)`, `select_slot`, `change_tool`), which return an `AmsError` immediately (the refusal, not the outcome) while the real result arrives later as `kEventLoadComplete` / `kEventUnloadComplete` / `kEventError`. Which UI surface owns a given operation is tiered by [`include/filament_op_dispatch.h#helix::ui`](../../../include/filament_op_dispatch.h); that ladder is FILAMENT_MANAGEMENT.md § "Filament Op Dispatch". Cooldowns after load/unload/swap live in `PostOpCooldownManager` (chapter 05's census).
+
+A few capability questions shape generic code directly:
+
+| Capability question | True for | What generic code does with it |
+|---------------------|----------|-------------------------------|
+| `manages_active_spool()` | AFC, AD5X IFS (always); Happy Hare when its Spoolman mode is not OFF | Skip the direct `set_active_spool` push: the firmware calls Spoolman itself (#644) |
+| `feed_slot_signals()` | INDX (`save_variables.variables.active_tool`) | Names the status field that says which slot feeds now, so the HelixPrint plugin can switch the active spool on a lane or tool change without knowing the backend (`HELIXPRINT_PLUGIN.md`, filament accounting) |
+| `supports_per_tool_spool_assignment()` | Tool changers | Each tool has a lane of its own, so Moonraker's active spool is linked to the lane feeding the mounted tool (`spoolman_active_spool_sync.cpp#try_assign_active_spool_to_tool`, through `AmsState::commit_slot_edit()`) |
+| `lane_record_is_only_identity()` | Tool changers (MedusaHC, INDX), OpenAMS without `[openams_spoolman]`, ACE without ACEPRO | HelixScreen's lane record is a lane's only identity, so Keep Spool Info on Eject applies there and its row is shown: `AmsState::sync_lanes_emptied()` calls `lane_emptied()` when a lane stops holding filament, which writes `loaded: false` and keeps or clears the record's identity |
+| `sensor_name_names_filament_system()` (static) | Every backend that lists `kSensorNameKeywords` in its header | The sensor filter asks whether a sensor's name carries any filament system's keyword (`ercf_gate`, `afc_hub`) without holding a vendor list of its own |
+| `publish_external_spool_lane()` (overridden) | CFS, AD5X IFS, AFC, Happy Hare | On the bypass-engage edge and every external-spool identity change, publish the extern spool as the lane one past the last slot in the shared `lane_data` namespace (OrcaSlicer picks it up as an extra tray) |
+
+The `any_bypass_active()` edge in `sync_from_backend()` is a notification bus, not an implementation site: it calls `FilamentSensorManager::on_bypass_active_changed()` (the sensor layer arms or restores RUNOUT-role sensors) and `publish_external_spool_lane()` on each backend. No backend implements the sensor policy, and the sensor manager never names a filament system; FILAMENT_MANAGEMENT.md § "Bypass companions" has the detail.
+
+The same split runs through the rest of the filament UI: a backend translates its firmware's words, and the screen reads the translation.
+
+- **Buffers.** A backend maps its raw buffer state onto `BufferMotion` (`Advancing` / `Trailing` / `Unknown`, per unit in `BufferHealth::motion`, system-wide in `AmsSystemInfo::system_buffer_motion`) and a spool motor's onto `SpoolMotorAction` ([`include/ams_types.h#BufferMotion`](../../../include/ams_types.h)). The buffer status modal ([`src/ui/modals/buffer_status_modal.cpp`](../../../src/ui/modals/buffer_status_modal.cpp)) and the AMS detail view switch on those enums and on the type's `AmsBufferRows`, never on a firmware status string.
+- **Where a load stopped.** Fault messages that name the stop point are read by the `helix::faultpath` provider table ([`include/fault_path_position.h`](../../../include/fault_path_position.h), AFC its one row); the `<fault_path>` graphic and the modals that embed it go through `helix::ui::fault_path_apply()` ([`include/ui_fault_path.h`](../../../include/ui_fault_path.h)) and the `fault_path_segment` subject. [`../FILAMENT_BACKEND_AFC.md`](../FILAMENT_BACKEND_AFC.md) has the wiring.
+- **Box fault codes.** The `keyNNN` codes on Klipper's gcode-error channel are rows of `klipper_error_table` ([`include/klipper_error_table.h`](../../../include/klipper_error_table.h)) carrying their severity and optional one-tap recovery; the generic console-error classifier asks `klipper_error_classify()` and `klipper_error_modal_title()` and holds no box policy of its own.
+- **Stock macros that do more than load.** What a printer's own load/unload macros do for themselves (heat, home, leave a sensor off, open a wizard) is one `kMacroProfiles` row each in [`src/printer/filament_macro_profiles.cpp`](../../../src/printer/filament_macro_profiles.cpp). A row with a `GuidedLoadProfile` (QIDI's `M604`) makes the macro tier's load continue in `GuidedLoadModal`, driven by the pure `GuidedLoadFlow` ([`include/guided_load_flow.h`](../../../include/guided_load_flow.h)); FILAMENT_MANAGEMENT.md § "Stock load macros that are one step of a wizard". Backend-tier commands stay in the backend: the QIDI Box backend picks its load/unload commands by the box controller's dialect (`MULTI_COLOR_LOAD`/`MULTI_COLOR_UNLOAD` when a `multi_color_controller` section is configured), [`../FILAMENT_BACKEND_QIDI_BOX.md`](../FILAMENT_BACKEND_QIDI_BOX.md).
+
+### Events in: queue first, write on the main thread
+
+Backends emit events from background threads (their Moonraker subscriptions fire on libhv). `on_backend_event()` ([`src/printer/ams_state.cpp#on_backend_event`](../../../src/printer/ams_state.cpp)) touches neither a lock nor a subject: it only posts a `helix::ui::queue_update()` lambda whose body, already on the main thread, checks the shutdown flag, then calls `sync_backend(index)` (`src/printer/ams_state.cpp#sync_backend`) or `update_slot_for_backend(index, slot)` (`src/printer/ams_state.cpp#update_slot_for_backend`), and finally bumps `ams_data_revision` so code waiting for backend data can re-read.
+
+`AmsState`'s own state is main-thread only and has no lock. Each method checks its thread: an off-main call aborts under strict UI checks (unit tests, `--test`) and otherwise logs and files an `ams_off_main` anomaly once. `get_backend()` hands out a raw pointer and is main-thread only too. The few queries background threads make (`backend_count()`, `primary_type()`, `any_filament_batch_in_flight()`, `is_filament_operation_active()`, the unload grace) answer from `AmsBackendRegistry` ([`include/ams_backend_registry.h#AmsBackendRegistry`](../../../include/ams_backend_registry.h)), `RunoutGrace` ([`include/ams_runout_grace.h#RunoutGrace`](../../../include/ams_runout_grace.h)) or an atomic, each with its own guard. The registry's mutex is held across calls into a backend, so the lock order is registry -> `AmsBackend::mutex_`.
+
+Routing is by captured index: `add_backend()` stamps the backend's index and hands it to `AmsBackendRegistry::add()` ([`src/printer/ams_backend_registry.cpp#add`](../../../src/printer/ams_backend_registry.cpp)), which registers an event lambda closing over that index, so events from concurrent systems cannot cross wires.
+
+Event coarsening is deliberate: `STATE_CHANGED`, op completions, errors and attention trigger a full backend sync; `SLOT_CHANGED` parses a slot index for a one-slot update and falls back to a full sync when it cannot, so a backend that forgets the index still refreshes the UI (`src/printer/ams_state.cpp#"else if (event == AmsBackend::kEventSlotChanged) {"`).
+
+`sync_from_backend()` ([`src/printer/ams_state.cpp#sync_from_backend`](../../../src/printer/ams_state.cpp)) runs as named steps in a fixed order (`sync_system_subjects`, `sync_tool_topology`, `sync_filament_runout`, `sync_bypass`, `sync_tool_routing`, `sync_lanes_emptied`, `sync_unit_environment`, ...); the step declarations in `ams_state.h` document the order. Subject storage is two-shaped:
+
+- **Backend 0** writes the flat arrays every single-backend XML binding knows (`slot_colors_[i]`, `slot_statuses_[i]`, `slot_fills_[i]`, plus string and live-state families), per-slot change-gated in `write_slot_subjects()` (`src/printer/ams_state.cpp#write_slot_subjects`).
+- **Backends at index 1+** get a `BackendSlotSubjects` struct ([`include/ams_state.h#AmsState`](../../../include/ams_state.h)) allocated at `add_backend()` time: dynamic `colors`/`statuses`/`fills`/`lane_states`/`has_errors`/`severities`/`materials` vectors sized to the backend's slot count. `clear_backends()` destroys them, on rediscovery and inside `deinit_subjects()`, flipping the struct's own `SubjectLifetime` token first (`src/printer/ams_state_subjects.cpp#"void AmsState::BackendSlotSubjects::deinit() {"`).
+
+Every per-slot accessor with a `SubjectLifetime&` out-param hands out a live token for the subject it returns (#1700). Backend 0 and the single-slot overloads return `get_subjects_lifetime()` (`include/ams_state.h#get_subjects_lifetime`), which `deinit_subjects()` flips; a secondary backend returns its `BackendSlotSubjects` token, which `clear_backends()` flips; a nullptr return comes with an empty token. Everything else registered with `subjects_` (per-unit subjects, the rest of the fixed set) dies in `deinit_subjects()`, so its long-lived observers pass `get_subjects_lifetime()` directly: `PrintStatusPanel` watching `get_current_color_subject()` and `get_tool_map_version_subject()` to recolor the gcode preview is the usual case.
+
+Writes are change-gated: every value is compared before `lv_subject_set_*` fires, and a material-name delta additionally bumps `slots_version_`, because container-level consumers re-read material through `refresh_slots()` (#1065). The fixed set (about a hundred members, capped at `MAX_SLOTS = 64` and `MAX_UNITS = 16`) splits into families:
+
+| Family | Members (subject names) | Consumed by |
+|--------|--------------------------|-------------|
+| System identity | `ams_type`, `ams_system_name`, `ams_system_logo`, `ams_slot_count`, `ams_is_tool_changer`, `ams_is_filament_system` | Home AMS widget gate, AMS panel header |
+| Backend selector | `backend_count`, `active_backend`, `ams_data_revision` | Multi-system selector UI, data-wait code |
+| Per-slot state (x16) | `ams_slot_<n>_*`: color, status, fill, remaining, material, lane state, toolhead-present, active-loaded | Slot cards, `ams_slot` widget, filament-path canvas |
+| Current line | `current_slot`, `ams_current_tool`, `ams_filament_loaded`, `ams_filament_runout`, `current_color` | Filament panel, runout dialog |
+| Operation progress | `ams_action`, `ams_action_detail`, `ams_operation_phase`, `toolchange_step` | Step bar, action prompts |
+| Toolchange narration | `toolchange_visible`, `ams_current_toolchange`, `ams_number_of_toolchanges`, `toolchange_text` | Print-status toolchange banner |
+| Path canvas feed | `path_topology`, `path_filament_segment` | Filament-path canvas ([`../FILAMENT_PATH_CANVAS.md`](../FILAMENT_PATH_CANVAS.md)) |
+| Dryer / environment | `dryer_*`, per-unit `ams_unit_<i>_*` and `ams_env_ind_<i>_*` | AMS unit card badges, environment detail overlay |
+| Unit paging | `ams_unit_view_active`, `ams_page_count`, `ams_page_current`, `ams_page_has_prev`, `ams_page_has_next`, `ams_page_unit_name`, `ams_page_unit_logo`; `ams_units_dryer_version` | The overview's unit view: header, arrows and dots |
+| Buffer / clog | `buffer_*`, `clog_meter_*`; the buffer modal's own `buf_state`, `buf_fault_distance` | Filament Buffer widget and modal, clog bar |
+| Endless spool | `ams_endless_state`, `ams_endless_text` | Endless-spool status line |
+
+The AMS panel itself is nothing but bindings over those subjects:
+
+<img src="../../images/screenshot-ams-panel.png" alt="AMS panel (Happy Hare), landscape: on the left the slot diagram, each spool labelled with its name over its material, the unit's temperature and humidity in a pill at the box's right end, and the filament path to the toolhead below; on the right the loaded strip (a colour bar beside the position and remaining weight, then the filament name), the status line, and the action buttons two to a row" width="800"/>
+
+One end-to-end sequence ties the pieces together. The user taps a slot; a dispatch surface lands on a backend op (a tap that mounts another tool first passes the shared `decide_tool_change()` verdict in `include/tool_change_request.h`). The NVI entry point, say `change_tool(n)`, passes the print-active gate, claims the in-flight slot, and calls the backend's `do_change_tool`, which sends G-code through the API (chapter 04). The firmware acts; the backend's subscription fires on libhv, and the backend emits `kEventToolChanged`. `on_backend_event()` posts; the queued body runs `sync_backend(0)` on the main thread, change-gating every subject write, bumping `ams_data_revision`, and, if the tool-to-slot mapping moved, `tool_map_version` so the gcode preview recolors. No panel code ran; the subjects did the work.
+
+### Which head prints tool N: attachment is not routing
+
+Two questions look like one and are not. **Attachment** is which slot physically holds which spool (`AmsSystemInfo::tool_to_slot_map`), read by the Load/Unload slot resolver and the persisted tool-map ledger. **Routing** is which head will actually print logical tool `N` for the current print (`AmsBackend::get_tool_mapping()`).
+
+On most backends they are the same vector: a filament system routes whichever lane it selects to its one nozzle. On a tool changer they come apart. A Snapmaker U1 has four permanently-attached spools (attachment is trivially identity) while the firmware routes logical tools onto heads through its own table. Anything asking "what color is tool N" must ask the routing question through `get_tool_mapping()`; reading the attachment map instead answers confidently and wrongly on the U1, rendering a 2-color print with its colors swapped. `AmsState::routed_tool_colors()` is the one consumer and `FilamentMapper::routed_tool_colors()` the one place the color math lives. A backend with no routing of its own returns an empty vector, which callers read as "no opinion", never as identity ([`../FILAMENT_BACKEND_SNAPMAKER_U1.md`](../FILAMENT_BACKEND_SNAPMAKER_U1.md) explains why that matters).
+
+Whether the user can *change* the routing is three separate questions, each with one spelling in [`include/ams_remap.h`](../../../include/ams_remap.h):
+
+| Question | Ask | Backend declares |
+|---|---|---|
+| Can the user's tool->lane pick be carried out at all, right now? | `helix::printer::can_remap(backend)` | `get_remap_strategy()` + `remap_ready()` |
+| Does the route write a table that outlives the send? | `helix::printer::remap_is_persistent(strategy)` | (derived from the strategy) |
+| Does this backend own a tool->slot table for `ToolState` to adopt? | `backend.owns_tool_mapping_table()` | that virtual |
+
+`remap_ready()` is the one to understand: a backend can be built to remap and not be able to yet. AD5X IFS declares `RemapStrategy::Native` unconditionally, but until the `_IFS_VARS` macro is discovered, `set_tool_mapping()` writes local state the firmware replays nothing from. The U1 shows why the third question is separate: it carries out every pick through its pre-print `SET_PRINT_EXTRUDER_MAP` send and owns no tool->slot table, so `build_ams_topology()` asks about the table, never about remap capability. `requires_preprint_send()` stays out of all three: it is a print-start sequencing question. A new firmware declares `get_remap_strategy()`, adds `remap_ready()` only if discovery gates it, and `owns_tool_mapping_table()` only if it owns a table; [`tests/unit/test_remap_strategy.cpp`](../../../tests/unit/test_remap_strategy.cpp) pins every backend's answers.
+
+### The overview draws one model: units, hub, buffer, toolhead
+
+Every multi-filament overview is one or more chains `units -> hub -> buffer -> toolhead`. A hub joins the paths of every unit sharing a non-empty `AmsUnit::hub_id` (an OpenAMS lane); a unit without one is its own hub. Buffer and hub are 1:1, and a buffer box is what `ams_detail_buffer_box(info, unit)` gives the hub's first unit, so overview and unit view agree. `ams_draw::compute_system_tool_layout()` (`src/ui/filament/ams_drawing_utils.cpp`) derives `hub_groups`; `src/ui/filament/ui_system_path_plan.cpp` plans one hub box per group for several toolheads and one combiner for a single toolhead. Toolhead badges name the extruder, never a filament group.
+
+### A tool's spool is its lane's
+
+Which spool a tool holds is not stored anywhere for the tool. `AmsState::lane_feeding_tool()` (`src/printer/ams_state.cpp#lane_feeding_tool`) answers it: the backend lane the tool is wired to (`ToolInfo::backend_slot`), else the primary backend's first lane whose `mapped_tool` names the tool. Pressure-advance auto-apply, filament accounting's per-tool feed, PA tuning's result spool and the spool picker's "in use elsewhere" check all ask the lanes. Linking Moonraker's active spool to a tool writes the lane's link through the backend's own link path (firmware, macro variable or lane record).
+
+### Lane identity by source: one record per observer, resolved on read
+
+A lane shows what Moonraker holds. The lane model carries *where* each of a lane's values came from instead of re-deriving it from the values. Every backend files its readings into it, the record each backend reads from Moonraker's database is filed into it, a person's edit stands in it until its write lands, and every backend's parse ends by reading back out of it, so the precedence argument is settled in one place.
+
+`Observation` ([`include/lane_observation.h#"struct Observation"`](../../../include/lane_observation.h)) is one reading from one source. Every field is a `std::optional`, so "this source said nothing about the material" and "this source reports the material as blank" are different states, which no sentinel check can tell apart. The only constructor is `explicit Observation(ObservationSource)`.
+
+`ObservationSource` ([`include/lane_observation.h#ObservationSource`](../../../include/lane_observation.h)) has six values:
+
+| Source | What it is |
+|--------|------------|
+| `Sensed` | Real hardware: presence and motion, never a spool identity |
+| `Firmware` | What the machine states on the current frame (AFC lane fields, a tag reader, a box's saved ids) |
+| `Record` | The lane's record as last read from Moonraker's database, filed whole on every read |
+| `Spoolman` | The Spoolman server's record of the spool the lane links |
+| `Metered` | The consumption meter's estimate |
+| `Pending` | A user's edit whose write is in flight |
+
+`LaneSources` ([`include/lane_sources.h#"struct LaneSources {"`](../../../include/lane_sources.h)) holds one optional `Observation` per source. `apply()` replaces that source's record whole, so a field a source stops reporting stops contributing and no two writers share a destination; `drop()` discards one source's record. `resolve()` ([`src/printer/lane_resolver.cpp#resolve`](../../../src/printer/lane_resolver.cpp)) folds the sources into a `ResolvedLane`, the values a surface paints. It is pure, and its result is never stored back. Within each ladder a source that did not observe a field leaves the weaker source's value standing:
+
+| Fields | Ranked weakest to strongest | Why that order |
+|--------|-----------------------------|----------------|
+| `present` | `Sensed`, and nothing else | Identity is never evidence of presence: firmware still naming the last spool would resurrect an emptied lane |
+| Identity: material, colour with its name, brand, spool name, catalog id, product name, Spoolman ids | `Spoolman` (linked spool only), `Record`, `Firmware`, `Pending` | What the machine holds now outranks what was written down; Spoolman fills only fields both leave unset; an edit in flight shows until its write lands |
+| Weight: remaining, total | `Metered`, `Record`, `Firmware`, `Spoolman` (linked spool only), `Pending` | Spoolman owns consumption for the spool the lane links; an unlinked lane has its record and the meter |
+
+**Spoolman counts only for the linked spool.** `linked_spool_id()` ([`src/printer/lane_resolver.cpp#linked_spool_id`](../../../src/printer/lane_resolver.cpp)) is the lane's spool id from `Pending`, then `Firmware`, then `Record`; a `Spoolman` observation for any other id is ignored by `resolve()`, and `SpoolmanManager` drops a fetched record whose id the lane no longer links.
+
+**Two funnels, and a private writer behind them.** `ingest()` ([`include/lane_source_store.h#ingest`](../../../include/lane_source_store.h)) is the one way a reading reaches the store, and it replaces that source's record whole, so leaving a field out *retracts* it. `file_pending()` (`include/lane_source_store.h#file_pending`) is the one way an edit does; it amends the lane's `Pending` record field by field and restarts its `kPendingWriteTimeout` (30 s) window. Each refuses the other's source. `LaneSourceStore::write()` (`include/lane_source_store.h#LaneSourceStore`) is private with exactly those two friends, and [`tests/shell/test_code_lint.bats`](../../../tests/shell/test_code_lint.bats) fails the build on a third friend, a loosened access specifier, or a `LaneSourceStore::instance()` outside the funnels' own file.
+
+**Pending.** `AmsBackend::commit_user_edit()` (`src/printer/ams_backend.cpp#commit_user_edit`) files the edit as `Pending` (`user_edit_observation()`, [`src/printer/lane_translation.cpp#user_edit_observation`](../../../src/printer/lane_translation.cpp): only the fields the edit moved) and then lets the backend write the record and any firmware command. The value is withdrawn when a `Firmware` or `Record` reading states it back (`strip_echoed_fields()`), when the write fails or firmware refuses it, or at the timeout with a warn log (`expire_pending()`). No toast either way: the lane falls back to what Moonraker holds. The spool editor waits on the outcome (`await_pending()`, [`src/printer/lane_source_store.cpp`](../../../src/printer/lane_source_store.cpp)): it shows "Saving..." while the edit is pending, closes on the echo, and stays open with an inline "Not saved" line when the write fails, is refused or times out. A cleared field withdraws the field's earlier pending value, except an unlink and a colour name cleared beside a new colour, which stay engaged to displace what Moonraker holds until the write lands; an edit that only clears leaves an empty `Pending` record that shows nothing but stands for the write, and only a `Record` read ends it. A writer that answers a write directly but whose echo will not restate every field (OpenAMS's component) ends the record with `acknowledge_pending()` on its answer. The full rules and the record store behind them are [`../FILAMENT_SLOT_METADATA.md`](../FILAMENT_SLOT_METADATA.md) §§ 4 and 5.
+
+**A lane id is a block, not a slot index.** `lane_id_for(backend_index, slot)` (`include/lane_source_store.h#lane_id_for`) gives each registered backend its own block of `kLanesPerBackend` ids, with the bypass (`kBypassLaneId`) and the direct-drive tools in reserved blocks above, so coexisting backends cannot file onto one another's lanes. `AmsBackend::lane_id()` is the accessor every producer uses, and it answers `kInvalidLaneId` until `AmsState::add_backend` has stamped the index. A pair naming no lane is dropped by both funnels with a warning latched per funnel per lane.
+
+**What each producer's firmware states.** Every backend builds its records from the values its parse just read, never from the `SlotInfo` `apply_resolved_lane()` has already rewritten, or a person's choice would be filed as something the machine reported:
+
+| Backend | `Sensed` presence from | `Firmware` identity | Other |
+|---------|------------------------|------------------------|-------|
+| AFC | `prep` / `load` / `tool_loaded`, when a frame carries one | `color_rgb`, `material`, `spool_name`, `brand`, `spoolman_id`, remaining weight | |
+| Happy Hare | `gate_status`, when the gate is not "unknown" | `color_rgb`, `material`, `spool_name`, `spoolman_id` | |
+| CFS | the bay's parsed status | `color_rgb`, `material`, `brand`, `product_name`, `spoolman_id` | |
+| Snapmaker | `filament_detect.state` | `color_rgb`, `material`, `brand`, `product_name`, `total_weight_g` | |
+| QIDI Box | the slot state word, once every writer of status has run | `color_rgb`, `material`, `brand` | |
+| ACE | the hub's occupancy status, when the frame states one | `color_rgb`, `material` | |
+| AD5X IFS | port presence, once a port sensor has spoken | `color_rgb`, `material` | |
+| Tool changer | the dock, plus the carriage tool | none | |
+| Mock | the simulated slot status | `color_rgb`, `material`, `brand`, `spool_name`, `spoolman_id`, filed again after each slot write | each edit also files as the lane's `Record`, so every edited field echoes |
+| OpenAMS with `[openams_spoolman]` | (manager frames, above) | the component's per-bay status: `spoolman_id`, `material`, `color_rgb`, `brand`, weights | |
+
+OpenAMS reports no identity in its manager status and files nothing from its parse: without `[openams_spoolman]` its lanes are what the record, edits and Spoolman say, and with it each bay's identity is the component's status ([`../FILAMENT_BACKEND_OPENAMS.md`](../FILAMENT_BACKEND_OPENAMS.md)). One consequence to read straight off the table: on an ACE or an AD5X, brand and spool name have no firmware source, so a value there came from the record, an edit or Spoolman. `catalog_id`, `color_name` and `spoolman_vendor_id` come only from the record, an edit or Spoolman.
+
+**The read path.** `AmsSubscriptionBackend::refresh_lane_records()` ([`src/printer/ams_subscription_backend.cpp#refresh_lane_records`](../../../src/printer/ams_subscription_backend.cpp)) reads a backend's lane records at connect, after each write of ours, every `kLaneRecordPollPeriod` (10 s; Moonraker sends no database-change notification) and on a user resync, and files each record whole as its lane's `Record`. Lane editing is disabled until a backend's first read lands: `AmsState`'s `ams_lane_records_ready` subject gates the context menu's Edit Spool and the editor's Save, with an inline "Loading lane details…" line. Every backend's parse ends by laying the resolved identity, presence and weights onto its `SlotInfo` (`include/ams_backend.h#AmsBackend/apply_resolved_lane`), so what a user sees is what `resolve()` ranked. [`tests/unit/test_lane_resolver.cpp`](../../../tests/unit/test_lane_resolver.cpp) pins the ladders, [`tests/unit/test_lane_pending.cpp`](../../../tests/unit/test_lane_pending.cpp) the Pending overlay, [`tests/unit/test_lane_record_refresh.cpp`](../../../tests/unit/test_lane_record_refresh.cpp) the read path and [`tests/unit/test_lane_backend_observations.cpp`](../../../tests/unit/test_lane_backend_observations.cpp) what each producer files.
+
+### Who writes a lane
+
+HelixScreen keeps no lane state of its own: an edit goes where the lane's identity lives, and the lane shows it back from there. The rule per backend ([`../../specs/filament_slots.md`](../../specs/filament_slots.md) §1, RFC 0001's "one writer per machine"):
+
+| Backend | Firmware fields written with | `lane_data` | HelixScreen's own namespace |
+|---------|------------------------------|-------------|-----------------------------|
+| AFC | `SET_SPOOL_ID`, `SET_COLOR`, `SET_MATERIAL`, `SET_WEIGHT`, `SET_MAP` | AFC's (read only; the external spool's lane is ours) | `helix-screen-afc-overrides`: brand, name, colour name, catalog pick, total weight |
+| Happy Hare | `MMU_GATE_MAP` (colour, material, vendor on v4, name, temp, spool id); refused whole in Spoolman pull mode | Happy Hare's (read only) | `helix-screen-hh-overrides`, the same narrowed set |
+| OpenAMS with `[openams_spoolman]` | `server.openams_spoolman.edit` | the component's, protected by Moonraker (read only, and not per bay) | none |
+| CFS, AD5X IFS, QIDI, Snapmaker U1, ACE, MultiACE, tool changers, OpenAMS alone | each printer's own commands for what its firmware holds | HelixScreen's, written through `FilamentSlotOverrideStore` | none |
+
+The store ([`include/filament_slot_override_store.h`](../../../include/filament_slot_override_store.h)) writes RFC 0001 §5 records (`to_lane_data_record()`), never overwrites a record whose `writer` names another producer (`writer_refusal()`, so the edit is withdrawn and the editor says why), and narrows a record to the extras fields on the AFC and Happy Hare namespaces (`extras_only()`, on write and on read). The shared persist path (`AmsSubscriptionBackend::persist_user_record_locked()`, `persist_slot_weight()`, `persist_external_identity_impl()`) is the one implementation every backend calls; a failed write withdraws the lane's `Pending` and repaints it through the store's `set_on_write_failed()` hook. A backend whose spool link another program owns answers `clear_spool_refusal()` (OpenAMS with the component), which greys Clear Spool in the slot menu with that reason.
+
+### Spoolman without AMS
+
+Spoolman integration is deliberately *not* a backend. `SpoolmanManager` ([`include/spoolman_manager.h#SpoolmanManager`](../../../include/spoolman_manager.h), [`src/printer/spoolman_manager.cpp`](../../../src/printer/spoolman_manager.cpp)) gives printers with no filament-changer hardware spool tracking too. Its charter, from the header:
+
+- periodic weight polling via `lv_timer`, with refcounted start/stop;
+- a circuit breaker that suppresses error toasts while Spoolman is unreachable;
+- a Spoolman availability observer that auto-stops polling when the service disappears;
+- a transient identity cache (with negative caching for deleted spools) feeding the filament display-name resolver;
+- each fetched spool record, filed as its lane's `Spoolman` record through `ingest()` (`SpoolmanManager::file_spool_on_lane`), so an edit made on the Spoolman server reaches the lane. A "not found" answer drops that record; an unreachable server leaves it standing.
+
+Its weight refresh ([`src/printer/spoolman_manager.cpp#refresh_spoolman_weights`](../../../src/printer/spoolman_manager.cpp)) files through the same path, and nothing is written back to a slot: a slot write would restate identity to firmware, the firmware would report it back, and the poll would loop. The external (bypass) spool is a lane too: its Spoolman record, meter and edits file on `kBypassLaneId`, and `AmsState::get_external_spool_info()` folds `resolve(kBypassLaneId)` over the stored binding for every reader. All Spoolman RPC goes through `server.spoolman.proxy` via the `MoonrakerSpoolmanAPI` sub-API (chapter 04); the spool browser/wizard UI ([`src/ui/filament/ui_panel_spoolman.cpp`](../../../src/ui/filament/ui_panel_spoolman.cpp), [`src/ui/filament/ui_spool_wizard.cpp`](../../../src/ui/filament/ui_spool_wizard.cpp)) talks to that API, not to `AmsState`.
+
+Pushing "active spool" to Spoolman happens only for the loaded lane, and only when nothing else switches it: `active_spool_owner_now()` (`include/filament_accounting_controller.h`) must answer `Helix` (every lane path asks it through `helix_sets_active_spool(backend)`), which it does not when the backend answers `manages_active_spool()`, the firmware switches the spool itself (the U1 extended firmware's SpoolLink), or the printer's `T<n>` macros call `SET_ACTIVE_SPOOL` ([`src/printer/ams_state.cpp#"const int spool = spool_to_activate(loaded_backend, slot_index);"`](../../../src/printer/ams_state.cpp)). The AmsPanel posts, the lane and external-spool edit commits, the app fallback and the HelixPrint plugin ask the same rule before they set a spool. AFC, for instance, updates Spoolman itself when HelixScreen sends its native spool command; calling Spoolman directly would update the widget while bypassing the firmware's own state (#644).
+
+The rule in full, since it decides whether a print is charged to any spool at all (Moonraker's `[spoolman]` records usage only against the active spool):
+
+- **Trigger.** `AmsState::sync_current_loaded_from_backend()` (`src/printer/ams_state.cpp#"sync_current_loaded_from_backend(const AmsSystemInfo& primary_info)"`) posts `set_active_spool(slot.spoolman_id)` when it finds a backend whose `filament_loaded` is true with `current_slot >= 0`, that slot's `spoolman_id > 0`, and the id differs from `last_synced_spoolman_id_`. That memory resets to 0 whenever the loaded `(slot, filament_loaded)` pair changes, so every load re-sends, including a reload of the same spool after something else cleared the server's active spool. A lane that stays loaded is not re-asserted against an outside clear until the next load.
+- **Other writers.** `AmsState::commit_slot_edit()` (`src/printer/ams_state.cpp#commit_slot_edit`) sets the active spool when the edited lane is the actively loaded one, so linking a spool to the loaded lane takes effect without a reload. An explicit link follows `app_sets_spool_on_edit()` (`helix_sets_active_spool_on_edit()`), not the automatic rule: a switcher that acts on a load or a tool change never sees the edit, so the app sets it on Happy Hare (which activates a spool only on a gate load, in its own filament movement code) and under `T<n>` macros, and leaves it to AFC (whose `SET_SPOOL_ID` handler sets it when the lane is the one loaded, which `AmsBackend::sets_active_spool_on_link()` reports) and to SpoolLink; a spool created from the lane editor reaches the server only this way, so adding one to a lane that is not loaded leaves the active spool alone. On unlink of the loaded lane it clears the active spool whoever owns it, since no firmware drops a link Moonraker holds. `AmsState::commit_external_spool_edit()` follows the same split for the external spool. `AmsPanel`'s current-slot observer posts too while the panel is open, keyed on `current_slot` alone. Nothing clears the active spool on unload.
+- **Identity is the id.** Only `SlotInfo::spoolman_id` is compared; material and filament names never enter it.
+- **Backends that own it** (`manages_active_spool()` true): AFC; Happy Hare while its `spoolman_mode` is not off; INDX when its tool macros set the spool (`src/printer/indx_contract.cpp#macros_set_active_spool`); AD5X IFS always, which makes every Spoolman write there an explicit user action. Note `commit_slot_edit()` does not consult `manages_active_spool()`.
+- **Tool changes.** A tool a backend feeds is switched by the trigger above on its lane load. A tool that prints from its own extruder with a spool assigned to the tool (`ToolInfo::spoolman_id`, no backend slot) is switched by `FilamentAccountingController` when the active tool changes mid-print, only while the HelixPrint plugin's `filament_accounting` feature cannot run, the user opted in, nothing else switches the spool (`active_spool_owner`: a backend that manages it, firmware that does it itself such as the U1 extended firmware's SpoolLink, or T<n> macros), and `fallback_sender_role()` makes this screen the sender (`src/printer/filament_accounting.cpp#filament_accounting_sender`). With the feature Ready, the plugin switches it for every tool and lane change, whichever client is connected.
+- **What "loaded" means is the backend's.** On CFS it is the toolhead filament sensor (`FILAMENT_BACKEND_CFS.md`, "Active spool"), so the sync fires as filament reaches the head, not when the load starts.
+
+For debugging, every class here logs under a stable tag: `[AMS State]` for the coordinator, `[ToolState]` for assignments, `[SpoolmanAPI]` for Spoolman RPC, and one tag per backend from `backend_log_tag()` (e.g. `[AMS AFC]`, `[AMS HappyHare]`). A `-vv` run shows the whole pipeline: creation, events, queued syncs and spool saves each leave a line.
+
+## Patterns & gotchas
+
+- **Never name a filament system outside its backend file.** Generic code sees `AmsBackend*` and `AmsType`. If a feature would need `if (type == AmsType::AFC)`, the answer is a capability question (a `BackendTraits` field or a virtual); that is chapter 06's one-file test.
+- **A lane record enters through one of two funnels, and a producer's record is replaced whole.** `helix::ams::ingest()` for a reading, `helix::ams::file_pending()` for a human edit in flight. Build the record from the values the parse just read, never from a `SlotInfo` `apply_resolved_lane()` has rewritten. Leaving a field out of an `ingest()` retracts it; it does not leave the last reading standing.
+- **Observing any per-slot subject requires the lifetime token.** Use the `SubjectLifetime`-taking accessor overloads; the plain overloads are for one-frame reads on the main thread.
+- **Do not write subjects from backend-event context.** The event path queues before touching anything; the queued body is where subjects are written. A shortcut around `queue_update` reintroduces the bg-thread LVGL crash family (chapter 03).
+- **Do not call `AmsState` off the main thread** except for the documented registry and `RunoutGrace` queries. Tests and `--test` abort on it; a release build files an `ams_off_main` anomaly.
+- **Never keep lane state on the screen.** No cache file, no held write, no copy of a firmware field in HelixScreen's records: an edit is written where the lane's identity lives (§ "Who writes a lane"), shown as `Pending` until it echoes, and a failed write is reported in the editor, not queued. A second screen reads the same records on its next poll.
+- **Don't "fix" the gram threshold.** Weights are re-fetched on connect, so persisting them buys nothing. Compare via `same_displayed_weight()` or not at all.
+- **Save and load are deliberately asymmetric.** Save writes the local JSON first and fire-and-forgets the DB POST; load prefers the DB and falls back to the file, seeding the DB (`src/printer/tool_state.cpp#save_spool_assignments_if_dirty`). The file is the recovery path, not the primary.
+- **`tools_version_` (ToolState) and `slots_version_` (AmsState) are different clocks.** The first bumps on tool/spool data changes (including weight-only); the second on slot card data. Binding a rebuild to the wrong one yields twitchy or stale UI.
+- **Clearing a spool assignment is a question of OWNERSHIP.** The gate is `supports_per_tool_spool_assignment()`, not `has_firmware_spool_persistence()`: CFS and AD5X IFS answer no to firmware persistence while keeping identity in our own `lane_data` store, and gating the clear on it would refill a lane the user cleared from ToolState on the next poll.
+- **Slot and unit subjects are capped**: `AmsState::kMaxSlots = 64`, `kMaxUnits = 16` ([`include/ams_state.h#kMaxSlots`](../../../include/ams_state.h), `include/ams_state.h#kMaxUnits`, taken from `kAmsMaxSlots` and `kAmsMaxUnits` in `include/ams_types.h`). Every per-slot cap in the UI (the path canvas, endless-spool arrows, runout grace, the detail and panel slot grids) derives from `kAmsMaxSlots` too, so raise that one constant, never a local copy. A slot past the cap has no subjects and shows unbound, but still drives Currently Loaded and the ToolState sync; `AmsState` warns once per slot count when a backend reports more slots than it has subjects. Units past their cap bind to always-off placeholder subjects.
+- **`AmsState` init is discovery-driven and idempotent.** `init_backends_from_hardware()` self-guards against double init and mock mode; don't add a second construction path or hand-register backends. Mock AMS (`--test`) is `AmsBackendMock`, driven by `RuntimeConfig::should_mock_ams()`.
+- **Backend ops go through the NVI entry points, never `do_*` directly.** The entry point enforces the print-active gate and the one-in-flight claim; calling a `do_*` hook bypasses both.
+- **Event names are plain strings, so a typo compiles.** `EVENT_*` are `constexpr const char*` and `on_backend_event()` is an if/else chain; a misspelled name falls through every branch with nothing but the entry trace log.
+- **`clear_backends()` is a wider reset than it looks.** `AmsBackendRegistry::clear()` ([`src/printer/ams_backend_registry.cpp#clear`](../../../src/printer/ams_backend_registry.cpp)) unregisters the per-slot `FilamentConsumptionTracker` sinks before unlinking and stopping backends (they flush on the way out and read their backend to do it); `AmsState` then returns every backend subject to its default, closing the home widget gates, and drops ToolState's AMS topology (`src/printer/tool_state.cpp#clear_ams_topology`).
+- **Some XML subject names are not the member names.** Member `filament_loaded_` binds as `ams_filament_loaded` ([`src/printer/ams_state_subjects.cpp#init_subjects`](../../../src/printer/ams_state_subjects.cpp)). When a binding reports "No subject was found", check the registration call, not the header.
+
+## Going deeper
+
+- [`../FILAMENT_MANAGEMENT.md`](../FILAMENT_MANAGEMENT.md) - everything this chapter defers: status-frame parsing, the filament-op dispatch ladder, endless spool, dryers, error channels, `lane_data` persistence, UI panels, mock modes, adding a backend.
+- `../FILAMENT_BACKEND_*.md` - one leaf per backend: protocol, data sources, G-code, topology, capability table.
+- [`../FILAMENT_ENVIRONMENT_ZONES.md`](../FILAMENT_ENVIRONMENT_ZONES.md) - filament boxes: how per-backend environment hardware becomes one `EnvironmentZone`, and the tabs-or-list rule.
+- [`../FILAMENT_SLOT_METADATA.md`](../FILAMENT_SLOT_METADATA.md) + [`../../specs/filament_slots.md`](../../specs/filament_slots.md) - the lane record store, the read path, Pending edits, and the public `lane_data` wire format.
+- [`../TOOL_ABSTRACTION.md`](../TOOL_ABSTRACTION.md) - the ToolState deep dive: `ToolInfo`, `DetectState`, tool discovery, backend_index/backend_slot mapping.
+- [`06-discovery-capabilities.md`](06-discovery-capabilities.md) - the detection half, and how the AMS home widget gates on `ams_slot_count`.
+- [`03-threading-lifetime.md`](03-threading-lifetime.md) - `queue_update`, `SubjectLifetime`, `AsyncLifetimeGuard`.
+- [`05-printer-state.md`](05-printer-state.md) - where ToolState sits in the singleton map, and the `tool_count != extruder_count` topology override.
+- [`../printer-research/CREALITY_CFS_K1_INTERNALS.md`](../printer-research/CREALITY_CFS_K1_INTERNALS.md) - a full reverse-engineering reference for one backend (CFS on K1).
+- [`../printer-research/CREALITY_CFS_K2_INTERNALS.md`](../printer-research/CREALITY_CFS_K2_INTERNALS.md) - the K2 CFS protocol reference.
+
+## Guided code tour
+
+Read in this order; about 30 minutes total.
+
+1. [`include/ams_types.h#AmsType`](../../../include/ams_types.h) - the `AmsType` enum (ten systems plus `NONE`), the entire vendor taxonomy generic code may see, and `kAmsTypeTraits`, the one row per value that carries its names and per-type facts.
+2. [`include/ams_backend.h`](../../../include/ams_backend.h) - the event constants at `include/ams_backend.h#EVENT_STATE_CHANGED`, the constant capabilities in `include/ams_backend.h#BackendTraits`, the virtual `manages_active_spool()` at `include/ams_backend.h#manages_active_spool`, and the factories from `create()` (`include/ams_backend.h#"static std::unique_ptr<AmsBackend> create(AmsType detected_type"`) through `create_mock()` (`include/ams_backend.h#create_mock`).
+3. [`include/ams_subscription_backend.h#AmsSubscriptionBackend`](../../../include/ams_subscription_backend.h) - the NVI base: the must-override/may-override contract, then the filament-op entry points, whose comment (`include/ams_subscription_backend.h#"The gate is a CLAIM, not a test:"`) explains the in-flight claim.
+4. [`include/ams_backend_afc.h#AmsBackendAfc`](../../../include/ams_backend_afc.h) - one real backend: its section layout as the shape all nine share; `manages_active_spool()` at `include/ams_backend_afc.h#manages_active_spool` and its constant answers in `include/ams_backend_afc.h#"static constexpr BackendTraits kTraits"`.
+5. [`src/printer/printer_discovery_parse.cpp#register_detected_ams_systems`](../../../src/printer/printer_discovery_parse.cpp) - the detection ladder; then [`src/printer/printer_discovery.cpp#init_subsystems_from_hardware`](../../../src/printer/printer_discovery.cpp), where discovery hands off to AmsState.
+6. [`src/printer/ams_state.cpp#init_backends_from_hardware`](../../../src/printer/ams_state.cpp) - mock skip, double-init guard, the create-start loop, the immediate sync.
+7. [`src/printer/ams_state.cpp#add_backend`](../../../src/printer/ams_state.cpp) - `add_backend()`: registration in [`src/printer/ams_backend_registry.cpp#add`](../../../src/printer/ams_backend_registry.cpp) (the captured-index event lambda, one consumption sink per slot; `ensure_sinks()` adds sinks for slots a backend reports later, from every sync), then secondary-subject allocation (`src/printer/ams_state.cpp#"BackendSlotSubjects subs;"`).
+8. [`src/printer/ams_state.cpp#on_backend_event`](../../../src/printer/ams_state.cpp) - queue-only body, shutdown guard, the SLOT_CHANGED parse-or-full-sync fallback; follow one queued call into `sync_backend()` (`src/printer/ams_state.cpp#sync_backend`).
+9. [`include/ams_state.h#AmsState`](../../../include/ams_state.h) - the thread-safety note in the class comment, `BackendSlotSubjects` and its lifetime-token comment, then the storage members `registry_` (`include/ams_state.h#registry_`), `runout_grace_` (`include/ams_state.h#runout_grace_`) and `secondary_slot_subjects_` (`include/ams_state.h#secondary_slot_subjects_`).
+10. [`src/printer/ams_state.cpp#sync_from_backend`](../../../src/printer/ams_state.cpp) - the named steps in order; then `sync_tool_spools()` (`src/printer/ams_state.cpp#sync_tool_spools`) for the ToolState bridge: forward assign, the ownership-gated clear, the reverse sync, the persistence-gated save.
+11. [`src/printer/tool_state.cpp#same_displayed_weight`](../../../src/printer/tool_state.cpp) - the whole-gram compare; then `assign_spool()` (`src/printer/tool_state.cpp#assign_spool`), `save_spool_json` (`src/printer/tool_state.cpp#save_spool_json`) and `save_spool_assignments` (`src/printer/tool_state.cpp#save_spool_assignments`).
+12. [`src/printer/spoolman_manager.cpp#refresh_spoolman_weights`](../../../src/printer/spoolman_manager.cpp) - the re-fetch loop that files each spool as its lane's `Spoolman` record; then [`include/spoolman_manager.h#SpoolmanManager`](../../../include/spoolman_manager.h) for the charter.
+13. [`include/ams_state.h#get_subjects_lifetime`](../../../include/ams_state.h) - the two-scope lifetime doc with its PrintStatusPanel example: the best single comment on when observers need a token.
+14. [`include/lane_source_store.h#ingest`](../../../include/lane_source_store.h) - the lane model's entrance: the two funnels, the blocked address space, and the friend list guarding `LaneSourceStore::write` (`include/lane_source_store.h#LaneSourceStore/write`). Then the widest producer, [`src/printer/ams_backend_afc.cpp#apply_lane_status`](../../../src/printer/ams_backend_afc.cpp), and the narrowest, `src/printer/ams_backend_toolchanger.cpp#refresh_slot_statuses_locked`, which files presence and nothing else.

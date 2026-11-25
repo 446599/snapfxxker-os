@@ -1,0 +1,4 @@
+/work/diagnostic94/firmware/wupa94.c:5:10:br_platform_enter	0	static
+/work/diagnostic94/firmware/wupa94.c:6:6:br_platform_leave	0	static
+/work/diagnostic94/firmware/wupa94.c:7:5:br_platform_commit_valid	0	static
+/work/diagnostic94/firmware/wupa94.c:13:10:wupa94	56	static

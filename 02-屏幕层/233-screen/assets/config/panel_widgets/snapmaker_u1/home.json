@@ -1,0 +1,153 @@
+{
+  "_comment": "U1 480x320 home uses four physical head readings and the print task on measured 12-track grids. Other layout variants use the shipped table.",
+  "variants": {
+    "tiny": {
+      "anchors": [
+        {
+          "id": "tool_switcher",
+          "placements": {
+            "tiny@12x6": {
+              "col": 0,
+              "row": 0,
+              "colspan": 8,
+              "rowspan": 2
+            },
+            "tiny@12x4": {
+              "col": 0,
+              "row": 0,
+              "colspan": 8,
+              "rowspan": 2
+            }
+          }
+        },
+        {
+          "id": "bed_temperature",
+          "placements": {
+            "tiny@12x6": {
+              "col": 8,
+              "row": 0,
+              "colspan": 4,
+              "rowspan": 2
+            },
+            "tiny@12x4": {
+              "col": 8,
+              "row": 0,
+              "colspan": 4,
+              "rowspan": 2
+            }
+          }
+        },
+        {
+          "id": "print_status",
+          "placements": {
+            "tiny@12x6": {
+              "col": 0,
+              "row": 2,
+              "colspan": 12,
+              "rowspan": 4
+            },
+            "tiny@12x4": {
+              "col": 0,
+              "row": 2,
+              "colspan": 12,
+              "rowspan": 2
+            }
+          },
+          "config": {
+            "layout_style": "detailed"
+          }
+        }
+      ],
+      "disabled": {
+        "tiny": [
+          "printer_image",
+          "fan_stack",
+          "notifications",
+          "temperature",
+          "led",
+          "filament",
+          "tips",
+          "temp_graph",
+          "ams",
+          "dryer",
+          "chamber_temperature",
+          "active_spool"
+        ]
+      }
+    },
+    "micro": {
+      "anchors": [
+        {
+          "id": "tool_switcher",
+          "placements": {
+            "micro@12x6": {
+              "col": 0,
+              "row": 0,
+              "colspan": 8,
+              "rowspan": 2
+            },
+            "micro@12x4": {
+              "col": 0,
+              "row": 0,
+              "colspan": 8,
+              "rowspan": 2
+            }
+          }
+        },
+        {
+          "id": "bed_temperature",
+          "placements": {
+            "micro@12x6": {
+              "col": 8,
+              "row": 0,
+              "colspan": 4,
+              "rowspan": 2
+            },
+            "micro@12x4": {
+              "col": 8,
+              "row": 0,
+              "colspan": 4,
+              "rowspan": 2
+            }
+          }
+        },
+        {
+          "id": "print_status",
+          "placements": {
+            "micro@12x6": {
+              "col": 0,
+              "row": 2,
+              "colspan": 12,
+              "rowspan": 4
+            },
+            "micro@12x4": {
+              "col": 0,
+              "row": 2,
+              "colspan": 12,
+              "rowspan": 2
+            }
+          },
+          "config": {
+            "layout_style": "detailed"
+          }
+        }
+      ],
+      "disabled": {
+        "micro": [
+          "printer_image",
+          "fan_stack",
+          "notifications",
+          "temperature",
+          "led",
+          "filament",
+          "tips",
+          "temp_graph",
+          "ams",
+          "dryer",
+          "chamber_temperature",
+          "active_spool"
+        ]
+      }
+    }
+  }
+}

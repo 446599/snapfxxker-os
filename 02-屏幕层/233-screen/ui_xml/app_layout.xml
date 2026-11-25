@@ -1,0 +1,104 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="u1_notification_width" value="52"/>
+    <px name="u1_notification_count_size" value="24"/>
+  </consts>
+  <styles>
+    <style name="badge_info" bg_color="#info"/>
+    <style name="badge_warning" bg_color="#warning"/>
+    <style name="badge_error" bg_color="#danger"/>
+  </styles>
+  <view extends="lv_obj" width="100%" height="100%" flex_flow="column_reverse"
+        style_bg_color="#screen_bg" style_bg_opa="255" style_border_width="0"
+        style_pad_all="0" style_pad_gap="0" scrollable="false">
+    <navigation_bar name="navbar"/>
+    <lv_obj name="content_area" width="100%" height="0" flex_grow="1" flex_flow="column"
+            style_pad_all="0" style_pad_gap="0" style_border_width="0" style_bg_opa="0" scrollable="false">
+      <lv_obj name="u1_status_header" width="100%" height="#u1_status_height" flex_flow="row"
+              style_pad_hor="#u1_page_pad" style_pad_ver="0" style_pad_gap="#u1_compact_gap"
+              style_flex_cross_place="center" style_flex_track_place="center" style_border_width="0" style_bg_opa="0" scrollable="false">
+        <bind_flag_if cond="path_calibration_active" flag="hidden"/>
+        <text_body text="U1" style_text_font="noto_sans_bold_18">
+          <bind_flag_if_not_eq subject="active_panel" flag="hidden" ref_value="0"/>
+        </text_body>
+        <text_body text="打印文件" style_text_font="noto_sans_bold_18">
+          <bind_flag_if_not_eq subject="active_panel" flag="hidden" ref_value="1"/>
+        </text_body>
+        <text_body text="控制" style_text_font="noto_sans_bold_18">
+          <bind_flag_if_not_eq subject="active_panel" flag="hidden" ref_value="2"/>
+        </text_body>
+        <text_body text="耗材" style_text_font="noto_sans_bold_18">
+          <bind_flag_if_not_eq subject="active_panel" flag="hidden" ref_value="3"/>
+        </text_body>
+        <text_body text="设置" style_text_font="noto_sans_bold_18">
+          <bind_flag_if_not_eq subject="active_panel" flag="hidden" ref_value="4"/>
+        </text_body>
+        <text_body text="高级功能" style_text_font="noto_sans_bold_18">
+          <bind_flag_if_not_eq subject="active_panel" flag="hidden" ref_value="5"/>
+        </text_body>
+        <lv_obj width="0" flex_grow="1" height="1" style_pad_all="0" style_bg_opa="0" style_border_width="0" clickable="false"/>
+        <ui_button name="files_header_view_toggle" width="#u1_touch_target" height="100%" style_min_height="0" style_pad_all="0" icon="list" variant="ghost">
+          <bind_flag_if_not_eq subject="active_panel" flag="hidden" ref_value="1"/>
+          <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+          <event_cb trigger="clicked" callback="on_print_select_view_toggle"/>
+        </ui_button>
+        <lv_obj name="u1_live_status" width="content" height="content" flex_flow="row" style_pad_all="0"
+                style_pad_gap="#u1_nav_icon_gap" style_flex_cross_place="center" style_bg_opa="0" scrollable="false">
+          <lv_obj width="#u1_status_dot" height="#u1_status_dot" style_pad_all="0" style_border_width="0"
+                  style_radius="#u1_brand_radius" style_bg_color="#primary" style_bg_opa="255" clickable="false">
+            <bind_flag_if cond="nav_buttons_enabled ne 1 or print_active eq 1" flag="hidden"/>
+          </lv_obj>
+          <lv_obj width="#u1_status_dot" height="#u1_status_dot" style_pad_all="0" style_border_width="0"
+                  style_radius="#u1_brand_radius" style_bg_color="#success" style_bg_opa="255" clickable="false">
+            <bind_flag_if cond="nav_buttons_enabled ne 1 or print_active ne 1" flag="hidden"/>
+          </lv_obj>
+          <text_small style_text_font="#u1_aux_font" text="未连接" style_text_color="#text_muted">
+            <bind_flag_if_eq subject="printer_connection_state" flag="hidden" ref_value="2"/>
+          </text_small>
+          <text_small style_text_font="#u1_aux_font" text="未就绪" style_text_color="#text_muted">
+            <bind_flag_if cond="printer_connection_state ne 2 or nav_buttons_enabled eq 1" flag="hidden"/>
+          </text_small>
+          <text_small style_text_font="#u1_aux_font" text="就绪" style_text_color="#text_muted">
+            <bind_flag_if cond="nav_buttons_enabled ne 1 or print_active eq 1" flag="hidden"/>
+          </text_small>
+          <text_small style_text_font="#u1_aux_font" text="打印中" style_text_color="#text_muted">
+            <bind_flag_if cond="nav_buttons_enabled ne 1 or print_state_enum ne 1" flag="hidden"/>
+          </text_small>
+          <text_small style_text_font="#u1_aux_font" text="已暂停" style_text_color="#text_muted">
+            <bind_flag_if cond="nav_buttons_enabled ne 1 or print_state_enum ne 2" flag="hidden"/>
+          </text_small>
+        </lv_obj>
+        <lv_obj name="u1_notification_bell" width="#u1_notification_width" height="100%" style_pad_all="0" style_bg_opa="0"
+                style_border_width="0" clickable="true" scrollable="false">
+          <event_cb trigger="clicked" callback="status_notification_history_clicked"/>
+          <icon src="bell" size="sm" variant="muted" align="right_mid" clickable="false" event_bubble="true"/>
+          <notification_badge name="u1_notification_badge" align="left_mid"
+                              width="#u1_notification_count_size" height="#u1_notification_count_size"
+                              hidden="true" clickable="true" click_focusable="false"
+                              bind_text="notification_count_text">
+            <bind_flag_if_eq subject="notification_count" flag="hidden" ref_value="0"/>
+            <bind_style name="badge_info" subject="notification_severity" ref_value="0"/>
+            <bind_style name="badge_warning" subject="notification_severity" ref_value="1"/>
+            <bind_style name="badge_error" subject="notification_severity" ref_value="2"/>
+            <event_cb trigger="clicked" callback="status_notification_history_clicked"/>
+          </notification_badge>
+        </lv_obj>
+        <divider_horizontal align="bottom_mid" floating="true" opacity="60%" clickable="false"/>
+      </lv_obj>
+      <bed_drying_banner name="bed_drying_banner"/>
+      <path_calibration_banner/>
+      <lv_obj name="panel_container" width="100%" height="0" flex_grow="1" style_pad_all="0"
+              style_border_width="0" style_bg_opa="0" scrollable="false">
+        <home_panel name="home_panel"/>
+        <print_select_panel name="print_select_panel"/>
+        <controls_panel name="controls_panel"/>
+        <filament_panel name="filament_panel"/>
+        <settings_panel name="settings_panel"/>
+        <advanced_panel name="advanced_panel"/>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

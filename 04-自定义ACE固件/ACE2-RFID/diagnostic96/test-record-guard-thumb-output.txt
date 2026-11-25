@@ -1,0 +1,1 @@
+PASS: linked 96O Thumb guard admits only four exact records; invalid pointers return -1 with stack restored

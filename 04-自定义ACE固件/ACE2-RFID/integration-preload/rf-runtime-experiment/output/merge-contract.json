@@ -1,0 +1,28 @@
+{
+  "base": "c132",
+  "storage_magic": "0x45585231",
+  "storage_ready": "0x52445231",
+  "tail_bytes": 184,
+  "payload_bytes": 216,
+  "minimum_block": 224,
+  "offsets": {
+    "rf": 16,
+    "ex": 76,
+    "preload": 144
+  },
+  "changed_field": "ex+0 initialized -> owner_task; bit0 exchange busy; rest aligned TCB",
+  "new_fields": [],
+  "merge_conflicts": [
+    "experimental_binding.h/c storage version + ex_state semantics",
+    "event_storage.c sizeof and ready/version use",
+    "bounded_rc522.c/h exchange claim/finish and byte publication",
+    "rf_stock_adapter.c/h background immutable slot interface and bind_operation",
+    "build_accessor.py sources + hooks + label",
+    "native_tag_decoder.c typed probe",
+    "typed_results.c/h + decoder_typed_bridge.c/h"
+  ],
+  "do_not_merge_by_reusing_queue_v3": true,
+  "no_physical_proof": true,
+  "image_sha256": "6b67835bff4cbc3c52bab477929206fe79e48807176c91393246021633921c93",
+  "elf_sha256": "1e0e98f12edf9bf5cd803d3e6a0ee7605063765410371dd88195d373d2a0922c"
+}

@@ -1,0 +1,25 @@
+{
+  "words": {
+    "0": 2143289344,
+    "1": 2143289344,
+    "2": 0,
+    "3": 0,
+    "4": 0
+  },
+  "cmd13": {
+    "_code_absent": true,
+    "_code_present": false,
+    "_index_present": true,
+    "brand": "",
+    "code": 0,
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "index": 2,
+    "rfid": 0,
+    "sku": "",
+    "type": ""
+  }
+}

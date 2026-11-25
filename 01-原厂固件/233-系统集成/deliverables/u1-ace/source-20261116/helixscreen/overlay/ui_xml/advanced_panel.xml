@@ -1,0 +1,328 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Advanced Panel - Hub for advanced printer tools and emergency controls -->
+<!-- Three tabs: tools, calibration, and system operations before optional extensions. -->
+<!-- System recovery controls are grouped under the System tab; the global emergency control stays available. -->
+<!-- Features are conditionally shown based on printer capabilities -->
+<component>
+  <consts>
+    <px name="u1_advanced_tile_min_width" value="170"/>
+    <px name="u1_advanced_tile_height" value="72"/>
+    <px name="u1_advanced_selection_border" value="2"/>
+  </consts>
+  <!-- Emergency bar orientation. Landscape seats the four buttons two to a row:
+       min_width forces the wrap, because four in one row clip their labels even
+       at 800x480. Portrait is too narrow for two across, so they stack
+       full-width. These are the controls someone reaches for when things are
+       going wrong, and their labels have to stay readable.
+
+       Only container flex direction and child sizing differ, so this is a
+       bind_style_if toggle on ui_is_portrait rather than an if/else structural
+       branch. An if/else would have to duplicate all four buttons and their
+       event_cb wiring inside one file, where no gate can see the copies drift
+       apart (see the same reasoning in motion_panel.xml).
+
+       Both orientations need an explicit style: an inline flex_flow or
+       flex_grow attribute outranks a bound style, so leaving the landscape
+       values inline would silently win over the portrait binding.
+
+       layout="flex" is not redundant with flex_flow. The inline flex_flow=
+       attribute routes through lv_obj_set_flex_flow(), which sets the layout
+       AND the flow; a style sets only the property named. Without layout the
+       container runs no layout at all and all four buttons land on top of
+       each other at the same y. -->
+  <styles>
+    <style name="estop_bar_row" layout="flex" flex_flow="row_wrap"/>
+    <style name="estop_bar_column" layout="flex" flex_flow="column"/>
+    <style name="estop_btn_inline" min_width="45%" flex_grow="1" pad_hor="#space_sm"/>
+    <style name="estop_btn_stacked" width="100%" flex_grow="0"/>
+    <style name="more_tab_active" bg_color="#card_bg" bg_opa="255" border_width="#u1_advanced_selection_border" border_color="#primary" radius="#u1_card_radius" shadow_width="0"/>
+    <style name="more_tab_text_active" text_color="#primary"/>
+    <style name="more_tab_text_idle" text_color="#text"/>
+  </styles>
+  <view name="advanced_panel" extends="lv_obj" width="100%" height="100%" style_pad_all="0" style_pad_gap="0" flex_flow="column" scrollable="false" style_bg_color="#screen_bg">
+    <lv_obj name="more_tabs" width="100%" height="content" flex_flow="row" style_pad_gap="#u1_card_gap" scrollable="false" style_pad_hor="#u1_page_pad" style_pad_ver="#u1_compact_gap">
+      <lv_button name="more_tab_0" width="0" flex_grow="1" height="#u1_touch_target" style_pad_all="0" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center" scrollable="false">
+        <bind_style_if_eq name="more_tab_active" subject="u1_more_category" ref_value="0"/>
+        <bind_style_if_not_eq name="styles.u1_tab_idle" subject="u1_more_category" ref_value="0"/>
+        <text_body text="工具与记录" clickable="false" event_bubble="true" style_text_font="#u1_body_font">
+          <bind_style_if_eq name="more_tab_text_active" subject="u1_more_category" ref_value="0"/>
+          <bind_style_if_not_eq name="more_tab_text_idle" subject="u1_more_category" ref_value="0"/>
+        </text_body>
+        <event_cb trigger="clicked" callback="u1_more_tools"/>
+      </lv_button>
+      <lv_button name="more_tab_1" width="0" flex_grow="1" height="#u1_touch_target" style_pad_all="0" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center" scrollable="false">
+        <bind_style_if_eq name="more_tab_active" subject="u1_more_category" ref_value="1"/>
+        <bind_style_if_not_eq name="styles.u1_tab_idle" subject="u1_more_category" ref_value="1"/>
+        <text_body text="校准" clickable="false" event_bubble="true" style_text_font="#u1_body_font">
+          <bind_style_if_eq name="more_tab_text_active" subject="u1_more_category" ref_value="1"/>
+          <bind_style_if_not_eq name="more_tab_text_idle" subject="u1_more_category" ref_value="1"/>
+        </text_body>
+        <event_cb trigger="clicked" callback="u1_more_calibration"/>
+      </lv_button>
+      <lv_button name="more_tab_2" width="0" flex_grow="1" height="#u1_touch_target" style_pad_all="0" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center" scrollable="false">
+        <bind_style_if_eq name="more_tab_active" subject="u1_more_category" ref_value="2"/>
+        <bind_style_if_not_eq name="styles.u1_tab_idle" subject="u1_more_category" ref_value="2"/>
+        <text_body text="系统" clickable="false" event_bubble="true" style_text_font="#u1_body_font">
+          <bind_style_if_eq name="more_tab_text_active" subject="u1_more_category" ref_value="2"/>
+          <bind_style_if_not_eq name="more_tab_text_idle" subject="u1_more_category" ref_value="2"/>
+        </text_body>
+        <event_cb trigger="clicked" callback="u1_more_system"/>
+      </lv_button>
+    </lv_obj>
+    <!-- ================================================================== -->
+    <!-- SCROLLABLE CONTENT AREA -->
+    <!-- ================================================================== -->
+    <lv_obj width="100%" flex_grow="1" style_pad_gap="#u1_card_gap" flex_flow="column" scrollable="true" style_bg_color="#screen_bg" name="more_scroll" scrollbar_mode="auto" scroll_dir="ver" height="0" style_pad_hor="#u1_page_pad" style_pad_top="#space_xs" style_pad_bottom="#u1_card_gap">
+      <!-- Disable settings rows when printer not connected or klippy not ready -->
+      <!-- ================================================================== -->
+      <!-- TOOLS SECTION -->
+      <!-- ================================================================== -->
+      <lv_obj name="group_tools" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <bind_flag_if cond="u1_more_category ne 0" flag="hidden"/>
+        <responsive_grid name="more_tool_tiles" min_col_width="#u1_advanced_tile_min_width" max_cols="2" fit_items="false" style_pad_column="#u1_card_gap" style_pad_row="#u1_card_gap">
+          <!-- Macro Browser -->
+          <u1_settings_tile name="row_macros" label="宏命令" icon="script_text" description="运行已配置的打印宏" height="#u1_advanced_tile_height" label_lines="2">
+            <event_cb trigger="clicked" callback="on_advanced_macros"/>
+          </u1_settings_tile>
+          <!-- Console / G-code Terminal -->
+          <u1_settings_tile name="row_console" label="G-code 控制台" icon="console" description="查看输出与发送指令" height="#u1_advanced_tile_height" label_lines="2">
+            <event_cb trigger="clicked" callback="on_console_row_clicked"/>
+          </u1_settings_tile>
+          <!-- Guided cold pull (#2011) -->
+          <u1_settings_tile name="row_cold_pull" label="喷嘴冷拉" icon="nozzle" description="按步骤清洁堵塞喷嘴" height="#u1_advanced_tile_height" label_lines="2">
+            <event_cb trigger="clicked" callback="on_cold_pull_row_clicked"/>
+          </u1_settings_tile>
+          <!-- Print History -->
+          <u1_settings_tile name="row_print_history" label="打印历史" icon="clock" description="任务详情与打印统计" height="#u1_advanced_tile_height" label_lines="2">
+            <event_cb trigger="clicked" callback="on_history_row_clicked"/>
+          </u1_settings_tile>
+          <u1_settings_tile name="row_job_queue" label="打印队列" icon="list" description="管理等待中的打印任务" callback="u1_more_job_queue" height="#u1_advanced_tile_height" label_lines="2">
+            <bind_flag_if_eq subject="printer_has_job_queue" flag="hidden" ref_value="0"/>
+          </u1_settings_tile>
+          <!-- Notification History: the way in when no bell widget is on the home screen -->
+          <lv_obj name="container_notification_history" style_pad_all="0" scrollable="false" height="content">
+            <u1_settings_tile name="row_notification_history" label="消息记录" icon="notifications" description="提醒、错误与设备事件" width="100%" height="#u1_advanced_tile_height" label_lines="2">
+              <event_cb trigger="clicked" callback="status_notification_history_clicked"/>
+            </u1_settings_tile>
+          </lv_obj>
+          <!-- Spoolman (hidden if not connected) -->
+          <lv_obj name="container_spoolman" style_pad_all="0" scrollable="false" height="content">
+            <bind_flag_if_eq subject="printer_has_spoolman" flag="hidden" ref_value="0"/>
+            <u1_settings_tile name="row_spoolman" label="耗材库存" icon="spoolman" description="查看已连接的 Spoolman" width="100%" height="#u1_advanced_tile_height" label_lines="2">
+              <event_cb trigger="clicked" callback="on_advanced_spoolman"/>
+            </u1_settings_tile>
+          </lv_obj>
+          <!-- Dry filament on the heated bed (hidden on open printers) -->
+          <lv_obj name="container_bed_drying" style_pad_all="0" scrollable="false" height="content">
+            <bind_flag_if_eq subject="printer_can_bed_dry" flag="hidden" ref_value="0"/>
+            <u1_settings_tile name="row_bed_drying" label="热床烘干" icon="heat_wave" description="在热床上干燥料盘" width="100%" height="#u1_advanced_tile_height" label_lines="2">
+              <event_cb trigger="clicked" callback="on_bed_drying_start_clicked"/>
+            </u1_settings_tile>
+          </lv_obj>
+        </responsive_grid>
+        <!-- Fallback message when Spoolman not available -->
+        <lv_obj name="container_no_spoolman" width="100%" style_pad_all="0" scrollable="false">
+          <bind_flag_if_eq subject="printer_has_spoolman" flag="hidden" ref_value="1"/>
+          <setting_info_row name="row_no_spoolman" label="Spoolman" icon="spoolman" value="Not configured"/>
+        </lv_obj>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- AUTOMATION SECTION -->
+      <!-- ================================================================== -->
+      <responsive_grid name="group_power" min_col_width="#u1_advanced_tile_min_width" max_cols="2" fit_items="false" style_pad_column="#u1_card_gap" style_pad_row="#u1_card_gap">
+        <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <bind_flag_if cond="u1_more_category ne 2 or platform_host_power_supported eq 0" flag="hidden"/>
+        <!-- Shutdown / Reboot — both rows open the same dialog (which presents
+           both actions plus, on dual-host, the printer/screen/both scope). -->
+        <u1_settings_tile name="row_shutdown" label="关机" icon="power" description="关闭打印机或屏幕" height="#u1_advanced_tile_height" label_lines="2">
+          <event_cb trigger="clicked" callback="on_advanced_power_clicked"/>
+        </u1_settings_tile>
+        <u1_settings_tile name="row_reboot" label="重启" icon="restart" description="重新启动打印机或屏幕" height="#u1_advanced_tile_height" label_lines="2">
+          <event_cb trigger="clicked" callback="on_advanced_power_clicked"/>
+        </u1_settings_tile>
+      </responsive_grid>
+      <lv_obj width="100%" height="content" style_pad_left="#space_md" style_pad_right="#space_md" style_pad_top="#space_sm" style_pad_bottom="#space_sm" style_pad_gap="#u1_card_gap" scrollable="false" name="more_recovery_actions" style_pad_all="0">
+        <bind_flag_if cond="u1_more_category ne 2" flag="hidden"/>
+        <bind_style_if name="estop_bar_column" cond="ui_is_portrait"/>
+        <bind_style_if name="estop_bar_row" cond="ui_is_portrait" invert="true"/>
+        <ui_button name="advanced_estop_btn" style_radius="#u1_card_radius" height="#u1_touch_target" icon="alert_octagon" text="E-Stop (M112)" variant="danger">
+          <bind_style_if name="estop_btn_stacked" cond="ui_is_portrait"/>
+          <bind_style_if name="estop_btn_inline" cond="ui_is_portrait" invert="true"/>
+          <event_cb trigger="clicked" callback="advanced_estop_clicked"/>
+        </ui_button>
+        <ui_button name="advanced_restart_klipper_btn" style_radius="#u1_card_radius" height="#u1_touch_target" icon="refresh" text="Restart Klipper" variant="warning">
+          <bind_style_if name="estop_btn_stacked" cond="ui_is_portrait"/>
+          <bind_style_if name="estop_btn_inline" cond="ui_is_portrait" invert="true"/>
+          <event_cb trigger="clicked" callback="advanced_restart_klipper_clicked"/>
+        </ui_button>
+        <ui_button name="advanced_firmware_restart_btn" style_radius="#u1_card_radius" height="#u1_touch_target" icon="cog_refresh" text="Firmware Restart" variant="secondary">
+          <bind_style_if name="estop_btn_stacked" cond="ui_is_portrait"/>
+          <bind_style_if name="estop_btn_inline" cond="ui_is_portrait" invert="true"/>
+          <event_cb trigger="clicked" callback="advanced_firmware_restart_clicked"/>
+        </ui_button>
+        <ui_button name="advanced_restart_moonraker_btn" style_radius="#u1_card_radius" height="#u1_touch_target" icon="refresh" text="Restart Moonraker" variant="secondary">
+          <bind_style_if name="estop_btn_stacked" cond="ui_is_portrait"/>
+          <bind_style_if name="estop_btn_inline" cond="ui_is_portrait" invert="true"/>
+          <event_cb trigger="clicked" callback="advanced_restart_moonraker_clicked"/>
+        </ui_button>
+      </lv_obj>
+      <lv_obj name="group_automation" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <bind_flag_if cond="u1_more_category ne 2" flag="hidden"/>
+        <text_body width="100%" text="扩展与自动化" style_text_font="#font_body_bold" style_text_color="#text_muted" style_margin_top="#space_xs"/>
+        <responsive_grid name="more_extension_tiles" min_col_width="#u1_advanced_tile_min_width" max_cols="2" fit_items="false" style_pad_column="#u1_card_gap" style_pad_row="#u1_card_gap">
+          <!-- Timelapse Videos -->
+          <u1_settings_tile name="row_timelapse_videos" label="延时摄影" icon="video" description="浏览已录制的视频" height="#u1_advanced_tile_height" label_lines="2">
+            <bind_flag_if_eq subject="printer_has_timelapse" flag="hidden" ref_value="0"/>
+            <event_cb trigger="clicked" callback="on_timelapse_videos_clicked"/>
+          </u1_settings_tile>
+          <!-- Timelapse Setup (shown when plugin not installed but webcam available).
+               Both conditions belong on the cell so a hidden option leaves no gap. -->
+          <lv_obj height="content" style_pad_all="0" style_pad_gap="0" scrollable="false">
+            <bind_flag_if cond="timelapse_owner ne 0 or printer_has_webcam eq 0" flag="hidden"/>
+            <u1_settings_tile name="row_timelapse_setup" label="设置延时摄影" icon="camera_timer" description="安装摄影扩展" width="100%" height="#u1_advanced_tile_height" label_lines="2">
+              <event_cb trigger="clicked" callback="on_timelapse_setup_clicked"/>
+            </u1_settings_tile>
+          </lv_obj>
+          <!-- HelixPrint Plugin (NOT installed - show Install row).
+               Shows ONLY when value == 0 (known absent); -1 means the probe has
+               not answered yet and must not advertise an install. -->
+          <lv_obj name="container_helix_plugin_install" height="content" style_pad_top="0" style_pad_left="0" style_pad_bottom="0" scrollable="false" style_pad_all="0">
+            <bind_flag_if_not_eq subject="helix_plugin_installed" flag="hidden" ref_value="0"/>
+            <u1_settings_tile name="row_helix_plugin_install" label="安装打印扩展" icon="puzzle_outline" description="设置可选的打印准备项" width="100%" height="#u1_advanced_tile_height" label_lines="2">
+              <event_cb trigger="clicked" callback="on_helix_plugin_install_clicked"/>
+            </u1_settings_tile>
+          </lv_obj>
+          <!-- HelixPrint Plugin overview: what the installed plugin runs -->
+          <u1_settings_tile name="row_helix_plugin_overview" label="打印扩展" icon="puzzle_outline" description="查看版本与启用项" height="#u1_advanced_tile_height" label_lines="2">
+            <bind_flag_if_not_eq subject="helix_plugin_installed" flag="hidden" ref_value="1"/>
+            <event_cb trigger="clicked" callback="on_helix_plugin_overview_clicked"/>
+          </u1_settings_tile>
+          <!-- HelixPrint Plugin (INSTALLED - show Uninstall row) -->
+          <!-- Shows ONLY when value == 1 (installed and enabled), hidden otherwise (-1 or 0) -->
+          <lv_obj name="container_helix_plugin_uninstall" height="content" style_pad_top="0" style_pad_left="0" style_pad_bottom="0" scrollable="false" style_pad_all="0">
+            <bind_flag_if_not_eq subject="helix_plugin_installed" flag="hidden" ref_value="1"/>
+            <u1_settings_tile name="row_helix_plugin_uninstall" label="卸载打印扩展" icon="puzzle_outline" description="移除已安装的扩展" width="100%" height="#u1_advanced_tile_height" label_lines="2">
+              <event_cb trigger="clicked" callback="on_helix_plugin_uninstall_clicked"/>
+            </u1_settings_tile>
+          </lv_obj>
+        </responsive_grid>
+        <!-- HelixPrint Plugin Help Text -->
+        <lv_obj width="100%" height="content" style_pad_top="0" style_pad_left="0" style_pad_bottom="0" scrollable="false">
+          <lv_obj width="100%" height="content" style_pad_hor="#u1_card_pad" style_pad_top="0" style_pad_bottom="#space_md" scrollable="false" flex_flow="row" style_flex_cross_place="start" style_pad_gap="#space_sm">
+            <icon src="info" size="xs" variant="secondary"/>
+            <text_small flex_grow="1" text="扩展用于设置打印前的校准与准备项目。" long_mode="wrap" style_text_color="#text_muted"/>
+          </lv_obj>
+        </lv_obj>
+        <responsive_grid name="more_macro_tiles" min_col_width="#u1_advanced_tile_min_width" max_cols="2" fit_items="false" style_pad_column="#u1_card_gap" style_pad_row="#u1_card_gap">
+          <!-- Helix Helper Macros (helix_macros.cfg): back the Clean Nozzle and
+               Bed Mesh slots on printers with no macros of their own. One row
+               visible per helix_macros_status value (bind_flag_if_not_eq hides
+               the row unless the subject equals its ref_value); -1 (unknown, no
+               objects list yet) matches none, so the whole feature stays hidden
+               rather than offering an install that cannot honestly be made.
+               Values: 0 not installed (install offer), 1 installed, 2 outdated
+               (update offer), 3 staged, awaiting the Klipper restart. -->
+          <u1_settings_tile name="row_helix_macros_install" label="安装辅助宏" icon="script_text" description="启用喷嘴清洁等功能" height="#u1_advanced_tile_height" label_lines="2">
+            <bind_flag_if_not_eq subject="helix_macros_status" flag="hidden" ref_value="0"/>
+            <event_cb trigger="clicked" callback="on_helix_macros_install_clicked"/>
+          </u1_settings_tile>
+          <u1_settings_tile name="row_helix_macros_update" label="更新辅助宏" icon="script_text" description="安装可用的新版本" height="#u1_advanced_tile_height" label_lines="2">
+            <bind_flag_if_not_eq subject="helix_macros_status" flag="hidden" ref_value="2"/>
+            <event_cb trigger="clicked" callback="on_helix_macros_update_clicked"/>
+          </u1_settings_tile>
+        </responsive_grid>
+        <lv_obj name="container_helix_macros_installed" width="100%" style_pad_all="0" scrollable="false">
+          <bind_flag_if_not_eq subject="helix_macros_status" flag="hidden" ref_value="1"/>
+          <setting_info_row name="row_helix_macros_installed" label="Helper Macros" icon="script_text" value="Installed"/>
+        </lv_obj>
+        <lv_obj name="container_helix_macros_restart_pending" width="100%" style_pad_all="0" scrollable="false">
+          <bind_flag_if_not_eq subject="helix_macros_status" flag="hidden" ref_value="3"/>
+          <setting_info_row name="row_helix_macros_restart_pending" label="Helper Macros" icon="script_text" value="Restart pending"/>
+        </lv_obj>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- CALIBRATION SECTION -->
+      <!-- ================================================================== -->
+      <responsive_grid name="group_calibration" min_col_width="#u1_advanced_tile_min_width" max_cols="2" fit_items="false" style_pad_column="#u1_card_gap" style_pad_row="#u1_card_gap">
+        <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <bind_flag_if cond="u1_more_category ne 1" flag="hidden"/>
+        <!-- Bed Leveling (hidden if screws_tilt_adjust not configured) -->
+        <lv_obj name="container_bed_leveling" style_pad_all="0" scrollable="false" height="content">
+          <bind_flag_if_eq subject="printer_has_screws_tilt" flag="hidden" ref_value="0"/>
+          <u1_settings_tile name="row_bed_mesh" label="热床调平" icon="grid_large" description="探测网格或调节螺钉" width="100%" height="#u1_advanced_tile_height" label_lines="2">
+            <event_cb trigger="clicked" callback="on_screws_tilt_row_clicked"/>
+          </u1_settings_tile>
+        </lv_obj>
+        <!-- Input Shaping (hidden if no accelerometer) -->
+        <u1_settings_tile name="row_input_shaping" label="振动补偿" icon="inputshaper" description="X / Y 轴振动测试" height="#u1_advanced_tile_height" label_lines="2">
+          <bind_flag_if_eq subject="printer_has_accelerometer" flag="hidden" ref_value="0"/>
+          <event_cb trigger="clicked" callback="on_input_shaper_row_clicked"/>
+        </u1_settings_tile>
+        <!-- Pressure Advance (only firmwares that can measure it; helix::pacal decides) -->
+        <u1_settings_tile name="row_pa_calibration" label="压力提前校准" icon="gauge" description="自动测量补偿值" height="#u1_advanced_tile_height" label_lines="2">
+          <bind_flag_if_eq subject="printer_has_pa_cal" flag="hidden" ref_value="0"/>
+          <event_cb trigger="clicked" callback="on_calibration_pa"/>
+        </u1_settings_tile>
+        <!-- Pressure advance tuned by eye on a live test print: any Klipper extruder -->
+        <u1_settings_tile name="row_pa_tuning" label="压力提前微调" icon="gauge" description="用测试塔调整 K 值" height="#u1_advanced_tile_height" label_lines="2">
+          <event_cb trigger="clicked" callback="on_pa_tuning_clicked"/>
+        </u1_settings_tile>
+        <!-- Tool Offsets (printers with a tool offset calibration) -->
+        <u1_settings_tile name="row_tool_offsets" label="工具头偏移" icon="axis_arrow" bind_description="printer_tool_offset_cal_description" description_lines="2" height="#u1_advanced_tile_height" label_lines="2">
+          <bind_flag_if_eq subject="printer_has_tool_offset_cal" flag="hidden" ref_value="0"/>
+          <event_cb trigger="clicked" callback="on_tool_offset_row_clicked"/>
+        </u1_settings_tile>
+        <!-- Vertical Artifact Compensation (firmwares with a stepper resonance
+             calibration; helix::stepper_resonance_cal decides) -->
+        <u1_settings_tile name="row_stepper_resonance_cal" label="电机共振校准" icon="sine_wave" description="减少细密的垂直纹路" height="#u1_advanced_tile_height" label_lines="2">
+          <bind_flag_if_eq subject="printer_has_stepper_resonance_cal" flag="hidden" ref_value="0"/>
+          <event_cb trigger="clicked" callback="on_stepper_resonance_cal_clicked"/>
+        </u1_settings_tile>
+        <!-- Belt Tension (hidden if no accelerometer) -->
+        <u1_settings_tile name="row_belt_tension" label="皮带张力" icon="vibrate" description="比较共振扫描结果" height="#u1_advanced_tile_height" label_lines="2">
+          <!-- One binding, both conditions (two flag bindings on a widget
+               fight): an accelerometer, and a kinematics whose two diagonals
+               are the two belt paths (corexy, limited_corexy). -->
+          <bind_flag_if cond="printer_has_accelerometer eq 0 or printer_supports_belt_compare eq 0" flag="hidden"/>
+          <event_cb trigger="clicked" callback="on_belt_tension_row_clicked"/>
+        </u1_settings_tile>
+        <!-- Probe Management (hidden if no probe) -->
+        <u1_settings_tile name="row_probe" label="探针管理" icon="target" description="精度测试与探针设置" height="#u1_advanced_tile_height" label_lines="2">
+          <bind_flag_if_eq subject="printer_has_probe" flag="hidden" ref_value="0"/>
+          <event_cb trigger="clicked" callback="on_probe_row_clicked"/>
+        </u1_settings_tile>
+        <!-- Z-Offset Calibration (hidden if no probe) -->
+        <u1_settings_tile name="row_z_offset" label="Z 偏移校准" icon="z_closer" description="逐步调整喷嘴距离" height="#u1_advanced_tile_height" label_lines="2">
+          <!-- One binding, every test (two flag bindings on a widget fight):
+               needs a probe; steps aside where the firmware applies each
+               head's own Z offset at pickup, which the calibration's absolute
+               offset would overwrite on the mounted head; and steps aside for automatic tool offset calibration where
+               the database says that routine covers the reference tool's Z
+               too (see the same bind in controls_panel.xml). -->
+          <bind_flag_if cond="printer_has_probe eq 0 or z_offset_reapplied_per_head eq 1 or (printer_has_tool_offset_cal eq 1 and hide_manual_z_calibration eq 1)" flag="hidden"/>
+          <event_cb trigger="clicked" callback="on_zoffset_row_clicked"/>
+        </u1_settings_tile>
+        <!-- PID Tuning -->
+        <u1_settings_tile name="row_pid_tuning" label="加热器校准" icon="heater" description="调整温控响应参数" height="#u1_advanced_tile_height" label_lines="2">
+          <event_cb trigger="clicked" callback="on_pid_tuning_clicked"/>
+        </u1_settings_tile>
+      </responsive_grid>
+      <!-- ================================================================== -->
+      <!-- POWER SECTION -->
+      <!-- ================================================================== -->
+      <!-- Both rows open the same dialog the home-panel power widget uses,
+           which handles single-/dual-host scope and confirms the action.
+           Hidden whole (header + rows) on platforms without host power
+           controls (Android) — see platform_host_power_supported in
+           app_globals.cpp. -->
+      <!-- Bottom padding for scroll -->
+    </lv_obj>
+    <!-- ================================================================== -->
+    <!-- PINNED EMERGENCY BAR (non-scrolling, always enabled) -->
+    <!-- ================================================================== -->
+  </view>
+</component>

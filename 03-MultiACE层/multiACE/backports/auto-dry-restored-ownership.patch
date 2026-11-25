@@ -1,0 +1,22 @@
+Recover legacy humidity-drying ownership after a confirmed stop.
+
+Applies to the managed 233 runtime, which already reconciles its persisted
+pending-cycle marker. Some older state has only the auto-dry owner marker.
+Keep both checks in the same fresh-telemetry path.
+
+Upstream: https://github.com/decay71/multiACE/pull/212
+
+diff --git a/klipper/extras/ace_dry_cycle.py b/klipper/extras/ace_dry_cycle.py
+--- a/klipper/extras/ace_dry_cycle.py
++++ b/klipper/extras/ace_dry_cycle.py
+@@ -72,7 +72,9 @@ class DryCycles:
+         if idx not in self.cycles:
+             observed = info.get('dryer_status') or {}
+             if observed.get('status') in self.DEVICE_RUNNING or observed.get('rotisserie'):
+                 self._remember(idx, True)
+-            elif idx in self.unresolved and self.stopped(idx):
++            elif ((idx in self.unresolved or idx in self.ace._auto_dry_started)
++                  and self.stopped(idx)):
++                # Old installs may have only the humidity ownership marker.
+                 self._remember(idx, False)
+                 self.ace._auto_dry_release(idx, '收到设备停止确认')

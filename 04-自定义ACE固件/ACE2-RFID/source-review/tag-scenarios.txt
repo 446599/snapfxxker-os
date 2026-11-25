@@ -1,0 +1,66 @@
+SCENARIO 1 - SKU on the tag, spool exists in the backend
+  ok   anycubic: sku -> spool 26, confirmed                 anycubic / sku 'SM26'
+  ok   openspool: sku -> spool 26, confirmed                openspool / sku 26
+  ok   filaman: sku -> spool 26, confirmed                  filaman / sku '26'
+  ok   openprinttag: sku -> spool 26, confirmed             openprinttag / sku 26
+  ok   ndef-json: sku -> spool 26, confirmed                ndef-json / sku 26
+
+SCENARIO 2 - no SKU on the tag, identity from the UID
+  ok   anycubic: rfid_uid -> spool 26                       rfid_uid 04A27C70C52A81
+  ok   openspool: rfid_uid -> spool 26                      rfid_uid 04A27C70C52A81
+  ok   filaman: rfid_uid -> spool 26                        rfid_uid 04A27C70C52A81
+  ok   openprinttag: rfid_uid -> spool 26                   rfid_uid 04A27C70C52A81
+  ok   ndef-json: rfid_uid -> spool 26                      rfid_uid 04A27C70C52A81
+
+SCENARIO 2b - the OTHER face of the same spool (previous_tag)
+  ok   anycubic: previous_tag -> spool 26                   previous_tag 0424D34FC92A81
+  ok   openspool: previous_tag -> spool 26                  previous_tag 0424D34FC92A81
+  ok   filaman: previous_tag -> spool 26                    previous_tag 0424D34FC92A81
+  ok   openprinttag: previous_tag -> spool 26               previous_tag 0424D34FC92A81
+  ok   ndef-json: previous_tag -> spool 26                  previous_tag 0424D34FC92A81
+
+SCENARIO 2c - UID spellings that differ from the backend's
+  ok   uid 04:AB:DD:4F:C9:2A:81   -> spool 22               rfid_uid 04ABDD4FC92A81
+  ok   uid 04abdd4fc92a81         -> spool 22               rfid_uid 04ABDD4FC92A81
+  ok   uid 04-AB-DD-4F-C9-2A-81   -> spool 22               rfid_uid 04ABDD4FC92A81
+
+SCENARIO 3a - backend unreachable: tag data must still render
+  ok   anycubic: renders offline, sku kept, unconfirmed     material='PLA' colour='F7D959'
+  ok   openspool: renders offline, sku kept, unconfirmed    material='PLA' colour='4B2A17'
+  ok   filaman: renders offline, sku kept, unconfirmed      material='PETG' colour='112233'
+  ok   openprinttag: renders offline, sku kept, unconfirmed material='ABS' colour='FF8800'
+  ok   ndef-json: renders offline, sku kept, unconfirmed    material='TPU' colour='00FF00'
+
+SCENARIO 3b - spool number the backend has never heard of
+  ok   anycubic: reports 999 unconfirmed, does NOT bind another sku 'SM999' (no such spool in the backend)
+  ok   openspool: reports 999 unconfirmed, does NOT bind another sku 999 (no such spool in the backend)
+  ok   filaman: reports 999 unconfirmed, does NOT bind another sku '999' (no such spool in the backend)
+  ok   openprinttag: reports 999 unconfirmed, does NOT bind another sku 999 (no such spool in the backend)
+  ok   ndef-json: reports 999 unconfirmed, does NOT bind another sku 999 (no such spool in the backend)
+
+SCENARIO 3c - nothing identifying at all
+  ok   anycubic: unresolved but still renders               no spool number and no uid on this tag
+  ok   openspool: unresolved but still renders              no spool number and no uid on this tag
+  ok   filaman: unresolved but still renders                no spool number and no uid on this tag
+  ok   openprinttag: unresolved but still renders           no spool number and no uid on this tag
+  ok   ndef-json: unresolved but still renders              no spool number and no uid on this tag
+
+BAMBU - UID only, no readable pages (MIFARE crypto)
+  ok   bambu: uid -> spool 7                                rfid_uid 16C74AC7C93E4614A67B31C5EA5DF8ED
+  ok   bambu: unresolved with no backend, honestly          uid 16C74AC7C93E4614A67B31C5EA5DF8ED (backend unreachable)
+
+SCENARIO 3d - Multi-vendor on-tag data extraction when backend is unavailable
+  ok   bambu: brand on tag preserved                        Bambu Lab
+  ok   bambu: material on tag preserved                     PLA Matte
+  ok   bambu: name formatted from tag                       Bambu Lab PLA Matte
+  ok   bambu: temps on tag preserved                        190-230
+  ok   creality: brand preserved                            Creality
+  ok   creality: material preserved                         PLA
+  ok   creality: color preserved                            FF0000
+  ok   creality: name formatted                             Creality PLA
+  ok   prusament: brand preserved                           Prusament
+  ok   prusament: material preserved                        PETG
+  ok   prusament: color preserved                           00FF88
+  ok   prusament: name formatted                            Prusament PETG
+
+47 checks, 0 failed

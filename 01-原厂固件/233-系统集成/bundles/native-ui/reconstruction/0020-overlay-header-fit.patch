@@ -1,0 +1,13 @@
+diff --git a/ui_xml/header_bar.xml b/ui_xml/header_bar.xml
+index 8550666bc79987cec74bd23d0fce2df9f00b4799..190f7c10c49f64af3933640e842a2c99c8f4aca5 100644
+--- a/ui_xml/header_bar.xml
++++ b/ui_xml/header_bar.xml
+@@ -148,7 +148,7 @@
+          alone, as action_button_2_hidden_cond does. -->
+     <prop name="action_icon_hidden_cond" type="string" default=""/>
+   </api>
+-  <view extends="lv_obj" width="100%" height="#header_height" style_pad_left="0" style_pad_right="#space_lg" style_pad_top="0" style_pad_bottom="0" flex_flow="row" style_flex_main_place="space_between" style_flex_track_place="center" style_flex_cross_place="center" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_border_width="#u1_border" style_border_color="#border" style_border_side="bottom">
++  <view extends="lv_obj" width="100%" height="#u1_header_height" style_pad_left="0" style_pad_right="#space_lg" style_pad_top="0" style_pad_bottom="0" flex_flow="row" style_flex_main_place="space_between" style_flex_track_place="center" style_flex_cross_place="center" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_border_width="0">
+     <!-- Back button: flex_grow region covers arrow + title = huge touch target -->
+     <lv_obj name="back_button" height="100%" flex_grow="1" style_pad_right="0" style_pad_top="0" style_pad_bottom="0" scrollable="false" clickable="true" style_flex_cross_place="center" style_flex_track_place="center" flex_flow="row" style_pad_gap="#space_xs" style_min_height="#u1_touch_target">
+       <bind_style_if_eq name="header_title_inset_micro" subject="ui_breakpoint" ref_value="0"/>

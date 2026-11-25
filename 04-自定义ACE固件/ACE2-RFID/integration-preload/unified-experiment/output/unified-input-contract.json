@@ -1,0 +1,23 @@
+{
+  "rf_image": "840bafe77a7fba234fb6e75d3c38e766bf7e7ee05bcce963bbedf53cb72a7403",
+  "rf_elf": "13f59b644a2f6b9706bfe51fbfe2793adc7b2b333e169ec30b981db9808799c5",
+  "queue_image": "e568a39514a405c185995bdd8cf5cbcb90ad3fdc9bafa01f71e41333254d8114",
+  "queue_elf": "0decbfb4887b811ecb6c032b3206eddffc115dc5a1bbcc94b4ef94feb55ab6cd",
+  "output": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-preload/unified-experiment",
+  "status": "prepared-not-built-or-verified",
+  "tail": 608,
+  "payload": 640,
+  "minimum_block": 648,
+  "fields": {
+    "rf": 16,
+    "ex": 76,
+    "preload": 144,
+    "queue": 184
+  },
+  "rf_owner_task_field": "EX+0, bit0 exchange busy, aligned current TCB",
+  "version": "EXU1/RDU1",
+  "queue_candidate_bound_to_rf_owner": false,
+  "production_proofs": 7,
+  "ready": false,
+  "physical_proof": false
+}

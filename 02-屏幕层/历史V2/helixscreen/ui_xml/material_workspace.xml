@@ -1,0 +1,241 @@
+<?xml version="1.0"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="workspace_action_h" value="44"/>
+    <px name="workspace_list_h" value="48"/>
+    <px name="workspace_toggle_w" value="70"/>
+    <px name="workspace_progress_h" value="20"/>
+  </consts>
+  <view name="material_workspace" extends="overlay_panel" title_subject="workspace_title" title_transform="none" back_button_callback="workspace_back" bg_color="#screen_bg">
+    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_pad_all="#space_sm" style_pad_gap="#space_xs" scroll_dir="ver">
+      <text_body name="workspace_status" width="100%" bind_text="workspace_status" style_text_color="#primary"/>
+      <lv_obj name="workspace_page_0" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 0" flag="hidden"/>
+        <text_body name="workspace_detail" width="100%" bind_text="workspace_detail"/>
+        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <ui_button name="workspace_load" text="装料 / 换料" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="load"/>
+          </ui_button>
+          <ui_button name="workspace_unload" text="退出当前耗材" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="unload"/>
+          </ui_button>
+          <ui_button name="workspace_edit" text="槽位信息" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="edit"/>
+          </ui_button>
+          <ui_button name="workspace_dry" text="温湿度 / 烘干" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="dry"/>
+          </ui_button>
+          <ui_button name="workspace_library" text="耗材库 / 余量" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="library"/>
+          </ui_button>
+          <ui_button name="workspace_read_tag" text="读取 RFID" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="read_tag"/>
+          </ui_button>
+          <ui_button name="workspace_write_tag" text="写入 RFID" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="write_tag"/>
+          </ui_button>
+          <ui_button name="workspace_auto_dry" text="自动烘干" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry"/>
+          </ui_button>
+          <ui_button name="workspace_calibrate_pa" text="PA 标定" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="calibrate_pa"/>
+          </ui_button>
+          <ui_button name="workspace_settings" text="自动续料 / 设置" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <event_cb trigger="clicked" callback="workspace_action" user_data="settings"/>
+          </ui_button>
+          <ui_button name="workspace_firmware" text="本地固件升级" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="firmware"/>
+          </ui_button>
+        </lv_obj>
+        </lv_obj>
+      <lv_obj name="workspace_page_1" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 1" flag="hidden"/>
+        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <ui_button name="workspace_new_spool" text="新增线盘" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="new_spool"/>
+          </ui_button>
+          <ui_button name="workspace_refresh_library" text="刷新耗材库" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="refresh_library"/>
+          </ui_button>
+          <ui_button name="workspace_sync" text="同步 Spoolman" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="sync"/>
+          </ui_button>
+        </lv_obj>
+        <repeat count="workspace_spool_count">
+          <ui_button name="workspace_spool_${i}" bind_text="workspace_spool_${i}" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="100%" height="#workspace_list_h">
+            <event_cb trigger="clicked" callback="workspace_spool_select" user_data="${i}"/>
+          </ui_button>
+        </repeat>
+        </lv_obj>
+      <lv_obj name="workspace_page_2" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 2" flag="hidden"/>
+        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small text="耗材类型"/>
+            <text_input name="spool_material" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_material" keyboard_hint="text" max_length="48"/>
+          </lv_obj>
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small text="颜色 HEX"/>
+            <text_input name="spool_color" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_color" keyboard_hint="text" max_length="48"/>
+          </lv_obj>
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small text="品牌"/>
+            <text_input name="spool_vendor" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_vendor" keyboard_hint="text" max_length="48"/>
+          </lv_obj>
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small text="剩余重量 g · 留空保留原值"/>
+            <text_input name="spool_weight" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_weight" keyboard_hint="numeric" max_length="48"/>
+          </lv_obj>
+        </lv_obj>
+        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <ui_button name="workspace_save_spool" text="保存线盘" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="save_spool"/>
+          </ui_button>
+          <ui_button name="workspace_assign_spool" text="绑定当前槽位" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="spool_assign"/>
+          </ui_button>
+          <ui_button name="workspace_unbind" text="解除当前槽绑定" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="unbind"/>
+          </ui_button>
+          <ui_button name="workspace_return_library" text="返回耗材库" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="library"/>
+          </ui_button>
+        </lv_obj>
+        </lv_obj>
+      <lv_obj name="workspace_page_3" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 3" flag="hidden"/>
+        <text_body text="升级本机 U1 打印机"/>
+        <text_small text="从 U 盘或本地 firmware 目录选择完整 .bin 升级包" width="100%"/>
+        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <ui_button name="workspace_refresh_files" text="刷新本地文件" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="refresh_files"/>
+          </ui_button>
+          <ui_button name="workspace_upgrade_status" text="查看升级任务" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="upgrade_status"/>
+          </ui_button>
+        </lv_obj>
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+        <repeat count="workspace_file_count">
+          <ui_button name="workspace_file_${i}" bind_text="workspace_file_${i}" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="100%" height="#workspace_list_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_file_select" user_data="${i}"/>
+          </ui_button>
+        </repeat>
+        </lv_obj>
+        <text_body name="firmware_file_info" bind_text="workspace_file_info" width="100%"/>
+        <text_body text="固件包目标版本"/>
+        <text_heading bind_text="workspace_version"/>
+        <ui_button name="workspace_firmware_next" text="核对升级信息" width="100%" height="#workspace_action_h">
+          <bind_state_if cond="not workspace_prepared or workspace_busy" state="disabled"/>
+          <event_cb trigger="clicked" callback="workspace_action" user_data="firmware_next"/>
+        </ui_button>
+        </lv_obj>
+      <lv_obj name="workspace_page_4" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 4" flag="hidden"/>
+        <text_body bind_text="workspace_detail" width="100%"/>
+          <ui_button name="workspace_firmware_start" text="确认开始升级" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="100%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="firmware_start"/>
+          </ui_button>
+        </lv_obj>
+      <lv_obj name="workspace_page_5" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 5" flag="hidden"/>
+        <text_heading text="本地升级任务"/>
+        <lv_bar width="100%" height="#workspace_progress_h" min_value="0" max_value="100" bind_value="workspace_progress"/>
+        <text_body text="重启后请核对当前版本。升级日志保存在本机 firmware 目录。" width="100%"/>
+          <ui_button name="workspace_poll_status" text="刷新进度" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="100%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="upgrade_status"/>
+          </ui_button>
+        </lv_obj>
+      <lv_obj name="workspace_page_6" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 6" flag="hidden"/>
+        <text_body bind_text="workspace_detail" width="100%"/>
+          <ui_button name="workspace_confirm" text="确认操作" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="100%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="confirm"/>
+          </ui_button>
+        </lv_obj>
+      <lv_obj name="workspace_page_7" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 7" flag="hidden"/>
+        <text_body text="湿度控制与跟随策略保存在设备中。主设备编号使用 0-3，-1 表示无跟随。" width="100%"/>
+        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small text="温度 °C"/>
+            <text_input name="auto_value_0" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_0" max_length="8"/>
+          </lv_obj>
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <bind_flag_if cond="workspace_auto_sensor eq 0" flag="hidden"/>
+            <text_small text="启动湿度 %"/>
+            <text_input name="auto_value_1" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_1" max_length="8"/>
+          </lv_obj>
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <bind_flag_if cond="workspace_auto_sensor eq 0" flag="hidden"/>
+            <text_small text="停止湿度 %"/>
+            <text_input name="auto_value_2" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_2" max_length="8"/>
+          </lv_obj>
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <bind_flag_if cond="workspace_auto_sensor eq 1" flag="hidden"/>
+            <text_small text="跟随主设备 0-3"/>
+            <text_input name="auto_value_3" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_3" max_length="8"/>
+          </lv_obj>
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <bind_flag_if cond="workspace_auto_sensor eq 1" flag="hidden"/>
+            <text_small text="追加烘干 分钟"/>
+            <text_input name="auto_value_4" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_4" max_length="8"/>
+          </lv_obj>
+        </lv_obj>
+        <ui_button name="workspace_auto_dry_save" text="保存烘干参数" width="100%" height="#workspace_action_h">
+          <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+          <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_save"/>
+        </ui_button>
+        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <ui_button name="workspace_auto_dry_on" text="启用自动烘干" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_on"/>
+          </ui_button>
+          <ui_button name="workspace_auto_dry_off" text="关闭自动烘干" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_off"/>
+          </ui_button>
+        </lv_obj>
+        </lv_obj>
+      <lv_obj name="workspace_page_8" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 8" flag="hidden"/>
+        <repeat count="5">
+          <lv_obj width="100%" height="#workspace_list_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" style_flex_cross_place="center" scrollable="false">
+            <text_body bind_text="workspace_setting_${i}" width="0" flex_grow="1"/>
+            <ui_button name="setting_${i}_on" text="启用" variant="secondary" width="#workspace_toggle_w" height="#workspace_action_h">
+              <bind_state_if cond="workspace_busy or not workspace_settings_ready" state="disabled"/>
+              <event_cb trigger="clicked" callback="workspace_action" user_data="setting_${i}_on"/>
+            </ui_button>
+            <ui_button name="setting_${i}_no" text="关闭" variant="secondary" width="#workspace_toggle_w" height="#workspace_action_h">
+              <bind_state_if cond="workspace_busy or not workspace_settings_ready" state="disabled"/>
+              <event_cb trigger="clicked" callback="workspace_action" user_data="setting_${i}_no"/>
+            </ui_button>
+          </lv_obj>
+        </repeat>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

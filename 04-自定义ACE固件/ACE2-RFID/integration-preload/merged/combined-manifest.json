@@ -1,0 +1,559 @@
+{
+  "classification": "COMBINED NOFLASH offline fixture; normal reset intentionally blocked",
+  "stock_sha256": "a468e366226e7c483d3dd96b444223e89cbf0d1b10573d42b6263843ffd6be3e",
+  "rf_snapshot_id": "b0bab54e587e5c62d6646239992abca5cf35ee12de3d0f1a4e2974d49b8a5795",
+  "rf_snapshot_path": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-preload/merged/snapshots/b0bab54e587e5c62d6646239992abca5cf35ee12de3d0f1a4e2974d49b8a5795",
+  "image_sha256": "5e5a90a6eb4c5da0e959e026f59ccb7c62b2fb98d6867905079ed649a2078852",
+  "elf_sha256": "e07e06b0738135c83cfa0c4308ff1f1129b3da361dc6ecb9692fdca596fb1c86",
+  "image_bytes": 165052,
+  "rf_hook_count": 19,
+  "preload_hook_count": 10,
+  "total_hooks": 29,
+  "hooks": [
+    {
+      "address": "0x80116a8",
+      "target": "0x80197b4",
+      "symbol": "ex_event_factory_entry",
+      "expected_bytes": "04f049fd",
+      "replacement_bytes": "08f084f8",
+      "reason": "extended event-group allocation factory BL",
+      "branch_kind": "BL",
+      "component": "RF"
+    },
+    {
+      "address": "0x8008244",
+      "target": "0x80197a0",
+      "symbol": "experiment_reset_gate",
+      "expected_bytes": "09488047",
+      "replacement_bytes": "11f0acba",
+      "reason": "original reset barrier",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f574",
+      "target": "0x801a078",
+      "symbol": "br_stock_read",
+      "expected_bytes": "81b0d0e90123",
+      "replacement_bytes": "0af080bd00bf",
+      "reason": "stock register read",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f5d0",
+      "target": "0x801a0aa",
+      "symbol": "br_stock_write",
+      "expected_bytes": "81b0d0e901c3",
+      "replacement_bytes": "0af06bbd00bf",
+      "reason": "stock register write",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f32c",
+      "target": "0x801a1f8",
+      "symbol": "br_stock_transceive_entry",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0af064bf",
+      "reason": "six-argument transceive + LR",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800deb6",
+      "target": "0x8019b48",
+      "symbol": "ex_reject_select",
+      "expected_bytes": "f0b585b0",
+      "replacement_bytes": "0bf047be",
+      "reason": "unsafe stock SELECT rejected",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e108",
+      "target": "0x8019b56",
+      "symbol": "ex_reject_halt",
+      "expected_bytes": "b0b584b0",
+      "replacement_bytes": "0bf025bd",
+      "reason": "unimplemented physical HALT rejected",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e244",
+      "target": "0x801a7a4",
+      "symbol": "rf_background_entry",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0cf0aeba",
+      "reason": "background RF operation",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e7a8",
+      "target": "0x801a7d8",
+      "symbol": "rf_cmd68_entry",
+      "expected_bytes": "2de9f047",
+      "replacement_bytes": "0cf016b8",
+      "reason": "CMD68",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e910",
+      "target": "0x801a82e",
+      "symbol": "rf_cmd13_entry",
+      "expected_bytes": "2de9f043",
+      "replacement_bytes": "0bf08dbf",
+      "reason": "CMD13 cache response",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e74c",
+      "target": "0x801a884",
+      "symbol": "rf_cmd14_entry",
+      "expected_bytes": "10b582b0",
+      "replacement_bytes": "0cf09ab8",
+      "reason": "CMD14 queue path blocked",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e70c",
+      "target": "0x801a8de",
+      "symbol": "rf_requeue_entry",
+      "expected_bytes": "80b582b0",
+      "replacement_bytes": "0cf0e7b8",
+      "reason": "requeue path blocked",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800ea14",
+      "target": "0x8019b64",
+      "symbol": "ex_reject_worker",
+      "expected_bytes": "82b041f2f056",
+      "replacement_bytes": "0bf0a6b800bf",
+      "reason": "outer worker GPIO/cache writes blocked",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e7da",
+      "target": "0x80197aa",
+      "symbol": "ex_raw_reject_stub",
+      "expected_bytes": "012092e0",
+      "replacement_bytes": "0af0e6bf",
+      "reason": "legacy unticketed raw commands rejected",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e836",
+      "target": "0x801c00c",
+      "symbol": "uid_stub",
+      "expected_bytes": "062064e0",
+      "replacement_bytes": "0df0e9bb",
+      "reason": "UID success and fallback publication rejected",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e842",
+      "target": "0x801c010",
+      "symbol": "rawtag_stub",
+      "expected_bytes": "0df18c0e",
+      "replacement_bytes": "0df0e5bb",
+      "reason": "live decoder publication rejected",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800fe3c",
+      "target": "0x801c014",
+      "symbol": "rawtag_cache_stub",
+      "expected_bytes": "05f1880e",
+      "replacement_bytes": "0cf0eab8",
+      "reason": "cache copy and parse publication rejected",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800fe36",
+      "target": "0x801c01e",
+      "symbol": "rawtag_extract_stub",
+      "expected_bytes": "06468c28",
+      "replacement_bytes": "0cf0f2b8",
+      "reason": "background decoder publication rejected",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e228",
+      "target": "0x801c028",
+      "symbol": "pageread_gate_stub",
+      "expected_bytes": "40f20471",
+      "replacement_bytes": "0df0febe",
+      "reason": "page read publication rejected",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f726",
+      "target": "0x803011c",
+      "symbol": "ph_insert_hook",
+      "component": "preload",
+      "expected_bytes": "47f6a460",
+      "replacement_bytes": "20f0f9bc"
+    },
+    {
+      "address": "0x800ece8",
+      "target": "0x8030170",
+      "symbol": "ph_start_hook",
+      "component": "preload",
+      "expected_bytes": "2de9f047",
+      "replacement_bytes": "21f042ba"
+    },
+    {
+      "address": "0x800ed38",
+      "target": "0x80301c6",
+      "symbol": "ph_after_wait_hook",
+      "component": "preload",
+      "expected_bytes": "c4e90700",
+      "replacement_bytes": "21f045ba"
+    },
+    {
+      "address": "0x800ed46",
+      "target": "0x803021c",
+      "symbol": "ph_active_hook",
+      "component": "preload",
+      "expected_bytes": "84f83400",
+      "replacement_bytes": "21f069ba"
+    },
+    {
+      "address": "0x800ed76",
+      "target": "0x8030276",
+      "symbol": "ph_enable_gpio_hook",
+      "component": "preload",
+      "expected_bytes": "11612179",
+      "replacement_bytes": "21f07eba"
+    },
+    {
+      "address": "0x800ee98",
+      "target": "0x80302ba",
+      "symbol": "ph_enable_timer_hook",
+      "component": "preload",
+      "expected_bytes": "08433060",
+      "replacement_bytes": "21f00fba"
+    },
+    {
+      "address": "0x800eeca",
+      "target": "0x80303c2",
+      "symbol": "ph_start_pwm_hook",
+      "component": "preload",
+      "expected_bytes": "cff6ff72",
+      "replacement_bytes": "21f07aba"
+    },
+    {
+      "address": "0x800f012",
+      "target": "0x803040a",
+      "symbol": "ph_control_pwm_hook",
+      "component": "preload",
+      "expected_bytes": "cff6ff72",
+      "replacement_bytes": "21f0fab9"
+    },
+    {
+      "address": "0x8009d62",
+      "target": "0x8030354",
+      "symbol": "ph_encoder_enable_hook",
+      "component": "preload",
+      "expected_bytes": "d0600120",
+      "replacement_bytes": "26f0f7ba"
+    },
+    {
+      "address": "0x800efa4",
+      "target": "0x803031a",
+      "symbol": "ph_disable_timer_hook",
+      "component": "preload",
+      "expected_bytes": "22ea0000",
+      "replacement_bytes": "21f0b9b9"
+    }
+  ],
+  "prefix_changes": [
+    {
+      "address": "0x80116a8",
+      "expected_bytes": "04f049fd",
+      "replacement_bytes": "08f084f8",
+      "reason": "extended event-group allocation factory BL",
+      "component": "RF"
+    },
+    {
+      "address": "0x8008244",
+      "expected_bytes": "09488047",
+      "replacement_bytes": "11f0acba",
+      "reason": "original reset barrier",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f574",
+      "expected_bytes": "81b0d0e90123",
+      "replacement_bytes": "0af080bd00bf",
+      "reason": "stock register read",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f5d0",
+      "expected_bytes": "81b0d0e901c3",
+      "replacement_bytes": "0af06bbd00bf",
+      "reason": "stock register write",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f32c",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0af064bf",
+      "reason": "six-argument transceive + LR",
+      "component": "RF"
+    },
+    {
+      "address": "0x800deb6",
+      "expected_bytes": "f0b585b0",
+      "replacement_bytes": "0bf047be",
+      "reason": "unsafe stock SELECT rejected",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e108",
+      "expected_bytes": "b0b584b0",
+      "replacement_bytes": "0bf025bd",
+      "reason": "unimplemented physical HALT rejected",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e244",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0cf0aeba",
+      "reason": "background RF operation",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e7a8",
+      "expected_bytes": "2de9f047",
+      "replacement_bytes": "0cf016b8",
+      "reason": "CMD68",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e910",
+      "expected_bytes": "2de9f043",
+      "replacement_bytes": "0bf08dbf",
+      "reason": "CMD13 cache response",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e74c",
+      "expected_bytes": "10b582b0",
+      "replacement_bytes": "0cf09ab8",
+      "reason": "CMD14 queue path blocked",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e70c",
+      "expected_bytes": "80b582b0",
+      "replacement_bytes": "0cf0e7b8",
+      "reason": "requeue path blocked",
+      "component": "RF"
+    },
+    {
+      "address": "0x800ea14",
+      "expected_bytes": "82b041f2f056",
+      "replacement_bytes": "0bf0a6b800bf",
+      "reason": "outer worker GPIO/cache writes blocked",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e7da",
+      "expected_bytes": "012092e0",
+      "replacement_bytes": "0af0e6bf",
+      "reason": "legacy unticketed raw commands rejected",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e836",
+      "expected_bytes": "062064e0",
+      "replacement_bytes": "0df0e9bb",
+      "reason": "UID success and fallback publication rejected",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e842",
+      "expected_bytes": "0df18c0e",
+      "replacement_bytes": "0df0e5bb",
+      "reason": "live decoder publication rejected",
+      "component": "RF"
+    },
+    {
+      "address": "0x800fe3c",
+      "expected_bytes": "05f1880e",
+      "replacement_bytes": "0cf0eab8",
+      "reason": "cache copy and parse publication rejected",
+      "component": "RF"
+    },
+    {
+      "address": "0x800fe36",
+      "expected_bytes": "06468c28",
+      "replacement_bytes": "0cf0f2b8",
+      "reason": "background decoder publication rejected",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e228",
+      "expected_bytes": "40f20471",
+      "replacement_bytes": "0df0febe",
+      "reason": "page read publication rejected",
+      "component": "RF"
+    },
+    {
+      "address": "0x8008004",
+      "expected_bytes": "45820008",
+      "replacement_bytes": "a1970108",
+      "reason": "reset vector",
+      "component": "RF"
+    },
+    {
+      "address": "0x8018c20",
+      "expected_bytes": "56312e312e333100",
+      "replacement_bytes": "4558505246212100",
+      "reason": "invalid experimental version label",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f726",
+      "expected_bytes": "47f6a460",
+      "replacement_bytes": "20f0f9bc",
+      "reason": "ph_insert_hook",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ece8",
+      "expected_bytes": "2de9f047",
+      "replacement_bytes": "21f042ba",
+      "reason": "ph_start_hook",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ed38",
+      "expected_bytes": "c4e90700",
+      "replacement_bytes": "21f045ba",
+      "reason": "ph_after_wait_hook",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ed46",
+      "expected_bytes": "84f83400",
+      "replacement_bytes": "21f069ba",
+      "reason": "ph_active_hook",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ed76",
+      "expected_bytes": "11612179",
+      "replacement_bytes": "21f07eba",
+      "reason": "ph_enable_gpio_hook",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ee98",
+      "expected_bytes": "08433060",
+      "replacement_bytes": "21f00fba",
+      "reason": "ph_enable_timer_hook",
+      "component": "preload"
+    },
+    {
+      "address": "0x800eeca",
+      "expected_bytes": "cff6ff72",
+      "replacement_bytes": "21f07aba",
+      "reason": "ph_start_pwm_hook",
+      "component": "preload"
+    },
+    {
+      "address": "0x800f012",
+      "expected_bytes": "cff6ff72",
+      "replacement_bytes": "21f0fab9",
+      "reason": "ph_control_pwm_hook",
+      "component": "preload"
+    },
+    {
+      "address": "0x8009d62",
+      "expected_bytes": "d0600120",
+      "replacement_bytes": "26f0f7ba",
+      "reason": "ph_encoder_enable_hook",
+      "component": "preload"
+    },
+    {
+      "address": "0x800efa4",
+      "expected_bytes": "22ea0000",
+      "replacement_bytes": "21f0b9b9",
+      "reason": "ph_disable_timer_hook",
+      "component": "preload"
+    }
+  ],
+  "rf_payload": {
+    "address": "0x80197a0",
+    "bytes": 11137,
+    "sha256": "33bc4d554566804803d78554c264f0c5c694b98b0893ab197cc9cd1a821f2dc4"
+  },
+  "preload_payload": {
+    "address": "0x8030000",
+    "bytes": 1204,
+    "sha256": "201256597ec1061f5e39752611dba87f9c8ce144684652e25ef02878183772eb"
+  },
+  "startup_hooks": [
+    {
+      "address": "0x80116a8",
+      "target": "0x80197b4",
+      "symbol": "ex_event_factory_entry",
+      "expected_bytes": "04f049fd",
+      "replacement_bytes": "08f084f8",
+      "reason": "extended event-group allocation factory BL",
+      "branch_kind": "BL",
+      "component": "RF"
+    },
+    {
+      "address": "0x8008244",
+      "target": "0x80197a0",
+      "symbol": "experiment_reset_gate",
+      "expected_bytes": "09488047",
+      "replacement_bytes": "11f0acba",
+      "reason": "original reset barrier",
+      "branch_kind": "B.W",
+      "component": "RF"
+    }
+  ],
+  "preload_storage": {
+    "address": "0x21000000",
+    "simulation_only": true,
+    "reservation_verified": false
+  },
+  "normal_insert_entry_and_guards_preserved": true,
+  "normal_reset_blocked": true,
+  "exception_paths_quarantined": false,
+  "valid_iap_trailer": false,
+  "production_output_supported": false,
+  "production_link_rejected": true,
+  "unbound_production_interfaces": [
+    "ph_storage",
+    "ph_verified_reserved_ram",
+    "ph_verified_exclusive_startup",
+    "ph_verified_owned_failure_source",
+    "ph_verified_all_motion_writers",
+    "ph_verified_controller_quiescence"
+  ],
+  "auth_failure_producer_connected": false,
+  "rf_stop_request_connected_to_preload": false,
+  "physical_stop_proven": false,
+  "device_tests_run": false,
+  "rf_input_directory_modified": false
+}

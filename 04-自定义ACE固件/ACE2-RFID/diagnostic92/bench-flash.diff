@@ -1,0 +1,61 @@
+--- minimal-repair/bench_flash.py	2026-11-07 17:14:43
++++ diagnostic92/bench_flash.py	2026-11-07 18:02:51
+@@ -15,7 +15,7 @@
+ HERE = Path(__file__).resolve().parent
+ PORT = '/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0'
+ UID = (808780566, 17445170, 942880330)
+-HASH = '34a8a3c76b8e127262baf05fb22639ee9f2ce588450eb04559c1c15d506fe323'
++HASH = '411079789ce2f64654ef47b6d1be7abddbbf0d4a396c5a7e20304a302df9afcb'
+ TRANSPORT_HASH = 'c67395d7299bb0de82944a13a2b659043fc6f25696c1951f19d1de3757199f1f'
+ opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+ 
+@@ -59,7 +59,7 @@
+         actual = tuple(ota.get_field(f, i) for i in (1, 2, 3))
+         assert actual == UID, 'different ACE UID: '+repr(actual)
+         version = ota.get_ace_version(t)
+-        assert version and version[0] in ('V1.1.60O', 'V1.1.91O') and not version[1]
++        assert version and version[0] in ('V1.1.91O', 'V1.1.92O') and not version[1]
+         assert ota.ace_app_alive(t) is True, 'application not responding'
+         return {'uid': actual, 'version': version, 'app_alive': True}
+     finally:
+@@ -70,16 +70,18 @@
+     parser.add_argument('--flash', action='store_true')
+     args = parser.parse_args()
+     assert hashlib.sha256(Path(ota.__file__).read_bytes()).hexdigest() == TRANSPORT_HASH
+-    image = HERE/'ACE2-233-V1.1.91O.bin'
++    image = HERE/'ACE2-92O-diagnostic.bin'
+     assert hashlib.sha256(image.read_bytes()).hexdigest() == HASH
+     rollback = HERE/'ACE2-Open-V1.1.60O.bin'
+     assert hashlib.sha256(rollback.read_bytes()).hexdigest() == '35d154abb9b6e037f9c6e10640bdce05fa62e2ecaa47fc5b3b21dac9607e5360'
+-    fw = ota.load_image(str(image), '1.1.91O', 'b5789351ed50d97223cfd9c8f46ed535')
+-    assert len(fw.data) == 78720 and fw.image_crc == 0xb20b
++    rollback91 = HERE/'ACE2-233-V1.1.91O.bin'
++    assert hashlib.sha256(rollback91.read_bytes()).hexdigest() == '34a8a3c76b8e127262baf05fb22639ee9f2ce588450eb04559c1c15d506fe323'
++    fw = ota.load_image(str(image), '1.1.92O', '94acf4fae8e84623b95bc56333a86590')
++    assert len(fw.data) == 78830 and fw.image_crc == 0x3dd3
+     assert fw.data[-8:] == bytes.fromhex('61a5635a65a5325a')
+     # Exact private bench target, not a general force/allow-unknown switch.
+-    ota.KNOWN_FIRMWARE['1.1.91O'] = {
+-        'size': 78720, 'crc': 0xb20b, 'md5': 'b5789351ed50d97223cfd9c8f46ed535',
++    ota.KNOWN_FIRMWARE['1.1.92O'] = {
++        'size': 78830, 'crc': 0x3dd3, 'md5': '94acf4fae8e84623b95bc56333a86590',
+         'announce': '1.1.31', 'tested': 'offline reviewed private bench candidate',
+     }
+     ota.check_known(fw)
+@@ -92,14 +94,14 @@
+         identity = identify()
+         save('identity-before-'+('flash' if args.flash else 'dry')+'.json', identity)
+         if args.flash:
+-            assert identity['version'][0] == 'V1.1.60O', 'do not repeat candidate flash'
++            assert identity['version'][0] == 'V1.1.91O', 'do not repeat candidate flash'
+         result = ota.flash(PORT, fw, progress, dry_run=not args.flash, force=False)
+         save('flash-result.json' if args.flash else 'dry-run-result.json', result)
+         print(json.dumps(result), flush=True)
+         if args.flash:
+             assert result.get('verified') and result.get('app_alive') is True, 'new application not verified'
+             after = identify()
+-            assert after['version'][0] == 'V1.1.91O'
++            assert after['version'][0] == 'V1.1.92O'
+             save('identity-after.json', after)
+     finally:
+         if attempted_release:

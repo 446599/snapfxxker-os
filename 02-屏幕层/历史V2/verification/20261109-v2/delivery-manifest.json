@@ -1,0 +1,77 @@
+{
+  "created_utc": "2026-11-09T07:54:56.091878+00:00",
+  "revision": "u1-native-ui-20261109-v2",
+  "source": {
+    "base_commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+    "branch": "codex/u1-native-filament-ui",
+    "patch_sha256": "57aa8b67378a0cd2612fa4f57fc0115544bf107b4d845022931bf43b04d8640d",
+    "embedded_version": "1.2.0-beta.1"
+  },
+  "binary": {
+    "path": "helixscreen/bin/helix-screen",
+    "size_bytes": 26917192,
+    "sha256": "1ba16c50c36bd6408441933e290ecc2caee57cd7629e652c9873c1804ddca250",
+    "format": "ELF 64-bit LSB executable, ARM aarch64, version 1 (GNU/Linux), statically linked, BuildID[sha1]=f43dff3f0242cf07a155c329fa1701ad4677d25f, for GNU/Linux 3.7.0, stripped"
+  },
+  "interface": {
+    "resolution": [
+      480,
+      320
+    ],
+    "mode": "multi",
+    "ace_slot_to_head": "same-number bay on every ACE feeds the same-number head",
+    "font_sizes": {
+      "heading": 20,
+      "body": 16,
+      "secondary": 14
+    },
+    "local_firmware_target": "U1 printer only",
+    "local_firmware_entry": "Settings / Local firmware upgrade",
+    "companion_service": "127.0.0.1:7136"
+  },
+  "verification": {
+    "native_regression_cases": 75,
+    "native_assertions": 1116,
+    "service_tests": 10,
+    "ui_checks": 26,
+    "rendered_screens": 23,
+    "xml_files": 482,
+    "xml_errors": 0,
+    "cjk_fonts": 35,
+    "cjk_codepoints": 1352,
+    "arm64_help": "passed in network-isolated container"
+  },
+  "hardware_acceptance": {
+    "deployed": false,
+    "display_verified": false,
+    "touch_verified": false,
+    "live_material_operations_verified": false,
+    "actual_firmware_upgrade_executed": false
+  },
+  "feature_scope_document": "verification/feature-parity.md",
+  "companion_sha256": {
+    "device_service.py": "550c78383b3b4d0606ffcaa26fbce8fb5aebb2a10b76bf86ed00fe6f4e3b1730",
+    "README.md": "ab517edf0222724f67104ffa119c268473f1ca86fa5b4bc4c72bb6c1105c78e7",
+    "run-service.sh": "28c5b4bad8f64be06b1566968881d93685c050a8bda2f2e2733d62a75747f7ef",
+    "test_device_service.py": "3cca700b96afe03dda433e03ffe0bc1eb64a6703b6a5860584f916053dd67fc2",
+    "S58u1-device-service": "be723ca0b5fa5b998247d99f72c0ecf69184cf333643dcdd62d6d9904ac1dfe2"
+  },
+  "ui_sha256": {
+    "head_inventory.xml": "ee41a5dcb47a9770552783a9da823d592348a73cc75a132a9ce526e79993ca05",
+    "material_workspace.xml": "496cda377803c2f6dade402bc31571bab597b939b0083eb4baf7998557ddb0b8",
+    "controls_panel.xml": "cfee67f8cfb0084a2917a5854063f203b460f96adebdb3adc904fe29f7bbf818",
+    "settings_panel.xml": "746c2504d8719d8b7f905ea0cefeee488492ff9d796114056fc3e7589161ca50",
+    "globals.xml": "6c11f1ea27c7b4d5845632cdfbf76d102516a93d1d8ee84cc820acbde1e79ca2"
+  },
+  "archive": {
+    "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/dist/u1-native-ui-20261109-v2.tar.gz",
+    "size_bytes": 61208482,
+    "sha256": "9b2e51a8e4b5a30bfcb3f5394bf812c367b28ababd8b9bb87f5889410fcab7a9"
+  },
+  "gallery": {
+    "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-v2/index.html",
+    "screens": 23,
+    "zip": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-v2.zip",
+    "zip_sha256": "779e8c32dec6be39cd7ff7a988ac7352f287380a25a4639edee1a2b574bc6428"
+  }
+}

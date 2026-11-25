@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Text Entry Modal - one line of text through the host keyboard -->
+<!-- NOTE: Backdrop created programmatically by Modal system -->
+<component>
+  <api>
+    <prop name="title" type="string" default=""/>
+    <prop name="placeholder" type="string" default=""/>
+    <prop name="accept_text" type="string" default="OK"/>
+  </api>
+  <view name="text_entry_modal" extends="ui_dialog" width="90%" style_max_width="#u1_modal_width" height="content" align="center" flex_flow="column" style_flex_main_place="start" style_pad_gap="0" style_max_height="94%" scrollable="false" style_radius="#u1_card_radius">
+    <modal_header title="$title" title_name="text_entry_title" hide_icon="true"/>
+    <lv_obj name="text_entry_form" width="100%" height="content" style_pad_hor="#u1_card_pad_roomy" style_pad_top="0" style_pad_bottom="#u1_card_pad" flex_flow="column" style_flex_cross_place="center" style_pad_gap="#u1_card_gap" style_max_height="#dialog_content_max" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+      <text_input name="text_entry_input" width="100%" height="#input_height" style_min_height="#u1_touch_target" style_radius="#u1_card_radius" placeholder_text="$placeholder"/>
+    </lv_obj>
+    <modal_button_row primary_text="$accept_text" secondary_text="Cancel"/>
+  </view>
+</component>

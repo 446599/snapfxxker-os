@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <api>
+    <prop name="index" type="string" default="0"/>
+    <prop name="label" type="string" default="1"/>
+    <prop name="temp_subject" type="string"/>
+    <prop name="color_subject" type="string"/>
+    <prop name="colors_subject" type="string"/>
+    <prop name="has_color_subject" type="string"/>
+    <prop name="active_subject" type="string" default="u1_home_active_tool"/>
+  </api>
+  <styles>
+    <style name="cell_idle" bg_opa="0"/>
+  </styles>
+  <!-- Equal flex weights distribute the space left after the four-cell row gaps. -->
+  <view extends="lv_obj" width="0" flex_grow="1" height="100%" flex_flow="column"
+        style_pad_all="0" style_pad_bottom="#u1_card_pad" style_pad_gap="#u1_compact_gap"
+        style_flex_cross_place="center" style_flex_main_place="end"
+        style_border_width="0" style_radius="#u1_card_radius"
+        scrollable="false" clickable="true">
+    <event_cb trigger="clicked" callback="u1_home_nozzle" user_data="$index"/>
+    <bind_style_if name="cell_idle" cond="${active_subject} ne ${index}"/>
+    <bind_style_if name="styles.u1_selected_light" cond="${active_subject} eq ${index} and settings_dark_mode eq 0"/>
+    <bind_style_if name="styles.u1_selected_dark" cond="${active_subject} eq ${index} and settings_dark_mode eq 1"/>
+    <text_small text="$label" width="100%" style_text_align="center"
+                style_text_color="#text_subtle" style_text_font="#u1_aux_font" clickable="false"/>
+    <lv_obj width="22" height="22" style_pad_all="0" style_bg_opa="0" style_border_width="0"
+            scrollable="false" clickable="false">
+      <color_swatch width="22" height="22" size="22" reach="2" hit="0" clickable="false"
+                    color_subject="$color_subject" colors_subject="$colors_subject"
+                    selected_subject="$active_subject" index="$index" align="center">
+        <bind_flag_if_eq subject="$has_color_subject" flag="hidden" ref_value="0"/>
+      </color_swatch>
+      <lv_obj width="100%" height="100%" style_bg_opa="0" style_border_width="0"
+              style_pad_all="0" scrollable="false" clickable="false">
+        <bind_flag_if_eq subject="$has_color_subject" flag="hidden" ref_value="1"/>
+        <lv_obj width="100%" height="100%" align="center" style_radius="11" style_bg_opa="0"
+                style_border_width="2" style_border_color="#border" style_pad_all="0"
+                scrollable="false" clickable="false"/>
+        <lv_label text="/" align="center" style_text_color="#border" style_text_font="#font_xs" clickable="false"/>
+      </lv_obj>
+    </lv_obj>
+    <text_body bind_text="$temp_subject" width="100%" style_text_align="center"
+               style_text_font="#u1_aux_font" clickable="false"/>
+  </view>
+</component>

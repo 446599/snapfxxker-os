@@ -1,0 +1,984 @@
+{
+  "status": "passed",
+  "error": null,
+  "checks": [
+    {
+      "name": "verification-report-regression",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "test_changed_source_and_missing_artifact_reject_old_pass (__main__.Reports.test_changed_source_and_missing_artifact_reject_old_pass) ... ok\ntest_concurrent_change_is_failure (__main__.Reports.test_concurrent_change_is_failure) ... ok\ntest_failed_rerun_replaces_pass_before_first_check (__main__.Reports.test_failed_rerun_replaces_pass_before_first_check) ... ok\ntest_interrupt_never_leaves_pass (__main__.Reports.test_interrupt_never_leaves_pass) ... ok\ntest_missing_declared_artifact_is_failure (__main__.Reports.test_missing_declared_artifact_is_failure) ... ok\ntest_missing_input_invalidates_previous_pass (__main__.Reports.test_missing_input_invalidates_previous_pass) ... ok\ntest_no_checks_is_not_success (__main__.Reports.test_no_checks_is_not_success) ... ok\n\n----------------------------------------------------------------------\nRan 7 tests in 0.007s\n\nOK\n"
+    },
+    {
+      "name": "accessor-full-regression",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "arm-accessor-build: PASS\ndefault-build-refused: PASS\ncompile-storage: PASS\ntest-storage: PASS\ncompile-storage-san: PASS\ntest-storage-san: PASS\ncompile-arm-queue-storage: PASS\ntest-arm-queue-storage: PASS\ncompile-arm-queue-storage-san: PASS\ntest-arm-queue-storage-san: PASS\ncompile-preload-queue: PASS\ntest-preload-queue: PASS\ncompile-preload-queue-san: PASS\ntest-preload-queue-san: PASS\ncompile-preload-accessor: PASS\ntest-preload-accessor: PASS\ncompile-preload-accessor-san: PASS\ntest-preload-accessor-san: PASS\ndynamic-instruction-checks: PASS\nqueue_instruction_checks: PASS\nqueue_commit_checks: PASS\nqueue_cost_profile: PASS\nimage-and-conflict-checks: PASS\nAll accessor experiment checks passed. NOFLASH, no hardware or actual AUTH producer proof.\n"
+    },
+    {
+      "name": "runtime-compile-typed-results",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-typed-results",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 79875 checks. Typed-interface dependency doubles only; no RF hardware, full CPU, SELECT freshness or cleanup proof.\n"
+    },
+    {
+      "name": "runtime-compile-typed-results-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-typed-results-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 79875 checks. Typed-interface dependency doubles only; no RF hardware, full CPU, SELECT freshness or cleanup proof.\n"
+    },
+    {
+      "name": "runtime-compile-core",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-core",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 31540 assertions; full transfer 222 status polls; exhaustive SPI-fault prefix and budget cutoffs\n"
+    },
+    {
+      "name": "runtime-compile-core-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-core-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 31540 assertions; full transfer 222 status polls; exhaustive SPI-fault prefix and budget cutoffs\n"
+    },
+    {
+      "name": "runtime-compile-bridge",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-bridge",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 31540 assertions; full transfer 222 status polls; exhaustive SPI-fault prefix and budget cutoffs\nPASS 34624 total core+bridge assertions; stock originals are explicit host doubles, no firmware hooks installed\n"
+    },
+    {
+      "name": "runtime-compile-bridge-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-bridge-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 31540 assertions; full transfer 222 status polls; exhaustive SPI-fault prefix and budget cutoffs\nPASS 34624 total core+bridge assertions; stock originals are explicit host doubles, no firmware hooks installed\n"
+    },
+    {
+      "name": "runtime-compile-owner",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-owner",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS: 25 owner pairs, six cleanup-stage faults, expiry/cancel/disconnect, stale tickets, wrap, 100000 random events; 100420 metadata sections\n"
+    },
+    {
+      "name": "runtime-compile-owner-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-owner-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS: 25 owner pairs, six cleanup-stage faults, expiry/cancel/disconnect, stale tickets, wrap, 100000 random events; 100420 metadata sections\n"
+    },
+    {
+      "name": "runtime-compile-adapter",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-adapter",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS: five adapter entries, fail-closed unready/busy/unverified/cleanup failure, native response preservation in simulation, all 256 legacy raw ops rejected\nPASS: acquisition/begin exact-deadline cleanup, six failed-begin cleanup faults, late result suppression, unaligned control rejection\n"
+    },
+    {
+      "name": "runtime-compile-adapter-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-adapter-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS: five adapter entries, fail-closed unready/busy/unverified/cleanup failure, native response preservation in simulation, all 256 legacy raw ops rejected\nPASS: acquisition/begin exact-deadline cleanup, six failed-begin cleanup faults, late result suppression, unaligned control rejection\n"
+    },
+    {
+      "name": "runtime-compile-decoder-integration",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-compile-integration",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-integration",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 76460 integration assertions; 222 SPI polls per successful fixture transfer. Exact integration C, MMIO/IRQ doubles only. No physical STOP or quiescence proof.\n"
+    },
+    {
+      "name": "runtime-compile-decoder-integration-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-compile-integration-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-integration-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 76460 integration assertions; 222 SPI polls per successful fixture transfer. Exact integration C, MMIO/IRQ doubles only. No physical STOP or quiescence proof.\n"
+    },
+    {
+      "name": "runtime-compile-decoder-typed-runtime",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-compile-typed-runtime",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-typed-runtime",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 22695 typed-runtime assertions; AUTH/four-read/register-abort fixture 1254 SPI polls. No identity, SELECT freshness or physical cleanup proof.\n"
+    },
+    {
+      "name": "runtime-compile-decoder-typed-runtime-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-compile-typed-runtime-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-typed-runtime-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 22695 typed-runtime assertions; AUTH/four-read/register-abort fixture 1254 SPI polls. No identity, SELECT freshness or physical cleanup proof.\n"
+    },
+    {
+      "name": "runtime-compile-decoder-lease-runtime",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-compile-lease-runtime",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-lease-runtime",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 180 live-lease assertions; fixture-clock expiry and owner changes, not a real-time or physical STOP proof.\n"
+    },
+    {
+      "name": "runtime-compile-decoder-lease-runtime-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-compile-lease-runtime-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-lease-runtime-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 180 live-lease assertions; fixture-clock expiry and owner changes, not a real-time or physical STOP proof.\n"
+    },
+    {
+      "name": "runtime-compile-decoder-unified-isolation",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-compile-unified-isolation",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-unified-isolation",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 263 unified isolation assertions; actual RF requeue gate/queue runtime, shared IRQ/TCB doubles. No physical owner/producer proof.\n"
+    },
+    {
+      "name": "runtime-compile-decoder-unified-isolation-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-compile-unified-isolation-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-unified-isolation-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 263 unified isolation assertions; actual RF requeue gate/queue runtime, shared IRQ/TCB doubles. No physical owner/producer proof.\n"
+    },
+    {
+      "name": "runtime-compile-decoder-halt-runtime",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-compile-halt-runtime",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-halt-runtime",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 21489 HALT/runtime assertions; HALT register path 324 SPI polls. No physical tag/cleanup/STOP or RTOS proof.\n"
+    },
+    {
+      "name": "runtime-compile-decoder-halt-runtime-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-compile-halt-runtime-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": ""
+    },
+    {
+      "name": "runtime-test-halt-runtime-san",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS 21489 HALT/runtime assertions; HALT register path 324 SPI polls. No physical tag/cleanup/STOP or RTOS proof.\n"
+    },
+    {
+      "name": "runtime-repeat-arm-link",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "ARM accessor link PASS: 39 hooks; ph_storage absolute symbol absent; BSS=0\nARM tail=608 payload=640 block>=648; image end 0x0801de80 < 0x08024000\nProduction proof link rejected; NOFLASH/reset barriers intact; AUTH source unbound.\n"
+    },
+    {
+      "name": "runtime-image-checks",
+      "exit_code": 0,
+      "passed": true,
+      "output_tail": "PASS: HALT E108 branch, bound owner symbol, no HALT RTOS-delay calls, background provenance denied, NOFLASH unchanged.\n"
+    }
+  ],
+  "files": {
+    "README.md": {
+      "sha256": "ebffdda62ae357fccebbcc698008abaca83343e4595b9e3d664561b6fa20fd87",
+      "bytes": 4226
+    },
+    "runtime-base.json": {
+      "sha256": "c03f65cf5a14bcfb0336f8ac31a5a45d6baaae8d155c722708a32d0b9816edf3",
+      "bytes": 278
+    },
+    "build_accessor.py": {
+      "sha256": "9328fecd1a7f7d218030eb823407715079d414f0564fe06e225779533ac3ada9",
+      "bytes": 10293
+    },
+    "verify_runtime.py": {
+      "sha256": "830e0fff0787c49de77ca06d3455cbc822f340bae9e7b14cd894c545b6c130db",
+      "bytes": 5818
+    },
+    "verify_accessor.py": {
+      "sha256": "8c204634a02715d6cf648a2d80f57d391a067471405254cf89b2ae3ffc1f8091",
+      "bytes": 1982
+    },
+    "verification_report.py": {
+      "sha256": "e28a404e301fc2b92da91f5c86103221586f669552c994898a1cd8a019830e26",
+      "bytes": 3354
+    },
+    "../build.py": {
+      "sha256": "1bac5991c65dfbae2c64adb68d50fd490708160590ee83a11aecf5112eeeed26",
+      "bytes": 5114
+    },
+    "../merge_offline.py": {
+      "sha256": "2fe724d2d1b9123cdf288dd3480f6769983a5eea9840539b9ee4c829b88857b5",
+      "bytes": 14870
+    },
+    "../../input/ACE2_V1.1.31_20260306.bin": {
+      "sha256": "a468e366226e7c483d3dd96b444223e89cbf0d1b10573d42b6263843ffd6be3e",
+      "bytes": 71592
+    },
+    "firmware/bounded_halt.c": {
+      "sha256": "ea62ea9d77f379464f845953fb9085b67349d68bcb58ff5318b705b14a408da4",
+      "bytes": 3127
+    },
+    "firmware/bounded_rc522.c": {
+      "sha256": "6e662144a9d9bb0e65020eee462b508b55afcc1751a95c784fcfea21bb50d557",
+      "bytes": 9768
+    },
+    "firmware/bounded_rc522.h": {
+      "sha256": "4aee11c5856c4ca3015e506bb59f18127142f2edbde6dcf00384acd9aa440e60",
+      "bytes": 3296
+    },
+    "firmware/decoder_typed_bridge.c": {
+      "sha256": "da7f348a88715f2563b7caeb8ecb22ec1b6a0e0d0f66417bf98552e416806da1",
+      "bytes": 2969
+    },
+    "firmware/decoder_typed_bridge.h": {
+      "sha256": "8fa06e9414cf678745a1a5867d8e5a5211733a5fb8a621f0e82b515390a612ed",
+      "bytes": 860
+    },
+    "firmware/event_storage.c": {
+      "sha256": "9fe5c89288c8303c51fec93b310753a42a3eb22f5187cc738e7b798fc56cd316",
+      "bytes": 4794
+    },
+    "firmware/experimental_binding.c": {
+      "sha256": "b7cf566fd441ad8729519c18b19f07f74e613706de6eb1403c70e4e53026be13",
+      "bytes": 8738
+    },
+    "firmware/experimental_binding.h": {
+      "sha256": "c40ada4d21e29ebf2ed16855fce92cf5c45388733c1dc8c9c57e22629e0e2803",
+      "bytes": 2488
+    },
+    "firmware/experimental_gate.S": {
+      "sha256": "0363ad7b8eb1e47ed86811451168ba834b6df261cc450d4d1b2d8cdac5aeb5bc",
+      "bytes": 963
+    },
+    "firmware/native_tag_decoder.c": {
+      "sha256": "4fbef58f2a916bea62df05ccc882295c4cac151423aecb9e4bcd27e662e1ead7",
+      "bytes": 35099
+    },
+    "firmware/pageread_gate_stub.s": {
+      "sha256": "cf55aa4a5e1b2d035996e82131585bafe4c41adeae07c743297f248ebf47ce47",
+      "bytes": 245
+    },
+    "firmware/preload_hooks.S": {
+      "sha256": "b1143afce3166028355c948c00873942f755dcafa89f7e860d29722ab6be86df",
+      "bytes": 8241
+    },
+    "firmware/preload_hooks.c": {
+      "sha256": "529d86dc574fd89ce214a000ff606c85dd1901d0786cd22f8032ac3970636ed9",
+      "bytes": 1804
+    },
+    "firmware/preload_hooks.h": {
+      "sha256": "5d18bddf88e04209c63fbcd78e0320d3d560a192921693a85e52e4f1c222ae3e",
+      "bytes": 1616
+    },
+    "firmware/preload_queue.S": {
+      "sha256": "54cd795ea90882bd9dbc46015fa16cb8e3e73008e3aa061155e14e3a569ed76a",
+      "bytes": 2116
+    },
+    "firmware/preload_queue.c": {
+      "sha256": "d4256918e9ec7312dd3039bb903530c40e96a97315c1f405bee923f725e64c3b",
+      "bytes": 10532
+    },
+    "firmware/preload_queue.h": {
+      "sha256": "53ad61e75c7984143cad655bb56888126d3b57f7daf2440a52194d76eafca305",
+      "bytes": 1590
+    },
+    "firmware/rawtag_cache_stub.s": {
+      "sha256": "9992b3db4c6d8f618d097b06e4a534ba50e556e7a19b7b62fb143923d43a9109",
+      "bytes": 311
+    },
+    "firmware/rawtag_extract_stub.s": {
+      "sha256": "c3474a390280e790cd00f0bf8db56ab0211fbf805e7aad183d31d34b07b242a5",
+      "bytes": 315
+    },
+    "firmware/rawtag_stub.s": {
+      "sha256": "3e22782be6d88ea6733ff2200e15cc105b5d2ae6de929a363401268747b98137",
+      "bytes": 281
+    },
+    "firmware/rf_owner.c": {
+      "sha256": "5d0c31bd2d4cefe506372e7267e6df5ccd47961377f5e652f98df415759e73f4",
+      "bytes": 6782
+    },
+    "firmware/rf_owner.h": {
+      "sha256": "ab5d46b0a90e61127acc7c02f984db59d5b5699b614e4d13a01533a85568fe3e",
+      "bytes": 3065
+    },
+    "firmware/rf_stock_adapter.c": {
+      "sha256": "b70982d4eb0af8fa55a8c718d2ba23bfd971b483106dc577fdb4aff0064e6af4",
+      "bytes": 5227
+    },
+    "firmware/rf_stock_adapter.h": {
+      "sha256": "20d8c50f746f383717de976dbdc9b297708260ed66a4ab2731dbe34fe12a24c3",
+      "bytes": 2176
+    },
+    "firmware/rf_stock_trampolines.S": {
+      "sha256": "b21e2dadd4527f3a906a4bac6576bfecbe0d92d05b3cbbdfcc22efc37855eb1b",
+      "bytes": 1276
+    },
+    "firmware/stock_bounded_bridge.c": {
+      "sha256": "fd54bc1171b90d47908d8190b69f2ecf667a619e96cdf2c33bc6d9fc69aca2a5",
+      "bytes": 3807
+    },
+    "firmware/stock_bounded_bridge.h": {
+      "sha256": "c068623ddbf0a81b31462765f419c9b2c8f2b00fdc78272c9a4961a22e951a8f",
+      "bytes": 2200
+    },
+    "firmware/stock_bounded_thunks.S": {
+      "sha256": "e7673e2ce1fecbdd22f8fa525d7d0a7ba7ebef38773a7d55593389bf845e2521",
+      "bytes": 601
+    },
+    "firmware/typed_results.c": {
+      "sha256": "80ded4d88115a4127dcbb03b566d98650389ccdf13a9c7fb33712a9655a4f51d",
+      "bytes": 5746
+    },
+    "firmware/typed_results.h": {
+      "sha256": "54def245b3403b856aee542a2118de914b2838d25651ef052623fc28b43fee69",
+      "bytes": 2241
+    },
+    "firmware/uid_stub.s": {
+      "sha256": "2c9bcfa7288cedb1af2afcb8af1ca8136abb6ca0593bc79dc11c1c066df34ed6",
+      "bytes": 275
+    },
+    "tests/dynamic_instruction_checks.py": {
+      "sha256": "0c858887dd62d53a7578341cd9a35901060592e97f70ce6aae7ebc3f80617610",
+      "bytes": 19819
+    },
+    "tests/event_mock.c": {
+      "sha256": "c36ed98d0b02049853643c73f33a02536d69f6cbb28bd59eca2b9ddfde2f0b89",
+      "bytes": 2496
+    },
+    "tests/event_mock.h": {
+      "sha256": "cdd9f053384ae826449b7880b7e3be299893a96f594550d6cbc47fc9b8957f72",
+      "bytes": 723
+    },
+    "tests/integration_peripherals.h": {
+      "sha256": "ba12ca92ed60946390f40209801c19c9d671cd9c6ac8d7fae90b29f758bb044f",
+      "bytes": 3343
+    },
+    "tests/queue_commit_checks.py": {
+      "sha256": "84fccb6d7ecca152dd3d8afca641e8ed88ef7af017405ef0acc3695b8c652053",
+      "bytes": 7424
+    },
+    "tests/queue_cost_profile.py": {
+      "sha256": "ae805814497f5deb055b3132a0b1de8f0829471f7605b27fbc04bf05b01a81ae",
+      "bytes": 3239
+    },
+    "tests/queue_instruction_checks.py": {
+      "sha256": "b05f44125143725fb1f9b520e979e603bf84c1bd746a976d10b85a049fcec074",
+      "bytes": 3855
+    },
+    "tests/test_arm_queue_storage.c": {
+      "sha256": "8503ff783c665ca73fde832b9139819f1af1eda92521b8a1a3a128812b0afafc",
+      "bytes": 2079
+    },
+    "tests/test_bounded_rc522.c": {
+      "sha256": "388fff2ce45070876754678583c44551d4d307cf93d73913ecdeb5e9f11a1567",
+      "bytes": 9286
+    },
+    "tests/test_event_storage.c": {
+      "sha256": "0cc8762531dce789fd690e03c61eade9026db56324b722e0f0375ad33e1b55c1",
+      "bytes": 5134
+    },
+    "tests/test_halt_runtime.c": {
+      "sha256": "31d063d760efdaa9d8f0316dce0802d66dda75d4a525ada5952cde95bb9714f2",
+      "bytes": 6117
+    },
+    "tests/test_integration.c": {
+      "sha256": "0aa9dc65eb632907daf2d02ea3996ce9968d1943b31c43c03becd61d4ebe3fd9",
+      "bytes": 9454
+    },
+    "tests/test_lease_runtime.c": {
+      "sha256": "1f92b271db17ebd4f49aaf97408e7bf35b6c5ea39f5e30a39afc023128954c78",
+      "bytes": 3257
+    },
+    "tests/test_preload_accessor.c": {
+      "sha256": "30a6d7b4677ec73ddbc60985b6c69ed269755ad73b34bea9dc03973da43407b8",
+      "bytes": 3154
+    },
+    "tests/test_preload_queue.c": {
+      "sha256": "4ea0cdc92188d793d3c1bc134e46e1d07825a32dbf96aaaf4d323491d5d5e7b1",
+      "bytes": 9168
+    },
+    "tests/test_rf_owner.c": {
+      "sha256": "843eddea4081aba1a0cd4ec75e1dff371d1bbe9c043cd4b29edc911628fce405",
+      "bytes": 8786
+    },
+    "tests/test_rf_stock_adapter.c": {
+      "sha256": "43f780d34e9fe30a1dcb60f55e24b6c93360cf09d6f3bf523079dd12c54f8028",
+      "bytes": 5946
+    },
+    "tests/test_stock_bridge.c": {
+      "sha256": "5f5d56f0f4bca8849ab776780a89a58dca52b9f5d4eb9aa1f441c49038d88e77",
+      "bytes": 3159
+    },
+    "tests/test_typed_results.c": {
+      "sha256": "1863629aed2fb30cd0a485f633c17db470f4ba3ff0f20a0d0fff309897f027d1",
+      "bytes": 8741
+    },
+    "tests/test_typed_runtime.c": {
+      "sha256": "3c66a0d8a072fd8723c41b1b566df73c5ea336418fe680da299743410b302d46",
+      "bytes": 4483
+    },
+    "tests/test_unified_isolation.c": {
+      "sha256": "895190c678646e91fd3a74b5c578de4b04e792e7c72fa572f3e871422e6fccef",
+      "bytes": 4694
+    },
+    "tests/test_verification_report.py": {
+      "sha256": "738da975b645dc6142a96f6c1d51f59e4c3827c5948fcca736f736e3cc3abb9c",
+      "bytes": 3533
+    },
+    "tests/verify_image.py": {
+      "sha256": "2f3874e463f15b62a5f76dd632a9a15460c13d49f5f9f4ce5351049b6f15b435",
+      "bytes": 4955
+    },
+    "tests/verify_runtime_image.py": {
+      "sha256": "073a2a3b551a910c3e83c25dbd2835fc7f484ae11c02dc2d0cdf844907e2e4d6",
+      "bytes": 1947
+    },
+    "frozen-inputs/__pycache__/build_offline.cpython-313.pyc": {
+      "sha256": "a01316f1c776bde08bdc53b7ad137256a227d5f9f5f279172ecdb8c6ecba2e02",
+      "bytes": 14509
+    },
+    "frozen-inputs/analysis-manifest.json": {
+      "sha256": "365c92390c907c1b6e8765123e0ad975babd41e59a627ad169742e4b672dd901",
+      "bytes": 9493
+    },
+    "frozen-inputs/build_offline.py": {
+      "sha256": "e54f2ac77ad3a01c9d034de92bae6f1d6b7fd250191c1949b86cff1b585b88cb",
+      "bytes": 9811
+    },
+    "frozen-inputs/firmware/bounded_rc522.c": {
+      "sha256": "bb1953ba49bcf0f825127423039080a59d65b4c1d7df1684b1ecb10fa852b896",
+      "bytes": 8255
+    },
+    "frozen-inputs/firmware/bounded_rc522.h": {
+      "sha256": "c51897bae8e8dc372761d5c629d6e82bf7ea185bbd7c80528cdf7d36cb5c8a9a",
+      "bytes": 2831
+    },
+    "frozen-inputs/firmware/event_storage.c": {
+      "sha256": "bfe40d4adbd0ccf5761bf1aee03212b5ed3f7ae25e6e2776439d38b132307c6b",
+      "bytes": 4264
+    },
+    "frozen-inputs/firmware/experimental_binding.c": {
+      "sha256": "f90a10450c71272d1352271d15e1772a0470123c039d536da54f453fc0e7951b",
+      "bytes": 4823
+    },
+    "frozen-inputs/firmware/experimental_binding.h": {
+      "sha256": "23e49c93bd6fdbeb28c2e325beb0e4963983d8a1abc9c9c561a0ad9346e6be6b",
+      "bytes": 1847
+    },
+    "frozen-inputs/firmware/experimental_gate.S": {
+      "sha256": "0363ad7b8eb1e47ed86811451168ba834b6df261cc450d4d1b2d8cdac5aeb5bc",
+      "bytes": 963
+    },
+    "frozen-inputs/firmware/native_tag_decoder.c": {
+      "sha256": "4ce7672426cae3b7a68271faaf7aa8632c89c6cc83c624d9094424dba1abef5b",
+      "bytes": 41094
+    },
+    "frozen-inputs/firmware/pageread_gate_stub.s": {
+      "sha256": "cf55aa4a5e1b2d035996e82131585bafe4c41adeae07c743297f248ebf47ce47",
+      "bytes": 245
+    },
+    "frozen-inputs/firmware/rawtag_cache_stub.s": {
+      "sha256": "9992b3db4c6d8f618d097b06e4a534ba50e556e7a19b7b62fb143923d43a9109",
+      "bytes": 311
+    },
+    "frozen-inputs/firmware/rawtag_extract_stub.s": {
+      "sha256": "c3474a390280e790cd00f0bf8db56ab0211fbf805e7aad183d31d34b07b242a5",
+      "bytes": 315
+    },
+    "frozen-inputs/firmware/rawtag_stub.s": {
+      "sha256": "3e22782be6d88ea6733ff2200e15cc105b5d2ae6de929a363401268747b98137",
+      "bytes": 281
+    },
+    "frozen-inputs/firmware/rf_owner.c": {
+      "sha256": "5d0c31bd2d4cefe506372e7267e6df5ccd47961377f5e652f98df415759e73f4",
+      "bytes": 6782
+    },
+    "frozen-inputs/firmware/rf_owner.h": {
+      "sha256": "ab5d46b0a90e61127acc7c02f984db59d5b5699b614e4d13a01533a85568fe3e",
+      "bytes": 3065
+    },
+    "frozen-inputs/firmware/rf_stock_adapter.c": {
+      "sha256": "db5c6170853086c19747712e92d087ef129eb1afb143e8a6f50059596c4d44a3",
+      "bytes": 4953
+    },
+    "frozen-inputs/firmware/rf_stock_adapter.h": {
+      "sha256": "afcdf337ea48f8f777ddf7e9cb568f25e21acc55a127c71f0645575aec8aa266",
+      "bytes": 1863
+    },
+    "frozen-inputs/firmware/rf_stock_trampolines.S": {
+      "sha256": "b21e2dadd4527f3a906a4bac6576bfecbe0d92d05b3cbbdfcc22efc37855eb1b",
+      "bytes": 1276
+    },
+    "frozen-inputs/firmware/stock_bounded_bridge.c": {
+      "sha256": "155e8aede19f9966090d93e1c17de79786db03c428a4dc765b86948e490daf82",
+      "bytes": 3064
+    },
+    "frozen-inputs/firmware/stock_bounded_bridge.h": {
+      "sha256": "974fbb2b2b05acd0b3b7e415a05a6762e66ed938de6874cbeec75748c98df95e",
+      "bytes": 2154
+    },
+    "frozen-inputs/firmware/stock_bounded_thunks.S": {
+      "sha256": "e7673e2ce1fecbdd22f8fa525d7d0a7ba7ebef38773a7d55593389bf845e2521",
+      "bytes": 601
+    },
+    "frozen-inputs/firmware/uid_stub.s": {
+      "sha256": "2c9bcfa7288cedb1af2afcb8af1ca8136abb6ca0593bc79dc11c1c066df34ed6",
+      "bytes": 275
+    },
+    "frozen-inputs/original.elf": {
+      "sha256": "e4fbade558785e32b97341b6ee4c499c6f8925b73977450a79d7f717d1724286",
+      "bytes": 55884
+    },
+    "frozen-inputs/preload/preload_hooks.S": {
+      "sha256": "ec77e4f166d7aeb99d467ede31c3f4e093f8d21a2f20ad3e1718caaa370e4942",
+      "bytes": 6509
+    },
+    "frozen-inputs/preload/preload_hooks.c": {
+      "sha256": "866e9ca742b5eb8bef9ba51244a820fd7f96e2492cd0d851ee06719ed70494a7",
+      "bytes": 1958
+    },
+    "frozen-inputs/preload/preload_hooks.h": {
+      "sha256": "80a5138d8fc1ed92f35153393dcecfc936196c85ca9375d5f12ca95bdbc4ffdc",
+      "bytes": 1425
+    },
+    "frozen-inputs/tests/event_mock.c": {
+      "sha256": "c36ed98d0b02049853643c73f33a02536d69f6cbb28bd59eca2b9ddfde2f0b89",
+      "bytes": 2496
+    },
+    "frozen-inputs/tests/event_mock.h": {
+      "sha256": "cdd9f053384ae826449b7880b7e3be299893a96f594550d6cbc47fc9b8957f72",
+      "bytes": 723
+    },
+    "frozen-inputs/tests/integration_peripherals.h": {
+      "sha256": "bb616ca35da029e5579d308b8f4794124e5e5f3a54f9b52c4a5ba2ab077ccac2",
+      "bytes": 2156
+    },
+    "frozen-inputs/tests/test_bounded_rc522.c": {
+      "sha256": "388fff2ce45070876754678583c44551d4d307cf93d73913ecdeb5e9f11a1567",
+      "bytes": 9286
+    },
+    "frozen-inputs/tests/test_event_storage.c": {
+      "sha256": "3386a2c421d3e6a4363f3c0029aa83b687060a0ba6a4e82620b16b668b0cfba7",
+      "bytes": 4608
+    },
+    "frozen-inputs/tests/test_integration.c": {
+      "sha256": "4dbcb438493aa04d526ce69942a60339b2df61d034f56b57e9605735bb9ccb51",
+      "bytes": 8608
+    },
+    "frozen-inputs/tests/test_rf_owner.c": {
+      "sha256": "843eddea4081aba1a0cd4ec75e1dff371d1bbe9c043cd4b29edc911628fce405",
+      "bytes": 8786
+    },
+    "frozen-inputs/tests/test_rf_stock_adapter.c": {
+      "sha256": "97c56d404a5719e1f4155ce3b9e9be36fabee54d7cd258019d0ff6da9828fdf6",
+      "bytes": 5765
+    },
+    "frozen-inputs/tests/test_stock_bridge.c": {
+      "sha256": "5f5d56f0f4bca8849ab776780a89a58dca52b9f5d4eb9aa1f441c49038d88e77",
+      "bytes": 3159
+    },
+    "frozen-inputs/tests/verify_image.py": {
+      "sha256": "625ce65c1a49963b141808d36922cb3ce1d62ba465ff4e28ea3c3306c8a84a03",
+      "bytes": 8777
+    },
+    "frozen-inputs.json": {
+      "sha256": "2223210f75fae999e7ab16ea115f55234a9402aaec48ea02c5b33f580448badb",
+      "bytes": 9575
+    },
+    "build/ACCESSOR-NOFLASH.elf": {
+      "sha256": "71e6ca213f7824142f2730abcb60c14203364d4eb5d54f72f777dbd82f46abff",
+      "bytes": 66452
+    },
+    "output/ACCESSOR-NOFLASH.offline-image": {
+      "sha256": "b4aaff45455d8b59643a5e2e2f0c594ac7c539a82c3795be845f364f13e11924",
+      "bytes": 89728
+    },
+    "output/manifest.json": {
+      "sha256": "f43d980c141d54409d2f8c24b84cfac60263db3ebd5a919e850d74c2f4e913dc",
+      "bytes": 14686
+    },
+    "build/symbols.json": {
+      "sha256": "88796173cfc67653000a8dc6d009d1f91d36badefa81df641e758355fb569154",
+      "bytes": 7072
+    },
+    "build/combined.dis": {
+      "sha256": "2706e1191d38c4949eb8afd84f43f19d953debb62649df789393690c775c7ba3",
+      "bytes": 298845
+    },
+    "build/verification-report-regression.log": {
+      "sha256": "01abb11504cac54a847f6a266fc48fa3b60bc42f7238807a336973a3f8999106",
+      "bytes": 864
+    },
+    "build/accessor-full-regression.log": {
+      "sha256": "7f12f648072d3985d96093ae05cfd75eab28ae6a3328f47f296d1c9ae67c8972",
+      "bytes": 751
+    },
+    "build/runtime-compile-typed-results.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-typed-results.log": {
+      "sha256": "2d13ebc8a42c2debe5de198c07b0c0f287af3d5e49da10ff8ed1a4f34ecfe6de",
+      "bytes": 121
+    },
+    "build/runtime-compile-typed-results-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-typed-results-san.log": {
+      "sha256": "2d13ebc8a42c2debe5de198c07b0c0f287af3d5e49da10ff8ed1a4f34ecfe6de",
+      "bytes": 121
+    },
+    "build/runtime-compile-core.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-core.log": {
+      "sha256": "49ad4a562fe678c4951ebafed6ed7e90ff58ca8889aa63bf1c7d596b9e99e1da",
+      "bytes": 102
+    },
+    "build/runtime-compile-core-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-core-san.log": {
+      "sha256": "49ad4a562fe678c4951ebafed6ed7e90ff58ca8889aa63bf1c7d596b9e99e1da",
+      "bytes": 102
+    },
+    "build/runtime-compile-bridge.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-bridge.log": {
+      "sha256": "7eeaf9f50495ac77921349f844a3dfa5d1623e46813c045688505373ebc92c5c",
+      "bytes": 214
+    },
+    "build/runtime-compile-bridge-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-bridge-san.log": {
+      "sha256": "7eeaf9f50495ac77921349f844a3dfa5d1623e46813c045688505373ebc92c5c",
+      "bytes": 214
+    },
+    "build/runtime-compile-owner.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-owner.log": {
+      "sha256": "bbc9f85e71940bf9c015ede68846234498212c27f775536da0f82c67d8b486cf",
+      "bytes": 142
+    },
+    "build/runtime-compile-owner-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-owner-san.log": {
+      "sha256": "bbc9f85e71940bf9c015ede68846234498212c27f775536da0f82c67d8b486cf",
+      "bytes": 142
+    },
+    "build/runtime-compile-adapter.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-adapter.log": {
+      "sha256": "042d6a6a3255fe2e9db29371bf8d44a8ae58b95820c2f1a030e85c0c9af07166",
+      "bytes": 291
+    },
+    "build/runtime-compile-adapter-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-adapter-san.log": {
+      "sha256": "042d6a6a3255fe2e9db29371bf8d44a8ae58b95820c2f1a030e85c0c9af07166",
+      "bytes": 291
+    },
+    "build/runtime-compile-decoder-integration.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-compile-integration.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-integration.log": {
+      "sha256": "fa2060facd67896ac7743edd7d2488b7300b2d5fc8731af3c1e8b724b6c8305f",
+      "bytes": 164
+    },
+    "build/runtime-compile-decoder-integration-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-compile-integration-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-integration-san.log": {
+      "sha256": "fa2060facd67896ac7743edd7d2488b7300b2d5fc8731af3c1e8b724b6c8305f",
+      "bytes": 164
+    },
+    "build/runtime-compile-decoder-typed-runtime.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-compile-typed-runtime.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-typed-runtime.log": {
+      "sha256": "a41c41935d2259a1d3b9d48dbb28fdbdabd09773ea1e3c3a8bee8021f0ff0f0e",
+      "bytes": 148
+    },
+    "build/runtime-compile-decoder-typed-runtime-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-compile-typed-runtime-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-typed-runtime-san.log": {
+      "sha256": "a41c41935d2259a1d3b9d48dbb28fdbdabd09773ea1e3c3a8bee8021f0ff0f0e",
+      "bytes": 148
+    },
+    "build/runtime-compile-decoder-lease-runtime.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-compile-lease-runtime.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-lease-runtime.log": {
+      "sha256": "a72c4bec337dde2a90161a965f09cdf243cdf6d7190e1052240611ddcbaf36aa",
+      "bytes": 112
+    },
+    "build/runtime-compile-decoder-lease-runtime-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-compile-lease-runtime-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-lease-runtime-san.log": {
+      "sha256": "a72c4bec337dde2a90161a965f09cdf243cdf6d7190e1052240611ddcbaf36aa",
+      "bytes": 112
+    },
+    "build/runtime-compile-decoder-unified-isolation.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-compile-unified-isolation.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-unified-isolation.log": {
+      "sha256": "7852727f629ce7a68fac03228cc5a52fff50ff82d0e885100039719635bcdf3b",
+      "bytes": 135
+    },
+    "build/runtime-compile-decoder-unified-isolation-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-compile-unified-isolation-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-unified-isolation-san.log": {
+      "sha256": "7852727f629ce7a68fac03228cc5a52fff50ff82d0e885100039719635bcdf3b",
+      "bytes": 135
+    },
+    "build/runtime-compile-decoder-halt-runtime.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-compile-halt-runtime.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-halt-runtime.log": {
+      "sha256": "c9788356c9de0fb8f8d3530e3e0e4fa9d9c1c46ff11ab4183a4bc08edea520f1",
+      "bytes": 114
+    },
+    "build/runtime-compile-decoder-halt-runtime-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-compile-halt-runtime-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/runtime-test-halt-runtime-san.log": {
+      "sha256": "c9788356c9de0fb8f8d3530e3e0e4fa9d9c1c46ff11ab4183a4bc08edea520f1",
+      "bytes": 114
+    },
+    "build/runtime-repeat-arm-link.log": {
+      "sha256": "6b1c1402442704df9586b490f80736a1420742a29061d6ba8b7b60818eea2ea3",
+      "bytes": 230
+    },
+    "build/runtime-image-checks.log": {
+      "sha256": "8c5f617ffdcaada0325d748f40abcff672cadeadff06ae010709a6e0a7eef9a4",
+      "bytes": 119
+    }
+  },
+  "tools": {
+    "arm-gcc": "arm-none-eabi-gcc (15:14.2.rel1-1) 14.2.1 20241119",
+    "arm-ld": "GNU ld (2.44-3+23+b2) 2.44",
+    "host-gcc": "gcc (Debian 14.2.0-19) 14.2.0"
+  },
+  "scope": "Host C doubles, sanitizers, ARM link and limited Thumb model only",
+  "physical_proof": false,
+  "device_or_network_access": false
+}

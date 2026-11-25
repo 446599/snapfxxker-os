@@ -1,0 +1,394 @@
+diff --git a/firmware/build_patch.py b/firmware/build_patch.py
+index 5123364..de8d106 100644
+--- a/firmware/build_patch.py
++++ b/firmware/build_patch.py
+@@ -53,7 +53,7 @@ SYMS = {
+     "extract_resume": 0x0800FE3A, # rawtag_extract_stub Anycubic/failure resume
+     "scan_exit": 0x0800FE98,      # background scan success exit (bypasses Anycubic parse)
+ }
+-VERSION_STRING = b"V1.1.60O\x00"  # Production Multi-Format + Bambu RFID
++VERSION_STRING = b"V1.1.90O\x00"  # Production Multi-Format + Bambu RFID
+                                # Trailing 'O' ensures multiACE auto-detects open firmware build.
+ 
+ HERE = os.path.dirname(os.path.abspath(__file__))
+@@ -61,6 +61,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
+ 
+ def thumb_bw(src, dst):
+     """Encode a 32-bit Thumb-2 unconditional branch (B.W)."""
++    if (src & 1) or (dst & 1):
++        raise ValueError("Thumb branch address is not halfword-aligned")
+     off = dst - (src + 4)
+     if not -(1 << 24) <= off < (1 << 24):
+         raise ValueError("branch out of range")
+@@ -74,6 +76,8 @@ def thumb_bw(src, dst):
+ 
+ 
+ def assemble(src, addr, tmp, extra_objs=None):
++    if addr & 1:
++        raise ValueError("Thumb stub address is not halfword-aligned")
+     lds = "ENTRY(_start)\nSECTIONS {\n  . = 0x%08X;\n  .text : { *(.text*) *(.rodata*) }\n" % addr
+     for k, v in SYMS.items():
+         lds += "  %s = 0x%08X;\n" % (k, v)
+@@ -145,6 +149,10 @@ def main():
+                     os.path.join(args.tmp, "dec.elf"), os.path.join(args.tmp, "dec.bin")], check=True)
+     decoder_bin = open(os.path.join(args.tmp, "dec.bin"), "rb").read()
+     body += decoder_bin
++    # Thumb instructions must start on a halfword boundary. Decoder rodata
++    # can have odd size; pad before placing the first executable stub.
++    if len(body) & 1:
++        body += b"\x00"
+ 
+     # 3. Read symbols from dec.elf and register into SYMS
+     nm_out = subprocess.check_output(["arm-none-eabi-nm", os.path.join(args.tmp, "dec.elf")]).decode()
+diff --git a/firmware/native_tag_decoder.c b/firmware/native_tag_decoder.c
+index 21d286b..5907489 100644
+--- a/firmware/native_tag_decoder.c
++++ b/firmware/native_tag_decoder.c
+@@ -382,7 +382,10 @@ static uint32_t g_auth_diag = 0;
+ static uint32_t g_read_diag = 0;
+ 
+ static int rc522_mf_authent(void *readerObj, uint8_t auth_mode, uint8_t block_addr, const uint8_t *key, const uint8_t *uid) {
+-#if defined(__arm__) || defined(__thumb__)
++#if defined(ACE_DECODER_TEST)
++    extern int test_auth(void *, uint8_t, uint8_t, const uint8_t *, const uint8_t *);
++    return test_auth(readerObj, auth_mode, block_addr, key, uid);
++#elif defined(__arm__) || defined(__thumb__)
+     if (!readerObj) return 0;
+ 
+     // 1. Force Idle and clear IRQ / Crypto
+@@ -437,8 +440,15 @@ static int rc522_mf_authent(void *readerObj, uint8_t auth_mode, uint8_t block_ad
+ #endif
+ }
+ 
++static int rc522_block_result_ok(int res, uint32_t rx_bits, uint8_t error) {
++    return res == 0 && rx_bits == 128 && error == 0;
++}
++
+ static int rc522_read_block(void *readerObj, uint8_t block_addr, uint8_t *out_16b) {
+-#if defined(__arm__) || defined(__thumb__)
++#if defined(ACE_DECODER_TEST)
++    extern int test_read(void *, uint8_t, uint8_t *);
++    return test_read(readerObj, block_addr, out_16b);
++#elif defined(__arm__) || defined(__thumb__)
+     if (!readerObj || !out_16b) return 0;
+     uint8_t tx_mode = rc522_read_reg(readerObj, 0x12);
+     uint8_t rx_mode = rc522_read_reg(readerObj, 0x13);
+@@ -448,9 +458,17 @@ static int rc522_read_block(void *readerObj, uint8_t block_addr, uint8_t *out_16
+     rc522_flush(readerObj);
+ 
+     uint8_t cmd[2] = {0x30, block_addr};
++    /* The stock helper has no output-capacity argument and may use an 8-bit
++     * FIFO count without clamping it. Accommodate its full count on this
++     * version. Added stack cost must be verified before any device flash. */
++    uint8_t rx_buf[256];
+     uint32_t rx_bits = 0;
+-    int res = rc522_transceive(readerObj, 0x0C, cmd, 2, out_16b, &rx_bits);
+-    return ((res == 2 || res == 0) && rx_bits == 128);
++    int res = rc522_transceive(readerObj, 0x0C, cmd, 2, rx_buf, &rx_bits);
++    /* A collision result is not a valid block read. The stock helper's error
++     * mask misses the RC522 CRC error bit, so inspect ErrorReg explicitly. */
++    if (!rc522_block_result_ok(res, rx_bits, rc522_read_reg(readerObj, 0x06))) return 0;
++    memcpy(out_16b, rx_buf, 16);
++    return 1;
+ #else
+     (void)readerObj; (void)block_addr; (void)out_16b;
+     return 0;
+@@ -458,7 +476,10 @@ static int rc522_read_block(void *readerObj, uint8_t block_addr, uint8_t *out_16
+ }
+ 
+ static void rc522_auth_stop(void *readerObj) {
+-#if defined(__arm__) || defined(__thumb__)
++#if defined(ACE_DECODER_TEST)
++    extern void test_stop(void *);
++    test_stop(readerObj);
++#elif defined(__arm__) || defined(__thumb__)
+     if (!readerObj) return;
+     rc522_write_reg(readerObj, 0x01, 0x00); // CommandReg = Idle
+     uint8_t s2 = rc522_read_reg(readerObj, 0x08);
+@@ -603,136 +624,59 @@ static uint32_t scan_for_hex_color(const uint8_t *buf, int len) {
+  * and if readerObj is active, performs hardware RC522 PCD_MFAuthent to unlock
+  * Sector 1 and extract Block 4 (tray/material) and Block 5 (RGBA color, diameter, temps).
+  */
++/* Verified fields only. Failure must never publish invented identity. */
+ static int decode_bambu_classic(decoded_tag_t *tag, const uint8_t *uid, void *readerObj, int sel_res) {
+-    uint8_t u0 = uid[0];
+-    uint8_t u1 = uid[1];
+-    uint8_t u2 = uid[2];
+-    uint8_t u3 = uid[3];
+-    uint8_t bcc = uid[4];
+-
+-    if ((u0 | u1 | u2 | u3) == 0) return 0;
+-    if ((u0 ^ u1 ^ u2 ^ u3) != bcc) return 0;
+-
+-    str_copy(tag->brand, "Bambu Lab", 20);
+-
+-    char *sku = tag->sku;
+-    sku[0] = 'S';
+-    sku[1] = 'M';
+-    static const char hex_chars[] = "0123456789ABCDEF";
+-    sku[2] = hex_chars[(u0 >> 4) & 0xF];
+-    sku[3] = hex_chars[u0 & 0xF];
+-    sku[4] = hex_chars[(u1 >> 4) & 0xF];
+-    sku[5] = hex_chars[u1 & 0xF];
+-    sku[6] = hex_chars[(u2 >> 4) & 0xF];
+-    sku[7] = hex_chars[u2 & 0xF];
+-    sku[8] = hex_chars[(u3 >> 4) & 0xF];
+-    sku[9] = hex_chars[u3 & 0xF];
+-    sku[10] = '\0';
+-
+-    str_copy(tag->type, "PLA Basic", 20);
+-    tag->color = 0;
+-    tag->temp_min = 190;
+-    tag->temp_max = 230;
+-    tag->bed_min = 45;
+-    tag->bed_max = 60;
+-    tag->diameter = 175;
+-    tag->total_grams = 1000;
+-    tag->version = 0x0102;
+-
+-    if (!readerObj) {
+-        return 1;
+-    }
+-
+-    uint8_t key_a[6];
++    uint8_t key_a[6], b4[16], b5[16], again4[16], again5[16];
++    int ok = 0, n = 0, nonspace = 0;
++    if (!tag || !uid || !readerObj || sel_res != 0 || uid[0] == 0x88 ||
++        !(uid[0] | uid[1] | uid[2] | uid[3]) ||
++        (uint8_t)(uid[0] ^ uid[1] ^ uid[2] ^ uid[3]) != uid[4]) return 0;
+     bambu_kdf(uid, 1, key_a, (uint8_t *)0);
+-
+-    int auth_ok = rc522_mf_authent(readerObj, 0x60, 4, key_a, uid);
+-    if (!auth_ok) {
+-        auth_ok = rc522_mf_authent(readerObj, 0x60, 7, key_a, uid);
++    if (!rc522_mf_authent(readerObj, 0x60, 4, key_a, uid) &&
++        !rc522_mf_authent(readerObj, 0x60, 7, key_a, uid)) goto out;
++    if (!rc522_read_block(readerObj, 4, b4) || !rc522_read_block(readerObj, 5, b5) ||
++        !rc522_read_block(readerObj, 4, again4) || !rc522_read_block(readerObj, 5, again5)) goto out;
++    for (int i = 0; i < 16; ++i) if (b4[i] != again4[i] || b5[i] != again5[i]) goto out;
++    while (n < 16 && b4[n] != 0) {
++        if (b4[n] < 0x20 || b4[n] > 0x7e) goto out;
++        if (b4[n] != 0x20) nonspace = 1;
++        ++n;
+     }
+-    if (auth_ok) {
+-        uint8_t block4[16];
+-        uint8_t block5[16];
+-
+-        if (rc522_read_block(readerObj, 4, block4)) {
+-            int matched = 0;
+-            if (block4[0] == 'G' && block4[1] == 'F') {
+-                for (int c = 0; c < (int)BAMBU_CATALOG_SIZE; c++) {
+-                    if (block4[2] == BAMBU_CATALOG[c].code[2] &&
+-                        block4[3] == BAMBU_CATALOG[c].code[3] &&
+-                        block4[4] == BAMBU_CATALOG[c].code[4]) {
+-                        str_copy(tag->type, BAMBU_CATALOG[c].material, 20);
+-                        tag->temp_min = BAMBU_CATALOG[c].tmin;
+-                        tag->temp_max = BAMBU_CATALOG[c].tmax;
+-                        tag->bed_min = BAMBU_CATALOG[c].bmin;
+-                        tag->bed_max = BAMBU_CATALOG[c].bmax;
+-                        matched = 1;
+-                        break;
+-                    }
+-                }
+-            }
+-            if (!matched) {
+-                int printable = 0;
+-                for (int i = 0; i < 16; i++) {
+-                    if ((block4[i] >= 'A' && block4[i] <= 'Z') ||
+-                        (block4[i] >= 'a' && block4[i] <= 'z') ||
+-                        (block4[i] >= '0' && block4[i] <= '9') ||
+-                        block4[i] == '-' || block4[i] == ' ') {
+-                        printable++;
+-                    } else if (block4[i] == 0) break;
+-                }
+-                if (printable >= 3) {
+-                    char mat_buf[17];
+-                    int k = 0;
+-                    while (k < 16 && block4[k] >= 0x20 && block4[k] <= 0x7E) {
+-                        mat_buf[k] = (char)block4[k];
+-                        k++;
+-                    }
+-                    mat_buf[k] = '\0';
+-                    if (k >= 3) str_copy(tag->type, mat_buf, 20);
+-                }
+-            }
+-        }
+-
+-        if (rc522_read_block(readerObj, 5, block5)) {
+-            uint8_t r = block5[2];
+-            uint8_t g = block5[3];
+-            uint8_t b = block5[4];
+-            uint8_t a = block5[5];
+-            if ((r | g | b) != 0 || a != 0) {
+-                tag->color = ((uint32_t)r << 24) | ((uint32_t)g << 16) | ((uint32_t)b << 8) | 0xFF;
+-            }
+-
+-            uint16_t w = ((uint16_t)block5[0] << 8) | block5[1];
+-            if (w < 200 || w > 5000) w = ((uint16_t)block5[1] << 8) | block5[0];
+-            if (w >= 200 && w <= 5000) tag->total_grams = w;
+-
+-            uint16_t diam = ((uint16_t)block5[6] << 8) | block5[7];
+-            if (diam < 100 || diam > 300) diam = ((uint16_t)block5[7] << 8) | block5[6];
+-            if (diam >= 100 && diam <= 300) tag->diameter = diam;
+-
+-            uint16_t tmin = ((uint16_t)block5[8] << 8) | block5[9];
+-            if (tmin < 150 || tmin > 350) tmin = ((uint16_t)block5[9] << 8) | block5[8];
+-            if (tmin >= 150 && tmin <= 350) tag->temp_min = tmin;
+-
+-            uint16_t tmax = ((uint16_t)block5[10] << 8) | block5[11];
+-            if (tmax < 150 || tmax > 350) tmax = ((uint16_t)block5[11] << 8) | block5[10];
+-            if (tmax >= 150 && tmax <= 350) tag->temp_max = tmax;
+-
+-            uint16_t bmin = ((uint16_t)block5[12] << 8) | block5[13];
+-            if (bmin < 20 || bmin > 150) bmin = ((uint16_t)block5[13] << 8) | block5[12];
+-            if (bmin >= 20 && bmin <= 150) tag->bed_min = bmin;
+-
+-            uint16_t bmax = ((uint16_t)block5[14] << 8) | block5[15];
+-            if (bmax < 20 || bmax > 150) bmax = ((uint16_t)block5[15] << 8) | block5[14];
+-            if (bmax >= 20 && bmax <= 150) tag->bed_max = bmax;
+-        }
+-
+-        rc522_auth_stop(readerObj);
++    if (n < 3 || !nonspace) goto out;
++    for (int i = n; i < 16; ++i) if (b4[i] != 0) goto out;
++    /* Alpha byte and reasonable nominal mass help reject incomplete data. */
++    unsigned int grams = (unsigned int)b5[4] | ((unsigned int)b5[5] << 8);
++    if (b5[3] != 0xff || grams < 1 || grams > 5000) goto out;
++    memset(tag, 0, sizeof(*tag));
++    str_copy(tag->brand, "Bambu Lab", 20);
++    static const char hex_chars[] = "0123456789ABCDEF";
++    tag->sku[0] = 'S'; tag->sku[1] = 'M';
++    for (int i = 0; i < 4; ++i) {
++        tag->sku[2 + i * 2] = hex_chars[uid[i] >> 4];
++        tag->sku[3 + i * 2] = hex_chars[uid[i] & 15];
+     }
++    for (int i = 0; i < n; ++i) tag->type[i] = (char)b4[i];
++    tag->color = ((uint32_t)b5[0] << 24) | ((uint32_t)b5[1] << 16) |
++                 ((uint32_t)b5[2] << 8) | 0xff;
++    tag->total_grams = grams;
++    /* 1.75 mm float32 little endian is the only diameter verified so far. */
++    if (b5[8] == 0 && b5[9] == 0 && b5[10] == 0xe0 && b5[11] == 0x3f)
++        tag->diameter = 175;
++    tag->version = 0x0102;
++    ok = 1;
++out:
++    rc522_auth_stop(readerObj);
++    return ok;
++}
+ 
++/* SELECT writes the single-size UID and BCC at bytes 13..17. Compare it to
++ * the original UID before using data from a shared reader. */
++static int selection_matches(const uint8_t *uid, const uint8_t *selection, int result) {
++    if (!uid || !selection || result != 0) return 0;
++    for (int i = 0; i < 5; ++i) if (uid[i] != selection[13 + i]) return 0;
+     return 1;
+ }
++
+ /*
+  * Decode OpenSpool / Spoolman / NDEF JSON / FilaMan tag
+  */
+@@ -1012,14 +956,16 @@ int decode_native_tag(uint8_t *slot_record, const uint8_t *page_buf, int bytes_r
+     void *readerObj = get_reader_obj_from_ctx(ctx);
+ 
+     if (bytes_read < 140) {
++        int selected = -1;
+ #if defined(__arm__) || defined(__thumb__)
+         if (ctx && readerObj) {
+             ensure_reader_power(readerObj);
+-            __attribute__((aligned(4))) uint8_t select_buf[64];
+-            rfid_select(ctx, select_buf, 1);
++            __attribute__((aligned(4))) uint8_t select_buf[64] = {0};
++            int r = rfid_select(ctx, select_buf, 1);
++            if (selection_matches(&slot_record[3], select_buf, r)) selected = 0;
+         }
+ #endif
+-        if (decode_bambu_classic(&tag, &slot_record[3], readerObj, 0)) {
++        if (decode_bambu_classic(&tag, &slot_record[3], readerObj, selected)) {
+             slot_record[OFF_STATUS] = 2;
+             *(uint16_t *)&slot_record[OFF_VERSION] = tag.version;
+             str_copy((char *)&slot_record[OFF_SKU], tag.sku, 20);
+@@ -1119,8 +1065,9 @@ int decode_cmd68_uid_tag(uint8_t *resp, const uint8_t *uid, int slot) {
+     int sel_res = -1;
+     if (ctx && readerObj) {
+         ensure_reader_power(readerObj);
+-        __attribute__((aligned(4))) uint8_t select_buf[64];
+-        sel_res = rfid_select(ctx, select_buf, 1);
++        __attribute__((aligned(4))) uint8_t select_buf[64] = {0};
++        int r = rfid_select(ctx, select_buf, 1);
++        if (selection_matches(uid, select_buf, r)) sel_res = 0;
+     }
+ #else
+     void *readerObj = (void *)0;
+@@ -1142,13 +1089,13 @@ int decode_cmd68_uid_tag(uint8_t *resp, const uint8_t *uid, int slot) {
+             *(uint32_t *)(resp + 48) = 0;
+         }
+ 
+-        resp[92] = 1;
++        resp[92] = 0;
+         *(uint32_t *)(resp + 96) = tag.temp_min;
+         *(uint32_t *)(resp + 100) = tag.temp_max;
+         *(uint32_t *)(resp + 104) = 0;
+         *(uint32_t *)(resp + 108) = 0;
+ 
+-        resp[112] = 1;
++        resp[112] = 0;
+         *(uint32_t *)(resp + 116) = tag.bed_min;
+         *(uint32_t *)(resp + 120) = tag.bed_max;
+ 
+diff --git a/firmware/test_decoder.c b/firmware/test_decoder.c
+index 31d4fd7..3156d14 100644
+--- a/firmware/test_decoder.c
++++ b/firmware/test_decoder.c
+@@ -110,44 +110,14 @@ int main() {
+            *(uint16_t *)&slot[OFF_TEMP_MIN], *(uint16_t *)&slot[OFF_TEMP_MAX],
+            *(uint16_t *)&slot[OFF_BED_MIN], *(uint16_t *)&slot[OFF_BED_MAX]);
+ 
+-    /* Test 6: Bambu Lab MIFARE Classic UID */
++    /* Unauthenticated UIDs must not produce guessed Bambu metadata. */
+     memset(slot, 0, sizeof(slot));
+-    memset(page_buf, 0, sizeof(page_buf));
+-    /* Real Bambu UID: 89 93 34 FC -> BCC = 0x89 ^ 0x93 ^ 0x34 ^ 0xFC = 0xD2 */
+-    slot[3] = 0x89;
+-    slot[4] = 0x93;
+-    slot[5] = 0x34;
+-    slot[6] = 0xFC;
+-    slot[7] = 0xD2;
+-    int res6 = decode_native_tag(slot, page_buf, 0, NULL); /* page read failed (0 bytes) */
+-    assert(res6 == 1);
+-    assert(slot[OFF_STATUS] == 2);
+-    assert(*(uint16_t *)&slot[OFF_VERSION] == 0x0102);
+-    assert(strcmp((char *)&slot[OFF_BRAND], "Bambu Lab") == 0);
+-    assert(strcmp((char *)&slot[OFF_SKU], "SM899334FC") == 0);
+-    assert(strcmp((char *)&slot[OFF_TYPE], "PLA Basic") == 0);
+-    printf("[PASS] Test 6: Bambu Lab MIFARE Classic verified (SKU=%s, Brand=%s, Material=%s)\n",
+-           &slot[OFF_SKU], &slot[OFF_BRAND], &slot[OFF_TYPE]);
+-
+-    /* Test 7: CMD 68 UID fallback decoder */
+-    uint8_t resp[144];
+-    memset(resp, 0, sizeof(resp));
+-    uint8_t uid[7] = {0x1E, 0xF5, 0xE2, 0x98, 0x91, 0x00, 0x00};
+-    int res7 = decode_cmd68_uid_tag(resp, uid, 3);
+-    assert(res7 == 1);
+-    assert(*(uint32_t *)(resp + 4) == 0x0102);
+-    assert(strcmp((char *)(resp + 8), "SM1EF5E298") == 0);
+-    assert(strcmp((char *)(resp + 28), "PLA Basic") == 0);
+-    assert(*(uint32_t *)(resp + 96) == 190);
+-    assert(*(uint32_t *)(resp + 100) == 230);
+-    assert(*(uint32_t *)(resp + 116) == 45);
+-    assert(*(uint32_t *)(resp + 120) == 60);
+-    assert(*(uint32_t *)(resp + 124) == 175);
+-    assert(*(uint32_t *)(resp + 136) == 1000);
+-    assert(*(uint32_t *)(resp + 140) == 0);
+-    printf("[PASS] Test 7: CMD 68 Bambu UID decoder verified (SKU=%s, Type=%s, Version=0x%04X)\n",
+-           (char *)(resp + 8), (char *)(resp + 28), *(uint32_t *)(resp + 4));
++    slot[3] = 1; slot[4] = 2; slot[5] = 3; slot[6] = 4; slot[7] = 4;
++    assert(decode_native_tag(slot, page_buf, 0, NULL) == -1);
++    uint8_t resp[144] = {0}; uint8_t uid[5] = {1,2,3,4,4};
++    assert(decode_cmd68_uid_tag(resp, uid, 3) == 0);
++    printf("[PASS] UID-only paths do not invent Bambu metadata\n");
+ 
+-    printf("\n>>> ALL 7 TAG DECODER SUITES PASSED VERIFICATION <<<\n");
++    printf("\n>>> ALL 6 TAG DECODER SUITES PASSED VERIFICATION <<<\n");
+     return 0;
+ }

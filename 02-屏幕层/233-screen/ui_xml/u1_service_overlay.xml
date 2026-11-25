@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <view name="u1_service_overlay" extends="overlay_panel" title="维护与导出" bg_color="#screen_bg">
+    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" flex_flow="column" scroll_dir="ver" scrollbar_mode="auto" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap">
+      <lv_obj name="service_home" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <setting_action_row name="service_export" label="文件管理与导出" icon="folder_upload" description="照片、延时视频、打印文件与日志" callback="on_u1_service_action"/>
+        <setting_action_row name="service_system" label="原厂更新与整机恢复" icon="update" callback="on_u1_service_action"/>
+        <setting_action_row name="service_device_tools" label="设备测试与配置" icon="tune" callback="on_u1_device_tools"/>
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="#u1_card_pad" style_pad_gap="#u1_card_gap" scrollable="false">
+          <style name="styles.u1_card"/>
+          <text_body text="工具头保养" style_text_font="#u1_heading_font"/>
+          <text_small width="100%" text="在每个工具头的 3 颗钢珠上补充锂基脂，用擦拭布清洁所有工具头和转换器的弹簧触点。" long_mode="wrap" style_text_font="#u1_aux_font"/>
+          <text_small name="service_head_counts" width="100%" long_mode="wrap" style_text_font="#u1_aux_font"/>
+          <ui_button name="service_lubricated" text="已完成工具头保养" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        </lv_obj>
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="#u1_card_pad" style_pad_gap="#u1_card_gap" scrollable="false">
+          <style name="styles.u1_card"/>
+          <text_body text="更换滤芯" style_text_font="#u1_heading_font"/>
+          <text_small name="service_filter_hours" width="100%" long_mode="wrap" style_text_font="#u1_aux_font"/>
+          <text_small width="100%" text="打开滤芯盖，取出旧滤芯，装入新滤芯后合上盖子。" long_mode="wrap" style_text_font="#u1_aux_font"/>
+          <ui_button name="service_filter_reset" text="我已更换滤芯" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        </lv_obj>
+        <setting_action_row name="service_refresh" label="刷新设备读数" icon="refresh" callback="on_u1_service_action"/>
+        <setting_action_row name="service_intervals" label="保养周期与记录" icon="clock" callback="on_u1_service_action"/>
+      </lv_obj>
+      <lv_obj name="service_system_view" hidden="true" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <text_body text="原厂系统服务" style_text_font="#u1_heading_font"/>
+        <text_small name="system_status" width="100%" long_mode="wrap" style_text_font="#u1_aux_font"/>
+        <ui_button name="system_check" text="检查云端更新" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        <ui_button name="system_download" text="下载原厂固件" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        <ui_button name="system_verify" text="校验已下载的完整包" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        <ui_button name="system_install" text="安装已校验固件" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        <ui_button name="system_reset" text="恢复整机出厂设置" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        <lv_obj name="system_access_guide" width="100%" height="content" flex_flow="column" scrollable="false" style_pad_all="#u1_card_pad" style_pad_gap="#u1_card_gap">
+          <style name="styles.u1_card"/>
+          <text_body text="原厂高级模式与 Root 权限" width="100%" long_mode="wrap" style_text_font="#u1_heading_font"/>
+          <text_small name="system_advanced_guide" text="若需修改打印机配置，请在原厂触屏进入设置 → 维护 → 高级模式，阅读声明并开启，然后重启。修改配置可能影响温度保护、校准和自动进料。" width="100%" long_mode="wrap" style_text_font="#u1_aux_font"/>
+          <text_small name="system_root_guide" text="若设备提供 Root 权限，进入原厂设置 → 维护 → Root 权限，滚动阅读风险和保修说明后自行决定是否同意并开启。授权由原厂界面处理。" width="100%" long_mode="wrap" style_text_font="#u1_aux_font"/>
+        </lv_obj>
+        <ui_button name="system_return" text="返回维护" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+      </lv_obj>
+      <lv_obj name="service_exports" hidden="true" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <text_body name="service_usb" width="100%" long_mode="wrap" style_text_font="#u1_body_font"/>
+        <text_small name="service_progress" width="100%" long_mode="wrap" style_text_font="#u1_aux_font"/>
+        <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <ui_button name="service_cancel" text="取消导出" width="0" flex_grow="1" height="100%" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+          <ui_button name="service_return" text="返回维护" width="0" flex_grow="1" height="100%" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        </lv_obj>
+        <lv_dropdown name="service_kind" width="100%" options="AI 照片&#10;延时摄影&#10;打印文件&#10;运行日志"><event_cb trigger="value_changed" callback="on_u1_service_kind"/></lv_dropdown>
+        <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <ui_button name="service_copy_all" text="导出本类" width="0" flex_grow="1" height="100%" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+          <ui_button name="service_copy_checked" text="导出所选" width="0" flex_grow="1" height="100%" variant="primary" style_text_color="#text_on_primary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        </lv_obj>
+        <ui_button name="service_local_logs" hidden="true" text="保存日志包到本机" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        <ui_button name="service_select_page" text="选择或取消本页全部文件" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        <ui_button name="service_delete" hidden="true" text="删除所选文件" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        <ui_button name="service_clear" hidden="true" text="清理全部打印文件与延时视频" width="100%" height="#u1_touch_target" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        <text_small name="service_files_status" width="100%" long_mode="wrap" style_text_font="#u1_aux_font"/>
+        <lv_obj name="service_files" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false"/>
+        <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <ui_button name="service_prev" text="上一页" width="0" flex_grow="1" height="100%" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+          <ui_button name="service_next" text="下一页" width="0" flex_grow="1" height="100%" variant="secondary"><event_cb trigger="clicked" callback="on_u1_service_action"/></ui_button>
+        </lv_obj>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

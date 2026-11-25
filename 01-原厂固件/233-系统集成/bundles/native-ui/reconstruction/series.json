@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "status": "reconstruction-in-progress",
+  "baseline_repository_commit": "49b8b2205171820f81845751d7f1927a4ec5f7f1",
+  "baseline_manifest": {
+    "path": "bundles/native-ui/manifest.json",
+    "sha256": "3c5591e20fce2ca0dfefc6a8f56d7a7b18738b44e88983ec805f8e2f379245b8",
+    "source_sha256": "19ff93f15c33ca066582824152d6fb293c54988e48b66654d440477c312bffca"
+  },
+  "historical_ui5_checkpoint": "171ec32ec623414c9929ac0359f4d475964e68ba",
+  "byte_identical_original_recovery": false,
+  "patches": [
+    {
+      "path": "bundles/native-ui/reconstruction/0001-palette-spacing.patch",
+      "sha256": "4000f1bc274046bc57883ced340ba117323b04f7302c11af3b5656c56bb335de",
+      "component": "Confirmed palette and common spacing",
+      "verification": "XML/JSON parse and whitespace check passed; native build pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0002-bottom-navigation.patch",
+      "sha256": "60cc5861497d8e188c2d4e00b1d5e0c30b0d590102d7da14860631a7e4728ec8",
+      "component": "Four-tab bottom navigation and full-width overlay geometry",
+      "verification": "XML parse and whitespace check passed; native build pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0003-motion-lock.patch",
+      "sha256": "de86a1f89149aa684e4a8b26041ed14b67630c2968489a8b97da8c5742d03ca5",
+      "component": "Printing lock for ring, Z, home and coordinate keypad",
+      "verification": "XML parse and whitespace check passed; native build and runtime checks pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0004-settings-menu.patch",
+      "sha256": "eec21ace625b6b16f7eec72f317621c2712c9a565e5eda556b1e6448259dbdb1",
+      "component": "Advanced and grouped settings with retained native entrypoints",
+      "verification": "XML parse and whitespace check passed; native build and runtime checks pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0005-fan-cards.patch",
+      "sha256": "132606e9419461be215e6c583acd56dd1f4291a998dddecd92e8621d18056b0d",
+      "component": "Compact fan cards and five-percent adjustments",
+      "verification": "XML parse and whitespace check passed; native build and runtime checks pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0006-overlay-height.patch",
+      "sha256": "2750cc99742c5c095e39ac48c77a26dafa4955617a812deff6c901e366f4980a",
+      "component": "Screen-height driven bottom-navigation overlay height",
+      "verification": "Source inspection and whitespace check passed; native runtime pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0007-speed-presets.patch",
+      "sha256": "cf12f993b614f1f1eeb1fb1ecc18d65a0d9b1c4d5a7f831b94ef97fdede5e2f6",
+      "component": "Four speed presets with retained advanced tune controls",
+      "verification": "XML parse and whitespace check passed; native runtime pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0008-controls-menu.patch",
+      "sha256": "7798b3c822ad7b54db1021764c73e6f5a70cd2719f9045121bacd6d021b2d587",
+      "component": "Four control cards and retained complete controls dashboard",
+      "verification": "XML parse, retained-grid check and whitespace check passed; native runtime pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0009-bed-draft.patch",
+      "sha256": "c1635baf5c53a7ec483aff9448ee1f5814b783485c310dcb3502087d561f0daa",
+      "component": "Bed temperature draft and explicit apply action",
+      "verification": "XML parse and whitespace check passed; native runtime pending"
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0010-home-task-card.patch",
+      "sha256": "1796fd7f644089a5de4a6a329c1dc57dd3e937c8f6ba7d8888280a7235852cd6",
+      "component": "Home task card reconstructed from UI.5 review",
+      "verification": "Three XML files parse; whitespace check passed. Native render validation pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0011-temperature-overview.patch",
+      "sha256": "4f212eab79d4ccef23c9538e2efa96e4e48bcfe3d2eccbf684479f496f76b951",
+      "component": "Four-head temperature overview and bounded nozzle browsing",
+      "verification": "XML parse and whitespace check passed. Native rendering and command checks pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0012-motion-layout.patch",
+      "sha256": "9c65481844b89cbf5a17b7fa5ab726df2bcf88e69d53b1df9c7b5cbdf99119f8",
+      "component": "208px dual-ring motion layout and fixed Z increments",
+      "verification": "XML parse and whitespace check passed. Native geometry and command checks pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0013-home-status-strip.patch",
+      "sha256": "1e96cad536d6c812411848f48b84965efdecb771db787e642b07eabb7e847b23",
+      "component": "Home layout and compact four-head status strip",
+      "verification": "Six XML files parse; native tool controls retained; whitespace check passed. Native render pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0014-material-main.patch",
+      "sha256": "cbaf8e20829727a2e9fa02d8689239663737f72b21de8b667d7af8bf59b52c89",
+      "component": "Material inventory external spool and ACE cards",
+      "verification": "XML parse and whitespace check passed; explicit source and operation gates reviewed. Native runtime pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0015-bed-draft-tests.patch",
+      "sha256": "40dd15395333b790b025af2cda3f224ea8e93857c9fa03b79aa29aa62ff4bb0f",
+      "component": "Temperature subject lifecycle and apply-only command regression",
+      "verification": "Whitespace check passed; targeted native test execution pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0016-nozzle-editor.patch",
+      "sha256": "edf19a91b7c1875909ec22920100576d29a0f752538eef1b2b29563d959a9158",
+      "component": "Nozzle temperature drafts, explicit tool actions and material editor",
+      "verification": "XML parse and whitespace check passed; no-send draft and candidate load gates implemented. Native build/runtime pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0017-narrow-task-card.patch",
+      "sha256": "2f26b883dd86468d8226904662a1831cb0ec98970df6ef5e13a32a1780295ee4",
+      "component": "Measured preview visibility for custom narrow task tiles",
+      "verification": "Two XML files parse; measured fit bindings and whitespace check passed. Native render pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0018-material-subject-const.patch",
+      "sha256": "9a53732bfa0732ea5ea51734aea54586ee63604e2f904d97635ab18eeb0a7c63",
+      "component": "LVGL subject API compile compatibility",
+      "verification": "Corrects native compiler constness error; whitespace check passed; native rebuild pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0019-material-label-height.patch",
+      "sha256": "6d687afda4bb4706ab542dbac295ae186ba34610317d193bed9a9fc79187acca",
+      "component": "Material overview CJK row clipping correction",
+      "verification": "Native geometry exposed 6px label clipping; corrected row heights/gaps preserve242px body,44px actions,80px cards. XML parse and whitespace passed; recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0020-overlay-header-fit.patch",
+      "sha256": "e629cdc8da8084267298f817f2eaa912ad7e11106d17eeeda78f063125cfa44e",
+      "component": "44px overlay header and full touch-target fit",
+      "verification": "Native geometry found56px inherited header; XML now44px with no1px content clip. XML parse and whitespace pass; affected page recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0021-secondary-icon-fit.patch",
+      "sha256": "50d7c09e135a33829b16391621774c2a869d087d96dc26874157a38f92b8f548",
+      "component": "Unclipped icons within44px secondary controls",
+      "verification": "Native overflow identified3px glyph clipping; zero padding on three44px icon buttons. XML parses and whitespace pass; recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0022-nozzle-label-fit.patch",
+      "sha256": "38890805a684ff683df39bed5f20eb1b0e5482b8382e3714a3636c819abe6151",
+      "component": "Nozzle manual-control text line height",
+      "verification": "Native overflow found6px label clipping;22px text row and4px gaps retain214px column. XML parse and whitespace pass; recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0023-overlay-root-gap.patch",
+      "sha256": "ab0ab33c689e2d62f49eb07d81a9860757cb222c7c839ddbbd5ea5a9f5da5e28",
+      "component": "Overlay content starts directly below header",
+      "verification": "Native geometry found8px inheritedgap and6px overflow; explicitzero rootgap. XML parses and whitespace passes; recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0024-bed-status-baseline.patch",
+      "sha256": "1aeaf3702a2a304bc219a6beb4042dcf5bf7bd4d658d95651a14ab6ce521d219",
+      "component": "Aligned home bed reading baseline",
+      "verification": "Native geometry found11px bedreading mismatch; explicit space_between layout. XML parse and whitespace pass; recapture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0025-bottom-nav-backdrop.patch",
+      "sha256": "fb93b3035c4adcdd99db8c0ec78d30e5b8751b50d94966f11f9ff04907b42375",
+      "component": "Ordinary overlay backdrop stops above bottom navigation",
+      "verification": "Native screenshots showed backdrop covering bottom46pxnav. Ordinary overlay backdrop uses live navbar bounds and1:1 crop; confirmation modal path unchanged. Whitespace pass; native rebuild/pointer checks pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0026-reference-header.patch",
+      "sha256": "1b4dfc5dd48170f8250dbda3d65bb4e94a73a56fdde43d26ed3adaa9f44a92d1",
+      "component": "Reference header title/back alignment",
+      "verification": "Retained UI.5 reference has titleleft and backright; native API/callback slots retained. XML parse and whitespace pass; final capture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0027-fan-controls-order.patch",
+      "sha256": "036ea8cc432cc820f8a9776018da10607362d140bfdc8685fa76f382941c448d",
+      "component": "Fan cards first with retained chamber-air controls",
+      "verification": "Native review found airstrip pushing thirdrow out; reordered existing namedcontrols into same scroll body. XML parse and whitespace pass; final scroll/capture pending."
+    },
+    {
+      "path": "bundles/native-ui/reconstruction/0028-ui5-xml-schema.patch",
+      "sha256": "5f6894ff313a7f168aa6adcf42b84a4363553cc6524a0bbf4954270f3fd8d8d5",
+      "component": "Refresh generated XML schema for reconstruction",
+      "verification": "485 XML files linted without errors; schema regeneration matches"
+    }
+  ],
+  "validation": {
+    "native_build": "pending",
+    "visual_similarity_percent": null,
+    "hardware_tested": false
+  }
+}

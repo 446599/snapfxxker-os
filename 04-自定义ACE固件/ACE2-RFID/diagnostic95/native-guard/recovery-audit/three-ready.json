@@ -1,0 +1,47 @@
+{
+  "stop": {},
+  "samples": [
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "heads": [
+        false,
+        false,
+        true,
+        false
+      ]
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "heads": [
+        false,
+        false,
+        true,
+        false
+      ]
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "heads": [
+        false,
+        false,
+        true,
+        false
+      ]
+    }
+  ]
+}

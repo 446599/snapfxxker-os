@@ -1,0 +1,17 @@
+{
+  "image_sha256": "34a8a3c76b8e127262baf05fb22639ee9f2ce588450eb04559c1c15d506fe323",
+  "device_uid": [
+    808780566,
+    17445170,
+    942880330
+  ],
+  "firmware": "V1.1.91O",
+  "flash_verified": true,
+  "app_alive": true,
+  "backend_fresh_query_rounds": 3,
+  "fw_hold": false,
+  "static_rfid_result_code": 3,
+  "real_bambu_decode_verified": false,
+  "subsequent_ota_cycle_verified": false,
+  "no_motor_or_heating_commands": true
+}

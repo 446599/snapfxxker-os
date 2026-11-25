@@ -1,0 +1,599 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -1604,6 +1604,7 @@
+         self._rescan_bind_pending = {}
+         self._swap_in_progress = False
+         self._slot_actions = SlotActions(self)
++        LocationHold.routes_default = os.path.join(self.paths['config_dir'], 'persistent', 'multiace-rfid-location-holds.json')
+         self._location_hold = LocationHold()
+         self._location_uid_by_idx = {}
+         self._y_recovery = Recovery(self)
+@@ -3684,7 +3685,7 @@
+ 
+     def _insert_read_then_preload(self, idx, slot, depth='auto'):
+         port, uid = self._location_identity(idx)
+-        if self._location_hold.blocks_route(idx=idx,slot=slot,port=port,ace_uid=uid):
++        if self._location_hold.blocks_route(idx=idx,slot=slot,port=port,ace_uid=uid,heads=self._rfid_route_heads(idx,slot)):
+             return {'kind': 'position_unconfirmed', 'parked': False}
+         if not hasattr(self, '_insert_read_running'):
+             self._insert_read_running = set()
+@@ -3730,7 +3731,7 @@
+ 
+     def _insert_tag_read_safe(self, idx, slot, depth='auto'):
+         port, uid = self._location_identity(idx)
+-        if self._location_hold.blocks_route(idx=idx,slot=slot,port=port,ace_uid=uid):
++        if self._location_hold.blocks_route(idx=idx,slot=slot,port=port,ace_uid=uid,heads=self._rfid_route_heads(idx,slot)):
+             return {'kind': 'position_unconfirmed', 'parked': False}
+         if not hasattr(self, '_insert_read_running'):
+             self._insert_read_running = set()
+@@ -6350,14 +6351,39 @@
+         except Exception:
+             return None, None
+ 
++    def _rfid_route_heads(self, idx, slot):
++        if type(idx) is not int or type(slot) is not int or not 0 <= slot < 4:
++            return None
++        mode = getattr(self, '_ace_mode', None)
++        if mode in ('multi', 'normal'):
++            return [slot]
++        if mode != 'head':
++            return None
++        try:
++            heads = {h for h in range(4) if self.head_uses_ace(h) and self.head_ace_for(h) == idx}
++            for h, source in self._head_source.items():
++                if (type(h) is int and 0 <= h < 4 and isinstance(source,dict)
++                        and source.get('ace_index') == idx):
++                    heads.add(h)
++            return sorted(heads) or None
++        except Exception:
++            return None
++
+     def _require_location_clear(self, gcmd, head=None, idx=None, slot=None):
+         port, uid = self._location_identity(idx)
+-        if self._location_hold.blocks_route(head=head,idx=idx,slot=slot,port=port,ace_uid=uid):
++        if self._location_hold.blocks_route(head=head,idx=idx,slot=slot,port=port,ace_uid=uid,heads=self._rfid_route_heads(idx,slot)):
+             raise gcmd.error(self._location_hold.message())
+ 
+     def _location_blocks_wire(self, idx, request):
+         port, uid = self._location_identity(idx)
+-        blocked = self._location_hold.blocks_wire(idx,request,port,uid)
++        params=request.get('params') or {} if isinstance(request,dict) else {}
++        slot=params.get('index',params.get('slot'))
++        heads=self._rfid_route_heads(idx,slot)
++        blocked = self._location_hold.blocks_wire(idx,request,port,uid,heads)
++        # Generic RFID holds may only be bypassed by the bounded eject lease;
++        # legacy special-session leases apply exclusively to the old marker.
++        if self._location_hold.rfid_blocks_wire(request, port, uid, heads):
++            return not self._slot_actions.eject_allows(idx,request)
+         owner = getattr(self, '_manual_measure_owner', None)
+         measured = owner is not None and owner.allows(idx, request, self._serials.get(idx))
+         return blocked and not measured and not self._y_recovery.allows(idx,request) and not self._hot_session.allows(idx,request) and not self._slot_actions.eject_allows(idx,request)
+@@ -17210,9 +17236,8 @@
+                 logging.warning('[multiACE] [rc522] admission denied ACE %d slot %d: %s', idx, target, reason)
+                 return False
+         reader._target_motion_allowed = _slot_motion_allowed
+-        if getattr(self, '_slot_web_rfid_pending', False):
+-            supervise_rfid_motion(reader, self._slot_actions, ace_idx, slot,
+-                                  _transport, MotionUncertain)
++        supervise_rfid_motion(reader, self._slot_actions, ace_idx, slot,
++                              _transport, MotionUncertain)
+ 
+         def _respond(msg):
+             if (msg in ('rc522: read failed - slot feeds a loaded head or printer state is unavailable',
+@@ -24006,7 +24031,54 @@
+         except Exception as e:
+             logging.info('[multiACE] telemetry %s failed: %s' % (event, e))
+ 
++    def _rfid_identity_status(self, idx):
++        transport = self._serials.get(idx)
++        if transport is None or not self._connected_per_ace.get(idx):
++            return None
++        port, uid = self._location_identity(idx)
++        if (not isinstance(port,str) or not port or not isinstance(uid,(tuple,list))
++                or len(uid)!=3 or any(type(part) is not int for part in uid)
++                or self._serials.get(idx) is not transport):
++            return None
++        return {'port':port, 'uid':list(uid)}
++
++    def _rfid_identity_known(self, idx):
++        return self._rfid_identity_status(idx) is not None
++
++    def _rfid_route_status(self):
++        self._location_hold.refresh_routes()
++        rfid_routes = []
++        for route in self._location_hold.routes:
++            matches = []
++            for idx in range(len(self._ace_devices)):
++                transport = self._serials.get(idx)
++                if transport is None or not self._connected_per_ace.get(idx):
++                    continue
++                port, uid = self._location_identity(idx)
++                if (isinstance(uid, (tuple,list)) and len(uid) == 3
++                        and all(type(part) is int for part in uid) and port == route['port'] and
++                        list(uid) == route['uid'] and self._serials.get(idx) is transport):
++                    matches.append(idx)
++            matched = matches[0] if self._location_hold.routes_valid and len(matches) == 1 else None
++            rfid_routes.append({'slot': route['slot'], 'ace_index': matched})
++        return rfid_routes
++
++    def _rfid_slot_flags(self, idx, slot):
++        port, uid = self._location_identity(idx)
++        heads = self._rfid_route_heads(idx,slot)
++        request = {'method':'feed_filament','params':{'index':slot}}
++        blocked = self._location_hold.rfid_blocks_wire(request,port,uid,heads)
++        identity = self._rfid_identity_status(idx)
++        exact = bool(identity and self._location_hold.routes_valid and any(
++            self._location_hold._same_route(r,identity['port'],identity['uid'],slot)
++            for r in self._location_hold.routes))
++        return blocked, exact
++
++    def _rfid_head_status(self):
++        return {str(h): self._location_hold.blocks_route(head=h) for h in range(4)}
++
+     def get_status(self, eventtime=None):
++        rfid_routes = self._rfid_route_status()
+ 
+         # head mode now allows any subset of heads to be ACE-driven (the rest
+         # stock feeders), so the device report is the same as multi - every
+@@ -24028,8 +24100,12 @@
+                     s.get('index', n))
+                 if not isinstance(_tt, dict):
+                     _tt = {}
++                _slot_index = s.get('index', n)
++                _unconfirmed, _recovery = self._rfid_slot_flags(i, _slot_index)
+                 slots_out.append({
+-                    'index':    s.get('index', n),
++                    'index':    _slot_index,
++                    'position_unconfirmed': _unconfirmed,
++                    'eject_recovery_allowed': _recovery,
+                     'status':   s.get('status', ''),
+                     'slot_status': (s.get('slot_status')
+                                     if info.get('_slot_status_frame_valid') is True
+@@ -24164,7 +24240,7 @@
+             # "writing..." bar while busy and reports only the outcome.
+             # str keys.
+             'slot_action': self._slot_actions.status(),
+-            'location_hold': {'active': self._location_hold.active, 'head': 3, 'slot': 3, 'reason': 'position_unconfirmed_after_seek', 'marker_valid': self._location_hold.valid_marker},
++            'location_hold': {'active': self._location_hold.active, 'head': 3, 'slot': 3, 'reason': 'position_unconfirmed_after_seek', 'marker_valid': self._location_hold.valid_marker, 'rfid_routes': rfid_routes, 'rfid_routes_valid': self._location_hold.routes_valid, 'rfid_recovery': '退出ACE后重新插入'},
+             'tag_op': {'busy': bool(getattr(self, '_tag_read_busy', False)
+                                or getattr(self, '_gen1_manual_busy', False)),
+                        'kind': str(getattr(self, '_tag_op_kind', '') or ''),
+@@ -24242,6 +24318,7 @@
+             'event_seq': self._event_seq,
+             # str keys: 1.4's status encoder rejects non-str dict keys
+             # ("Dict key must be str"). The web backend reads both forms.
++            'head_position_unconfirmed': self._rfid_head_status(),
+             'head_source': {str(k): v for k, v in self._head_source.items()},
+             'head_manual': {str(h): bool(self.head_manual.get(h, False))
+                             for h in range(4)},
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -1,6 +1,6 @@
+ """Bounded, fail-closed ACE2 slot ejection; no heating or head motion."""
+ import logging, os, json, stat, time, hashlib
+-from .ace_location_hold import PATH, PORT, UID, LocationHold
++from .ace_location_hold import PATH, PORT, UID, LocationHold, RouteChanged
+ STEP_MM = 20
+ SPEED_MM_S = 80
+ MAX_MM = 2000  # hard command budget; inlet sensor ends the move
+@@ -420,7 +420,7 @@
+         if not staged.valid_marker or not staged.active:
+             raise RuntimeError('退出中保护记录无效')
+         os.replace(tmp, PATH)
+-        a._location_hold = LocationHold()
++        a._location_hold = LocationHold(routes_path=a._location_hold.routes_path)
+         if not a._location_hold.valid_marker or not a._location_hold.active:
+             raise RuntimeError('退出中保护未生效')
+         directory = os.open(os.path.dirname(PATH), os.O_RDONLY)
+@@ -498,7 +498,7 @@
+                     os.fsync(d)
+                 finally:
+                     os.close(d)
+-                hold = LocationHold()
++                hold = LocationHold(routes_path=a._location_hold.routes_path)
+                 if not hold.valid_marker or hold.active:
+                     raise RuntimeError("退出记录复核失败")
+                 a._location_hold = hold
+@@ -540,13 +540,14 @@
+             if any(type(x) is not int for x in uid):
+                 raise RuntimeError("ACE身份未知")
+             held = a._location_hold.blocks_route(
+-                idx=idx, slot=slot, port=str(a._ace_devices[idx]), ace_uid=uid
++                idx=idx, slot=slot, port=str(a._ace_devices[idx]), ace_uid=uid, heads=a._rfid_route_heads(idx,slot)
+             )
+             marker_hash = None
+             affected = (
+                 idx == 0 and slot == 3 and uid == UID and str(a._ace_devices[0]) == PORT
+             )
+-            if held and not affected:
++            route_token = a._location_hold.route_token(str(a._ace_devices[idx]), uid, slot)
++            if held and not affected and route_token is None:
+                 raise RuntimeError("待核路线与目标身份不匹配")
+             if affected:
+                 if not a._location_hold.valid_marker:
+@@ -594,13 +595,21 @@
+                 gate = self._eject_stop_ready(idx, slot, transport, motion_start)
+                 moving = False
+             check()
+-            if affected:
++            if affected or route_token is not None:
+                 uid_end = self._request(idx, "discover_device", {}, 0, monitor=check)
+                 if tuple(uid_end.get("uid%d" % i) for i in (1, 2, 3)) != uid:
+                     raise RuntimeError("ACE身份改变")
+                 if self._eject_stable(idx, slot, check):
+                     raise RuntimeError("入口空状态未保持")
+             self._commit_ejected(idx, slot, transport, uid, marker_hash, sources)
++            if route_token is not None:
++                try:
++                    a._location_hold.release_route(str(a._ace_devices[idx]), uid, slot, route_token)
++                except RouteChanged:
++                    raise
++                except Exception as exc:
++                    a._latch_stop_fault(idx, slot, 'RFID position hold release could not be persisted: %s' % exc)
++                    raise
+             self.state.update(state="complete", message="耗材已退出 ACE 入口")
+             logging.info("[multiACE] slot_eject seq=%d result=complete", self.state["seq"])
+         except Exception as e:
+@@ -622,57 +631,24 @@
+             self._eject_sources = None
+             a._swap_in_progress = False
+ 
+-def persist_rfid_position_uncertain(ace, idx, slot):
+-    """Fail closed across restarts for the calibrated slot after uncertain motion."""
+-    if (idx, slot) != (0, 3):
+-        return
+-    import json
+-    import os
+-    import time
+-    from .ace_location_hold import LocationHold, PATH, PORT, UID
+-
+-    # Enforce the runtime hold even if persistence encounters an I/O failure.
+-    ace._location_hold.active = True
++def persist_rfid_position_uncertain(ace, idx, slot, identity=None, heads=None, scope="route"):
++    port, uid = identity if identity is not None else ace._location_identity(idx)
++    # Keep this route held in memory even if the durable write fails.
++    ace._location_hold.hold_route(port, uid, slot, heads, scope)
+     if getattr(ace, '_normal_load_speed', None) is not None:
+         ace._normal_load_speed.park = None
+-    with open(PATH, 'rb') as f:
+-        before = f.read()
+-    current = json.loads(before)
+-    if (current.get('ace_uid') != list(UID) or current.get('port') != PORT
+-            or current.get('slot') != 3 or current.get('head') != 3):
+-        raise RuntimeError('RFID位置保护标记身份不符')
+-    stamp = str(time.time_ns())
+-    backup = PATH + '.before-rfid-uncertain-' + stamp
+-    with open(backup, 'xb') as f:
+-        os.chmod(backup, 0o600)
+-        f.write(before)
+-        f.flush()
+-        os.fsync(f.fileno())
+-    current.update(state='manual_rfid_encoder_unconfirmed',
+-                   event_reason='manual_rfid_encoder_unconfirmed', event_time=time.time())
+-    tmp = PATH + '.rfid-pending-' + stamp
+-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+-    with os.fdopen(fd, 'w') as f:
+-        json.dump(current, f)
+-        f.flush()
+-        os.fsync(f.fileno())
+-    os.replace(tmp, PATH)
+-    fd = os.open(os.path.dirname(PATH), os.O_RDONLY)
+-    try:
+-        os.fsync(fd)
+-    finally:
+-        os.close(fd)
+-    hold = LocationHold()
+-    if not hold.valid_marker or not hold.active:
+-        raise RuntimeError('RFID位置保护落盘复核失败')
+-    ace._location_hold = hold
+ 
+ 
+ def supervise_rfid_motion(reader, actions, idx, slot, transport, motion_uncertain_type):
+     """Interrupt only this web RFID reader's active moves; never guess restore."""
+     reactor = actions.ace.reactor
++    original_identity = actions.ace._location_identity(idx)
++    original_heads = actions.ace._rfid_route_heads(idx, slot)
++    original_scope = "ace" if getattr(actions.ace, "_ace_mode", None) != "multi" else "route"
+     original_pause = reader._pause
+     original_move = reader._move_and_confirm
++    original_read = reader.read_slot
++    handled = [False]
+     active = [False]
+     stopping = [False]
+     stopped = [False]
+@@ -712,11 +688,15 @@
+                 # Set before STOP: the reader's finally must never restore a
+                 # movement whose end position can no longer be inferred.
+                 reader._motion_uncertain = 'RFID motion interrupted: %s' % exc
+-                stop_and_verify()
+                 raise motion_uncertain_type(reader._motion_uncertain)
+             original_pause(min(0.05, deadline - reactor.monotonic()))
+ 
+     def guarded_move(*args, **kwargs):
++        if (transport is None or actions.ace._serials.get(idx) is not transport
++                or original_identity != actions.ace._location_identity(idx)
++                or original_heads != actions.ace._rfid_route_heads(idx, slot)
++                or not original_identity[0] or original_identity[1] is None):
++            raise RuntimeError('RFID original route identity unavailable or changed')
+         if (idx, slot) == (0, 3) and getattr(actions.ace, '_normal_load_speed', None) is not None:
+             actions.ace._normal_load_speed.park = None
+         active[0] = True
+@@ -727,18 +707,42 @@
+             if isinstance(exc, motion_uncertain_type) or reader._motion_uncertain:
+                 if not reader._motion_uncertain:
+                     reader._motion_uncertain = 'RFID motion uncertain: %s' % exc
+-                if (idx, slot) == (0, 3):
+-                    actions.ace._location_hold.active = True
+-                    if getattr(actions.ace, '_normal_load_speed', None) is not None:
+-                        actions.ace._normal_load_speed.park = None
+-                stop_and_verify()
+-                try:
+-                    persist_rfid_position_uncertain(actions.ace, idx, slot)
+-                except Exception as hold_exc:
+-                    actions.ace._latch_stop_fault(idx, slot, 'RFID position hold could not be persisted: %s' % hold_exc)
++                handle_uncertain()
+             raise
+         finally:
+             active[0] = False
+ 
++    def handle_uncertain():
++        if handled[0]: return
++        handled[0] = True
++        hold = actions.ace._location_hold
++        route = None
++        hold_error = None
++        try:
++            route = hold.hold_memory(original_identity[0], original_identity[1], slot, original_heads, original_scope)
++            if getattr(actions.ace, '_normal_load_speed', None) is not None:
++                actions.ace._normal_load_speed.park = None
++        except Exception as exc:
++            hold_error = exc
++        stop_and_verify()
++        if hold_error is None:
++            try:
++                hold.persist_route(route)
++            except Exception as exc:
++                hold_error = exc
++        if hold_error is not None:
++            actions.ace._latch_stop_fault(idx, slot, 'RFID position hold could not be persisted: %s' % hold_error)
++
++    def guarded_read(*args, **kwargs):
++        try:
++            return original_read(*args, **kwargs)
++        except Exception as exc:
++            if isinstance(exc, motion_uncertain_type) or reader._motion_uncertain:
++                if not reader._motion_uncertain:
++                    reader._motion_uncertain = 'RFID motion uncertain: %s' % exc
++                handle_uncertain()
++            raise
++
+     reader._pause = guarded_pause
+     reader._move_and_confirm = guarded_move
++    reader.read_slot = guarded_read
+--- a/klipper/extras/ace_location_hold.py
++++ b/klipper/extras/ace_location_hold.py
+@@ -3,7 +3,10 @@
+ This is not a global STOP latch. Missing or invalid evidence is fail-closed for
+ this route. The guard deliberately has no automatic release operation.
+ """
+-import json, os, stat
++import json, os, stat, hashlib, fcntl
++from contextlib import contextmanager
++
++ROUTES_PATH = os.path.join(os.environ.get("MULTIACE_CONFIG_DIR", "/home/lava/printer_data/config"), "persistent", "multiace-rfid-location-holds.json")
+ 
+ PATH='/home/lava/printer_data/controlled-exploration/slot4-position-unconfirmed-20261109.json'
+ PORT='/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0'
+@@ -13,8 +16,17 @@
+ READ_STOP=frozenset(('stop_feed_filament','stop_feed_assist','get_status',
+                      'get_info','get_feed_info','get_key_state','discover_device'))
+ 
++class RouteChanged(ValueError):
++    pass
++
+ class LocationHold:
+-    def __init__(self,path=PATH):
++    routes_default = ROUTES_PATH
++    def __init__(self,path=PATH, routes_path=None):
++        self.routes_path=routes_path or self.routes_default
++        self.routes=[]
++        self._pending=[]
++        self.routes_valid=True
++        self._load_routes()
+         self.valid_marker=False
+         self.active=True
+         try:
+@@ -30,16 +42,170 @@
+                 self.active=not (data.get('head_triggered') is True and data.get('head_clear') is True and data.get('gate_present') is True and data.get('stopped') is True and data.get('encoder_target_reached') is True and data.get('target_mm') == 1393)
+         except (OSError,ValueError,TypeError):
+             return
+-    def blocks_route(self, *, head=None, idx=None, slot=None, port=None, ace_uid=None):
++    def _read_routes(self):
++        try:
++            fd=os.open(self.routes_path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
++            with os.fdopen(fd,'rb') as f:
++                st=os.fstat(f.fileno())
++                if not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or stat.S_IMODE(st.st_mode)!=0o600 or st.st_size>65536:
++                    raise ValueError('invalid route file')
++                raw=f.read(65537)
++            if len(raw)>65536:raise ValueError('oversize route file')
++            data=json.loads(raw)
++            if not isinstance(data,dict) or data.get('version')!=1 or not isinstance(data.get('routes'),list):
++                raise ValueError('invalid route payload')
++            for r in data['routes']:
++                if (not isinstance(r,dict) or not isinstance(r.get('port'),str) or not r['port']
++                    or not isinstance(r.get('uid'),list) or len(r['uid'])!=3
++                    or any(type(x) is not int for x in r['uid'])
++                    or type(r.get('slot')) is not int or not 0<=r['slot']<4
++                    or ('scope' in r and r['scope'] not in ('ace','route'))
++                    or ('heads' in r and r['heads'] is not None and
++                        (not isinstance(r['heads'],list) or not r['heads'] or any(type(h) is not int or not 0<=h<4 for h in r['heads'])))):
++                    raise ValueError('invalid route entry')
++            return data['routes'],raw
++        except FileNotFoundError:
++            return [],None
++
++    def _load_routes(self):
++        try:self.routes,_=self._read_routes()
++        except (OSError, ValueError, TypeError):self.routes_valid=False
++
++    def _write_routes(self,routes):
++        raw=(json.dumps({'version':1,'routes':routes},sort_keys=True)+'\n').encode()
++        tmp=self.routes_path+'.tmp-'+os.urandom(12).hex()
++        try:
++            fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
++            with os.fdopen(fd,'wb') as f:
++                f.write(raw);f.flush();os.fsync(f.fileno())
++            os.replace(tmp,self.routes_path)
++            d=os.open(os.path.dirname(self.routes_path),os.O_RDONLY)
++            try:os.fsync(d)
++            finally:os.close(d)
++        finally:
++            try:os.unlink(tmp)
++            except FileNotFoundError:pass
++
++    @contextmanager
++    def _locked(self):
++        directory=os.path.dirname(self.routes_path)
++        os.makedirs(directory, mode=0o700, exist_ok=True)
++        fd=os.open(self.routes_path+'.lock', os.O_RDWR|os.O_CREAT|getattr(os,'O_NOFOLLOW',0), 0o600)
++        try:
++            st=os.fstat(fd)
++            if not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or stat.S_IMODE(st.st_mode)!=0o600:
++                raise ValueError('route lock permissions invalid')
++            fcntl.flock(fd,fcntl.LOCK_EX)
++            try:yield
++            finally:fcntl.flock(fd,fcntl.LOCK_UN)
++        finally:os.close(fd)
++
++    def _snapshot(self):
++        if not self.routes_valid:raise ValueError('route holds invalid')
++        routes,raw=self._read_routes()
++        for r in list(self._pending):
++            if r not in routes:routes.append(r)
++        return routes,raw
++
++    @staticmethod
++    def _same_route(r, port, uid, slot):
++        return r.get('port') == port and r.get('uid') == list(uid) and r.get('slot') == slot
++
++    def hold_memory(self, port, uid, slot, heads=None, scope="route"):
++        if not isinstance(port,str) or not port or not isinstance(uid,(tuple,list)) or len(uid)!=3 or any(type(x) is not int for x in uid) or type(slot) is not int or not 0<=slot<4:
++            raise ValueError('route identity unavailable')
++        if heads is not None and (not isinstance(heads,(list,tuple)) or not heads or any(type(h) is not int or not 0<=h<4 for h in heads)):
++            raise ValueError('invalid route heads')
++        if scope not in ('route','ace'):raise ValueError('invalid route scope')
++        route={'port':port,'uid':list(uid),'slot':slot,'heads':sorted(set(heads)) if heads is not None else None,'scope':scope}
++        if route not in self._pending:self._pending.append(route)
++        if route not in self.routes:self.routes.append(route)
++        return route
++
++    def persist_route(self, route):
++        port,uid,slot=route['port'],route['uid'],route['slot']
++        with self._locked():
++            routes,_=self._snapshot()
++            same=[r for r in routes if self._same_route(r,port,uid,slot)]
++            merged = None if any(r.get('heads') is None for r in same) else sorted({h for r in same for h in r['heads']})
++            routes=[r for r in routes if not self._same_route(r,port,uid,slot)]
++            merged_scope = 'ace' if any(r.get('scope','ace') == 'ace' for r in same) else 'route'
++            routes.append({**route,'heads':merged,'scope':merged_scope})
++            self._write_routes(routes)
++            self._pending.remove(route)
++            self.refresh_routes()
++
++    def hold_route(self, port, uid, slot, heads=None, scope="route"):
++        route=self.hold_memory(port,uid,slot,heads,scope)
++        self.persist_route(route)
++
++    def route_token(self,port,uid,slot):
++        with self._locked():
++            routes,raw=self._snapshot()
++            if not any(self._same_route(r,port,uid,slot) for r in routes):return None
++            if any(self._same_route(r,port,uid,slot) for r in self._pending):raise ValueError('route hold not durable')
++            if raw is None:raise ValueError('route hold file missing')
++            return hashlib.sha256(raw).hexdigest()
++
++    def release_route(self,port,uid,slot,token):
++        if token is None:return
++        with self._locked():
++            routes,raw=self._snapshot()
++            if (raw is None or hashlib.sha256(raw).hexdigest()!=token or not any(self._same_route(r,port,uid,slot) for r in routes)
++                    or any(self._same_route(r,port,uid,slot) for r in self._pending)):
++                raise RouteChanged('route hold changed')
++            remaining=[r for r in routes if not self._same_route(r,port,uid,slot)]
++            try:self._write_routes(remaining)
++            except Exception:
++                try:self._write_routes(routes)
++                except Exception:pass
++                raise
++            self.refresh_routes()
++
++    def refresh_routes(self):
++        try:self.routes,_=self._snapshot()
++        except Exception:self.routes_valid=False
++        return self.routes_valid
++
++    def _route_blocked(self,head,slot,port,uid,heads=None):
++        if not self.refresh_routes():return True
++        target = sorted(set([head] + (heads or []))) if head is not None else heads
++        for r in self.routes:
++            saved = r.get('heads')
++            same_ace = (port is None or uid is None or port == r['port'] or tuple(uid)==tuple(r['uid']))
++            if slot is not None and r.get('scope','ace') == 'ace' and same_ace:return True
++            exact = (slot is not None and slot == r['slot'] and
++                     (port is None or uid is None or port == r['port'] or tuple(uid)==tuple(r['uid'])))
++            if exact:return True
++            if saved is None or target is None:return True
++            if set(saved).intersection(target):return True
++        return False
++
++    def blocks_route(self, *, head=None, idx=None, slot=None, port=None, ace_uid=None, heads=None):
+         # Head 4 may still contain this route even if another source/UID is
+         # selected.  Slot 4 on the original port is independently protected.
++        if self._route_blocked(head,slot,port,ace_uid,heads): return True
+         if not self.active: return False
+         if head == 3: return True
+         if slot != 3: return False
+         if idx in (None,0) or port == PORT: return True
+         # Unknown/reconnected hardware cannot prove that it is a different ACE.
+         return ace_uid is None or tuple(ace_uid) == UID
+-    def blocks_wire(self, idx, request, port, ace_uid=None):
++    def rfid_blocks_wire(self, request, port, ace_uid=None, heads=None):
++        if not isinstance(request,dict):return False
++        method=request.get('method');params=request.get('params') or {}
++        if method in READ_STOP:return False
++        if method == 'raw':
++            try: command=int(params.get('cmd'))
++            except (TypeError,ValueError): command=None
++            return command in (8,10,11) and self._route_blocked(None,None,port,ace_uid)
++        if method in ('drying','drying_raw'):
++            return bool(params.get('auto_roll',False)) and self._route_blocked(None,None,port,ace_uid)
++        if method not in MOTION:return False
++        slot=params.get('index',params.get('slot'))
++        return self._route_blocked(None,slot if type(slot) is int else None,port,ace_uid,heads)
++
++    def blocks_wire(self, idx, request, port, ace_uid=None, heads=None):
+         if not isinstance(request,dict): return False
+         method=request.get('method');params=request.get('params') or {}
+         if method in READ_STOP: return False
+@@ -49,13 +215,15 @@
+             except (ValueError,TypeError): command=None
+             # Raw motor command cannot be safely scoped to a slot without
+             # decoding protobuf; block only on the original ACE endpoint.
+-            return command in (8,10,11) and self.blocks_route(idx=idx,slot=3,port=port,ace_uid=ace_uid)
++            return command in (8,10,11) and (self._route_blocked(None,None,port,ace_uid) or self.blocks_route(idx=idx,slot=3,port=port,ace_uid=ace_uid))
+         if method in ('drying','drying_raw'):
+-            return bool(params.get('auto_roll',False)) and self.blocks_route(idx=idx,slot=3,port=port,ace_uid=ace_uid)
++            return bool(params.get('auto_roll',False)) and (self._route_blocked(None,None,port,ace_uid) or self.blocks_route(idx=idx,slot=3,port=port,ace_uid=ace_uid))
+         if method not in MOTION: return False
+         slot=params.get('index',params.get('slot'))
+         if type(slot) is not int:
+-            return self.blocks_route(idx=idx,slot=3,port=port,ace_uid=ace_uid)
+-        return self.blocks_route(idx=idx,slot=slot,port=port,ace_uid=ace_uid)
++            return self._route_blocked(None,None,port,ace_uid) or self.blocks_route(idx=idx,slot=3,port=port,ace_uid=ace_uid)
++        return self.blocks_route(idx=idx,slot=slot,port=port,ace_uid=ace_uid,heads=heads)
+     def message(self):
+-        return 'ACE槽4/喷头4耗材位置待核，相关运动已暂停；STOP和状态查询可用'
++        if self.active and not self.routes:
++            return 'ACE槽4/喷头4耗材位置待核，相关运动已暂停；STOP和状态查询可用'
++        return '耗材路线位置待核，相关运动已暂停；请退出对应ACE料槽后重新插入'

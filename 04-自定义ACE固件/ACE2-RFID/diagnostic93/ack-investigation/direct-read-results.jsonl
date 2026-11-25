@@ -1,0 +1,13 @@
+{"event": "identity", "uid": [808780566, 17445170, 942880330], "version": ["V1.1.93O", ""]}
+{"iteration": 0, "cmd": 6, "request_seq": 3, "elapsed_ms": 11.1, "response_count": 1, "response_seqs": [3], "valid": true}
+{"iteration": 0, "cmd": 76, "request_seq": 4, "elapsed_ms": 11.2, "response_count": 1, "response_seqs": [4], "valid": true}
+{"iteration": 1, "cmd": 6, "request_seq": 5, "elapsed_ms": 11.1, "response_count": 1, "response_seqs": [5], "valid": true}
+{"iteration": 1, "cmd": 76, "request_seq": 6, "elapsed_ms": 11.1, "response_count": 1, "response_seqs": [6], "valid": true}
+{"iteration": 2, "cmd": 6, "request_seq": 7, "elapsed_ms": 11.1, "response_count": 1, "response_seqs": [7], "valid": true}
+{"iteration": 2, "cmd": 76, "request_seq": 8, "elapsed_ms": 11.2, "response_count": 1, "response_seqs": [8], "valid": true}
+{"iteration": 3, "cmd": 6, "request_seq": 9, "elapsed_ms": 11.1, "response_count": 1, "response_seqs": [9], "valid": true}
+{"iteration": 3, "cmd": 76, "request_seq": 10, "elapsed_ms": 11.1, "response_count": 1, "response_seqs": [10], "valid": true}
+{"iteration": 4, "cmd": 6, "request_seq": 11, "elapsed_ms": 11.2, "response_count": 1, "response_seqs": [11], "valid": true}
+{"iteration": 4, "cmd": 76, "request_seq": 12, "elapsed_ms": 11.2, "response_count": 1, "response_seqs": [12], "valid": true}
+{"iteration": 5, "cmd": 6, "request_seq": 13, "elapsed_ms": 11.1, "response_count": 1, "response_seqs": [13], "valid": true}
+{"iteration": 5, "cmd": 76, "request_seq": 14, "elapsed_ms": 11.0, "response_count": 1, "response_seqs": [14], "valid": true}

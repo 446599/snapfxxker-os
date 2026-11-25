@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <styles>
+    <style name="reading_column" layout="flex" flex_flow="column" flex_main_place="center" pad_hor="#u1_card_pad"/>
+    <style name="reading_row" layout="flex" flex_flow="row" flex_main_place="space_between" flex_cross_place="center" pad_hor="#u1_compact_gap"/>
+  </styles>
+  <view extends="ui_card" style_pad_all="#u1_compact_gap" style_radius="#u1_card_radius" flex_flow="column" style_pad_gap="#u1_compact_gap" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+    <lv_obj width="100%" height="0" flex_grow="1" style_min_height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_compact_gap" scrollable="false">
+      <lv_obj name="ps_chip_nozzle" width="0" flex_grow="1" height="100%"
+              style_pad_ver="0" style_pad_gap="0" style_bg_color="#elevated_bg" style_bg_opa="255"
+              style_radius="#u1_card_radius" clickable="true" scrollable="false">
+        <style name="styles.press_wash" selector="pressed"/>
+        <bind_style_if name="reading_row" cond="not ui_is_portrait and ui_breakpoint le 1"/>
+        <bind_style_if name="reading_column" cond="ui_is_portrait or ui_breakpoint gt 1"/>
+        <text_small style_text_font="#u1_aux_font" style_text_color="#text_muted" text="喷头" clickable="false" event_bubble="true"/>
+        <temp_display name="ps_nozzle_value" size="sm" show_target="false" bind_current="extruder_temp"/>
+        <nozzle_icon size="xs" hidden="true"/>
+        <event_cb trigger="clicked" callback="on_temp_card_clicked"/>
+      </lv_obj>
+      <lv_obj name="ps_chip_bed" width="0" flex_grow="1" height="100%"
+              style_pad_ver="0" style_pad_gap="0" style_bg_color="#elevated_bg" style_bg_opa="255"
+              style_radius="#u1_card_radius" clickable="true" scrollable="false">
+        <style name="styles.press_wash" selector="pressed"/>
+        <bind_style_if name="reading_row" cond="not ui_is_portrait and ui_breakpoint le 1"/>
+        <bind_style_if name="reading_column" cond="ui_is_portrait or ui_breakpoint gt 1"/>
+        <text_small style_text_font="#u1_aux_font" style_text_color="#text_muted" text="热床" clickable="false" event_bubble="true"/>
+        <temp_display name="ps_bed_value" size="sm" show_target="false" bind_current="bed_temp"/>
+        <heater_icon src="radiator" glyph_name="bed_icon_glyph" size="xs" hidden="true"/>
+        <event_cb trigger="clicked" callback="on_print_status_bed_temp_clicked"/>
+      </lv_obj>
+    </lv_obj>
+    <lv_obj width="100%" height="0" flex_grow="1" style_min_height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_compact_gap" scrollable="false">
+      <lv_obj name="ps_fan_reading" width="0" flex_grow="1" height="100%"
+              style_pad_ver="0" style_pad_gap="0" style_bg_color="#elevated_bg" style_bg_opa="255"
+              style_radius="#u1_card_radius" clickable="true" scrollable="false">
+        <style name="styles.press_wash" selector="pressed"/>
+        <bind_style_if name="reading_row" cond="not ui_is_portrait and ui_breakpoint le 1"/>
+        <bind_style_if name="reading_column" cond="ui_is_portrait or ui_breakpoint gt 1"/>
+        <text_small style_text_font="#u1_aux_font" style_text_color="#text_muted" text="风扇" clickable="false" event_bubble="true"/>
+        <text_body bind_text="fan_speed" bind_text-fmt="%d%%" style_text_font="#font_body_bold" clickable="false" event_bubble="true"/>
+        <event_cb trigger="clicked" callback="on_print_status_fans_clicked"/>
+      </lv_obj>
+      <lv_obj name="ps_speed_reading" width="0" flex_grow="1" height="100%"
+              style_pad_ver="0" style_pad_gap="0" style_bg_color="#elevated_bg" style_bg_opa="255"
+              style_radius="#u1_card_radius" clickable="true" scrollable="false">
+        <style name="styles.press_wash" selector="pressed"/>
+        <bind_style_if name="reading_row" cond="not ui_is_portrait and ui_breakpoint le 1"/>
+        <bind_style_if name="reading_column" cond="ui_is_portrait or ui_breakpoint gt 1"/>
+        <text_small style_text_font="#u1_aux_font" style_text_color="#text_muted" text="速度" clickable="false" event_bubble="true"/>
+        <text_body bind_text="speed_factor" bind_text-fmt="%d%%" style_text_font="#font_body_bold" clickable="false" event_bubble="true"/>
+        <event_cb trigger="clicked" callback="on_print_status_tune"/>
+      </lv_obj>
+    </lv_obj>
+    <lv_obj name="ps_chip_chamber" width="100%" height="content" flex_flow="row" style_pad_hor="#u1_compact_gap" style_pad_ver="0" style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" scrollable="false">
+      <bind_flag_if_eq subject="printer_has_chamber" flag="hidden" ref_value="0"/>
+      <heater_icon src="fridge_industrial" glyph_name="chamber_icon_glyph" size="xs"/>
+      <text_small text="仓温"/>
+      <temp_display size="sm" show_target="false" bind_current="chamber_temp"/>
+    </lv_obj>
+    <chamber_fault_banner name="chamber_fault_banner"/>
+  </view>
+</component>

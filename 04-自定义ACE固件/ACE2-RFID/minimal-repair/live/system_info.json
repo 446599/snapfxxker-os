@@ -1,0 +1,104 @@
+{
+  "result": {
+    "system_info": {
+      "python": {
+        "version": [
+          3,
+          11,
+          8,
+          "final",
+          0
+        ],
+        "version_string": "3.11.8 (main, Oct 28 2026, 04:35:30) [GCC 12.4.0]"
+      },
+      "product_info": {
+        "machine_type": "Snapmaker U1",
+        "nozzle_diameter": [
+          0.4,
+          0.4,
+          0.4,
+          0.4
+        ],
+        "serial_number": "8110026102800040G3Z5",
+        "device_name": "U1",
+        "firmware_version": "2.1.0",
+        "software_version": "2.1.0"
+      },
+      "cpu_info": {
+        "cpu_count": 4,
+        "bits": "64bit",
+        "processor": "aarch64",
+        "cpu_desc": "",
+        "serial_number": "ff7684960ab92ead",
+        "hardware_desc": "",
+        "model": "",
+        "total_memory": 984740,
+        "memory_units": "kB"
+      },
+      "sd_info": {
+        "manufacturer_id": "32",
+        "manufacturer": "Unknown",
+        "oem_id": "0101",
+        "product_name": "MMC32",
+        "product_revision": "4.7",
+        "serial_number": "8110026102800040G3Z5",
+        "manufacturer_date": "13/2147",
+        "capacity": "Unknown",
+        "total_bytes": 0
+      },
+      "distribution": {
+        "name": "Buildroot 2024.02",
+        "id": "buildroot",
+        "version": "2024.02",
+        "version_parts": {
+          "major": "2024",
+          "minor": "02",
+          "build_number": ""
+        },
+        "like": "buildroot",
+        "codename": "",
+        "release_info": {},
+        "kernel_version": "6.1.99"
+      },
+      "virtualization": {
+        "virt_type": "unknown",
+        "virt_identifier": "unknown"
+      },
+      "network": {
+        "wlan0": {
+          "mac_address": "8c:cd:fe:58:56:1d",
+          "ip_addresses": [
+            {
+              "family": "ipv4",
+              "address": "192.168.2.213",
+              "is_link_local": false
+            },
+            {
+              "family": "ipv6",
+              "address": "2409:8a20:42c4:cdc4:8ecd:feff:fe58:561d",
+              "is_link_local": false
+            },
+            {
+              "family": "ipv6",
+              "address": "2409:8a20:42c4:cdc4:cbf4:46cb:7fb7:8b26",
+              "is_link_local": false
+            },
+            {
+              "family": "ipv6",
+              "address": "fe80::8ecd:feff:fe58:561d",
+              "is_link_local": true
+            }
+          ]
+        }
+      },
+      "canbus": {},
+      "provider": "none",
+      "available_services": [],
+      "service_state": {},
+      "instance_ids": {
+        "moonraker": "moonraker",
+        "klipper": "klipper"
+      }
+    }
+  }
+}

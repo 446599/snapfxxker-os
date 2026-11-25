@@ -1,0 +1,32 @@
+[
+  {
+    "message": "A_STOP ACE=0 SLOT=2",
+    "time": 1794054224.097469,
+    "type": "command"
+  },
+  {
+    "message": "// [A stop_feed_assist] \u8d85\u65f6 (3.0s \u5185\u65e0\u54cd\u5e94)",
+    "time": 1794054227.101055,
+    "type": "response"
+  },
+  {
+    "message": "A_STOP ACE=0 SLOT=2",
+    "time": 1794054245.616881,
+    "type": "command"
+  },
+  {
+    "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1447, \"msg\": \"success\", \"result\": {}}",
+    "time": 1794054245.6714075,
+    "type": "response"
+  },
+  {
+    "message": "A_STOP ACE=0 SLOT=2",
+    "time": 1794054264.1690376,
+    "type": "command"
+  },
+  {
+    "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1646, \"msg\": \"success\", \"result\": {}}",
+    "time": 1794054264.2228816,
+    "type": "response"
+  }
+]

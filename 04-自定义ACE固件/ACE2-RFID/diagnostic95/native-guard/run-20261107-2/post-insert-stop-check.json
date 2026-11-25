@@ -1,0 +1,146 @@
+{
+  "stop": {},
+  "samples": [
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": false,
+        "_wire_valid": true,
+        "decoder": 0,
+        "index": 2,
+        "length": 0,
+        "steps": 6
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "key_fields": {
+        "1": 17749
+      },
+      "guard": {
+        "state": "confirmed",
+        "reason": "motion after STOP",
+        "triggered": [],
+        "event_seq": 6,
+        "stop_count": 4,
+        "gate": true,
+        "lane_states": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "rfid_flags": [
+          1,
+          1
+        ],
+        "timer_max_gap": 2.2315979599952698,
+        "selftest_active": false,
+        "selftest_max_gap": 0.05479454199667089,
+        "selftest_count": 1189
+      }
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": false,
+        "_wire_valid": true,
+        "decoder": 0,
+        "index": 2,
+        "length": 0,
+        "steps": 6
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "key_fields": {
+        "1": 17749
+      },
+      "guard": {
+        "state": "confirmed",
+        "reason": "motion after STOP",
+        "triggered": [],
+        "event_seq": 6,
+        "stop_count": 4,
+        "gate": true,
+        "lane_states": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "rfid_flags": [
+          1,
+          1
+        ],
+        "timer_max_gap": 2.2315979599952698,
+        "selftest_active": false,
+        "selftest_max_gap": 0.05479454199667089,
+        "selftest_count": 1189
+      }
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": false,
+        "_wire_valid": true,
+        "decoder": 0,
+        "index": 2,
+        "length": 0,
+        "steps": 6
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "key_fields": {
+        "1": 17749
+      },
+      "guard": {
+        "state": "confirmed",
+        "reason": "motion after STOP",
+        "triggered": [],
+        "event_seq": 6,
+        "stop_count": 4,
+        "gate": true,
+        "lane_states": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "rfid_flags": [
+          1,
+          1
+        ],
+        "timer_max_gap": 2.2315979599952698,
+        "selftest_active": false,
+        "selftest_max_gap": 0.05479454199667089,
+        "selftest_count": 1189
+      }
+    }
+  ]
+}

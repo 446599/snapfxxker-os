@@ -1,0 +1,30 @@
+{
+  "reset": {
+    "result": "ok"
+  },
+  "calibration": "idle",
+  "fw_hold": false,
+  "firmware": "V1.1.93O",
+  "heads": [
+    false,
+    false,
+    true,
+    false
+  ],
+  "lane1": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "lane2": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "encoder": [
+    276,
+    276
+  ]
+}

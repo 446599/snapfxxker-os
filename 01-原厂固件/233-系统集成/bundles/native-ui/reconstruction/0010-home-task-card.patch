@@ -1,0 +1,232 @@
+diff --git a/ui_xml/components/panel_widget_print_status.xml b/ui_xml/components/panel_widget_print_status.xml
+index e9a518c2f9886b6e7bd66b4394d9427e08170d98..5b167c35170ea03023610cbdbb259e5bb319f009 100644
+--- a/ui_xml/components/panel_widget_print_status.xml
++++ b/ui_xml/components/panel_widget_print_status.xml
+@@ -25,8 +25,12 @@
+     <style name="library_cell_grid_top" layout="flex" flex_main_place="end"/>
+     <style name="library_cell_grid_bottom" layout="flex" flex_main_place="start"/>
+     <style name="library_icon_grid" text_font="#icon_font_xs"/>
++    <style name="task_card_default_inset" pad_all="#space_md"/>
++    <style name="task_card_detailed_inset" pad_hor="#u1_page_pad" pad_ver="#space_xs"/>
+   </styles>
+-  <view extends="ui_card" width="100%" height="100%" style_pad_all="#space_md">
++  <view extends="ui_card" width="100%" height="100%">
++    <bind_style_if name="task_card_detailed_inset" cond="print_status_view eq 2 or print_status_view eq 4"/>
++    <bind_style_if name="task_card_default_inset" cond="print_status_view ne 2 and print_status_view ne 4"/>
+     <bind_state_if_not_eq subject="printer_connection_state" state="disabled" ref_value="2"/>
+     <event_cb trigger="clicked" callback="print_card_clicked_cb"/>
+     <!-- IDLE STATE: Library card with thumbnail + file actions.
+diff --git a/ui_xml/components/print_status_detailed_active.xml b/ui_xml/components/print_status_detailed_active.xml
+index 1b988d80cae92dc846f0ac0d183942fec6c5d34e..c1c90d87a15f2f4656a2f5008128631283826f39 100644
+--- a/ui_xml/components/print_status_detailed_active.xml
++++ b/ui_xml/components/print_status_detailed_active.xml
+@@ -3,55 +3,73 @@
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+ <component>
+   <view name="print_status_detailed_active" extends="lv_obj" width="100%" flex_grow="1"
+-        style_pad_all="0" style_pad_gap="#space_xxs" flex_flow="column"
++        style_pad_all="0" style_pad_gap="#u1_page_pad" flex_flow="row"
+         scrollable="false" clickable="false" event_bubble="true">
+-    <text_body name="detailed_filename" width="100%" bind_text="print_display_filename"
+-               long_mode="dots" style_text_font="#font_body_bold" clickable="false" event_bubble="true">
+-      <bind_flag_if_eq subject="display_message_visible" flag="hidden" ref_value="1"/>
+-    </text_body>
+-    <text_body name="detailed_display_message" width="100%" bind_text="display_message"
+-               long_mode="dots" style_text_font="#font_body_bold" clickable="false" event_bubble="true">
+-      <bind_flag_if_eq subject="display_message_visible" flag="hidden" ref_value="0"/>
+-    </text_body>
+-    <print_start_preparing_info name="detailed_preparing_info" width="100%" flex_grow="1"
+-                                hide_title="true" status_flow="row_wrap"/>
+-    <lv_obj name="detailed_main_row" width="100%" flex_grow="1" flex_flow="row"
+-            style_pad_all="0" style_pad_gap="#space_md" style_flex_cross_place="center"
+-            clickable="false" event_bubble="true" scrollable="false">
+-      <bind_flag_if_not_eq subject="print_start_phase" flag="hidden" ref_value="0"/>
+-      <text_body name="detailed_progress_pct" bind_text="print_progress_text"
+-                 style_text_font="#font_progress" clickable="false" event_bubble="true"/>
+-      <lv_obj name="detailed_data_col" height="content" flex_grow="1" flex_flow="column"
+-              style_pad_all="0" style_pad_gap="0" clickable="false" event_bubble="true" scrollable="false">
+-        <text_small text="预计剩余" clickable="false" event_bubble="true"/>
+-        <text_heading name="detailed_time_remaining" bind_text="print_status_remaining_text"
+-                      style_text_color="#text" clickable="false" event_bubble="true"/>
+-      </lv_obj>
+-      <text_small name="detailed_layer_count" bind_text="print_status_layer_text"
+-                  clickable="false" event_bubble="true"/>
++    <lv_obj name="detailed_model_preview" width="#u1_model_width" height="100%"
++            style_pad_all="#space_xs" style_radius="#u1_icon_badge_radius"
++            style_bg_color="#screen_bg" style_bg_opa="255" scrollable="false" clickable="false" event_bubble="true">
++      <lv_image name="detailed_thumb" width="100%" height="100%" bind_src="print_thumbnail_path"
++                inner_align="contain" clickable="false" event_bubble="true">
++        <bind_flag_if_eq subject="print_has_thumbnail" flag="hidden" ref_value="0"/>
++      </lv_image>
++      <icon name="detailed_model_placeholder" src="cube_outline" size="xl" align="center"
++            variant="muted" clickable="false" event_bubble="true">
++        <bind_flag_if_eq subject="print_has_thumbnail" flag="hidden" ref_value="1"/>
++      </icon>
+     </lv_obj>
+-    <progress_bar name="detailed_progress_bar" width="100%" bind_value="print_progress_display"
+-                  clickable="false" event_bubble="true">
+-      <bind_flag_if_not_eq subject="print_start_phase" flag="hidden" ref_value="0"/>
+-    </progress_bar>
+-    <!-- The shared controller owns confirmation, pending state and device acknowledgement. -->
+-    <lv_obj name="home_print_actions" width="100%" height="#button_height" flex_flow="row"
+-            style_pad_all="0" style_pad_gap="#space_md" scrollable="false" clickable="false">
+-      <ui_button name="home_print_primary" flex_grow="2" height="100%" variant="primary"
+-                 bind_text="print_control_primary_label" bind_icon="print_control_primary_icon"
+-                 style_pad_hor="#space_sm" event_bubble="false">
+-        <bind_state_if_eq subject="print_control_primary_enabled" state="disabled" ref_value="0"/>
+-        <event_cb trigger="clicked" callback="on_print_control_primary"/>
+-      </ui_button>
+-      <ui_button name="home_print_detail" flex_grow="1" height="100%" text="详情" variant="outline"
+-                 style_pad_hor="#space_sm" event_bubble="false">
+-        <event_cb trigger="clicked" callback="print_card_clicked_cb"/>
+-      </ui_button>
+-      <ui_button name="home_print_stop" flex_grow="1" height="100%" text="停止" variant="danger"
+-                 style_pad_hor="#space_sm" event_bubble="false">
+-        <bind_state_if_eq subject="print_control_stop_enabled" state="disabled" ref_value="0"/>
+-        <event_cb trigger="clicked" callback="on_print_control_stop"/>
+-      </ui_button>
++    <lv_obj name="detailed_task_data" width="0" height="100%" flex_grow="1" flex_flow="column"
++            style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false" clickable="false" event_bubble="true">
++      <text_body name="detailed_filename" width="100%" height="#u1_text_line" bind_text="print_display_filename"
++                 long_mode="dots" clickable="false" event_bubble="true">
++        <bind_flag_if_eq subject="display_message_visible" flag="hidden" ref_value="1"/>
++      </text_body>
++      <text_body name="detailed_display_message" width="100%" height="#u1_text_line" bind_text="display_message"
++                 long_mode="dots" clickable="false" event_bubble="true">
++        <bind_flag_if_eq subject="display_message_visible" flag="hidden" ref_value="0"/>
++      </text_body>
++      <print_start_preparing_info name="detailed_preparing_info" width="100%" flex_grow="1"
++                                  hide_title="true" status_flow="row_wrap"/>
++      <lv_obj name="detailed_metrics" width="100%" height="0" flex_grow="1" flex_flow="column"
++              style_pad_all="0" style_pad_gap="0" style_flex_main_place="end"
++              clickable="false" event_bubble="true" scrollable="false">
++        <bind_flag_if_not_eq subject="print_start_phase" flag="hidden" ref_value="0"/>
++        <text_body text="剩余" width="100%" height="#u1_text_line" style_text_align="right"
++                   style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++        <lv_obj name="detailed_main_row" width="100%" height="#u1_progress_line" flex_flow="row"
++                style_pad_all="0" style_pad_gap="#space_xs" style_flex_cross_place="center"
++                style_flex_main_place="space_between" clickable="false" event_bubble="true" scrollable="false">
++          <text_body name="detailed_progress_pct" bind_text="print_progress_text"
++                     style_text_font="#font_progress" clickable="false" event_bubble="true"/>
++          <text_body name="detailed_time_remaining" width="0" flex_grow="1" bind_text="print_status_remaining_text"
++                     long_mode="dots" style_text_align="right" style_text_font="#font_progress"
++                     clickable="false" event_bubble="true"/>
++        </lv_obj>
++      </lv_obj>
++      <lv_bar name="detailed_progress_bar" width="100%" height="#u1_progress_track" min_value="0" max_value="100"
++              bind_value="print_progress_display" style_radius="#u1_brand_radius"
++              style_bg_color="#elevated_bg" style_bg_opa="255" style_border_width="0"
++              style_bg_color-indicator="#primary" style_bg_opa-indicator="255"
++              style_radius-indicator="#u1_brand_radius" clickable="false" event_bubble="true">
++        <bind_flag_if_not_eq subject="print_start_phase" flag="hidden" ref_value="0"/>
++      </lv_bar>
++      <!-- The shared controller owns confirmation, pending state and device acknowledgement. -->
++      <lv_obj name="home_print_actions" width="100%" height="#u1_touch_target" flex_flow="row"
++              style_pad_all="0" style_pad_gap="#u1_card_gap" style_flex_cross_place="center" scrollable="false" clickable="false">
++        <icon src="layers" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++        <text_body name="detailed_layer_count" width="0" flex_grow="1" bind_text="print_status_layer_text"
++                   long_mode="dots" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++        <ui_button name="home_print_primary" width="#u1_touch_target" height="#u1_touch_target" variant="primary"
++                   bind_text="print_control_primary_label" bind_icon="print_control_primary_icon"
++                   label_hidden_cond="print_status_view eq 4" style_min_width="0" style_pad_all="0" event_bubble="false">
++          <bind_state_if_eq subject="print_control_primary_enabled" state="disabled" ref_value="0"/>
++          <event_cb trigger="clicked" callback="on_print_control_primary"/>
++        </ui_button>
++        <ui_button name="home_print_stop" width="#u1_touch_target" height="#u1_touch_target" text="停止" icon="stop" variant="secondary"
++                   label_hidden_cond="print_status_view eq 4" style_min_width="0" style_pad_all="0" event_bubble="false">
++          <bind_state_if_eq subject="print_control_stop_enabled" state="disabled" ref_value="0"/>
++          <event_cb trigger="clicked" callback="on_print_control_stop"/>
++        </ui_button>
++      </lv_obj>
+     </lv_obj>
+   </view>
+ </component>
+diff --git a/ui_xml/components/print_status_detailed_idle.xml b/ui_xml/components/print_status_detailed_idle.xml
+index c8b1461e302e610acc8fe4805b29e00ad35c2190..0515e3878e7069e9439e7830364471e3c9ad6f44 100644
+--- a/ui_xml/components/print_status_detailed_idle.xml
++++ b/ui_xml/components/print_status_detailed_idle.xml
+@@ -1,40 +1,51 @@
+-<?xml version='1.0' encoding='UTF-8'?>
++<?xml version="1.0"?>
+ <!-- Copyright (C) 2025-2026 356C LLC -->
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+ <component>
+-  <view name="print_status_detailed_idle" extends="lv_obj" width="100%" height="100%" style_pad_all="0" style_pad_gap="#space_md" flex_flow="column" scrollable="false" clickable="false" event_bubble="true">
+-    <lv_obj name="idle_main_row" width="100%" flex_grow="1" style_pad_all="0" flex_flow="row" style_pad_gap="#space_lg" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+-      <lv_obj name="idle_data_col" flex_grow="1" height="content" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xs" clickable="false" event_bubble="true" scrollable="false">
+-        <text_heading text="准备就绪" style_text_color="#text" clickable="false" event_bubble="true">
+-          <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="0"/>
+-        </text_heading>
+-        <text_heading text="设备尚未就绪" style_text_color="#text" clickable="false" event_bubble="true">
+-          <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+-        </text_heading>
+-        <text_small text="选择文件，开始下一次打印" clickable="false" event_bubble="true">
+-          <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="0"/>
+-        </text_small>
+-        <text_small bind_text="printer_connection_message" width="100%" long_mode="dots" clickable="false" event_bubble="true">
+-          <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+-        </text_small>
+-      </lv_obj>
+-      <icon src="print" size="xl" variant="secondary" clickable="false" event_bubble="true"/>
++  <view name="print_status_detailed_idle" extends="lv_obj" width="100%" height="100%"
++        style_pad_all="0" style_pad_gap="#u1_page_pad" flex_flow="row" scrollable="false" clickable="false" event_bubble="true">
++    <lv_obj name="idle_model_preview" width="#u1_model_width" height="100%" style_pad_all="#space_xs"
++            style_radius="#u1_icon_badge_radius" style_bg_color="#screen_bg" style_bg_opa="255"
++            scrollable="false" clickable="false" event_bubble="true">
++      <lv_image name="idle_thumb" width="100%" height="100%" bind_src="print_status_idle_thumb_path"
++                inner_align="contain" clickable="false" event_bubble="true"/>
+     </lv_obj>
+-    <text_small name="detailed_idle_filename" width="100%" bind_text="print_status_idle_filename" long_mode="dots" clickable="false" event_bubble="true">
+-      <bind_flag_if_eq subject="print_status_idle_has_last" flag="hidden" ref_value="0"/>
+-    </text_small>
+-    <lv_obj name="idle_action_row" width="100%" height="#button_height" style_pad_all="0" flex_flow="row" style_pad_gap="#space_md" scrollable="false" clickable="false">
+-      <ui_button name="idle_files_btn" flex_grow="2" height="100%" variant="primary" text="选择文件" icon="folder" style_pad_hor="#space_sm" event_bubble="false">
+-        <event_cb trigger="clicked" callback="library_files_cb"/>
+-      </ui_button>
+-      <ui_button name="idle_reprint_btn" flex_grow="1" height="100%" variant="outline" text="重新打印" style_pad_hor="#space_sm" event_bubble="false">
+-        <bind_state_if_eq subject="print_status_idle_has_last" state="disabled" ref_value="0"/>
+-        <event_cb trigger="clicked" callback="library_last_cb"/>
+-      </ui_button>
+-      <ui_button name="idle_queue_btn" width="#button_height" height="100%" variant="outline" icon="progress_clock" style_pad_all="0" event_bubble="false">
+-        <bind_flag_if_eq subject="print_status_queue_hidden" flag="hidden" ref_value="1"/>
+-        <event_cb trigger="clicked" callback="library_queue_cb"/>
+-      </ui_button>
++    <lv_obj name="idle_task_data" width="0" height="100%" flex_grow="1" flex_flow="column"
++            style_pad_all="0" style_pad_gap="#space_xs" scrollable="false" clickable="false" event_bubble="true">
++      <text_body text="准备就绪" width="100%" height="#u1_text_line" clickable="false" event_bubble="true">
++        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="0"/>
++      </text_body>
++      <text_body text="设备尚未就绪" width="100%" height="#u1_text_line" clickable="false" event_bubble="true">
++        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
++      </text_body>
++      <text_body text="选择文件，开始下一次打印" width="100%" long_mode="dots" style_text_color="#text_muted" clickable="false" event_bubble="true">
++        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="0"/>
++      </text_body>
++      <text_body bind_text="printer_connection_message" width="100%" long_mode="dots" style_text_color="#text_muted" clickable="false" event_bubble="true">
++        <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
++      </text_body>
++      <lv_obj width="100%" height="0" flex_grow="1" style_pad_all="0" scrollable="false" clickable="false" event_bubble="true"/>
++      <text_body name="detailed_idle_filename" width="100%" height="#u1_text_line" bind_text="print_status_idle_filename"
++                 long_mode="dots" style_text_color="#text_muted" clickable="false" event_bubble="true">
++        <bind_flag_if_eq subject="print_status_idle_has_last" flag="hidden" ref_value="0"/>
++      </text_body>
++      <lv_obj name="idle_action_row" width="100%" height="#u1_touch_target" style_pad_all="0" flex_flow="row"
++              style_pad_gap="#u1_card_gap" scrollable="false" clickable="false">
++        <ui_button name="idle_files_btn" width="0" flex_grow="1" height="100%" variant="primary" text="选择文件" icon="folder"
++                   style_min_width="0" style_pad_hor="#space_xs" event_bubble="false">
++          <event_cb trigger="clicked" callback="library_files_cb"/>
++        </ui_button>
++        <ui_button name="idle_reprint_btn" width="0" flex_grow="1" height="100%" variant="outline" text="重新打印"
++                   style_min_width="0" style_pad_hor="#space_xs" event_bubble="false">
++          <bind_state_if_eq subject="print_status_idle_has_last" state="disabled" ref_value="0"/>
++          <event_cb trigger="clicked" callback="library_last_cb"/>
++        </ui_button>
++        <ui_button name="idle_queue_btn" width="#u1_touch_target" height="100%" variant="outline" icon="progress_clock"
++                   style_min_width="0" style_pad_all="0" event_bubble="false">
++          <bind_flag_if_eq subject="print_status_queue_hidden" flag="hidden" ref_value="1"/>
++          <event_cb trigger="clicked" callback="library_queue_cb"/>
++        </ui_button>
++      </lv_obj>
+     </lv_obj>
+   </view>
+ </component>

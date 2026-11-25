@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="inventory_tab_h_small" value="38"/>
+    <px name="inventory_tab_h_medium" value="54"/>
+    <px name="inventory_tab_h_large" value="64"/>
+    <px name="inventory_gauge_h_small" value="60"/>
+    <px name="inventory_gauge_h_medium" value="84"/>
+    <px name="inventory_gauge_h_large" value="110"/>
+    <px name="inventory_route_h_small" value="12"/>
+    <px name="inventory_route_h_medium" value="24"/>
+    <px name="inventory_route_h_large" value="32"/>
+    <px name="inventory_head_h_small" value="46"/>
+    <px name="inventory_head_h_medium" value="66"/>
+    <px name="inventory_head_h_large" value="84"/>
+    <px name="inventory_card_w_small" value="106"/>
+    <px name="inventory_card_w_medium" value="140"/>
+    <px name="inventory_card_w_large" value="160"/>
+  </consts>
+  <styles>
+    <style name="tab_idle" bg_color="#elevated_bg" bg_opa="255" border_width="0"/>
+    <style name="tab_selected" bg_color="#elevated_bg" bg_opa="255" border_color="#primary" border_width="2"/>
+    <style name="card_idle" border_color="#text_muted" border_width="1" border_opa="40"/>
+    <style name="card_viewed" border_color="#primary" border_width="2" border_opa="255"/>
+  </styles>
+  <view name="head_inventory" extends="overlay_panel" title="耗材" title_transform="none" back_button_callback="inventory_back" action_button_text="操作" hide_action_button="false" action_button_callback="inventory_manage" action_button_2_text="耗材库" hide_action_button_2="false" action_button_2_callback="inventory_library" bg_color="#screen_bg">
+    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_pad_all="#space_xs" style_pad_gap="#space_xxs" scrollable="false">
+      <lv_obj name="inventory_heads" width="100%" height="#inventory_tab_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+        <repeat count="4">
+          <lv_obj name="inventory_head_${i}" width="0" flex_grow="1" height="100%" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="#space_xxs" style_pad_gap="0" style_radius="#space_sm" clickable="true" scrollable="false">
+            <bind_style_if name="tab_idle" cond="inventory_selected_head ne ${i}"/>
+            <bind_style_if name="tab_selected" cond="inventory_selected_head eq ${i}"/>
+            <text_body text="喷头 ${i + 1}" clickable="false" event_bubble="true"/>
+            <event_cb trigger="clicked" callback="inventory_select_head" user_data="${i}"/>
+          </lv_obj>
+        </repeat>
+      </lv_obj>
+      <text_body name="inventory_notice" width="100%" bind_text="inventory_source" long_mode="dots" style_text_color="#text_muted"/>
+      <lv_obj name="inventory_cards" width="100%" height="content" flex_flow="row" style_flex_main_place="center" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+        <repeat count="4">
+          <lv_obj name="inventory_card_${i}" width="24%" style_max_width="#inventory_card_w" height="content" flex_flow="column" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="#space_xxs" style_pad_gap="0" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#space_sm" clickable="true" scrollable="false">
+            <bind_flag_if cond="inventory_unit_count le ${i}" flag="hidden"/>
+            <bind_style_if name="card_idle" cond="inventory_selected_unit ne ${i}"/>
+            <bind_style_if name="card_viewed" cond="inventory_selected_unit eq ${i}"/>
+            <text_small name="inventory_unit_name_${i}" width="100%" bind_text="inventory_unit_${i}_name" style_text_align="center" long_mode="dots" clickable="false" event_bubble="true"/>
+            <text_small name="inventory_environment_${i}" width="100%" bind_text="inventory_unit_${i}_env" style_text_align="center" style_text_color="#text_muted" long_mode="dots" clickable="false" event_bubble="true"/>
+            <lv_obj width="100%" height="#inventory_gauge_h" style_pad_all="0" style_radius="#space_xs" scrollable="false" clickable="false" event_bubble="true">
+              <lv_bar name="inventory_gauge_${i}" width="100%" height="100%" orientation="vertical" min_value="0" max_value="100" bind_value="inventory_unit_${i}_fill" style_bg_color="#elevated_bg" style_bg_opa="255" style_radius="#space_xs" style_radius-indicator="#space_xs" clickable="false" event_bubble="true">
+                <bind_style_prop prop="bg_color" selector="indicator" subject="inventory_unit_${i}_color"/>
+              </lv_bar>
+              <lv_obj width="content" height="content" align="center" flex_flow="column" style_flex_cross_place="center" style_pad_all="#space_xxs" style_pad_gap="0" style_bg_color="#card_bg" style_bg_opa="220" style_radius="#space_xs" scrollable="false" clickable="false" event_bubble="true">
+                <text_body name="inventory_material_${i}" bind_text="inventory_unit_${i}_material" clickable="false" event_bubble="true"/>
+                <text_small name="inventory_percent_${i}" bind_text="inventory_unit_${i}_percent" clickable="false" event_bubble="true"/>
+              </lv_obj>
+              <text_small name="inventory_current_${i}" text="供料" align="top_right" style_bg_color="#card_bg" style_bg_opa="255" style_pad_left="#space_xxs" style_pad_right="#space_xxs" style_radius="#space_xxs" clickable="false" event_bubble="true">
+                <bind_flag_if_eq subject="inventory_unit_${i}_current" flag="hidden" ref_value="0"/>
+              </text_small>
+            </lv_obj>
+            <text_small name="inventory_weight_${i}" bind_text="inventory_unit_${i}_weight" clickable="false" event_bubble="true"/>
+            <event_cb trigger="clicked" callback="inventory_select_unit" user_data="${i}"/>
+          </lv_obj>
+        </repeat>
+      </lv_obj>
+      <lv_obj name="inventory_routes" width="100%" height="#inventory_route_h" style_pad_all="0" scrollable="false">
+        <event_cb trigger="draw_main" callback="inventory_draw_routes"/>
+      </lv_obj>
+      <lv_obj name="inventory_output" width="100%" flex_grow="1" height="0" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="0" style_pad_gap="0" scrollable="false">
+        <lv_image name="inventory_toolhead" width="#inventory_head_h" height="#inventory_head_h" inner_align="contain" bind_src="inventory_toolhead_image"/>
+        <text_small name="inventory_source" bind_text="inventory_source" long_mode="dots">
+          <bind_flag_if_le subject="ui_breakpoint" flag="hidden" ref_value="1"/>
+        </text_small>
+      </lv_obj>
+
+    </lv_obj>
+  </view>
+</component>

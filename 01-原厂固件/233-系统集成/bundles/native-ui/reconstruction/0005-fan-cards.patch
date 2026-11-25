@@ -1,0 +1,107 @@
+diff --git a/include/ui_fan_dial.h b/include/ui_fan_dial.h
+index 55265feb92ff5f108c694247e0877e53f5c7c62a..f102014371723c3104bbde0313fb75de95f1f2fe 100644
+--- a/include/ui_fan_dial.h
++++ b/include/ui_fan_dial.h
+@@ -40,7 +40,7 @@ class FanDial {
+      * @param fan_id Identifier passed to callbacks (e.g., "fan" or "fan_generic chamber")
+      * @param initial_speed Initial speed percentage (0-100), or -1 before telemetry arrives
+      * @param label_bottom If true, fan name label appears below the arc instead of above
+-     * @param compact_controls Use the two-column card with 10% step buttons
++     * @param compact_controls Use the two-column card with 5% step buttons
+      */
+     FanDial(lv_obj_t* parent, const std::string& name, const std::string& fan_id,
+             int initial_speed = 0, bool label_bottom = false, bool compact_controls = false);
+diff --git a/src/ui/controls/ui_fan_dial.cpp b/src/ui/controls/ui_fan_dial.cpp
+index 34f8cfbdd69c5e434f87501652d3a6978466b474..bfc74e338877d95f5e83f15b8bc9b5d81725fdcd 100644
+--- a/src/ui/controls/ui_fan_dial.cpp
++++ b/src/ui/controls/ui_fan_dial.cpp
+@@ -553,7 +553,7 @@ void FanDial::update_fan_animation(int speed_pct) {
+ 
+ void FanDial::on_step_clicked(lv_event_t* e) {
+     const auto delta = helix::ui::event_user_int(e);
+-    if (!delta || (*delta != -10 && *delta != 10))
++    if (!delta || (*delta != -5 && *delta != 5))
+         return;
+     auto* root = lv_event_get_current_target_obj(e);
+     while (root) {
+diff --git a/ui_xml/fan_control_overlay.xml b/ui_xml/fan_control_overlay.xml
+index 88a8658ffaa7e18f6c7e6381a1bd1bdc4d4e0a55..db5ddcc8a198f8247e408f26e682be045a034477 100644
+--- a/ui_xml/fan_control_overlay.xml
++++ b/ui_xml/fan_control_overlay.xml
+@@ -4,12 +4,15 @@
+ <!-- Fan Control Overlay: Full-width overlay panel displaying all fans -->
+ <!-- Single flex-wrap row: controllable fans first, then auto-controlled fans -->
+ <component>
++  <consts>
++    <px name="fan_grid_gap" value="6"/>
++  </consts>
+   <api>
+-    <prop name="title" type="string" default="风扇与循环风"/>
++    <prop name="title" type="string" default="风扇"/>
+   </api>
+   <view name="fan_control_overlay" extends="overlay_panel" title="$title" bg_color="#screen_bg">
+     <!-- Main Content Area - minimal padding for maximum card space -->
+-    <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_row="0" scrollable="false" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="center" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap">
++    <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_row="0" scrollable="false" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="center" style_pad_all="#u1_page_pad" style_pad_top="#fan_grid_gap" style_pad_bottom="#u1_card_gap" style_pad_gap="#fan_grid_gap">
+       <!-- Chamber air modes (helix::chamber_air): each button sends its mode.
+            Hidden unless the printer offers at least one mode and any accessory
+            the modes need is fitted (chamber_air_available). A printer that
+@@ -47,7 +50,7 @@
+       <!-- ================================================================== -->
+       <!-- Single flex-wrap row for all fans (controllable first, then auto) -->
+       <!-- ================================================================== -->
+-      <lv_obj name="fans_container" width="100%" flex_grow="1" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="true" flex_flow="row_wrap" style_flex_main_place="start" style_flex_cross_place="start">
++      <lv_obj name="fans_container" width="100%" height="0" flex_grow="1" style_pad_all="0" style_pad_gap="#fan_grid_gap" style_flex_track_place="start" scrollable="true" flex_flow="row_wrap" style_flex_main_place="start" style_flex_cross_place="start">
+         <bind_flag_if_not_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+         <!-- All fan widgets (FanDial and fan_status_card) are created here dynamically by C++ -->
+         <!-- Controllable fans are added first, then auto-controlled fans -->
+diff --git a/ui_xml/fan_stepper.xml b/ui_xml/fan_stepper.xml
+index 24c2166f0d7a0bad34ccf1ef72909de23e416674..6ec4a795134099fe4aa109881e18d13137fcde95 100644
+--- a/ui_xml/fan_stepper.xml
++++ b/ui_xml/fan_stepper.xml
+@@ -1,28 +1,34 @@
+ <?xml version='1.0' encoding='UTF-8'?>
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+ <component>
++  <consts>
++    <px name="fan_stepper_height" value="68"/>
++    <px name="fan_stepper_name_pad" value="6"/>
++    <px name="fan_stepper_speed_width" value="48"/>
++  </consts>
+   <api>
+     <prop name="fan_name" type="string" default="Fan"/>
+     <prop name="fan_id" type="string" default="fan"/>
+     <prop name="initial_value" type="number" default="0"/>
+   </api>
+-  <view name="fan_stepper_root" extends="ui_card" width="49%" height="content" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_sm" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_border_width="1" style_border_color="#border" style_min_width="49%">
+-    <text_body name="name_label" width="100%" text="$fan_name" long_mode="wrap"/>
+-    <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" scrollable="false">
+-      <icon name="fan_icon" src="fan" size="sm" variant="secondary"/>
+-      <text_heading name="speed_label" text="0%" flex_grow="1"/>
++  <view name="fan_stepper_root" extends="ui_card" width="49%" height="#fan_stepper_height" flex_flow="column" style_pad_all="0" style_pad_gap="0" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_border_width="0" style_min_width="49%">
++    <lv_obj name="fan_card_header" width="100%" height="#u1_emphasis_line" flex_flow="row" style_pad_all="0" style_pad_hor="#fan_stepper_name_pad" style_pad_gap="0" style_flex_cross_place="center" scrollable="false">
++      <text_body name="name_label" width="0" flex_grow="1" text="$fan_name" long_mode="dots" style_text_color="#text_muted"/>
++      <text_heading name="speed_label" width="#fan_stepper_speed_width" text="0%" style_text_align="right"/>
+     </lv_obj>
+-    <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+-      <ui_button name="fan_step_down" width="0" flex_grow="1" height="#button_height" text="-10%" variant="secondary">
++    <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="0" style_flex_cross_place="center" scrollable="false">
++      <ui_button name="fan_step_down" width="0" flex_grow="1" height="#u1_touch_target" icon="minus" icon_size="sm" variant="ghost" style_border_width="0" style_pad_all="0">
+         <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+-        <event_cb trigger="clicked" callback="on_fan_step_clicked" user_data="-10"/>
++        <event_cb trigger="clicked" callback="on_fan_step_clicked" user_data="-5"/>
+       </ui_button>
+-      <ui_button name="fan_step_up" width="0" flex_grow="1" height="#button_height" text="+10%" variant="secondary">
++      <lv_obj width="1" height="#u1_emphasis_line" style_pad_all="0" style_bg_color="#border" style_bg_opa="255" style_border_width="0" scrollable="false"/>
++      <ui_button name="fan_step_up" width="0" flex_grow="1" height="#u1_touch_target" icon="plus" icon_size="sm" variant="ghost" style_border_width="0" style_pad_all="0">
+         <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+-        <event_cb trigger="clicked" callback="on_fan_step_clicked" user_data="10"/>
++        <event_cb trigger="clicked" callback="on_fan_step_clicked" user_data="5"/>
+       </ui_button>
+     </lv_obj>
+-    <!-- FanDial owns these state mirrors; this layout exposes the step controls. -->
++    <!-- FanDial retains its state mirrors and animation owner for this compact view. -->
++    <icon name="fan_icon" src="fan" size="sm" hidden="true"/>
+     <lv_arc name="dial_arc" value="$initial_value" min_value="0" max_value="100" hidden="true"/>
+     <ui_switch name="onoff_switch" hidden="true"/>
+     <text_body name="onoff_label" hidden="true"/>

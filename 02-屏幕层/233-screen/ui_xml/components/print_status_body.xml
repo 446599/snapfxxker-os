@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Print status panel content, shared by the landscape and portrait panels:
+     the job tile and the printer tile, then the strip across the bottom.
+     PrintStatusLayoutFitter measures overlay_content and publishes
+     ps_arrangement (0 side by side, 1 stacked).
+     The job tile is the preview card while printing; during pre-print the
+     start-sequence checklist covers it. -->
+<component>
+  <consts>
+    <!-- Two touch rows plus card chrome on short landscape screens. -->
+    <px name="ps_compact_tiles_min_height" value="102"/>
+  </consts>
+  <styles>
+    <style name="body_regular" pad_gap="#u1_card_gap"/>
+    <style name="body_lcd" pad_gap="0"/>
+    <style name="tiles_min_usable_height" min_height="#ps_compact_tiles_min_height"/>
+    <style name="tiles_side" layout="flex" flex_flow="row"/>
+    <style name="tiles_stacked" layout="flex" flex_flow="column"/>
+    <style name="job_side" flex_grow="3"/>
+    <style name="job_stacked" flex_grow="252"/>
+    <style name="printer_side" flex_grow="2"/>
+    <style name="printer_stacked" flex_grow="180"/>
+  </styles>
+  <view extends="lv_obj" width="100%" height="100%" style_pad_all="0" style_bg_opa="0" style_border_width="0" flex_flow="column" scrollable="false">
+    <bind_style_if name="body_regular" cond="not print_status_lcd_layout"/>
+    <bind_style_if name="body_lcd" cond="print_status_lcd_layout"/>
+    <!-- print_status_lcd_layout is published by the panel before tree creation:
+         1 only for 480x320 landscape. Do not use the Tiny breakpoint as a size test. -->
+    <if cond="print_status_lcd_layout">
+      <lv_obj name="ps_job_tile" width="100%" height="0" flex_grow="1"
+              style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false">
+        <print_status_preview_card width="100%" height="100%"/>
+        <print_status_job_checklist name="ps_job_checklist" ignore_layout="true">
+          <bind_flag_if_eq subject="preparing_visible" flag="hidden" ref_value="0"/>
+        </print_status_job_checklist>
+      </lv_obj>
+      <!-- Faults keep their native visibility and take space only when present. -->
+      <chamber_fault_banner name="chamber_fault_banner"/>
+      <print_status_lcd_strip name="ps_strip"/>
+      <else/>
+      <lv_obj name="ps_tiles_scroll" width="100%" height="0" flex_grow="1"
+              style_pad_all="0" style_bg_opa="0" style_border_width="0"
+              scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+        <lv_obj name="ps_tiles" width="100%" height="100%" style_pad_all="0" style_bg_opa="0" style_border_width="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <bind_style_if name="tiles_min_usable_height" cond="not ui_is_portrait and ui_breakpoint le 1"/>
+          <bind_style_if_eq name="tiles_side" subject="ps_arrangement" ref_value="0"/>
+          <bind_style_if_eq name="tiles_stacked" subject="ps_arrangement" ref_value="1"/>
+          <lv_obj name="ps_job_tile" width="100%" height="100%" style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false">
+            <bind_style_if_eq name="job_side" subject="ps_arrangement" ref_value="0"/>
+            <bind_style_if_eq name="job_stacked" subject="ps_arrangement" ref_value="1"/>
+            <print_status_preview_card width="100%" height="100%"/>
+            <print_status_job_checklist name="ps_job_checklist" ignore_layout="true">
+              <bind_flag_if_eq subject="preparing_visible" flag="hidden" ref_value="0"/>
+            </print_status_job_checklist>
+          </lv_obj>
+          <print_status_printer_tile name="ps_printer_tile" width="100%" height="100%">
+            <bind_style_if_eq name="printer_side" subject="ps_arrangement" ref_value="0"/>
+            <bind_style_if_eq name="printer_stacked" subject="ps_arrangement" ref_value="1"/>
+          </print_status_printer_tile>
+        </lv_obj>
+      </lv_obj>
+      <print_status_strip name="ps_strip"/>
+    </if>
+  </view>
+</component>

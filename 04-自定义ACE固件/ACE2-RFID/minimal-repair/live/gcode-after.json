@@ -1,0 +1,86 @@
+{
+  "result": {
+    "gcode_store": [
+      {
+        "message": "SET_GCODE_VARIABLE MACRO=_NTFY_HOOKS VARIABLE=lift_ceiling VALUE=265",
+        "time": 1794026020.1479356,
+        "type": "command"
+      },
+      {
+        "message": "// auto switching bed PID control based on voltage type: 220v, switch_success: True",
+        "time": 1794026021.47674,
+        "type": "response"
+      },
+      {
+        "message": "[multiACE] 1 responding ACE(s); physical port indexes preserved",
+        "time": 1794026023.8501935,
+        "type": "response"
+      },
+      {
+        "message": "ACE_TAG_READ EXPLORE=1 RECOVERY_STATUS=1",
+        "time": 1794026024.3177385,
+        "type": "command"
+      },
+      {
+        "message": "// {\"state\": \"not_started\", \"reason\": \"\", \"fault\": {\"ace_idx\": 0, \"slot\": 3, \"reason\": \"post-STOP telemetry invalid: encoder absent\"}}",
+        "time": 1794026024.3205564,
+        "type": "response"
+      },
+      {
+        "message": "// [['extruder', 0], ['ACTIVATE', 'PARKED', 'PARKED', 'PARKED'], [[False, True, True], [True, False, False], [True, False, False], [True, False, False]]]",
+        "time": 1794026026.8538923,
+        "type": "response"
+      },
+      {
+        "message": "ACE_TAG_READ EXPLORE=1 RECOVER=1",
+        "time": 1794026033.7442133,
+        "type": "command"
+      },
+      {
+        "message": "// Recovery starts with one STOP then read-only checks; fault remains locked until they pass",
+        "time": 1794026033.748404,
+        "type": "response"
+      },
+      {
+        "message": "ACE_TAG_READ EXPLORE=1 RECOVERY_STATUS=1",
+        "time": 1794026040.864766,
+        "type": "command"
+      },
+      {
+        "message": "// {\"state\": \"recovered\", \"reason\": \"fresh STOP acknowledged and repeated read-only telemetry stable; decoder is absent protobuf default zero, not movement or physical standstill proof\", \"fault\": null}",
+        "time": 1794026040.867482,
+        "type": "response"
+      },
+      {
+        "message": "A_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794042442.4661329,
+        "type": "command"
+      },
+      {
+        "message": "A_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794042442.4661329,
+        "type": "command"
+      },
+      {
+        "message": "A_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794042442.4661329,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_info] {\"_v2_command\": 7, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 16429, \"msg\": \"success\", \"result\": {\"boot_version\": \"\", \"firmware\": \"V1.1.60O\", \"model\": \"ACE 2 Pro\"}}",
+        "time": 1794042442.521573,
+        "type": "response"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 16430, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 46, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794042442.5739415,
+        "type": "response"
+      },
+      {
+        "message": "// [A get_temp] {\"_v2_command\": 64, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 16431, \"msg\": \"success\", \"result\": {\"box1_temp\": 0.0, \"box2_temp\": 0.0, \"env_humidity\": 45.935916900634766, \"env_temp\": 25.16613006591797, \"ptc1_temp\": 21.62604331970215, \"ptc2_temp\": 20.408601760864258}}",
+        "time": 1794042442.6260264,
+        "type": "response"
+      }
+    ]
+  }
+}

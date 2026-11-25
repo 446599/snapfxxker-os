@@ -1,0 +1,42 @@
+{
+  "target": 3,
+  "segments": [
+    {
+      "direction": "unknown",
+      "start_time": 99304.806399685,
+      "first": 1,
+      "last": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "direction": "increasing",
+      "start_time": 99305.109590102,
+      "first": 1,
+      "last": 536,
+      "min": 1,
+      "max": 536,
+      "end_time": 99339.746484077
+    },
+    {
+      "direction": "unknown",
+      "start_time": 99340.655909202,
+      "first": -5,
+      "last": -5,
+      "min": -5,
+      "max": -5
+    },
+    {
+      "direction": "reverse_or_reset",
+      "start_time": 99340.959466827,
+      "first": -5,
+      "last": -121,
+      "min": -121,
+      "max": -5,
+      "end_time": 99348.862809831
+    }
+  ],
+  "trace_gaps": [],
+  "total_distance": "unknown",
+  "note": "Coordinates are phase-local observations; reverse and counter reset are not distinguished."
+}

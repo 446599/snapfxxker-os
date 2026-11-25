@@ -1,0 +1,65 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Change Printer Host Modal - Allows changing Moonraker connection -->
+<!-- NOTE: Backdrop created programmatically by Modal system -->
+<component>
+  <consts>
+    <!-- 480x320 leaves 192 px between the fixed title and actions. -->
+    <px name="change_host_compact_form_max" value="192"/>
+  </consts>
+  <styles>
+    <style name="form_compact" max_height="#change_host_compact_form_max"/>
+    <style name="form_standard" max_height="#dialog_content_max"/>
+  </styles>
+  <!-- Subjects managed in C++ (init_subjects registers change_host_testing, change_host_validated) -->
+  <!-- Dialog card (backdrop created programmatically) -->
+  <view name="change_host_modal" extends="ui_dialog" width="90%" style_max_width="#u1_modal_width" height="content" align="center" flex_flow="column" style_flex_main_place="start" style_pad_gap="0" style_max_height="94%" style_radius="#u1_card_radius" style_border_width="#u1_border" style_border_color="#border">
+    <modal_header name="change_host_header" title="Change Printer Host" title_name="title_change_host" hide_icon="true">
+      <bind_flag_if_eq subject="change_host_adding" flag="hidden" ref_value="1"/>
+    </modal_header>
+    <modal_header name="add_printer_header" title="Add Printer" title_name="title_add_printer" hide_icon="true">
+      <bind_flag_if_eq subject="change_host_adding" flag="hidden" ref_value="0"/>
+    </modal_header>
+    <lv_obj name="form_container" width="100%" height="content" style_pad_hor="#u1_card_pad_roomy" style_pad_top="0" style_pad_bottom="#u1_compact_gap" style_pad_gap="#u1_compact_gap" style_bg_opa="0" style_border_width="0" flex_flow="column" style_flex_cross_place="center" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+      <bind_style_if_eq name="form_compact" subject="ui_breakpoint" ref_value="1"/>
+      <bind_style_if_not_eq name="form_standard" subject="ui_breakpoint" ref_value="1"/>
+      <!-- Printers found on the network (mDNS and the LAN sweep); shown while discovery runs -->
+      <lv_obj name="discovery_section" width="100%" height="content" style_pad_all="0" style_pad_gap="#space_xs" flex_flow="column">
+        <bind_flag_if_eq subject="change_host_discovery_active" flag="hidden" ref_value="0"/>
+        <text_body width="100%" text="Discovered Printers"/>
+        <lv_dropdown name="printer_dropdown" width="100%" style_min_height="#u1_touch_target" style_radius="#u1_card_radius">
+          <event_cb trigger="value_changed" callback="on_change_host_printer_picked"/>
+        </lv_dropdown>
+      </lv_obj>
+      <!-- Input row: Host (75%) + Port (25%) -->
+      <lv_obj width="100%" height="content" scrollable="false" style_pad_all="0" style_pad_gap="#u1_card_gap" flex_flow="row">
+        <!-- Left: Host -->
+        <lv_obj width="0" height="content" flex_grow="3" style_pad_all="0" style_pad_gap="#u1_compact_gap" flex_flow="column" scrollable="false" style_flex_main_place="start" style_flex_cross_place="start">
+          <text_muted width="100%" style_text_font="#u1_aux_font" text="Host"/>
+          <text_input name="host_input" width="100%" height="#u1_touch_target" bind_text="change_host_ip" placeholder_text="192.168.1.100" placeholder_tag="192.168.1.100" style_min_height="#u1_touch_target" style_radius="#u1_card_radius"/>
+        </lv_obj>
+        <!-- Right: Port -->
+        <lv_obj width="0" height="content" flex_grow="1" style_pad_all="0" style_pad_gap="#u1_compact_gap" flex_flow="column" scrollable="false" style_flex_main_place="start" style_flex_cross_place="start">
+          <text_muted width="100%" style_text_font="#u1_aux_font" text="Port"/>
+          <text_input name="port_input" width="100%" height="#u1_touch_target" bind_text="change_host_port" placeholder_text="7125" keyboard_hint="numeric" style_min_height="#u1_touch_target" style_radius="#u1_card_radius"/>
+        </lv_obj>
+      </lv_obj>
+      <!-- API key for a Moonraker that requires a login: the active printer's, or the one being added -->
+      <api_key_field name="api_key_section" subject="change_host_api_key" field_height="#u1_touch_target"/>
+      <!-- Test Connection button + Status row -->
+      <lv_obj width="100%" height="content" style_pad_all="0" style_pad_gap="#u1_card_gap" flex_flow="row" style_flex_main_place="start" style_flex_cross_place="center" style_flex_track_place="center" scrollable="false">
+        <ui_button name="btn_test_connection" width="50%" height="#u1_touch_target" style_pad_ver="#u1_card_pad" variant="secondary" text="Test Connection" style_min_height="#u1_touch_target" style_radius="#u1_card_radius">
+          <bind_state_if_eq subject="change_host_testing" state="disabled" ref_value="1"/>
+          <event_cb trigger="clicked" callback="on_change_host_test"/>
+        </ui_button>
+        <!-- Status display -->
+        <lv_obj width="0" height="content" style_pad_all="0" flex_grow="1" flex_flow="row" style_flex_main_place="start" style_flex_cross_place="center" style_pad_gap="#u1_compact_gap" style_flex_track_place="center" scrollable="false">
+          <lv_label name="status_icon" text="" style_text_font="mdi_icons_16"/>
+          <text_body name="status_text" width="0" style_text_font="#u1_aux_font" text="" flex_grow="1" long_mode="wrap"/>
+        </lv_obj>
+      </lv_obj>
+    </lv_obj>
+    <modal_button_row secondary_name="modal_cancel_btn" secondary_text="Cancel" secondary_callback="on_change_host_cancel" primary_name="modal_save_btn" primary_text="Save" primary_callback="on_change_host_save" primary_disable_subject="change_host_save_locked"/>
+  </view>
+</component>

@@ -1,0 +1,4 @@
+Current source checks: see current/manifest.json and ../audit/INTEGRATION-STATUS.md.
+All old .bin files in this directory are obsolete offline experiments, not current
+bounded-driver integration, and remain DO NOT FLASH. run_checks.py produces only
+host tests and an ARM relocatable object with deliberately unresolved bindings.

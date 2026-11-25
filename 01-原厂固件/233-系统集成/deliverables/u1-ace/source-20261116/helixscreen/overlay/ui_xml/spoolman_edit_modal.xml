@@ -1,0 +1,92 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Modal for editing Spoolman spool properties -->
+<!-- NOTE: Backdrop created programmatically by Modal system -->
+<!-- Spool summary above a scrolling edit form. -->
+<component>
+  <consts>
+    <!-- Notes textarea height: 2 visible lines + padding (tighter on small screens) -->
+    <px name="notes_height_small" value="44"/>
+    <px name="notes_height_medium" value="72"/>
+    <px name="notes_height_large" value="88"/>
+  </consts>
+  <!-- Dialog card -->
+  <view name="spoolman_edit_modal" extends="ui_dialog" width="94%" height="content" style_min_width="0" style_max_width="560" style_max_height="90%" align="center" flex_flow="column" style_flex_main_place="start" style_pad_gap="0">
+    <!-- Header: title + close. -->
+    <modal_header title="Edit Spool" hide_icon="true" hide_close="false" close_callback="spoolman_edit_close_cb"/>
+    <lv_obj width="100%" height="content" style_max_height="#dialog_content_pinned_max"
+            style_pad_all="#u1_card_pad_roomy" flex_flow="column" style_pad_gap="#u1_card_gap"
+            scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+      <lv_obj width="100%" height="content" flex_flow="row" style_flex_cross_place="center"
+              style_pad_all="#u1_card_pad" style_pad_gap="#u1_card_gap" scrollable="false">
+        <style name="styles.u1_card"/>
+        <spool_canvas name="spool_preview" size="#u1_touch_target" color="#text_muted" fill_level="1.0"/>
+        <lv_obj width="0" flex_grow="1" height="content" flex_flow="column"
+                style_pad_all="0" style_pad_gap="0" scrollable="false">
+          <text_body name="material_label" width="100%" long_mode="wrap" text="PLA" style_text_color="#text"/>
+          <text_small name="vendor_label" width="100%" long_mode="wrap" text="Polymaker" style_text_color="#text_muted"/>
+        </lv_obj>
+        <lv_obj width="28%" height="#u1_touch_target" style_pad_ver="0" style_pad_hor="#space_sm" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_xs" scrollable="false" clickable="true" style_radius="#u1_card_radius" style_border_width="1" style_border_color="#text_subtle">
+          <style name="styles.press_wash" selector="pressed"/>
+          <text_small name="color_label" width="0" flex_grow="1" long_mode="dots" text="Black" style_text_color="#text" clickable="false"/>
+          <icon src="palette" size="xs" variant="secondary" clickable="false"/>
+          <event_cb trigger="clicked" callback="spoolman_edit_color_clicked_cb"/>
+        </lv_obj>
+      </lv_obj>
+      <!-- Both weight fields share a row. Text-area labels may wrap. -->
+      <lv_obj width="100%" height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#u1_card_gap"
+              style_flex_cross_place="end" scrollable="false">
+        <lv_obj width="0" height="content" flex_grow="1" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <text_small text="Remaining (g)" width="100%" long_mode="wrap"/>
+          <text_input name="field_remaining" width="100%" height="#u1_touch_target" keyboard_hint="numeric" placeholder="1000" max_length="8">
+            <event_cb trigger="value_changed" callback="spoolman_edit_field_changed_cb"/>
+          </text_input>
+        </lv_obj>
+        <lv_obj width="0" height="content" flex_grow="1" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <text_small text="Spool wt (g)" width="100%" long_mode="wrap"/>
+          <text_input name="field_spool_weight" width="100%" height="#u1_touch_target" keyboard_hint="numeric" placeholder="0" max_length="8">
+            <event_cb trigger="value_changed" callback="spoolman_edit_field_changed_cb"/>
+          </text_input>
+        </lv_obj>
+      </lv_obj>
+      <!-- Price, location and batch are independent metadata. -->
+      <lv_obj width="100%" height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#u1_card_gap"
+              style_flex_cross_place="end" scrollable="false">
+        <lv_obj width="0" height="content" flex_grow="1" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <text_small text="Price" width="100%" long_mode="wrap"/>
+          <text_input name="field_price" width="100%" height="#u1_touch_target" keyboard_hint="numeric" placeholder="" max_length="10">
+            <event_cb trigger="value_changed" callback="spoolman_edit_field_changed_cb"/>
+          </text_input>
+        </lv_obj>
+        <lv_obj width="0" height="content" flex_grow="1" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <text_small text="Location" width="100%" long_mode="wrap"/>
+          <text_input name="field_location" width="100%" height="#u1_touch_target" placeholder="Shelf A" placeholder_tag="Shelf A" max_length="64">
+            <event_cb trigger="value_changed" callback="spoolman_edit_field_changed_cb"/>
+          </text_input>
+        </lv_obj>
+        <lv_obj width="0" height="content" flex_grow="1" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <text_small text="Lot/Batch Nr" width="100%" long_mode="wrap"/>
+          <text_input name="field_lot_nr" width="100%" height="#u1_touch_target" placeholder="" max_length="32">
+            <event_cb trigger="value_changed" callback="spoolman_edit_field_changed_cb"/>
+          </text_input>
+        </lv_obj>
+      </lv_obj>
+      <!-- Row 3: Notes (full width) -->
+      <lv_obj width="100%" height="content" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+        <text_small text="Notes"/>
+        <text_input name="field_comment" width="100%" height="#notes_height" placeholder="" max_length="256" multiline="true">
+          <event_cb trigger="value_changed" callback="spoolman_edit_field_changed_cb"/>
+        </text_input>
+      </lv_obj>
+      <lv_obj name="row_print_label" width="100%" height="content" flex_flow="row" style_flex_main_place="center" style_pad_all="0" scrollable="false" hidden="true">
+        <bind_flag_if_eq subject="label_printer_configured" flag="hidden" ref_value="0"/>
+        <ui_button name="btn_print_label" width="100%" height="#u1_touch_target" text="Print Label" icon="printer" variant="secondary">
+          <event_cb trigger="clicked" callback="spoolman_edit_print_label_cb"/>
+        </ui_button>
+      </lv_obj>
+    </lv_obj>
+    <!-- Action buttons -->
+    <modal_button_row secondary_text="Reset" secondary_variant="secondary" secondary_callback="spoolman_edit_reset_cb" primary_text="@spoolman_edit_save_text" primary_callback="spoolman_edit_save_cb"/>
+  </view>
+</component>

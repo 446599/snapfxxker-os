@@ -1,0 +1,61 @@
+{
+  "status": "offline candidate; NOT FLASHED OR DEPLOYED",
+  "version": "V1.1.97O",
+  "image": "ACE2-97O-diagnostic.bin",
+  "size_bytes": 78898,
+  "sha256": "3863df3742bf23f9b7c8ae297be5ddaeb1b0eac423ce1a7ac574f96429d5d853",
+  "md5": "a9538adc68118de39574f017e1fe0ee7",
+  "crc16_kermit_init0000_patch_replay_hex": "a682",
+  "crc16_kermit_initffff_ota_transport_hex": "159d",
+  "base_sha256": "a468e366226e7c483d3dd96b444223e89cbf0d1b10573d42b6263843ffd6be3e",
+  "base_md5": "79fb22e7914bae1dc75ac91b30739c19",
+  "previous_96_sha256": "639670e528570c0325e7821f249abb409e0778eb03dedb048ed324b24285f96d",
+  "repeat_sha256": "3863df3742bf23f9b7c8ae297be5ddaeb1b0eac423ce1a7ac574f96429d5d853",
+  "repeat_identical": true,
+  "tail_hex": "61a5635a65a5325a",
+  "first_512_vector_bytes_identical_to_stock": true,
+  "first_four_words": [
+    "0x20009a80",
+    "0x08008245",
+    "0x08008f9b",
+    "0x08008f95"
+  ],
+  "stock_region_changes_only_generated_hooks_and_pokes": true,
+  "changed_source_files": [
+    "build_patch.py"
+  ],
+  "decoder_source_sha256": "b3f07904760e4f82ef623e66e5085b0f8ec28675bd333c407eaace3c1c61ad3f",
+  "geometry_assumptions": {
+    "core_mm": 87,
+    "width_mm": 60,
+    "filament_mm": 1.75,
+    "turns_per_layer": 33,
+    "safety_multiplier": 0.9
+  },
+  "geometry_literals": [
+    "0x0800bcd8",
+    "0x0800bce0",
+    "0x0800bce8",
+    "0x0800bcf0",
+    "0x0800bcf8",
+    "0x0800bd00"
+  ],
+  "tests": {
+    "native_thumb_geometry_sweep_boundaries_and_sort": true,
+    "patch_replay_byte_identical": true,
+    "bambu_dual_read_and_failure": true,
+    "rc522_staging_boundaries": true,
+    "native_decoder_6_suites": true,
+    "linked_thumb_350_diag_and_epilogue_abi": true,
+    "linked_thumb_record_guard": true,
+    "fake_sram_four_records": true
+  },
+  "limitations": [
+    "No hardware, optical, geometry, or concurrent dual-spool validation.",
+    "Native 10000mm floor and ctx+8 upper cap remain; at-limit readings are bounds, not exact estimates.",
+    "BB00 initially writes ctx+12 only once; native preload AB5E later replaces it with a sorted-array value when count>=2.",
+    "Existing Anycubic rawtag_cache reads four bytes beyond a 164-byte record; unchanged.",
+    "Shared RF scratch and firmware SPI handling are not fixed.",
+    "Full image rebuild required; no existing hooked region may be replaced in-place."
+  ]
+}

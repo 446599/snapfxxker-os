@@ -1,0 +1,516 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component>
+  <consts>
+    <px name="workspace_action_h" value="48" />
+    <px name="workspace_list_h" value="52" />
+    <px name="workspace_toggle_w" value="96" />
+    <px name="workspace_progress_h" value="8" />
+    <px name="workspace_arrow_w" value="56" />
+    <px name="workspace_swatch" value="24" />
+    <px name="workspace_temperature_card_h" value="58" />
+    <px name="workspace_temperature_reading_h" value="32" />
+    <px name="workspace_nozzle_body_h" value="176" />
+    <px name="workspace_nozzle_temp_h" value="128" />
+    <px name="workspace_nozzle_reading_h" value="32" />
+    <px name="workspace_nozzle_line_h" value="22" />
+    <px name="workspace_back_w" value="72" />
+    <px name="workspace_status_slot" value="16" />
+    <px name="workspace_max_width" value="680" />
+    <px name="workspace_temperature_card_roomy_h" value="78" />
+    <px name="workspace_footer_message_max" value="72" />
+  </consts>
+  <styles>
+    <style name="temperature_card_roomy" height="#workspace_temperature_card_roomy_h" />
+  </styles>
+  <view name="material_workspace" extends="lv_obj" width="100%" height="#u1_overlay_height" align="top_left" flex_flow="column" style_pad_all="0" style_pad_gap="0" style_border_width="0" style_bg_color="#screen_bg" style_bg_opa="255" scrollable="false">
+    <header_bar name="overlay_header" title_subject="workspace_title" title_transform="none" back_button_callback="workspace_back">
+      <bind_flag_if cond="workspace_page eq 9" flag="hidden" />
+    </header_bar>
+    <lv_obj name="workspace_nozzle_header" width="100%" height="#u1_header_height" flex_flow="row" style_pad_hor="#u1_page_pad" style_pad_ver="0" style_pad_gap="#space_xs" style_flex_cross_place="center" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" scrollable="false">
+      <bind_flag_if cond="workspace_page ne 9" flag="hidden" />
+      <ui_button name="workspace_nozzle_back" text="返回" icon="chevron_left" variant="ghost" width="#workspace_back_w" height="#u1_touch_target" style_pad_all="0" style_shadow_width="0">
+        <event_cb trigger="clicked" callback="workspace_back" />
+      </ui_button>
+      <ui_button name="workspace_previous_head" icon="chevron_left" variant="ghost" width="#u1_touch_target" height="#u1_touch_target" style_pad_all="0" style_shadow_width="0">
+        <bind_state_if cond="workspace_busy or workspace_nozzle_head eq 0" state="disabled" />
+        <event_cb trigger="clicked" callback="workspace_action" user_data="previous_head" />
+      </ui_button>
+      <text_body width="0" flex_grow="1" bind_text="workspace_nozzle_title" long_mode="dots" style_text_font="#u1_heading_font" style_text_align="center" />
+      <ui_button name="workspace_next_head" icon="chevron_right" variant="ghost" width="#u1_touch_target" height="#u1_touch_target" style_pad_all="0" style_shadow_width="0">
+        <bind_state_if cond="workspace_busy or workspace_nozzle_head eq 3" state="disabled" />
+        <event_cb trigger="clicked" callback="workspace_action" user_data="next_head" />
+      </ui_button>
+      <lv_obj width="#workspace_back_w" height="1" style_bg_opa="0" scrollable="false" clickable="false" />
+    </lv_obj>
+    <path_calibration_banner />
+    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" flex_flow="column" style_flex_cross_place="center" style_flex_track_place="center" style_pad_hor="#u1_page_pad" style_pad_ver="#u1_card_gap" style_pad_gap="#u1_card_gap" scroll_dir="ver" scrollable="true">
+      <text_small name="workspace_status" width="100%" bind_text="workspace_status" style_text_color="#text_muted" long_mode="wrap">
+        <bind_flag_if cond="workspace_page eq 6 or workspace_page eq 7 or workspace_page eq 9 or workspace_page eq 10" flag="hidden" />
+      </text_small>
+      <lv_obj name="workspace_page_0" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 0" flag="hidden" />
+        <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
+          <bind_flag_if cond="workspace_external" flag="hidden" />
+          <ui_button name="workspace_load" text="装入喷头" variant="primary" style_text_color="#FFFFFF" width="0" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" flex_grow="1" style_text_font="#u1_body_font">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
+            <bind_state_if cond="not workspace_route_mapped" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="load" />
+          </ui_button>
+          <ui_button name="workspace_unload" text="退出喷头" variant="outline" width="0" height="#workspace_action_h" style_shadow_width="0" flex_grow="1" style_text_font="#u1_body_font" style_border_color="#border">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
+            <bind_state_if cond="not workspace_route_mapped" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="unload" />
+          </ui_button>
+          <ui_button name="workspace_eject" text="退出 ACE" variant="outline" width="0" height="#workspace_action_h" flex_grow="1" style_shadow_width="0" style_text_font="#u1_body_font" style_border_color="#border">
+            <bind_state_if cond="workspace_busy or not workspace_eject_ready" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="eject" />
+          </ui_button>
+        </lv_obj>
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_md" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_border_width="1" style_border_color="#border">
+          <text_body name="workspace_detail" width="100%" bind_text="workspace_detail" long_mode="wrap" style_text_font="#u1_body_font" />
+        </lv_obj>
+        <ui_button name="workspace_confirm_source" text="确认此槽正在供料" variant="outline" width="100%" height="#workspace_action_h" style_text_font="#u1_body_font">
+          <bind_flag_if cond="not workspace_source_ready" flag="hidden" />
+          <bind_state_if cond="workspace_busy" state="disabled" />
+          <event_cb trigger="clicked" callback="workspace_action" user_data="confirm_source" />
+        </ui_button>
+        <ui_button name="workspace_activate_external" text="激活此喷头" variant="outline" width="100%" height="#workspace_action_h" style_pad_hor="#space_sm" style_text_font="#u1_body_font">
+          <bind_state_if cond="workspace_busy or not workspace_ready or filament_manual_motion ne 0" state="disabled" />
+          <event_cb trigger="clicked" callback="workspace_action" user_data="activate_head" />
+          <bind_flag_if cond="not workspace_external" flag="hidden" />
+        </ui_button>
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <ui_button name="workspace_edit" text="编辑耗材" variant="ghost" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0" icon="pencil" icon_position="left" style_pad_hor="#space_sm" style_text_font="#u1_body_font" style_bg_opa="0" style_border_width="0">
+              <bind_state_if cond="workspace_busy or not workspace_editable" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="edit" />
+            </ui_button>
+            <ui_button name="workspace_manual" text="手动进退料" variant="ghost" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" icon="swap_vertical" icon_position="left" style_pad_hor="#space_sm" style_text_font="#u1_body_font" style_bg_opa="0">
+              <bind_state_if cond="workspace_busy" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="manual" />
+            </ui_button>
+          </lv_obj>
+          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <bind_flag_if cond="workspace_external" flag="hidden" />
+            <ui_button name="workspace_dry" text="环境与烘干" variant="ghost" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0" icon="thermometer" icon_position="left" style_pad_hor="#space_sm" style_text_font="#u1_body_font" style_bg_opa="0" style_border_width="0">
+              <bind_flag_if cond="workspace_external" flag="hidden" />
+              <bind_state_if cond="workspace_busy" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="dry" />
+            </ui_button>
+            <ui_button name="workspace_library" text="耗材库" variant="ghost" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0" icon="layers" icon_position="left" style_pad_hor="#space_sm" style_text_font="#u1_body_font" style_bg_opa="0" style_border_width="0">
+              <bind_flag_if cond="workspace_external" flag="hidden" />
+              <bind_state_if cond="workspace_busy" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="library" />
+            </ui_button>
+          </lv_obj>
+          <ui_button name="workspace_read_tag" text="RFID（高级）" variant="ghost" width="100%" height="#workspace_action_h" style_shadow_width="0" icon="refresh" icon_position="left" style_pad_hor="#space_sm" style_text_font="#u1_body_font" style_bg_opa="0" style_border_width="0">
+            <bind_flag_if cond="workspace_external" flag="hidden" />
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="read_tag" />
+          </ui_button>
+        </lv_obj>
+        <divider_horizontal>
+          <bind_flag_if cond="workspace_external" flag="hidden" />
+        </divider_horizontal>
+        <text_body text="更多操作">
+          <bind_flag_if cond="workspace_external" flag="hidden" />
+        </text_body>
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <bind_flag_if cond="workspace_external" flag="hidden" />
+          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <ui_button name="workspace_auto_dry" text="自动烘干" variant="ghost" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0" icon="thermometer" icon_position="left" style_pad_hor="#space_sm" style_text_font="#u1_body_font" style_bg_opa="0" style_border_width="0">
+              <bind_state_if cond="workspace_busy" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry" />
+            </ui_button>
+            <ui_button name="workspace_settings" text="续料与设置" variant="ghost" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0" icon="cog" icon_position="left" style_pad_hor="#space_sm" style_text_font="#u1_body_font" style_bg_opa="0" style_border_width="0">
+              <event_cb trigger="clicked" callback="workspace_action" user_data="settings" />
+            </ui_button>
+          </lv_obj>
+          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <ui_button name="workspace_calibrate_pa" text="PA 标定" variant="ghost" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0" icon="gauge" icon_position="left" style_pad_hor="#space_sm" style_text_font="#u1_body_font" style_bg_opa="0" style_border_width="0">
+              <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="calibrate_pa" />
+            </ui_button>
+            <ui_button name="workspace_write_tag" text="写入 RFID" variant="ghost" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0" icon="pencil" icon_position="left" style_pad_hor="#space_sm" style_text_font="#u1_body_font" style_bg_opa="0" style_border_width="0">
+              <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="write_tag" />
+            </ui_button>
+          </lv_obj>
+          <ui_button name="workspace_firmware" text="本地固件升级" variant="ghost" width="100%" height="#workspace_action_h" style_shadow_width="0" icon="update" icon_position="left" style_pad_hor="#space_sm" style_text_font="#u1_body_font" style_bg_opa="0" style_border_width="0">
+            <bind_state_if cond="workspace_busy" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="firmware" />
+          </ui_button>
+        </lv_obj>
+      </lv_obj>
+      <lv_obj name="workspace_page_10" width="100%" style_max_width="#workspace_max_width" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 10" flag="hidden" />
+        <lv_obj name="workspace_temperature_heads" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <lv_obj width="100%" height="#workspace_temperature_card_h" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <bind_style_if_ge name="temperature_card_roomy" subject="ui_breakpoint" ref_value="3" />
+            <lv_obj name="workspace_temperature_head_0" width="0" flex_grow="1" height="100%" flex_flow="column" style_pad_hor="#u1_card_pad" style_pad_ver="#u1_border" style_pad_gap="0" style_flex_main_place="center" clickable="true" scrollable="false">
+              <style name="styles.u1_card" />
+              <style name="styles.press_wash" selector="pressed" />
+              <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" style_flex_cross_place="center" scrollable="false" clickable="false" event_bubble="true">
+                <text_small text="1号喷头" width="0" flex_grow="1" style_text_color="#text_muted" clickable="false" event_bubble="true" />
+                <lv_obj width="#workspace_status_slot" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_flex_cross_place="center" style_flex_main_place="end" scrollable="false" clickable="false" event_bubble="true">
+                  <lv_obj width="#u1_status_dot" height="#u1_status_dot" style_radius="#u1_status_dot" style_bg_opa="255" scrollable="false" clickable="false" event_bubble="true">
+                    <bind_style_prop prop="bg_color" subject="workspace_heater_0_color" />
+                  </lv_obj>
+                </lv_obj>
+              </lv_obj>
+              <lv_obj width="100%" height="#workspace_temperature_reading_h" flex_flow="row" style_pad_all="0" style_border_width="0" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_main_place="space_between" scrollable="false" clickable="false" event_bubble="true">
+                <text_heading bind_text="workspace_heater_0_current" width="0" flex_grow="1" long_mode="dots" style_text_font="#u1_title_font" style_text_color="#text" clickable="false" event_bubble="true" />
+                <text_small bind_text="workspace_heater_0_target" width="44%" long_mode="dots" style_text_color="#text_muted" style_text_align="right" clickable="false" event_bubble="true" />
+              </lv_obj>
+              <event_cb trigger="clicked" callback="workspace_action" user_data="temperature_head_0" />
+            </lv_obj>
+            <lv_obj name="workspace_temperature_head_1" width="0" flex_grow="1" height="100%" flex_flow="column" style_pad_hor="#u1_card_pad" style_pad_ver="#u1_border" style_pad_gap="0" style_flex_main_place="center" clickable="true" scrollable="false">
+              <style name="styles.u1_card" />
+              <style name="styles.press_wash" selector="pressed" />
+              <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" style_flex_cross_place="center" scrollable="false" clickable="false" event_bubble="true">
+                <text_small text="2号喷头" width="0" flex_grow="1" style_text_color="#text_muted" clickable="false" event_bubble="true" />
+                <lv_obj width="#workspace_status_slot" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_flex_cross_place="center" style_flex_main_place="end" scrollable="false" clickable="false" event_bubble="true">
+                  <lv_obj width="#u1_status_dot" height="#u1_status_dot" style_radius="#u1_status_dot" style_bg_opa="255" scrollable="false" clickable="false" event_bubble="true">
+                    <bind_style_prop prop="bg_color" subject="workspace_heater_1_color" />
+                  </lv_obj>
+                </lv_obj>
+              </lv_obj>
+              <lv_obj width="100%" height="#workspace_temperature_reading_h" flex_flow="row" style_pad_all="0" style_border_width="0" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_main_place="space_between" scrollable="false" clickable="false" event_bubble="true">
+                <text_heading bind_text="workspace_heater_1_current" width="0" flex_grow="1" long_mode="dots" style_text_font="#u1_title_font" style_text_color="#text" clickable="false" event_bubble="true" />
+                <text_small bind_text="workspace_heater_1_target" width="44%" long_mode="dots" style_text_color="#text_muted" style_text_align="right" clickable="false" event_bubble="true" />
+              </lv_obj>
+              <event_cb trigger="clicked" callback="workspace_action" user_data="temperature_head_1" />
+            </lv_obj>
+          </lv_obj>
+          <lv_obj width="100%" height="#workspace_temperature_card_h" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <bind_style_if_ge name="temperature_card_roomy" subject="ui_breakpoint" ref_value="3" />
+            <lv_obj name="workspace_temperature_head_2" width="0" flex_grow="1" height="100%" flex_flow="column" style_pad_hor="#u1_card_pad" style_pad_ver="#u1_border" style_pad_gap="0" style_flex_main_place="center" clickable="true" scrollable="false">
+              <style name="styles.u1_card" />
+              <style name="styles.press_wash" selector="pressed" />
+              <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" style_flex_cross_place="center" scrollable="false" clickable="false" event_bubble="true">
+                <text_small text="3号喷头" width="0" flex_grow="1" style_text_color="#text_muted" clickable="false" event_bubble="true" />
+                <lv_obj width="#workspace_status_slot" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_flex_cross_place="center" style_flex_main_place="end" scrollable="false" clickable="false" event_bubble="true">
+                  <lv_obj width="#u1_status_dot" height="#u1_status_dot" style_radius="#u1_status_dot" style_bg_opa="255" scrollable="false" clickable="false" event_bubble="true">
+                    <bind_style_prop prop="bg_color" subject="workspace_heater_2_color" />
+                  </lv_obj>
+                </lv_obj>
+              </lv_obj>
+              <lv_obj width="100%" height="#workspace_temperature_reading_h" flex_flow="row" style_pad_all="0" style_border_width="0" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_main_place="space_between" scrollable="false" clickable="false" event_bubble="true">
+                <text_heading bind_text="workspace_heater_2_current" width="0" flex_grow="1" long_mode="dots" style_text_font="#u1_title_font" style_text_color="#text" clickable="false" event_bubble="true" />
+                <text_small bind_text="workspace_heater_2_target" width="44%" long_mode="dots" style_text_color="#text_muted" style_text_align="right" clickable="false" event_bubble="true" />
+              </lv_obj>
+              <event_cb trigger="clicked" callback="workspace_action" user_data="temperature_head_2" />
+            </lv_obj>
+            <lv_obj name="workspace_temperature_head_3" width="0" flex_grow="1" height="100%" flex_flow="column" style_pad_hor="#u1_card_pad" style_pad_ver="#u1_border" style_pad_gap="0" style_flex_main_place="center" clickable="true" scrollable="false">
+              <style name="styles.u1_card" />
+              <style name="styles.press_wash" selector="pressed" />
+              <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" style_flex_cross_place="center" scrollable="false" clickable="false" event_bubble="true">
+                <text_small text="4号喷头" width="0" flex_grow="1" style_text_color="#text_muted" clickable="false" event_bubble="true" />
+                <lv_obj width="#workspace_status_slot" height="#u1_text_line" flex_flow="row" style_pad_all="0" style_flex_cross_place="center" style_flex_main_place="end" scrollable="false" clickable="false" event_bubble="true">
+                  <lv_obj width="#u1_status_dot" height="#u1_status_dot" style_radius="#u1_status_dot" style_bg_opa="255" scrollable="false" clickable="false" event_bubble="true">
+                    <bind_style_prop prop="bg_color" subject="workspace_heater_3_color" />
+                  </lv_obj>
+                </lv_obj>
+              </lv_obj>
+              <lv_obj width="100%" height="#workspace_temperature_reading_h" flex_flow="row" style_pad_all="0" style_border_width="0" style_pad_gap="#space_xs" style_flex_cross_place="center" style_flex_main_place="space_between" scrollable="false" clickable="false" event_bubble="true">
+                <text_heading bind_text="workspace_heater_3_current" width="0" flex_grow="1" long_mode="dots" style_text_font="#u1_title_font" style_text_color="#text" clickable="false" event_bubble="true" />
+                <text_small bind_text="workspace_heater_3_target" width="44%" long_mode="dots" style_text_color="#text_muted" style_text_align="right" clickable="false" event_bubble="true" />
+              </lv_obj>
+              <event_cb trigger="clicked" callback="workspace_action" user_data="temperature_head_3" />
+            </lv_obj>
+          </lv_obj>
+        </lv_obj>
+        <lv_obj name="workspace_temperature_bed" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_hor="#u1_page_pad" style_pad_ver="0" style_pad_gap="#space_sm" style_flex_cross_place="center" style_radius="#u1_card_radius" style_bg_color="#card_bg" style_bg_opa="255" clickable="true" scrollable="false">
+          <style name="styles.press_wash" selector="pressed" />
+          <text_body text="热床" width="0" flex_grow="1" clickable="false" event_bubble="true" />
+          <text_heading bind_text="workspace_heater_4_current" style_text_font="#u1_title_font" style_text_color="#text" clickable="false" event_bubble="true" />
+          <icon src="chevron_right" size="sm" variant="muted" clickable="false" event_bubble="true" />
+          <event_cb trigger="clicked" callback="workspace_action" user_data="temperature_bed" />
+        </lv_obj>
+      </lv_obj>
+      <lv_obj name="workspace_page_9" width="100%" style_max_width="#workspace_max_width" height="#workspace_nozzle_body_h" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 9" flag="hidden" />
+        <lv_obj name="workspace_nozzle_info" width="0" flex_grow="3" height="100%" flex_flow="column" style_pad_all="0" style_pad_gap="0" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" scrollable="false">
+          <lv_obj name="workspace_nozzle_temperature_box" width="100%" height="#workspace_nozzle_temp_h" flex_flow="column" style_pad_hor="#u1_card_pad" style_pad_ver="0" style_pad_gap="#u1_compact_gap" scrollable="false">
+            <lv_obj width="100%" height="#workspace_nozzle_reading_h" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" style_flex_cross_place="center" scrollable="false">
+              <text_small text="当前温度" width="0" flex_grow="1" style_text_color="#text_muted" />
+              <text_heading name="workspace_nozzle_actual" bind_text="workspace_nozzle_temperature" style_text_font="#u1_title_font" style_text_color="#text" />
+            </lv_obj>
+            <lv_obj name="workspace_nozzle_target_bar" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="0" style_bg_color="#elevated_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_flex_cross_place="center" scrollable="false">
+              <ui_button name="workspace_nozzle_target_down" icon="minus" variant="ghost" width="#u1_touch_target" height="100%" style_pad_all="0" style_shadow_width="0">
+                <bind_state_if cond="workspace_busy or not workspace_nozzle_heat_ready" state="disabled" />
+                <event_cb trigger="clicked" callback="workspace_action" user_data="nozzle_target_down" />
+              </ui_button>
+              <lv_obj width="0" flex_grow="1" height="100%" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_compact_gap" style_flex_main_place="center" style_flex_cross_place="center" scrollable="false" clickable="false">
+                <text_small text="目标" style_text_color="#text_muted" />
+                <text_heading name="workspace_nozzle_target" bind_text="workspace_nozzle_target" style_text_font="#u1_heading_font" style_text_color="#text" />
+              </lv_obj>
+              <ui_button name="workspace_nozzle_target_up" icon="plus" variant="ghost" width="#u1_touch_target" height="100%" style_pad_all="0" style_shadow_width="0">
+                <bind_state_if cond="workspace_busy or not workspace_nozzle_heat_ready" state="disabled" />
+                <event_cb trigger="clicked" callback="workspace_action" user_data="nozzle_target_up" />
+              </ui_button>
+            </lv_obj>
+            <ui_button name="workspace_nozzle_apply" text="应用" variant="primary" style_text_color="#FFFFFF" width="100%" height="#u1_touch_target" style_pad_all="0" style_border_width="0" style_shadow_width="0" style_radius="#u1_card_radius">
+              <bind_state_if cond="workspace_busy or not workspace_nozzle_heat_ready or not workspace_nozzle_target_dirty" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="nozzle_apply" />
+            </ui_button>
+          </lv_obj>
+          <lv_obj name="workspace_nozzle_edit" width="100%" height="#workspace_action_h" flex_flow="row" style_pad_hor="#u1_card_pad" style_pad_ver="0" style_pad_gap="#space_sm" style_flex_cross_place="center" style_border_width="#u1_border" style_border_color="#border" style_border_side="top" clickable="true" scrollable="false">
+            <bind_state_if cond="workspace_busy or not workspace_nozzle_editable" state="disabled" />
+            <style name="styles.press_wash" selector="pressed" />
+            <lv_obj width="#workspace_swatch" height="#workspace_swatch" style_bg_opa="255" style_radius="#workspace_swatch" style_pad_all="0" style_border_width="#u1_border" style_border_color="#border" clickable="false" event_bubble="true" scrollable="false">
+              <bind_style_prop prop="bg_color" subject="workspace_nozzle_color" />
+            </lv_obj>
+            <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="0" clickable="false" event_bubble="true" scrollable="false">
+              <text_body width="100%" bind_text="workspace_nozzle_material" long_mode="dots" clickable="false" event_bubble="true" />
+              <text_small width="100%" bind_text="workspace_nozzle_source" style_text_color="#text_muted" long_mode="dots" clickable="false" event_bubble="true" />
+            </lv_obj>
+            <text_small text="编辑" style_text_color="#text_muted" clickable="false" event_bubble="true" />
+            <icon src="chevron_right" size="sm" variant="muted" clickable="false" event_bubble="true" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="edit_nozzle_material" />
+          </lv_obj>
+        </lv_obj>
+        <lv_obj name="workspace_nozzle_actions" width="0" flex_grow="2" height="100%" flex_flow="column" style_pad_hor="#u1_card_pad" style_pad_ver="#u1_compact_gap" style_pad_gap="#u1_compact_gap" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" scrollable="false">
+          <lv_obj width="100%" height="#workspace_nozzle_line_h" flex_flow="row" style_pad_all="0" style_flex_main_place="space_between" style_flex_cross_place="center" scrollable="false">
+            <text_small text="挤出机" style_text_color="#text_muted" />
+            <text_small text="5 mm" style_text_color="#text_muted" />
+          </lv_obj>
+          <ui_button name="workspace_retract" text="回抽" icon="arrow_up" icon_position="left" variant="secondary" width="100%" height="#u1_touch_target" style_bg_color="#elevated_bg" style_bg_opa="255" style_border_width="0" style_shadow_width="0" style_radius="#u1_card_radius" style_pad_all="#space_xs">
+            <bind_state_if cond="workspace_busy or not workspace_manual_ready" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="retract" />
+          </ui_button>
+          <ui_button name="workspace_extrude" text="挤出" icon="arrow_down" icon_position="left" variant="secondary" width="100%" height="#u1_touch_target" style_bg_color="#elevated_bg" style_bg_opa="255" style_border_width="0" style_shadow_width="0" style_radius="#u1_card_radius" style_pad_all="#space_xs">
+            <bind_state_if cond="workspace_busy or not workspace_manual_ready" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="extrude" />
+          </ui_button>
+          <ui_button name="workspace_activate_head" text="激活此喷头" variant="ghost" width="100%" height="#u1_touch_target" style_pad_all="0" style_text_font="#font_small" style_shadow_width="0">
+            <bind_flag_if cond="workspace_nozzle_active" flag="hidden" />
+            <bind_state_if cond="workspace_busy or not workspace_nozzle_activation_ready or filament_manual_motion ne 0" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="activate_head" />
+          </ui_button>
+          <lv_obj width="100%" height="#u1_touch_target" style_pad_all="0" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+            <bind_flag_if cond="not workspace_nozzle_active" flag="hidden" />
+            <text_small name="workspace_manual_hint" width="100%" bind_text="workspace_manual_hint" long_mode="wrap" style_text_color="#text_muted" style_text_align="center" />
+          </lv_obj>
+        </lv_obj>
+      </lv_obj>
+      <lv_obj name="workspace_page_1" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 1 or workspace_external" flag="hidden" />
+        <text_heading text="耗材库" width="100%" />
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <ui_button name="workspace_new_spool" text="新增线盘" variant="primary" style_text_color="#FFFFFF" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" icon="plus" icon_position="left" style_pad_hor="#space_sm">
+              <bind_state_if cond="workspace_busy" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="new_spool" />
+            </ui_button>
+            <ui_button name="workspace_refresh_library" text="刷新耗材库" variant="outline" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0" icon="refresh" icon_position="left" style_pad_hor="#space_sm">
+              <bind_state_if cond="workspace_busy" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="refresh_library" />
+            </ui_button>
+          </lv_obj>
+          <ui_button name="workspace_sync" text="同步 Spoolman" variant="outline" width="100%" height="#workspace_action_h" style_shadow_width="0">
+            <bind_state_if cond="workspace_busy" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="sync" />
+          </ui_button>
+        </lv_obj>
+        <repeat count="workspace_spool_count">
+          <ui_button name="workspace_spool_${i}" bind_text="workspace_spool_${i}" variant="outline" width="100%" height="#workspace_list_h" style_shadow_width="0">
+            <event_cb trigger="clicked" callback="workspace_spool_select" user_data="${i}" />
+          </ui_button>
+        </repeat>
+      </lv_obj>
+      <lv_obj name="workspace_page_2" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 2" flag="hidden" />
+        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_flex_main_place="center" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small text="耗材类型" />
+            <text_input name="spool_material" width="100%" height="#u1_touch_target" one_line="true" bind_text="workspace_material" keyboard_hint="text" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius" />
+          </lv_obj>
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small text="颜色 HEX" />
+            <text_input name="spool_color" width="100%" height="#u1_touch_target" one_line="true" bind_text="workspace_color" keyboard_hint="text" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius" />
+          </lv_obj>
+          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small text="品牌" />
+            <text_input name="spool_vendor" width="100%" height="#u1_touch_target" one_line="true" bind_text="workspace_vendor" keyboard_hint="text" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius" />
+          </lv_obj>
+          <lv_obj name="workspace_weight_field" width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <bind_flag_if cond="workspace_edit_external or workspace_external" flag="hidden" />
+            <text_small text="剩余重量 g · 留空保留原值" width="100%" long_mode="wrap" />
+            <text_input name="spool_weight" width="100%" height="#u1_touch_target" one_line="true" bind_text="workspace_weight" keyboard_hint="numeric" max_length="48" style_bg_color="#card_bg" style_radius="#u1_card_radius" />
+          </lv_obj>
+        </lv_obj>
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <bind_flag_if cond="workspace_edit_external or workspace_external" flag="hidden" />
+            <ui_button name="workspace_assign_spool" text="绑定当前槽位" variant="outline" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0">
+              <bind_flag_if cond="workspace_edit_external or workspace_external" flag="hidden" />
+              <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="spool_assign" />
+            </ui_button>
+            <ui_button name="workspace_unbind" text="解除当前槽绑定" variant="outline" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0">
+              <bind_flag_if cond="workspace_edit_external or workspace_external" flag="hidden" />
+              <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="unbind" />
+            </ui_button>
+          </lv_obj>
+        </lv_obj>
+      </lv_obj>
+      <lv_obj name="workspace_page_3" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 3" flag="hidden" />
+        <text_body text="升级本机 U1 打印机" />
+        <text_small text="从 U 盘或本地 firmware 目录选择完整 .bin 升级包" width="100%" />
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <ui_button name="workspace_refresh_files" text="刷新本地文件" variant="outline" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0">
+              <bind_state_if cond="workspace_busy" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="refresh_files" />
+            </ui_button>
+            <ui_button name="workspace_upgrade_status" text="查看升级任务" variant="outline" width="0" flex_grow="1" height="#workspace_action_h" style_shadow_width="0">
+              <bind_state_if cond="workspace_busy" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="upgrade_status" />
+            </ui_button>
+          </lv_obj>
+        </lv_obj>
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+          <repeat count="workspace_file_count">
+            <ui_button name="workspace_file_${i}" bind_text="workspace_file_${i}" variant="outline" width="100%" height="#workspace_list_h" style_shadow_width="0">
+              <bind_state_if cond="workspace_busy" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_file_select" user_data="${i}" />
+            </ui_button>
+          </repeat>
+        </lv_obj>
+        <text_body name="firmware_file_info" bind_text="workspace_file_info" width="100%" />
+        <text_body text="固件包目标版本" />
+        <text_heading bind_text="workspace_version" />
+        <ui_button name="workspace_firmware_next" text="核对升级信息" width="100%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" variant="primary" style_text_color="#FFFFFF">
+          <bind_state_if cond="not workspace_prepared or workspace_busy" state="disabled" />
+          <event_cb trigger="clicked" callback="workspace_action" user_data="firmware_next" />
+        </ui_button>
+      </lv_obj>
+      <lv_obj name="workspace_page_4" width="100%" height="content" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_border_width="1" style_border_color="#border">
+        <bind_flag_if cond="workspace_page ne 4" flag="hidden" />
+        <text_body bind_text="workspace_detail" width="100%" long_mode="wrap" />
+        <ui_button name="workspace_firmware_start" text="确认开始升级" variant="primary" style_text_color="#FFFFFF" width="100%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0">
+          <bind_state_if cond="workspace_busy" state="disabled" />
+          <event_cb trigger="clicked" callback="workspace_action" user_data="firmware_start" />
+        </ui_button>
+      </lv_obj>
+      <lv_obj name="workspace_page_5" width="100%" height="content" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_border_width="1" style_border_color="#border">
+        <bind_flag_if cond="workspace_page ne 5" flag="hidden" />
+        <text_heading text="本地升级任务" />
+        <lv_bar width="100%" height="#workspace_progress_h" min_value="0" max_value="100" bind_value="workspace_progress" />
+        <text_body text="重启后请核对当前版本。升级日志保存在本机 firmware 目录。" width="100%" long_mode="wrap" />
+        <ui_button name="workspace_poll_status" text="刷新进度" variant="outline" width="100%" height="#workspace_action_h" style_shadow_width="0">
+          <bind_state_if cond="workspace_busy" state="disabled" />
+          <event_cb trigger="clicked" callback="workspace_action" user_data="upgrade_status" />
+        </ui_button>
+      </lv_obj>
+      <lv_obj name="workspace_page_6" width="100%" height="content" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_border_width="1" style_border_color="#border">
+        <bind_flag_if cond="workspace_page ne 6" flag="hidden" />
+        <text_body bind_text="workspace_detail" width="100%" long_mode="wrap" />
+        <ui_button name="workspace_confirm" text="确认操作" bind_text="workspace_confirm_text" variant="primary" style_text_color="#FFFFFF" width="100%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0">
+          <bind_state_if cond="workspace_busy or not workspace_confirm_ready" state="disabled" />
+          <event_cb trigger="clicked" callback="workspace_action" user_data="confirm" />
+        </ui_button>
+      </lv_obj>
+      <lv_obj name="workspace_page_7" width="100%" style_max_width="#workspace_max_width" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 7" flag="hidden" />
+        <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#space_md" scrollable="false" style_flex_cross_place="center">
+          <text_small bind_text="workspace_status" width="0" flex_grow="1" long_mode="wrap" style_text_font="#u1_aux_font" style_text_color="#text_muted" />
+          <ui_button name="workspace_auto_dry_on" text="已关闭" variant="outline" width="#workspace_toggle_w" height="#u1_touch_target" style_shadow_width="0" style_radius="#u1_card_radius">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_on" />
+            <bind_flag_if cond="workspace_auto_enabled ne 0" flag="hidden" />
+          </ui_button>
+          <ui_button name="workspace_auto_dry_off" text="已启用" variant="primary" style_text_color="#FFFFFF" width="#workspace_toggle_w" height="#u1_touch_target" style_shadow_width="0" style_radius="#u1_card_radius" style_border_width="0">
+            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
+            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_off" />
+            <bind_flag_if cond="workspace_auto_enabled ne 1" flag="hidden" />
+          </ui_button>
+          <ui_button name="workspace_auto_dry_pending" text="未读取" variant="outline" width="#workspace_toggle_w" height="#u1_touch_target" style_shadow_width="0" style_radius="#u1_card_radius">
+            <bind_flag_if cond="workspace_auto_enabled ge 0" flag="hidden" />
+            <bind_state_if cond="1" state="disabled" />
+          </ui_button>
+        </lv_obj>
+        <lv_obj width="100%" height="content" flex_flow="row" style_flex_main_place="center" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small text="温度 °C" />
+            <text_input name="auto_value_0" width="100%" height="#u1_touch_target" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_0" max_length="8" style_bg_color="#card_bg" style_radius="#u1_card_radius" />
+          </lv_obj>
+          <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <bind_flag_if cond="workspace_auto_sensor eq 0" flag="hidden" />
+            <text_small text="启动湿度 %" />
+            <text_input name="auto_value_1" width="100%" height="#u1_touch_target" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_1" max_length="8" style_bg_color="#card_bg" style_radius="#u1_card_radius" />
+          </lv_obj>
+          <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <bind_flag_if cond="workspace_auto_sensor eq 0" flag="hidden" />
+            <text_small text="停止湿度 %" />
+            <text_input name="auto_value_2" width="100%" height="#u1_touch_target" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_2" max_length="8" style_bg_color="#card_bg" style_radius="#u1_card_radius" />
+          </lv_obj>
+          <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <bind_flag_if cond="workspace_auto_sensor eq 1" flag="hidden" />
+            <text_small text="跟随主设备 0-3" />
+            <text_input name="auto_value_3" width="100%" height="#u1_touch_target" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_3" max_length="8" style_bg_color="#card_bg" style_radius="#u1_card_radius" />
+          </lv_obj>
+          <lv_obj width="0" flex_grow="1" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+            <bind_flag_if cond="workspace_auto_sensor eq 1" flag="hidden" />
+            <text_small text="追加烘干 分钟" />
+            <text_input name="auto_value_4" width="100%" height="#u1_touch_target" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_4" max_length="8" style_bg_color="#card_bg" style_radius="#u1_card_radius" />
+          </lv_obj>
+        </lv_obj>
+        <ui_button name="workspace_auto_dry_save" text="保存烘干参数" width="100%" height="#u1_touch_target" style_shadow_width="0" style_radius="#u1_card_radius" style_border_width="0" variant="primary" style_text_color="#FFFFFF">
+          <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
+          <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_save" />
+        </ui_button>
+        <text_small text="跟随策略保存在设备中。主设备编号使用 0-3，-1 表示无跟随。" width="100%" long_mode="wrap" style_text_color="#text_muted">
+          <bind_flag_if cond="workspace_auto_sensor eq 1" flag="hidden" />
+        </text_small>
+      </lv_obj>
+      <lv_obj name="workspace_page_8" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="workspace_page ne 8" flag="hidden" />
+        <text_heading text="设备与续料策略" width="100%" />
+        <repeat count="5">
+          <lv_obj width="100%" height="#workspace_list_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_lg" style_flex_cross_place="center" scrollable="false">
+            <text_body bind_text="workspace_setting_${i}" width="0" flex_grow="1" />
+            <ui_button name="setting_${i}_on" text="已关闭" variant="outline" width="#workspace_toggle_w" height="#workspace_action_h" style_shadow_width="0">
+              <bind_state_if cond="workspace_busy or not workspace_settings_ready" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="setting_${i}_on" />
+              <bind_flag_if cond="workspace_setting_enabled_${i} ne 0" flag="hidden" />
+            </ui_button>
+            <ui_button name="setting_${i}_no" text="已启用" variant="primary" style_text_color="#FFFFFF" width="#workspace_toggle_w" height="#workspace_action_h" style_shadow_width="0" style_border_width="0">
+              <bind_state_if cond="workspace_busy or not workspace_settings_ready" state="disabled" />
+              <event_cb trigger="clicked" callback="workspace_action" user_data="setting_${i}_no" />
+              <bind_flag_if cond="workspace_setting_enabled_${i} ne 1" flag="hidden" />
+            </ui_button>
+            <ui_button name="setting_${i}_pending" text="未读取" variant="outline" width="#workspace_toggle_w" height="#workspace_action_h" style_shadow_width="0">
+              <bind_flag_if cond="workspace_setting_enabled_${i} ge 0" flag="hidden" />
+              <bind_state_if cond="1" state="disabled" />
+            </ui_button>
+          </lv_obj>
+        </repeat>
+      </lv_obj>
+    </lv_obj>
+    <lv_obj name="workspace_task_footer" width="100%" height="content" flex_flow="column" style_pad_hor="#u1_page_pad" style_pad_ver="#space_xs" style_pad_gap="#space_xs" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255">
+      <bind_flag_if cond="workspace_external or workspace_page ne 0 or (workspace_ready and not workspace_task_stoppable and not workspace_recovery_needed)" flag="hidden" />
+      <lv_obj width="100%" height="content" style_max_height="#workspace_footer_message_max" style_pad_all="0" scrollable="true" scroll_dir="ver">
+        <text_small name="workspace_task_text" bind_text="workspace_task_message" width="100%" long_mode="wrap" />
+      </lv_obj>
+      <ui_button name="workspace_stop_slot" text="停止当前操作" variant="outline" width="100%" height="#u1_touch_target" style_shadow_width="0">
+        <bind_flag_if cond="not workspace_task_stoppable" flag="hidden" />
+        <event_cb trigger="clicked" callback="workspace_action" user_data="stop_slot" />
+      </ui_button>
+    </lv_obj>
+    <lv_obj name="workspace_editor_footer" width="100%" height="content" flex_flow="row" style_pad_hor="#u1_page_pad" style_pad_top="0" style_pad_bottom="#u1_card_gap" style_pad_gap="#u1_card_gap" scrollable="false">
+      <bind_flag_if cond="workspace_page ne 2" flag="hidden" />
+      <ui_button name="workspace_return_library" text="取消" variant="outline" width="0" flex_grow="1" height="#u1_touch_target" style_bg_color="#elevated_bg" style_border_width="0" style_shadow_width="0">
+        <bind_state_if cond="workspace_busy" state="disabled" />
+        <event_cb trigger="clicked" callback="workspace_action" user_data="back" />
+      </ui_button>
+      <ui_button name="workspace_save_spool" text="保存耗材" variant="primary" style_text_color="#FFFFFF" width="0" flex_grow="1" height="#u1_touch_target" style_border_width="0" style_shadow_width="0">
+        <bind_state_if cond="workspace_busy" state="disabled" />
+        <event_cb trigger="clicked" callback="workspace_action" user_data="save_spool" />
+      </ui_button>
+    </lv_obj>
+  </view>
+</component>

@@ -1,0 +1,23 @@
+{
+  "version": "V1.1.92O",
+  "scope": "raw diagnostic, unattributed; offline only",
+  "sha256": "411079789ce2f64654ef47b6d1be7abddbbf0d4a396c5a7e20304a302df9afcb",
+  "size": 78830,
+  "md5": "94acf4fae8e84623b95bc56333a86590",
+  "repeat_equal": true,
+  "original_app_differing_addresses": [
+    "0x800e22a",
+    "0x800e844",
+    "0x800fe38",
+    "0x800fe3e",
+    "0x8018c26"
+  ],
+  "first_1024_equal": true,
+  "iap_trailer_equal": true,
+  "ota_crc_init_ffff": "0x3dd3",
+  "builder_crc_init_0000": "0x6642",
+  "ota_chunk_count": 1232,
+  "ota_last_chunk_bytes": 46,
+  "thumb_emulation": "passed 200 cases plus native epilogue return; not device evidence",
+  "protocol_contract": "2 tests passed"
+}

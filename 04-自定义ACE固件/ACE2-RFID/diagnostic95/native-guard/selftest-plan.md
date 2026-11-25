@@ -1,0 +1,9 @@
+# 60-second reactor timer check — review candidate, not executed
+
+Install the reviewed updated extra using a new backup and controlled service restart. Verify fresh 95O UID, original route and four sensor states. No ARM, FEED, RF operation, heat or retraction during this check.
+
+Before the check, snapshot `/multiace/api/state` for indices 1, 2, 3, including connected and fw_hold. For each only if `connected is False`, `fw_hold is False`, and firmware protocol has been detected such that ACE_FW_RELEASE accepts it, record it as a candidate and invoke `ACE_FW_RELEASE ACE=n` once. Verify resulting fw_hold. Do not touch ACE0 or any previously held or connected device. On refusal stop and report; no assumption that a vacant port is an ACE. After check use ACE_FW_RESUME only for successfully held indices, then verify each restored to prior hold state. Do not resume a port merely because it was in the requested list; record confirmed acquisitions.
+
+Invoke `ACE_NATIVE_GUARD_SELFTEST` once. Poll `/printer/objects/query?ace_native_guard` until `selftest_active=false`; save elapsed time, `selftest_count`, `selftest_max_gap` and fresh four head sensors. Timer only records timestamps at nominal 50 ms; no RFID, serial, or motion requests. Compare against a separately approved no-hold baseline if needed; a one-minute maximum is empirical, not an upper bound on future latency. Abort on printer state change.
+
+Potential timing source is not proved: unused port `_open_ace` runs from a reactor timer, but its serial open/handshake is explicitly in a worker thread and the reactor waits using `reactor.pause`, which yields. Consequently temporal overlap with the prior stale event is evidence of correlation, not proof that the reactor was blocked. Real timer gap and one-in-flight request instrumentation are needed.

@@ -1,0 +1,46 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <view name="console_panel" extends="overlay_panel" title="Console" bg_color="#screen_bg" title_transform="none" title_font="#font_heading" title_color="#text">
+    <!-- Content Area -->
+    <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" style_pad_top="8" scrollable="false" flex_flow="column" style_pad_gap="8" style_pad_bottom="8" style_pad_left="12" style_pad_right="12">
+      <!-- Disable content when printer not connected or klippy not ready -->
+      <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+      <!-- Status message (hidden when empty to avoid dead space) -->
+      <text_small name="status_message" width="100%" text="" bind_text="console_status" style_text_align="center">
+        <bind_flag_if_eq subject="console_status_visible" flag="hidden" ref_value="0"/>
+      </text_small>
+      <!-- Console output (transparent — entries sit directly on the panel card) -->
+      <lv_obj name="console_container" width="100%" flex_grow="1" style_bg_opa="255" style_pad_all="8" style_pad_right="#space_xs" scrollable="true" flex_flow="column" style_pad_gap="#space_xs" style_bg_color="#card_bg" style_radius="#u1_card_radius" style_border_width="#u1_border" style_border_color="#border" style_shadow_width="0" height="0">
+        <!-- Console entries populated dynamically by C++ (text_small labels) -->
+        <!-- Empty state (shown when no history available, inside console bg) -->
+        <lv_obj name="empty_state" width="100%" height="100%" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center" style_pad_gap="#space_md" scrollable="false">
+          <bind_flag_if_eq subject="console_has_entries" flag="hidden" ref_value="1"/>
+          <icon src="console" size="xl" variant="secondary"/>
+          <text_heading width="content" text="No History" style_text_align="center"/>
+          <text_muted width="content" text="G-code commands will appear here" style_text_align="center"/>
+        </lv_obj>
+      </lv_obj>
+      <!-- G-code composer: one recessed field with the actions living inside it.
+           The row itself carries the input background; the textarea is transparent
+           so the field reads as a single control rather than four adjacent ones. -->
+      <lv_obj name="input_row" width="100%" height="52" style_bg_color="#card_bg" style_bg_opa="255" style_border_width="#u1_border" style_border_color="#border" style_radius="#u1_card_radius" style_pad_all="4" style_pad_left="4" flex_flow="row" style_pad_gap="4" style_flex_cross_place="center" scrollable="false" style_shadow_width="0">
+        <!-- G-code text input (chrome removed — the row provides it) -->
+        <text_input name="gcode_input" flex_grow="1" placeholder_text="Enter G-code command..." placeholder_tag="Enter G-code command..." one_line="true" style_bg_opa="0" style_border_width="0" style_radius="0" style_pad_hor="0" width="0" height="44"/>
+        <!-- Clear button -->
+        <!-- Settings gear: opens console_settings_overlay (filter toggles, future per-pattern editor) -->
+        <!-- Send button: the one accented action, kept last so it reads as commit -->
+        <ui_button name="clear_btn" width="44" height="44" style_radius="8" variant="ghost" icon="delete" flex_grow="0" text="" style_pad_all="0">
+          <event_cb trigger="clicked" callback="on_console_clear_clicked"/>
+        </ui_button>
+        <ui_button name="settings_btn" width="44" height="44" style_radius="8" variant="ghost" icon="cog" flex_grow="0" text="" style_pad_all="0">
+          <event_cb trigger="clicked" callback="on_console_settings_clicked"/>
+        </ui_button>
+        <ui_button name="send_btn" width="64" height="44" style_radius="8" flex_grow="0" text="发送" style_pad_all="0">
+          <event_cb trigger="clicked" callback="on_console_send_clicked"/>
+        </ui_button>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

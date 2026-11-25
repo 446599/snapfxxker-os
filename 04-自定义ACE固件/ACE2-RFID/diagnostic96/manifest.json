@@ -1,0 +1,43 @@
+{
+  "status": "offline candidate; NOT FLASHED OR DEPLOYED",
+  "version": "V1.1.96O",
+  "image": "ACE2-96O-diagnostic.bin",
+  "size_bytes": 78898,
+  "sha256": "639670e528570c0325e7821f249abb409e0778eb03dedb048ed324b24285f96d",
+  "md5": "a80bca5c148dcc5aa83585d2de004270",
+  "crc16_kermit_hex": "6c25",
+  "base_sha256": "a468e366226e7c483d3dd96b444223e89cbf0d1b10573d42b6263843ffd6be3e",
+  "base_md5": "79fb22e7914bae1dc75ac91b30739c19",
+  "previous_95_sha256": "487b229840d65acc388926e9bae5502d12fdcd1b99372012b7461e6d24a3d26a",
+  "repeat_sha256": "639670e528570c0325e7821f249abb409e0778eb03dedb048ed324b24285f96d",
+  "repeat_identical": true,
+  "tail_hex": "61a5635a65a5325a",
+  "first_512_vector_bytes_identical_to_stock": true,
+  "first_four_words": [
+    "0x20009a80",
+    "0x08008245",
+    "0x08008f9b",
+    "0x08008f95"
+  ],
+  "stock_region_changes_only_generated_hooks_and_pokes": true,
+  "changed_source_files": [
+    "build_patch.py",
+    "native_tag_decoder.c"
+  ],
+  "decoder_source_sha256": "b3f07904760e4f82ef623e66e5085b0f8ec28675bd333c407eaace3c1c61ad3f",
+  "tests": {
+    "patch_replay_byte_identical": true,
+    "bambu_dual_read_and_failure": true,
+    "rc522_staging_boundaries": true,
+    "native_decoder_6_suites": true,
+    "linked_thumb_350_diag_and_epilogue_abi": true,
+    "linked_thumb_record_guard": true,
+    "fake_sram_four_records": true
+  },
+  "limitations": [
+    "No hardware, optical, or concurrent dual-spool validation.",
+    "Existing Anycubic rawtag_cache reads four bytes beyond a 164-byte record; unchanged.",
+    "Shared RF scratch and firmware SPI handling are not fixed.",
+    "Full image rebuild required; no existing hooked region may be replaced in-place."
+  ]
+}

@@ -1,0 +1,187 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- U1 480x320 home overview: progress + actions on top, four heads and stats below. -->
+<component>
+  <consts>
+    <px name="u1_home_band_height" value="90"/>
+    <px name="u1_home_thumb_size" value="100"/>
+    <px name="u1_home_stat_width" value="72"/>
+    <px name="u1_home_thumb_size_wide" value="156"/>
+    <px name="u1_home_wide_band_height" value="104"/>
+  </consts>
+  <styles>
+    <style name="compact_preview" width="#u1_home_thumb_size" height="#u1_home_thumb_size"/>
+    <style name="wide_preview" width="#u1_home_thumb_size_wide" height="#u1_home_thumb_size_wide"/>
+    <style name="wide_band" height="#u1_home_wide_band_height"/>
+    <style name="compact_band" height="#u1_home_band_height"/>
+  </styles>
+  <view extends="lv_obj" width="100%" height="100%" flex_flow="column"
+        style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap"
+        style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+    <!-- Mid row: progress card (~2/3) and action card (~1/3) -->
+    <lv_obj width="100%" height="0" flex_grow="1" flex_flow="row" style_pad_all="0"
+            style_pad_gap="#u1_card_gap" style_bg_opa="0" style_border_width="0"
+            scrollable="false" clickable="false">
+      <lv_obj name="u1_progress_card" width="0" flex_grow="2" height="100%" flex_flow="row"
+              style_pad_all="#u1_card_pad" style_pad_gap="#u1_card_pad_roomy" style_flex_cross_place="center"
+              scrollable="false" clickable="true">
+        <bind_flag_if_eq subject="job_holds_machine" flag="clickable" ref_value="1"/>
+        <event_cb trigger="clicked" callback="u1_home_job_details"/>
+        <style name="styles.u1_card"/>
+        <lv_obj name="u1_preview_well" style_max_height="100%"
+                style_radius="#u1_card_radius" style_bg_color="#elevated_bg" style_bg_opa="255"
+                style_border_width="1" style_border_color="#border" style_pad_all="0"
+                scrollable="false" clickable="false">
+          <bind_style_if name="compact_preview" cond="ui_breakpoint le 1"/>
+          <bind_style_if name="wide_preview" cond="ui_breakpoint gt 1"/>
+          <icon src="printer_3d" size="lg" variant="muted" align="center" clickable="false">
+            <bind_flag_if_eq subject="job_holds_machine" flag="hidden" ref_value="1"/>
+          </icon>
+          <gcode_viewer name="u1_preview_gcode" width="100%" height="100%" clickable="false" event_bubble="true">
+            <bind_flag_if cond="job_holds_machine ne 1 or print_has_thumbnail eq 1 or u1_home_preview_render eq 0" flag="hidden"/>
+          </gcode_viewer>
+          <icon name="u1_preview_placeholder" src="cube_outline" size="lg" variant="muted" align="center" clickable="false">
+            <bind_flag_if cond="job_holds_machine ne 1 or print_has_thumbnail eq 1 or u1_home_preview_render eq 2" flag="hidden"/>
+          </icon>
+          <lv_image name="u1_preview_image" width="100%" height="100%" bind_src="print_thumbnail_path"
+                    inner_align="contain" clickable="false">
+            <bind_flag_if cond="job_holds_machine ne 1 or print_has_thumbnail ne 1" flag="hidden"/>
+          </lv_image>
+        </lv_obj>
+        <lv_obj width="0" flex_grow="1" height="100%" flex_flow="column" style_pad_all="0"
+                style_pad_gap="#u1_compact_gap" style_flex_main_place="center" style_bg_opa="0" style_border_width="0"
+                scrollable="false" clickable="false">
+          <!-- Idle readiness occupies the same reading area as an active job. -->
+          <text_heading text="就绪" style_text_color="#text" style_text_font="#u1_heading_font" clickable="false">
+            <bind_flag_if cond="job_holds_machine eq 1 or nav_buttons_enabled ne 1" flag="hidden"/>
+          </text_heading>
+          <text_heading text="未就绪" style_text_color="#text_muted" style_text_font="#u1_heading_font" clickable="false">
+            <bind_flag_if cond="job_holds_machine eq 1 or nav_buttons_enabled eq 1" flag="hidden"/>
+          </text_heading>
+          <!-- Printing: filename, percent, bar, remaining -->
+          <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_compact_gap"
+                  style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+            <bind_flag_if_eq subject="job_holds_machine" flag="hidden" ref_value="0"/>
+            <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" scrollable="false" clickable="false">
+              <text_body name="u1_print_filename" width="0" flex_grow="1" bind_text="print_display_filename" long_mode="dots" style_text_font="#u1_body_font" clickable="false"/>
+              <icon src="chevron_right" size="xs" variant="secondary" clickable="false"/>
+            </lv_obj>
+            <text_body name="u1_print_percent" bind_text="print_progress_text"
+                       style_text_font="#u1_heading_font" clickable="false"/>
+            <lv_bar name="u1_print_progress_bar" width="100%" height="#u1_progress_track"
+                    min_value="0" max_value="100" bind_value="print_progress_display"
+                    style_radius="4" style_bg_color="#elevated_bg" style_bg_opa="255" style_border_width="0"
+                    style_bg_color-indicator="#primary" style_bg_opa-indicator="255"
+                    style_radius-indicator="4" clickable="false"/>
+            <text_small name="u1_print_remaining" width="100%" bind_text="u1_home_remaining_text"
+                        long_mode="dots" style_text_color="#text_muted" style_text_font="#u1_aux_font" clickable="false"/>
+          </lv_obj>
+        </lv_obj>
+      </lv_obj>
+
+      <lv_obj name="u1_action_card" width="0" flex_grow="1" height="100%" flex_flow="column"
+              style_pad_all="0" style_bg_opa="0" style_border_width="0"
+              style_flex_main_place="center" scrollable="false" clickable="false">
+        <!-- Idle actions -->
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap"
+                style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+          <bind_flag_if_eq subject="job_holds_machine" flag="hidden" ref_value="1"/>
+          <ui_button name="u1_files_btn" width="100%" height="#u1_touch_target" style_pad_ver="#u1_compact_gap" variant="primary"
+                     text="选择文件" style_text_color="#text_on_primary" style_min_width="0"
+                     style_text_font="#u1_body_font" style_radius="#u1_card_radius" event_bubble="false"
+                     style_clip_corner="false">
+            <event_cb trigger="clicked" callback="library_files_cb"/>
+          </ui_button>
+          <ui_button name="u1_reprint_btn" width="100%" height="#u1_touch_target" style_pad_ver="#u1_compact_gap" variant="outline"
+                     text="重新打印" style_min_width="0" style_text_font="#u1_body_font"
+                     style_radius="#u1_card_radius" event_bubble="false" style_clip_corner="false">
+            <bind_state_if_eq subject="print_status_idle_has_last" state="disabled" ref_value="0"/>
+            <event_cb trigger="clicked" callback="library_last_cb"/>
+          </ui_button>
+        </lv_obj>
+        <!-- Printing actions -->
+        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap"
+                style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+          <bind_flag_if_eq subject="job_holds_machine" flag="hidden" ref_value="0"/>
+          <ui_button name="u1_pause_btn" width="100%" height="#u1_touch_target" style_pad_ver="#u1_compact_gap" variant="outline"
+                     bind_text="print_control_primary_label" style_min_width="0"
+                     style_text_font="#u1_body_font" style_radius="#u1_card_radius" event_bubble="false"
+                     style_clip_corner="false">
+            <bind_state_if_eq subject="print_control_primary_enabled" state="disabled" ref_value="0"/>
+            <event_cb trigger="clicked" callback="on_print_control_primary"/>
+          </ui_button>
+          <ui_button name="u1_stop_btn" width="100%" height="#u1_touch_target" style_pad_ver="#u1_compact_gap" variant="danger"
+                     text="停止" style_text_color="#text_on_danger" style_min_width="0"
+                     style_text_font="#u1_body_font" style_radius="#u1_card_radius" event_bubble="false"
+                     style_clip_corner="false">
+            <bind_state_if_eq subject="print_control_stop_enabled" state="disabled" ref_value="0"/>
+            <event_cb trigger="clicked" callback="on_print_control_stop"/>
+          </ui_button>
+        </lv_obj>
+      </lv_obj>
+    </lv_obj>
+
+    <!-- Bottom band: four nozzles + speed + bed -->
+    <lv_obj width="100%" flex_flow="row" style_pad_all="0"
+            style_pad_gap="#u1_card_gap" style_bg_opa="0" style_border_width="0"
+            scrollable="false" clickable="false">
+      <bind_style_if name="compact_band" cond="ui_breakpoint le 1"/>
+      <bind_style_if name="wide_band" cond="ui_breakpoint gt 1"/>
+      <lv_obj name="u1_nozzle_card" width="0" flex_grow="1" height="100%" flex_flow="row"
+              style_pad_all="#u1_compact_gap" style_pad_gap="#u1_compact_gap"
+              style_clip_corner="false" scrollable="false" clickable="false">
+        <style name="styles.u1_card"/>
+        <u1_home_nozzle_cell index="0" label="1"
+                             temp_subject="u1_home_nozzle_temp_0"
+                             color_subject="tool_switcher_seg_0_color"
+                             colors_subject="tool_switcher_seg_0_colors"
+                             has_color_subject="tool_switcher_seg_0_has_color"/>
+        <u1_home_nozzle_cell index="1" label="2"
+                             temp_subject="u1_home_nozzle_temp_1"
+                             color_subject="tool_switcher_seg_1_color"
+                             colors_subject="tool_switcher_seg_1_colors"
+                             has_color_subject="tool_switcher_seg_1_has_color"/>
+        <u1_home_nozzle_cell index="2" label="3"
+                             temp_subject="u1_home_nozzle_temp_2"
+                             color_subject="tool_switcher_seg_2_color"
+                             colors_subject="tool_switcher_seg_2_colors"
+                             has_color_subject="tool_switcher_seg_2_has_color"/>
+        <u1_home_nozzle_cell index="3" label="4"
+                             temp_subject="u1_home_nozzle_temp_3"
+                             color_subject="tool_switcher_seg_3_color"
+                             colors_subject="tool_switcher_seg_3_colors"
+                             has_color_subject="tool_switcher_seg_3_has_color"/>
+      </lv_obj>
+      <lv_obj name="u1_speed_card" width="#u1_home_stat_width" height="100%" flex_flow="column"
+              style_pad_hor="#u1_compact_gap" style_pad_ver="#u1_card_pad" style_pad_bottom="#u1_card_pad_roomy"
+              style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" style_flex_main_place="end"
+              scrollable="false" clickable="true">
+        <event_cb trigger="clicked" callback="u1_home_speed"/>
+        <style name="styles.u1_card"/>
+        <text_small width="100%" style_text_align="center" text="速度" style_text_color="#text_muted" style_text_font="#u1_aux_font" clickable="false"/>
+        <text_body width="100%" style_text_align="center" bind_text="u1_home_speed_text" style_text_font="#u1_body_font" clickable="false"/>
+      </lv_obj>
+      <lv_obj name="u1_fan_card" width="#u1_home_stat_width" height="100%" flex_flow="column"
+              style_pad_hor="#u1_compact_gap" style_pad_ver="#u1_card_pad" style_pad_bottom="#u1_card_pad_roomy"
+              style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" style_flex_main_place="end"
+              scrollable="false" clickable="true">
+        <event_cb trigger="clicked" callback="u1_home_fan"/>
+        <style name="styles.u1_card"/>
+        <text_small width="100%" style_text_align="center" text="风扇" style_text_color="#text_muted" style_text_font="#u1_aux_font" clickable="false"/>
+        <text_body width="100%" style_text_align="center" bind_text="u1_home_fan_text" style_text_font="#u1_body_font" clickable="false"/>
+      </lv_obj>
+      <lv_obj name="u1_light_card" width="#u1_home_stat_width" height="100%" flex_flow="column"
+              style_pad_hor="#u1_compact_gap" style_pad_ver="#u1_card_pad" style_pad_bottom="#u1_card_pad_roomy"
+              style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" style_flex_main_place="end"
+              scrollable="false" clickable="true">
+        <event_cb trigger="clicked" callback="u1_home_light"/>
+        <style name="styles.u1_card"/>
+        <style name="styles.press_wash" selector="pressed"/>
+        <bind_state_if_eq subject="led_controllable" state="disabled" ref_value="0"/>
+        <text_small width="100%" style_text_align="center" text="灯光" style_text_color="#text_muted" style_text_font="#u1_aux_font" clickable="false"/>
+        <text_body width="100%" style_text_align="center" bind_text="u1_home_light_text" style_text_font="#u1_body_font" clickable="false"/>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

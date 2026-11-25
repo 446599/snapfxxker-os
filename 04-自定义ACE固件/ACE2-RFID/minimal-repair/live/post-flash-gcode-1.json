@@ -1,0 +1,46 @@
+{
+  "result": {
+    "gcode_store": [
+      {
+        "message": "A_DISCOVER ACE=0\nA_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794042957.7008927,
+        "type": "command"
+      },
+      {
+        "message": "A_DISCOVER ACE=0\nA_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794042957.7008927,
+        "type": "command"
+      },
+      {
+        "message": "A_DISCOVER ACE=0\nA_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794042957.7008927,
+        "type": "command"
+      },
+      {
+        "message": "A_DISCOVER ACE=0\nA_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794042957.7008927,
+        "type": "command"
+      },
+      {
+        "message": "// [A discover_device] {\"_v2_command\": 0, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 39, \"msg\": \"success\", \"result\": {\"uid1\": 808780566, \"uid2\": 17445170, \"uid3\": 942880330}}",
+        "time": 1794042957.7551398,
+        "type": "response"
+      },
+      {
+        "message": "// [A get_info] {\"_v2_command\": 7, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 40, \"msg\": \"success\", \"result\": {\"boot_version\": \"\", \"firmware\": \"V1.1.91O\", \"model\": \"ACE 2 Pro\"}}",
+        "time": 1794042957.8069043,
+        "type": "response"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 41, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 46, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794042957.8595934,
+        "type": "response"
+      },
+      {
+        "message": "// [A get_temp] {\"_v2_command\": 64, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 42, \"msg\": \"success\", \"result\": {\"box1_temp\": 0.0, \"box2_temp\": 0.0, \"env_humidity\": 45.99428176879883, \"env_temp\": 25.182533264160156, \"ptc1_temp\": 21.610334396362305, \"ptc2_temp\": 20.426191329956055}}",
+        "time": 1794042957.911945,
+        "type": "response"
+      }
+    ]
+  }
+}

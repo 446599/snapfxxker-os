@@ -1,0 +1,14 @@
+{
+  "tail": 184,
+  "payload": 216,
+  "rf_offset": 16,
+  "ex_offset": 76,
+  "ph_offset": 144,
+  "rf_size": 60,
+  "ex_size": 68,
+  "ph_size": 40,
+  "magic": 1163416626,
+  "ready": 1380210994,
+  "ph_readers_offset": 16,
+  "reader_lane_offset": 4
+}

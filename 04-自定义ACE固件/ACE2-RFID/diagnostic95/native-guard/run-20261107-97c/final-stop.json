@@ -1,0 +1,96 @@
+{
+  "stop": {},
+  "samples": [
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": true,
+        "_wire_valid": true,
+        "decoder": 18446744073709550870,
+        "index": 2,
+        "length": 787,
+        "steps": 9725
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "flags": [
+        1,
+        1
+      ]
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": true,
+        "_wire_valid": true,
+        "decoder": 18446744073709550870,
+        "index": 2,
+        "length": 787,
+        "steps": 9725
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "flags": [
+        1,
+        1
+      ]
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": true,
+        "_wire_valid": true,
+        "decoder": 18446744073709550870,
+        "index": 2,
+        "length": 787,
+        "steps": 9725
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "flags": [
+        1,
+        1
+      ]
+    }
+  ],
+  "holds": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "guard": {
+    "state": "confirmed",
+    "reason": "native completed",
+    "stop_count": 1,
+    "stop_error": null,
+    "timer_max_gap": 0.07210087499697693
+  }
+}

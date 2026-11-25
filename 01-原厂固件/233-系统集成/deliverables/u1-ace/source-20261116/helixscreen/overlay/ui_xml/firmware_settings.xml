@@ -1,0 +1,122 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="firmware_row_h_small" value="48"/>
+    <px name="firmware_row_h_medium" value="56"/>
+    <px name="firmware_row_h_large" value="64"/>
+    <px name="firmware_option_min_width" value="88"/>
+    <px name="firmware_option_label_max" value="300"/>
+    <px name="firmware_row_content_h_small" value="38"/>
+    <px name="firmware_row_content_h_medium" value="46"/>
+    <px name="firmware_row_content_h_large" value="54"/>
+  </consts>
+  <styles>
+    <style name="option_idle" bg_color="#card_bg" bg_opa="255" border_width="#u1_border" border_color="#border"/>
+    <style name="option_selected" bg_color="#primary" bg_opa="70" border_color="#primary" border_width="#u1_border"/>
+    <style name="firmware_anchor_medium" height="#firmware_row_content_h_medium"/>
+    <style name="firmware_anchor_large" height="#firmware_row_content_h_large"/>
+  </styles>
+  <view name="firmware_settings" extends="overlay_panel" title_subject="firmware_title" title_transform="none" back_button_callback="firmware_back" bg_color="#screen_bg" action_icon="refresh" action_icon_callback="firmware_refresh" hide_action_icon="false" title_font="#u1_heading_font" title_color="#text">
+    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scrollable="false">
+      <text_small name="firmware_status" width="100%" bind_text="firmware_status" long_mode="wrap" style_text_color="#text_muted"/>
+      <text_small width="100%" text="打印任务进行中 · 设置只读" style_text_color="#warning">
+        <bind_flag_if cond="not job_holds_machine" flag="hidden"/>
+      </text_small>
+      <lv_obj name="firmware_scroll" width="100%" height="0" flex_grow="1" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+        <lv_obj name="firmware_groups" width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <bind_flag_if cond="firmware_page ne 0" flag="hidden"/>
+          <repeat count="firmware_group_count">
+            <lv_button name="firmware_group_${i}" width="48%" style_min_width="48%" style_max_width="50%"
+                       flex_grow="1" height="#firmware_row_h" flex_flow="row"
+                       style_flex_cross_place="center" style_pad_hor="#u1_card_pad_roomy" style_pad_ver="0"
+                       style_pad_gap="#u1_card_gap" scrollable="false">
+              <style name="styles.u1_card"/>
+              <style name="styles.press_wash" selector="pressed"/>
+              <bind_state_if cond="firmware_busy and not firmware_ready" state="disabled"/>
+              <text_body name="label" width="0" flex_grow="1" bind_text="firmware_group_label_${i}" long_mode="dots"
+                         style_text_font="noto_sans_bold_18" clickable="false" event_bubble="true"/>
+              <icon src="chevron_right" size="sm" variant="muted" clickable="false" event_bubble="true"/>
+              <event_cb trigger="clicked" callback="firmware_group_select" user_data="${i}"/>
+            </lv_button>
+          </repeat>
+        </lv_obj>
+        <lv_obj name="firmware_setting_list" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <bind_flag_if cond="firmware_page ne 1" flag="hidden"/>
+          <repeat count="firmware_setting_count">
+            <lv_button name="firmware_setting_${i}" width="100%" height="content" flex_flow="row" style_flex_cross_place="center" scrollable="false" style_min_height="#firmware_row_h" style_flex_track_place="center" style_pad_hor="#u1_page_pad" style_pad_ver="#space_xs" style_pad_gap="#u1_card_gap">
+              <style name="styles.u1_card"/>
+              <style name="styles.press_wash" selector="pressed"/>
+              <bind_state_if cond="firmware_busy and not firmware_ready" state="disabled"/>
+              <text_body width="0" clickable="false" bind_text="firmware_setting_label_${i}" long_mode="wrap" event_bubble="true" style_text_font="#font_body_bold" flex_grow="2"/>
+              <event_cb trigger="clicked" callback="firmware_setting_select" user_data="${i}"/>
+              <lv_obj width="0" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false" flex_grow="1" style_flex_track_place="center">
+                <text_small width="0" bind_text="firmware_setting_value_${i}" long_mode="wrap" style_text_align="right" event_bubble="true" flex_grow="1"/>
+                <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
+              </lv_obj>
+              <lv_obj name="firmware_row_height_anchor" width="0" height="#firmware_row_content_h_small" style_pad_all="0" style_border_width="0" style_bg_opa="0" scrollable="false" clickable="false" event_bubble="true">
+                <bind_style_if_eq name="firmware_anchor_medium" subject="ui_breakpoint" ref_value="3"/>
+                <bind_style_if_ge name="firmware_anchor_large" subject="ui_breakpoint" ref_value="4"/>
+              </lv_obj>
+            </lv_button>
+          </repeat>
+        </lv_obj>
+        <lv_obj name="firmware_setting_detail" width="100%" height="content" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scrollable="false">
+          <style name="styles.u1_card"/>
+          <bind_flag_if cond="firmware_page ne 2" flag="hidden"/>
+          <text_body name="firmware_current" width="100%" bind_text="firmware_current" long_mode="wrap"/>
+          <lv_obj name="firmware_options" width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <repeat count="firmware_option_count">
+              <lv_button name="firmware_option_${i}" width="content" height="content" flex_flow="row" style_flex_cross_place="center" style_pad_all="#space_md" style_shadow_width="0" style_radius="#u1_card_radius" scrollable="false" style_min_height="#u1_touch_target" style_flex_track_place="center" style_min_width="#firmware_option_min_width" style_max_width="100%" style_pad_hor="#space_md" style_pad_ver="#space_md" style_pad_gap="#space_sm">
+                <bind_style_if_eq name="option_selected" subject="firmware_selected_option" ref_value="${i}"/>
+                <lv_obj width="#u1_emphasis_line" height="#u1_emphasis_line" style_pad_all="0" style_border_width="0" scrollable="false" clickable="false" event_bubble="true">
+                  <icon src="check" size="sm" variant="text" event_bubble="true" align="center">
+                    <bind_flag_if_not_eq subject="firmware_selected_option" flag="hidden" ref_value="${i}"/>
+                  </icon>
+                </lv_obj>
+                <bind_style_if_not_eq name="option_idle" subject="firmware_selected_option" ref_value="${i}"/>
+                <bind_state_if cond="firmware_busy or not firmware_ready" state="disabled"/>
+                <text_body width="content" bind_text="firmware_option_label_${i}" long_mode="wrap" event_bubble="true" style_max_width="#firmware_option_label_max"/>
+                <event_cb trigger="clicked" callback="firmware_option_select" user_data="${i}"/>
+              </lv_button>
+            </repeat>
+          </lv_obj>
+          <repeat count="firmware_input_count">
+            <lv_obj width="100%" height="content" flex_flow="row" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+              <text_small width="0" flex_grow="1" bind_text="firmware_input_label_${i}" long_mode="wrap"/>
+              <text_input name="firmware_input_${i}" width="55%" style_max_width="280" height="#u1_touch_target" style_radius="#u1_card_radius" one_line="true" keyboard_hint="text" max_length="1000" bind_text="firmware_input_value_${i}">
+                <bind_state_if cond="firmware_busy or not firmware_ready" state="disabled"/>
+              </text_input>
+            </lv_obj>
+          </repeat>
+          <text_small name="firmware_description" width="100%" bind_text="firmware_description" long_mode="wrap"/>
+        </lv_obj>
+        <text_body name="firmware_review" width="100%" bind_text="firmware_review" long_mode="wrap" style_pad_all="#u1_page_pad">
+          <style name="styles.u1_card"/>
+          <bind_flag_if cond="firmware_page ne 3" flag="hidden"/>
+        </text_body>
+        <text_small name="firmware_output" width="100%" bind_text="firmware_output" long_mode="wrap" style_pad_all="#u1_page_pad">
+          <style name="styles.u1_card"/>
+          <bind_flag_if cond="firmware_page ne 4" flag="hidden"/>
+        </text_small>
+      </lv_obj>
+      <lv_obj name="firmware_footer" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false" style_pad_top="0" style_flex_main_place="end">
+        <bind_flag_if cond="firmware_page ne 2 and firmware_page ne 3 and not firmware_has_output" flag="hidden"/>
+        <ui_button name="firmware_details" text="执行详情" variant="secondary" width="content" flex_grow="0" height="#u1_touch_target" style_radius="#u1_card_radius">
+          <bind_flag_if cond="not firmware_has_output or firmware_page eq 4" flag="hidden"/>
+          <event_cb trigger="clicked" callback="firmware_show_output"/>
+        </ui_button>
+        <ui_button name="firmware_next" text="检查修改" width="content" flex_grow="0" height="#u1_touch_target" style_radius="#u1_card_radius">
+          <bind_flag_if cond="firmware_page ne 2" flag="hidden"/>
+          <bind_state_if cond="firmware_busy or not firmware_ready or not firmware_dirty or job_holds_machine" state="disabled"/>
+          <event_cb trigger="clicked" callback="firmware_review_change"/>
+        </ui_button>
+        <ui_button name="firmware_apply" text="确认应用" width="content" flex_grow="0" height="#u1_touch_target" style_radius="#u1_card_radius">
+          <bind_flag_if cond="firmware_page ne 3" flag="hidden"/>
+          <bind_state_if cond="firmware_busy or not firmware_ready or job_holds_machine" state="disabled"/>
+          <event_cb trigger="clicked" callback="firmware_apply_change"/>
+        </ui_button>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

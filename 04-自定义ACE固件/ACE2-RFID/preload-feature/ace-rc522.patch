@@ -1,0 +1,12 @@
+--- ace2-rfid-dev-20261107/diagnostic92/live/ace_rc522.py	2026-11-07 18:02:10
++++ ace2-rfid-dev-20261107/preload-feature/ace_rc522.py	2026-11-07 18:47:31
+@@ -205,7 +205,8 @@
+ 
+         try:
+             self.ace.send_request_to(
+-                idx, {'method': method, 'params': dict(params or {})}, _cb)
++                idx, {'method': method, 'params': dict(params or {}),
++                      '_rf_token': getattr(self, '_rf_token', None)}, _cb)
+         except Exception as e:
+             logging.info('[multiACE] [rc522] send %s failed: %s'
+                          % (method, e))

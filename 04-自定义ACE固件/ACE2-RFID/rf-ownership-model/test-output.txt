@@ -1,0 +1,32 @@
+test_abort_cancels_then_waits_for_quiescence_before_cleanup (test_rf_model.OwnershipTests.test_abort_cancels_then_waits_for_quiescence_before_cleanup) ... ok
+test_all_5040_orderings_of_racing_events (test_rf_model.OwnershipTests.test_all_5040_orderings_of_racing_events) ... ok
+test_all_owner_pairs_exclude_whole_transactions (test_rf_model.OwnershipTests.test_all_owner_pairs_exclude_whole_transactions) ... ok
+test_cleanup_failure_at_every_stage_preserves_owner (test_rf_model.OwnershipTests.test_cleanup_failure_at_every_stage_preserves_owner) ... ok
+test_cleanup_timeout_and_late_callback_fail_closed (test_rf_model.OwnershipTests.test_cleanup_timeout_and_late_callback_fail_closed) ... ok
+test_command_conflict_and_finish_with_inflight_are_rejected (test_rf_model.OwnershipTests.test_command_conflict_and_finish_with_inflight_are_rejected) ... ok
+test_connection_replacement_revokes_cmd68 (test_rf_model.OwnershipTests.test_connection_replacement_revokes_cmd68) ... ok
+test_disconnect_does_not_revoke_background_or_new_connection (test_rf_model.OwnershipTests.test_disconnect_does_not_revoke_background_or_new_connection) ... ok
+test_disconnect_during_cleanup_suppresses_publication (test_rf_model.OwnershipTests.test_disconnect_during_cleanup_suppresses_publication) ... ok
+test_disconnect_reconnect_cannot_steal_draining_lease (test_rf_model.OwnershipTests.test_disconnect_reconnect_cannot_steal_draining_lease) ... ok
+test_duplicate_callback_cannot_complete_next_operation (test_rf_model.OwnershipTests.test_duplicate_callback_cannot_complete_next_operation) ... ok
+test_expiry_between_frames_requires_cleanup (test_rf_model.OwnershipTests.test_expiry_between_frames_requires_cleanup) ... ok
+test_expiry_callback_at_boundary_cannot_succeed_transaction (test_rf_model.OwnershipTests.test_expiry_callback_at_boundary_cannot_succeed_transaction) ... ok
+test_expiry_inflight_does_not_release_and_lost_cancel_quarantines (test_rf_model.OwnershipTests.test_expiry_inflight_does_not_release_and_lost_cancel_quarantines) ... ok
+test_failure_requires_cleanup_and_yields_no_success (test_rf_model.OwnershipTests.test_failure_requires_cleanup_and_yields_no_success) ... ok
+test_invalid_time_ttl_and_connections_are_rejected (test_rf_model.OwnershipTests.test_invalid_time_ttl_and_connections_are_rejected) ... ok
+test_late_queued_effects_are_fenced_after_revoke_or_release (test_rf_model.OwnershipTests.test_late_queued_effects_are_fenced_after_revoke_or_release) ... ok
+test_malformed_callbacks_and_boolean_connection_are_rejected (test_rf_model.OwnershipTests.test_malformed_callbacks_and_boolean_connection_are_rejected) ... ok
+test_only_host_tunnel_can_renew (test_rf_model.OwnershipTests.test_only_host_tunnel_can_renew) ... ok
+test_operation_timeout_revokes_before_lease_expires (test_rf_model.OwnershipTests.test_operation_timeout_revokes_before_lease_expires) ... ok
+test_recovery_timeout_and_stale_recovery_callback (test_rf_model.OwnershipTests.test_recovery_timeout_and_stale_recovery_callback) ... ok
+test_renewal_has_hard_lifetime_limit_and_no_resurrection (test_rf_model.OwnershipTests.test_renewal_has_hard_lifetime_limit_and_no_resurrection) ... ok
+test_seeded_fault_and_stale_event_sequences (test_rf_model.OwnershipTests.test_seeded_fault_and_stale_event_sequences) ... ok
+test_stale_callbacks_and_lease_cannot_mutate_new_owner (test_rf_model.OwnershipTests.test_stale_callbacks_and_lease_cannot_mutate_new_owner) ... ok
+test_tunnel_retains_lease_between_frames_and_serial_wait (test_rf_model.OwnershipTests.test_tunnel_retains_lease_between_frames_and_serial_wait) ... ok
+test_unknown_requires_verified_recovery_and_entire_cleanup (test_rf_model.OwnershipTests.test_unknown_requires_verified_recovery_and_entire_cleanup) ... ok
+test_wait_and_effect_dispatch_must_be_outside_command_lock (test_rf_model.OwnershipTests.test_wait_and_effect_dispatch_must_be_outside_command_lock) ... ok
+
+----------------------------------------------------------------------
+Ran 27 tests in 0.365s
+
+OK

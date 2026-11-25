@@ -1,0 +1,206 @@
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -2,7 +2,7 @@
+ import logging, os, json, stat, time, hashlib
+ from .ace_location_hold import PATH, PORT, UID, LocationHold
+ STEP_MM = 20
+-SPEED_MM_S = 5
++SPEED_MM_S = 80
+ MAX_MM = 2000  # hard command budget; inlet sensor ends the move
+ MAX_SECONDS = 480
+ 
+@@ -358,60 +358,7 @@
+                 self._eject_stop(idx, slot, transport, monitor)
+                 retried = True
+             a.reactor.pause(min(deadline, a.reactor.monotonic() + 0.1))
+-
+-    def _eject_decoder_optional(self, idx, slot, transport, generation):
+-        # This read is strictly observational: no waiting, no retry after a
+-        # missing reply, and callbacks cannot cross into another operation.
+-        a = self.ace
+-        if self._eject_probe_disabled or self._eject_probe_inflight:
+-            return
+-        self._eject_probe_inflight = True
+-        self._eject_probe_started = a.reactor.monotonic()
+-
+-        def cb(self, response):
+-            actions = self._slot_actions
+-            if actions._eject_generation is not generation:
+-                return
+-            actions._eject_probe_inflight = False
+-            try:
+-                r = response
+-                if (
+-                    not isinstance(r, dict)
+-                    or r.get("_v2_frame_valid") is not True
+-                    or r.get("_v2_payload_valid") is not True
+-                    or r.get("_v2_command") != 76
+-                    or r.get("code") != 0
+-                ):
+-                    raise ValueError("invalid frame")
+-                body = r.get("result") or {}
+-                rows = body.get("feed_info") or []
+-                if body.get("_feed_wire_valid") is not True or not isinstance(
+-                    rows, list
+-                ):
+-                    raise ValueError("invalid rows")
+-                rows = [
+-                    row
+-                    for row in rows
+-                    if isinstance(row, dict) and row.get("index") == slot
+-                ]
+-                if len(rows) != 1 or rows[0].get("_wire_valid") is not True:
+-                    raise ValueError("invalid row")
+-                raw = rows[0].get("decoder")
+-                present = rows[0].get("_decoder_present")
+-                if type(raw) is not int or present is not True:
+-                    return
+-                signed = raw - (1 << 64) if raw >= (1 << 63) else raw
+-                if -(MAX_MM + 100) <= signed < 0:
+-                    actions._eject_last_encoder = -signed
+-            except Exception:
+-                actions._eject_probe_disabled = True
+ 
+-        try:
+-            a.send_request_to(idx, {"method": "get_feed_info"}, cb)
+-        except Exception:
+-            self._eject_probe_inflight = False
+-            self._eject_probe_disabled = True
+-
+     def start(self, gcmd):
+         idx = gcmd.get_int("ACE", minval=0, maxval=3)
+         slot = gcmd.get_int("SLOT", minval=0, maxval=3)
+@@ -429,10 +376,6 @@
+             "kind": "eject",
+             "ace": idx,
+             "slot": slot,
+-            "progress": 0,
+-            "limit": MAX_MM,
+-            "verified_mm": 0,
+-            "measurement_complete": True,
+             "message": "准备退出 ACE",
+         }
+         self.ace._swap_in_progress = True
+@@ -573,13 +516,6 @@
+         start = a.reactor.monotonic()
+         moving = False
+         motion_start = None
+-        last_encoder = None
+-        generation = object()
+-        self._eject_generation = generation
+-        self._eject_probe_inflight = False
+-        self._eject_probe_disabled = False
+-        self._eject_last_encoder = None
+-        self._eject_probe_started = None
+         try:
+             if transport is None:
+                 raise RuntimeError("ACE通信不可用")
+@@ -624,28 +560,21 @@
+                 a._latch_stop_fault(idx, slot, "initial stop unconfirmed: %s" % exc)
+                 raise
+             check()
+-            if gate:
+-                if affected:
+-                    marker_hash = self._arm_eject_pending(marker_hash)
++            if gate and affected:
++                marker_hash = self._arm_eject_pending(marker_hash)
++            while gate:
++                check()
+                 self._eject_pending = object()
+                 token = self._eject_pending
+                 moving = True
+                 motion_start = a.reactor.monotonic()
+                 self._request(
+-                    idx,
+-                    "unwind_filament",
++                    idx, "unwind_filament",
+                     {"index": slot, "length": MAX_MM, "speed": SPEED_MM_S},
+-                    8,
+-                    monitor=check,
+-                    eject_token=token,
++                    8, monitor=check, eject_token=token,
+                 )
+-                self.state.update(
+-                    commanded_mm=MAX_MM,
+-                    measurement_complete=False,
+-                    message="正在退出 ACE，里程待确认",
+-                )
++                self.state.update(message="正在高速退出 ACE，请稍候")
+                 seen_rollback = False
+-                next_sample = a.reactor.monotonic()
+                 while True:
+                     check()
+                     lanes = self._lane_states(idx, monitor=check)
+@@ -657,30 +586,13 @@
+                     if target == "rollback":
+                         seen_rollback = True
+                     gate = self._gate(idx, slot, monitor=check)
+-                    if not gate:
++                    if not gate or (target == "ready" and seen_rollback):
+                         break
+-                    elapsed = a.reactor.monotonic() - motion_start
+-                    if target == "ready" and seen_rollback:
+-                        raise RuntimeError("到达退料预算，入口仍有料")
+-                    if not seen_rollback and elapsed > 5:
++                    if not seen_rollback and a.reactor.monotonic() - motion_start > 5:
+                         raise RuntimeError("未观察到退料启动")
+-                    if (
+-                        self._eject_probe_inflight
+-                        and a.reactor.monotonic() - self._eject_probe_started > 1
+-                    ):
+-                        self._eject_probe_inflight = False
+-                        self._eject_probe_disabled = True
+-                    if seen_rollback and self._eject_last_encoder is not None:
+-                        last_encoder = self._eject_last_encoder
+-                        self.state["progress"] = last_encoder
+-                    if a.reactor.monotonic() >= next_sample:
+-                        self._eject_decoder_optional(idx, slot, transport, generation)
+-                        next_sample = a.reactor.monotonic() + 1
+                     a.reactor.pause(a.reactor.monotonic() + 0.1)
+                 gate = self._eject_stop_ready(idx, slot, transport, motion_start)
+                 moving = False
+-                if gate:
+-                    raise RuntimeError("停止后入口未确认空")
+             check()
+             if affected:
+                 uid_end = self._request(idx, "discover_device", {}, 0, monitor=check)
+@@ -689,27 +601,11 @@
+                 if self._eject_stable(idx, slot, check):
+                     raise RuntimeError("入口空状态未保持")
+             self._commit_ejected(idx, slot, transport, uid, marker_hash, sources)
+-            self.state.update(
+-                state="complete",
+-                verified_mm=last_encoder,
+-                measurement_complete=False,
+-                message="耗材已退出 ACE 入口；里程%s"
+-                % ("未知" if last_encoder is None else "为停止前估计"),
+-            )
+-            logging.info(
+-                "[multiACE] slot_eject seq=%d result=complete budget=%d encoder=%s",
+-                self.state["seq"],
+-                MAX_MM,
+-                last_encoder,
+-            )
++            self.state.update(state="complete", message="耗材已退出 ACE 入口")
++            logging.info("[multiACE] slot_eject seq=%d result=complete", self.state["seq"])
+         except Exception as e:
+-            self.state.update(state="error", measurement_complete=False, message=str(e))
+-            logging.info(
+-                "[multiACE] slot_eject seq=%d result=error encoder=%s error=%s",
+-                self.state["seq"],
+-                last_encoder,
+-                str(e),
+-            )
++            self.state.update(state="error", message=str(e))
++            logging.info("[multiACE] slot_eject seq=%d result=error error=%s", self.state["seq"], str(e))
+         finally:
+             if moving:
+                 try:
+@@ -721,7 +617,6 @@
+                     self.state.update(
+                         state="error", message="停止未确认，请检查设备：%s" % e
+                     )
+-            self._eject_generation = None
+             self._eject_pending = None
+             self._eject_lease = None
+             self._eject_sources = None

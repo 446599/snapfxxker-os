@@ -1,0 +1,26 @@
+diff --git a/include/ui_material_workspace.h b/include/ui_material_workspace.h
+index 57bfc0fab93c2d88a5068c8b5226ff730977517e..ddbdee81ad6da3fa764f0271d140e48a65d6aca2 100644
+--- a/include/ui_material_workspace.h
++++ b/include/ui_material_workspace.h
+@@ -54,7 +54,7 @@ class MaterialWorkspace : public OverlayBase {
+     void edit_external();
+     void save_external();
+     void return_from_editor();
+-    std::string load_refusal() const;
++    std::string load_refusal();
+     void move_filament(int millimeters);
+     void finish_motion();
+     void load_library();
+diff --git a/src/ui/filament/ui_material_workspace.cpp b/src/ui/filament/ui_material_workspace.cpp
+index 7bb885f527f0f9db24dd46887ea5aa10eab556f0..efedec124dfcd18ccd39037c7d48aafe60acac95 100644
+--- a/src/ui/filament/ui_material_workspace.cpp
++++ b/src/ui/filament/ui_material_workspace.cpp
+@@ -728,7 +728,7 @@ void MaterialWorkspace::finish_motion() {
+         refresh_nozzle();
+ }
+ 
+-std::string MaterialWorkspace::load_refusal() const {
++std::string MaterialWorkspace::load_refusal() {
+     auto* backend = AmsState::instance().get_backend();
+     if (!backend || !lv_subject_get_int(&ready_))
+         return "请等待设备空闲、在线并确认料路位置";

@@ -1,0 +1,9 @@
+# Final delta review: publication and SR-read cancellation
+
+Scope: read-only review of the two requested fixes in rf-runtime-experiment. No target files changed, network/device access, or image/hash certification. Parent-provided image identifier: 6b67835bff4cbc3c52bab477929206fe79e48807176c91393246021633921c93 (not independently verified in this narrow review).
+
+1. Publication fix accepted at source level. In the ACE_EXPERIMENTAL_OFFLINE exchange path, final commit validity, nested exchange_finish, successful *out publication (or fault latching) all execute inside one outer br_platform_enter/leave. rf_platform_enter saves PRIMASK; nested leave restores its saved masked state, not unconditional interrupt enable. The previous maskable-IRQ cancellation gap before output publication is removed. Cancellation arriving after the final unmask is correctly ordered after publication and can coexist with the already-linearized BR_OK result.
+
+2. SR-read cancellation fix accepted at source level. poll now rechecks quarantine and epoch immediately after the SR load and before returning BR_OK. STOP injected inside that load therefore causes failure/line restoration, not the next DR write. The HALT test iterates every observed poll and explicitly requires dr_writes == cancelled_dr_writes. The tail_output fixture asserts the published byte is present when final IRQ restoration permits STOP. Existing test log reports 21,489 assertions and 324 polls; this review inspected the tests/log, not a fresh rebuild/run.
+
+No new defect identified in these two requested changes. Remaining real-IRQ timing between a successful cancellation check and the following DR write is not made atomic. PRIMASK also does not mask NMI/HardFault. Thus the accepted result is the stated software/fixture ordering improvement, not physical STOP atomicity, physical cleanup, or permission to flash.

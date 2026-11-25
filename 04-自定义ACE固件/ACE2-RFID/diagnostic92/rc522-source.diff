@@ -1,0 +1,58 @@
+--- minimal-repair/firmware/rc522_stub.s	2026-11-07 12:21:37
++++ diagnostic92/firmware/rc522_stub.s	2026-11-07 17:57:44
+@@ -44,6 +44,8 @@
+         ldr     r5, [r7]                @ packed sub-command
+         ubfx    r3, r5, #16, #8         @ op
+ 
++        cmp     r3, #10
++        beq     op_diag
+         cmp     r3, #2
+         beq     op_store
+         cmp     r3, #4
+@@ -181,6 +183,46 @@
+         movs    r0, #0
+         b       done
+ 
++@ Diagnostic only: one raw aligned word from native lane context. No attribution.
++@ arg1 lane 0..3, arg2 field 0=last reference, 1=current sample, 2=count.
++@ Check all four status words and read while interrupts are masked; no calls,
++@ waiting, writes to shared memory, RF, or motion. 0xffffffff means rejected.
++@ Separate requests are NOT a coherent multiword snapshot.
++op_diag:
++        ubfx    r1, r5, #8, #8
++        cmp     r1, #4
++        bhs     diag_reject
++        ubfx    r2, r5, #0, #8
++        cmp     r2, #2
++        bhi     diag_reject
++        mrs     r6, PRIMASK
++        cpsid   i
++        movw    r0, #0x1004
++        movt    r0, #0x2000
++        ldr     r3, [r0, #0]
++        ldr     r8, [r0, #4]
++        orrs    r3, r3, r8
++        ldr     r8, [r0, #8]
++        orrs    r3, r3, r8
++        ldr     r8, [r0, #12]
++        orrs    r3, r3, r8
++        bne     diag_locked_reject
++        movw    r0, #0x18a4
++        movt    r0, #0x2000
++        movs    r3, #60
++        mla     r0, r1, r3, r0
++        cmp     r2, #2
++        it      eq
++        moveq   r2, #4
++        ldr     r0, [r0, r2, lsl #2]
++        msr     PRIMASK, r6
++        b       done
++diag_locked_reject:
++        msr     PRIMASK, r6
++diag_reject:
++        mov.w   r0, #0xffffffff
++        b       done
++
+ no_reader:
+         movs    r0, #0xFF
+ 

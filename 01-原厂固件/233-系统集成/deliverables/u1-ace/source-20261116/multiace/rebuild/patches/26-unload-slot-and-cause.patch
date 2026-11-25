@@ -1,0 +1,70 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -4388,7 +4388,7 @@
+         total stall (unload_decoder_gate, filament_feed_ace) - its short
+         retract keeps the toolhead pin as the verdict."""
+         operations = getattr(self, '_path_operations', None)
+-        if operations is not None and operations.handles(idx, index):
++        if operations is not None and operations.handles(idx, slot):
+             # The controlled operation verifies its own measured terminal
+             # condition and persists its segmented ledger. Legacy per-command
+             # decoder spans cannot express a seek/rebase/park transaction.
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -3749,7 +3749,7 @@
+             # latch is the independent operation-completion condition.
+             require_printer_clear(self.printer)
+ 
+-    def _emit_feed_pause(self, channel, key):
++    def _emit_feed_pause(self, channel, key, reason=""):
+         # Localized multiACE pause message for a feed fault, rendered via the
+         # ACE _t() catalog (1-based indices, ACE/Slot from head_source when
+         # known). Returns the [multiACE]-prefixed text for the gcmd.error raise,
+@@ -3764,7 +3764,7 @@
+         a, s = src.get('ace_index'), src.get('slot')
+         loc = ' (ACE %d / Slot %d)' % (self.ace._disp(a), self.ace._disp(s)) \
+             if a is not None and s is not None else ''
+-        return self.ace._t(key, head=hd, loc=loc)
++        return self.ace._t(key, head=hd, loc=loc, reason=reason)
+ 
+     def _feed_load_fail_details(self, channel):
+         # (detail, steps) for a failed LOAD, classified the way the SWAP path
+@@ -4299,7 +4299,7 @@
+                         self.channel_error[channel])
+                 if raw_msg is not None:
+                     tech = tech + "raw msg:" + raw_msg
+-                msg = self._emit_feed_pause(channel, 'msg.pause_feed_error') or tech
++                msg = self._emit_feed_pause(channel, 'msg.pause_unload_error', raw_msg or tech) or tech
+ 
+                 raise gcmd.error(
+                         message = msg,
+--- a/i18n/en.json
++++ b/i18n/en.json
+@@ -1065,5 +1065,6 @@
+     "head_ace_loaded": "[multiACE] Head {head} still has filament loaded - unload it first to change which ACE feeds it",
+     "spool_head_not_feeder": "[multiACE] Head {head} is ACE-driven - its spool follows the slot it loads from. Bind the spool to the ACE slot instead; a head binding is for feeder/manual heads.",
+     "load_head_starting_feeder": "[multiACE] Loading head {head} via its side feeder..."
+-  }
++  },
++  "msg.pause_unload_error": "[multiACE] Head {head}{loc} unload failed: {reason}"
+ }
+--- a/i18n/de.json
++++ b/i18n/de.json
+@@ -1001,5 +1001,6 @@
+     "head_ace_loaded": "[multiACE] Kopf {head} hat noch Filament geladen - erst entladen, dann den zugeordneten ACE ändern",
+     "spool_head_not_feeder": "[multiACE] Kopf {head} ist ACE-geführt - seine Spule folgt dem Slot, aus dem er lädt. Binde die Spule an den ACE-Slot; eine Kopf-Bindung ist für Feeder-/Manual-Köpfe.",
+     "load_head_starting_feeder": "[multiACE] Lade Kopf {head} über seinen Seitenfeeder..."
+-  }
++  },
++  "msg.pause_unload_error": "[multiACE] Kopf {head}{loc}: Entladen fehlgeschlagen: {reason}"
+ }
+--- a/i18n/zh.json
++++ b/i18n/zh.json
+@@ -1178,5 +1178,6 @@
+     "head_ace_loaded": "[multiACE] 喷头 {head} 仍装有耗材。请先退料，再更改供料 ACE",
+     "spool_head_not_feeder": "[multiACE] 喷头 {head} 由 ACE 驱动，其料盘随所加载的槽位变化。请把料盘绑定到 ACE 槽位；喷头绑定仅适用于馈料器或手动喷头。",
+     "load_head_starting_feeder": "[multiACE] 正在通过侧边馈料器装载喷头 {head}…"
+-  }
++  },
++  "msg.pause_unload_error": "[multiACE] 喷头 {head}{loc} 退料失败：{reason}"
+ }

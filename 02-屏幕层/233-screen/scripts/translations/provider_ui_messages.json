@@ -1,0 +1,15 @@
+{
+  "source_modules": [
+    "bundles/233-dev.2/managed-rfid/sources/ace_controlled_motion.py",
+    "bundles/233-dev.2/managed-rfid/sources/ace_path_calibration.py",
+    "bundles/233-dev.2/managed-rfid/sources/ace_path_operations.py",
+    "bundles/233-dev.2/managed-rfid/sources/ace_path_store.py",
+    "flow15/runtime/klipper/extras/ace_dry_cycle.py",
+    "device-service/file_exports.py",
+    "device-service/oem_tools.py",
+    "device-service/oem_system.py",
+    "device-service/device_service.py"
+  ],
+  "description": "CJK characters from user-visible provider string literals. Includes formatted-string literal parts.",
+  "characters": "·—…、。一上下不与且个中为主久之了于云互交享人仅仍他代令件任份优会传位低余作使供侧保信修值停像先入全公共关其具兼内再写冲净准出击分列删别到制刷前剩力功加务动助勿包化匹区升单占卡印卷卸厂原参及反发取受变叠口另可台号同后向否含启告命和品响喷器四回围固在地址均块型基填处备复外多大失头如始字存安完定实容对寻导将小少尚就尾屏展工差已带帧常幕干平并床库应度延建开异式强当录影往径待得必志态恒恢息意感成或截户所扇手打执扩找抓护报拒拔择持指按换据授排接控推提插握摄摸操支收改放故效敏数整文料斥断新方无日旧时明是普暂更替最有服期未本机权材束条来板果查标校核格检槽模次止正此步段每求没沿法流测消清温湿源滚满激灵点烘热照片版牌物状独率现理生用由电画界留登的盖盘目相看知短码础硬确示离移程稳空立端符等答签算管类精系级线组终经绑结络绝统继绪续维缓编缺网置考耗联能脚自至致舱节芯范荐荷获行衡补表被装要视解触订认记设访证识诊试话询该误说请读调象败账质超越足路跳身车轮载辅输达过运近返这进远连退送适选逐通速道部配重量锁错长门闭问闲间阅阶际降限除险随隔隙障集需面页顶项须预频额风馈首驱验高默（），：；"
+}

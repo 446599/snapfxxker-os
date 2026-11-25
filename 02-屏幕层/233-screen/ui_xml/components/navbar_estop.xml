@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="ps_lcd_estop_offset_x" value="-7"/>
+    <!-- The 46px navbar centres its 44px slot at y=275 on a 320px display.
+         The print footer's 8px bottom margin puts the same hit area at y=268. -->
+    <px name="ps_lcd_estop_offset_y" value="-7"/>
+  </consts>
+  <styles>
+    <style name="navbar_position" translate_x="0" translate_y="0"/>
+    <style name="print_footer_position" translate_x="#ps_lcd_estop_offset_x" translate_y="#ps_lcd_estop_offset_y"/>
+  </styles>
+  <!-- The E-stop that sits over the navbar's nav_estop_slot while a
+       job holds the machine. It lives on the screen rather than in the navbar so
+       it can stay bright and tappable above overlay and modal backdrops, which
+       dim the rest of the navbar (NavigationManager keeps it in place). -->
+  <view extends="ui_button"
+        width="#u1_touch_target" height="#u1_touch_target" ext_click_area="0" style_radius="9999"
+        variant="danger" focusable="false" hidden="true" style_pad_all="0" style_pad_gap="0">
+    <!-- Only the active U1 480x320 printing page opts in. Preserve the same
+         screen-level button, visibility, confirmation, callback and z-order. -->
+    <bind_style_if name="navbar_position" cond="not print_status_lcd_footer_active"/>
+    <bind_style_if name="print_footer_position" cond="print_status_lcd_footer_active"/>
+    <bind_flag_if_eq subject="estop_visible" flag="hidden" ref_value="0"/>
+    <icon src="alert_octagon" size="sm" variant="text" align="center" clickable="false" event_bubble="true"/>
+    <event_cb trigger="clicked" callback="emergency_stop_clicked"/>
+  </view>
+</component>

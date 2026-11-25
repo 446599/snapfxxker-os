@@ -1,0 +1,109 @@
+{
+  "mode": "isolated mock only",
+  "checks": [
+    {
+      "check": "Large-text control layout preserves a full-height calibration card",
+      "passed": true
+    },
+    {
+      "check": "Calibration actions remain visible after scrolling",
+      "passed": true
+    },
+    {
+      "check": "Local firmware update is also reachable directly from Settings",
+      "passed": true
+    },
+    {
+      "check": "Firmware Back returns directly to Settings",
+      "passed": true
+    },
+    {
+      "check": "Normal Filament navigation opens the approved inventory",
+      "passed": true
+    },
+    {
+      "check": "Four ACE units visible",
+      "passed": true
+    },
+    {
+      "check": "Head 4 uses fourth bays",
+      "passed": true
+    },
+    {
+      "check": "ACE names remain distinct from head numbers",
+      "passed": true
+    },
+    {
+      "check": "Actions open the new workspace",
+      "passed": true
+    },
+    {
+      "check": "Viewed candidate is distinct from confirmed source",
+      "passed": true
+    },
+    {
+      "check": "Opening material actions clears the prior firmware prompt",
+      "passed": true
+    },
+    {
+      "check": "Unload confirmation names actual ACE 1 while viewing ACE 2",
+      "passed": true
+    },
+    {
+      "check": "Load confirmation names selected ACE 2",
+      "passed": true
+    },
+    {
+      "check": "Library loads its live provider data",
+      "passed": true
+    },
+    {
+      "check": "Spool remaining weight can be edited",
+      "passed": true
+    },
+    {
+      "check": "Negative remaining weight is rejected",
+      "passed": true
+    },
+    {
+      "check": "Dryer page is reachable through a visible action",
+      "passed": true
+    },
+    {
+      "check": "Automatic drying reads saved humidity threshold",
+      "passed": true
+    },
+    {
+      "check": "Invalid humidity hysteresis is rejected",
+      "passed": true
+    },
+    {
+      "check": "Web continuation, PA, detection, cleaning and purge settings load",
+      "passed": true
+    },
+    {
+      "check": "U1 local firmware list is available",
+      "passed": true
+    },
+    {
+      "check": "Firmware confirmation requires a prepared package token",
+      "passed": true
+    },
+    {
+      "check": "Confirmation explicitly names the local U1 target",
+      "passed": true
+    },
+    {
+      "check": "Mock-only upgrade flows into the status page",
+      "passed": true
+    },
+    {
+      "check": "Inventory Back returns to Home without exposing the old filament landing",
+      "passed": true
+    },
+    {
+      "check": "Back leaves no stale overlays",
+      "passed": true
+    }
+  ]
+}

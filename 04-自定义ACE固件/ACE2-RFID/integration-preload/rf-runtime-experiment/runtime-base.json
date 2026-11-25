@@ -1,0 +1,5 @@
+{
+  "base_image": "c132f10a9a91f4bf7a5a5917772a61ea123e74d4d7a8e9b7fb8cb65161a89750",
+  "base_elf": "c17e3689ab1313a0e14ab4024f621e4d316f5c11aafab9c4e0df989ba10e0d8f",
+  "scope": "independent RF runtime experiment; NOFLASH permanent"
+}

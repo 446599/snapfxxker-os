@@ -1,0 +1,106 @@
+{
+  "rf_initial": {
+    "flags": [
+      1,
+      1
+    ],
+    "reader0": 0,
+    "reader1": 0
+  },
+  "before": {
+    "context": {
+      "0": 2143289344,
+      "1": 2143289344,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 1
+    },
+    "cmd13": {
+      "_code_absent": true,
+      "_code_present": false,
+      "_index_present": true,
+      "brand": "",
+      "code": 0,
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 2,
+      "rfid": 0,
+      "sku": "",
+      "type": ""
+    }
+  },
+  "temporary_holds": [
+    1,
+    2,
+    3
+  ],
+  "guard": {
+    "state": "confirmed",
+    "reason": "guard error: telemetry stale",
+    "triggered": [],
+    "event_seq": 3,
+    "stop_count": 1,
+    "gate": false,
+    "lane_states": [
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ],
+    "rfid_flags": [
+      0,
+      1
+    ],
+    "timer_max_gap": 0.05445766700722743,
+    "selftest_active": false,
+    "selftest_max_gap": 0.05479454199667089,
+    "selftest_count": 1189
+  },
+  "after": {
+    "context": {
+      "0": 2143289344,
+      "1": 2143289344,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 1
+    },
+    "cmd13": {
+      "_code_absent": true,
+      "_code_present": false,
+      "_index_present": true,
+      "brand": "",
+      "code": 0,
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 2,
+      "rfid": 0,
+      "sku": "",
+      "type": ""
+    }
+  },
+  "quality": "pending_attribution",
+  "guard_left_armed": true,
+  "complete": true,
+  "hold_cleanup": {
+    "1": {
+      "resume_error": "<HTTPError 400: '[multiACE] ACE 2 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=1 again'>",
+      "fw_hold": false
+    },
+    "2": {
+      "resume_error": "<HTTPError 400: '[multiACE] ACE 3 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=2 again'>",
+      "fw_hold": false
+    },
+    "3": {
+      "resume_error": "<HTTPError 400: '[multiACE] ACE 4 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=3 again'>",
+      "fw_hold": false
+    }
+  }
+}

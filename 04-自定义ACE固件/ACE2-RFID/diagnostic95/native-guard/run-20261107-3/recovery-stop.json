@@ -1,0 +1,71 @@
+{
+  "stop": {},
+  "samples": [
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": true,
+        "_wire_valid": true,
+        "decoder": 852,
+        "index": 2,
+        "length": 915,
+        "steps": 11305
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": true,
+        "_wire_valid": true,
+        "decoder": 852,
+        "index": 2,
+        "length": 915,
+        "steps": 11305
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "decoder": {
+        "_decoder_present": true,
+        "_wire_valid": true,
+        "decoder": 852,
+        "index": 2,
+        "length": 915,
+        "steps": 11305
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  ]
+}

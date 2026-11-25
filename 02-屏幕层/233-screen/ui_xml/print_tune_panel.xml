@@ -1,0 +1,303 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <!-- Two 44px targets and one 8px gap fit inside the scrolling body. -->
+    <px name="u1_speed_grid_min_height" value="96"/>
+    <px name="u1_speed_grid_max_height" value="156"/>
+  </consts>
+  <!-- Styles for Z-offset step amount radio buttons (L040: TWO bind_styles per button) -->
+  <styles>
+    <style name="speed_card_idle" bg_color="#card_bg" bg_opa="255" border_color="#border"/>
+    <style name="speed_card_selected" border_color="#primary"/>
+    <style name="adjustments_row" layout="flex" flex_flow="row"/>
+    <style name="adjustments_column" layout="flex" flex_flow="column"/>
+    <style name="adjustment_card_half" width="0" flex_grow="1"/>
+    <style name="adjustment_card_full" width="100%" flex_grow="0"/>
+    <style name="z_step_selected" bg_color="#primary" bg_opa="255"/>
+    <style name="z_step_unselected" bg_color="#primary" bg_opa="40"/>
+  </styles>
+  <!-- Print Tuning Panel: Speed and Flow adjustment during active print -->
+  <view name="print_tune_panel" extends="overlay_panel" title="打印速度" bg_color="#screen_bg">
+    <header_bar-header_content>
+      <ui_button name="btn_tune_presets" width="content" style_min_width="#u1_touch_target" style_radius="#u1_card_radius" style_pad_hor="#u1_card_pad" height="#u1_touch_target" text="速度预设" icon="chevron_left" variant="secondary" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+        <bind_flag_if_eq subject="tune_show_advanced" flag="hidden" ref_value="0"/>
+        <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <event_cb trigger="clicked" callback="on_tune_show_presets"/>
+      </ui_button>
+    </header_bar-header_content>
+    <lv_obj name="speed_quick_content" width="100%" flex_grow="1" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+      <bind_flag_if_eq subject="tune_show_advanced" flag="hidden" ref_value="1"/>
+      <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+      <lv_obj name="speed_quick_grid" width="100%" height="0" flex_grow="1" style_min_height="#u1_speed_grid_min_height" style_max_height="#u1_speed_grid_max_height" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <lv_obj width="100%" height="0" flex_grow="1" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <lv_obj name="btn_speed_preset_50" width="0" height="100%" flex_grow="1" style_pad_all="#u1_page_pad" style_border_width="#u1_border" style_radius="#u1_card_radius" scrollable="false" clickable="true">
+            <bind_style_if name="speed_card_idle" cond="tune_speed_percent ne 50"/>
+            <bind_style_if name="speed_card_selected" cond="tune_speed_percent eq 50"/>
+            <bind_style_if name="styles.u1_selected_light" cond="tune_speed_percent eq 50 and settings_dark_mode eq 0"/>
+            <bind_style_if name="styles.u1_selected_dark" cond="tune_speed_percent eq 50 and settings_dark_mode eq 1"/>
+            <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="50"/>
+            <text_heading text="50%" align="center" clickable="false" event_bubble="true"/>
+            <icon name="speed_selected_50" src="check" size="xs" align="top_right" clickable="false" event_bubble="true">
+              <bind_flag_if_not_eq subject="tune_speed_percent" flag="hidden" ref_value="50"/>
+            </icon>
+          </lv_obj>
+          <lv_obj name="btn_speed_preset_100" width="0" height="100%" flex_grow="1" style_pad_all="#u1_page_pad" style_border_width="#u1_border" style_radius="#u1_card_radius" scrollable="false" clickable="true">
+            <bind_style_if name="speed_card_idle" cond="tune_speed_percent ne 100"/>
+            <bind_style_if name="speed_card_selected" cond="tune_speed_percent eq 100"/>
+            <bind_style_if name="styles.u1_selected_light" cond="tune_speed_percent eq 100 and settings_dark_mode eq 0"/>
+            <bind_style_if name="styles.u1_selected_dark" cond="tune_speed_percent eq 100 and settings_dark_mode eq 1"/>
+            <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="100"/>
+            <text_heading text="100%" align="center" clickable="false" event_bubble="true"/>
+            <icon name="speed_selected_100" src="check" size="xs" align="top_right" clickable="false" event_bubble="true">
+              <bind_flag_if_not_eq subject="tune_speed_percent" flag="hidden" ref_value="100"/>
+            </icon>
+          </lv_obj>
+        </lv_obj>
+        <lv_obj width="100%" height="0" flex_grow="1" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <lv_obj name="btn_speed_preset_125" width="0" height="100%" flex_grow="1" style_pad_all="#u1_page_pad" style_border_width="#u1_border" style_radius="#u1_card_radius" scrollable="false" clickable="true">
+            <bind_style_if name="speed_card_idle" cond="tune_speed_percent ne 125"/>
+            <bind_style_if name="speed_card_selected" cond="tune_speed_percent eq 125"/>
+            <bind_style_if name="styles.u1_selected_light" cond="tune_speed_percent eq 125 and settings_dark_mode eq 0"/>
+            <bind_style_if name="styles.u1_selected_dark" cond="tune_speed_percent eq 125 and settings_dark_mode eq 1"/>
+            <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="125"/>
+            <text_heading text="125%" align="center" clickable="false" event_bubble="true"/>
+            <icon name="speed_selected_125" src="check" size="xs" align="top_right" clickable="false" event_bubble="true">
+              <bind_flag_if_not_eq subject="tune_speed_percent" flag="hidden" ref_value="125"/>
+            </icon>
+          </lv_obj>
+          <lv_obj name="btn_speed_preset_150" width="0" height="100%" flex_grow="1" style_pad_all="#u1_page_pad" style_border_width="#u1_border" style_radius="#u1_card_radius" scrollable="false" clickable="true">
+            <bind_style_if name="speed_card_idle" cond="tune_speed_percent ne 150"/>
+            <bind_style_if name="speed_card_selected" cond="tune_speed_percent eq 150"/>
+            <bind_style_if name="styles.u1_selected_light" cond="tune_speed_percent eq 150 and settings_dark_mode eq 0"/>
+            <bind_style_if name="styles.u1_selected_dark" cond="tune_speed_percent eq 150 and settings_dark_mode eq 1"/>
+            <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="150"/>
+            <text_heading text="150%" align="center" clickable="false" event_bubble="true"/>
+            <icon name="speed_selected_150" src="check" size="xs" align="top_right" clickable="false" event_bubble="true">
+              <bind_flag_if_not_eq subject="tune_speed_percent" flag="hidden" ref_value="150"/>
+            </icon>
+          </lv_obj>
+        </lv_obj>
+      </lv_obj>
+      <ui_button name="btn_tune_more" style_radius="#u1_card_radius" width="100%" height="#u1_touch_target" text="更多调节" icon="tune" variant="secondary" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+        <event_cb trigger="clicked" callback="on_tune_show_advanced"/>
+      </ui_button>
+    </lv_obj>
+    <!-- Original tuning controls remain accessible from More tuning. -->
+    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" flex_flow="column" style_pad_gap="#u1_card_gap" style_pad_all="#u1_page_pad" scrollable="false">
+      <bind_flag_if_eq subject="tune_show_advanced" flag="hidden" ref_value="0"/>
+      <!-- Disable content when printer not connected or klippy not ready -->
+      <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+      <lv_obj name="tune_advanced_scroll" width="100%" height="0" flex_grow="1"
+              flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap"
+              scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+        <!-- Fit both adjustment groups in the first landscape viewport. -->
+        <lv_obj name="speed_flow_row" width="100%" height="content" style_pad_all="0" scrollable="false" style_pad_gap="#u1_card_gap">
+          <bind_style_if name="adjustments_row" cond="not ui_is_portrait and ui_breakpoint gt 0"/>
+          <bind_style_if name="adjustments_column" cond="ui_is_portrait or ui_breakpoint eq 0"/>
+          <!-- Speed control -->
+          <lv_obj name="speed_section" height="content" style_min_width="0" style_pad_all="#u1_card_pad" flex_flow="column" style_pad_gap="#u1_compact_gap" scrollable="false">
+            <style name="styles.u1_card"/>
+            <bind_style_if name="adjustment_card_half" cond="not ui_is_portrait and ui_breakpoint gt 0"/>
+            <bind_style_if name="adjustment_card_full" cond="ui_is_portrait or ui_breakpoint eq 0"/>
+            <!-- Tap swaps which units lead, here and on Print Status -->
+            <lv_obj name="speed_readout" width="100%" height="content" style_min_height="#u1_touch_target" style_pad_all="0" scrollable="false"
+                    flex_flow="column" style_flex_main_place="center" style_pad_gap="0" clickable="true" style_radius="#u1_card_radius">
+              <style name="styles.press_wash" selector="pressed"/>
+              <event_cb trigger="clicked" callback="on_tune_units_toggle"/>
+              <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0"
+                      style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+                <text_small text="打印速度" width="0" flex_grow="1" style_text_font="#u1_aux_font"
+                            long_mode="dots" clickable="false" event_bubble="true"/>
+                <text_heading name="speed_display" bind_text="tune_speed_display" style_text_font="#u1_heading_font" style_text_color="#text"
+                              clickable="false" event_bubble="true"/>
+              </lv_obj>
+              <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0"
+                      style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+                <icon src="swap_horizontal" size="xs" variant="secondary" clickable="false" event_bubble="true"/>
+                <text_small name="actual_speed_display" width="0" flex_grow="1" bind_text="tune_actual_speed_display"
+                            style_text_font="#u1_aux_font" style_text_color="#text_muted" long_mode="dots" clickable="false" event_bubble="true"/>
+              </lv_obj>
+            </lv_obj>
+            <lv_obj name="speed_presets" width="100%" height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#u1_compact_gap" scrollable="false">
+              <ui_button name="btn_tune_speed_preset_50" width="0" flex_grow="1" height="#u1_touch_target" style_min_width="0" style_pad_hor="0" text="50%" variant="secondary" style_radius="#u1_card_radius" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                <bind_style_if_eq name="styles.choice_selected" subject="tune_speed_percent" ref_value="50"/>
+                <bind_style_if_not_eq name="styles.choice_idle" subject="tune_speed_percent" ref_value="50"/>
+                <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="50"/>
+              </ui_button>
+              <ui_button name="btn_tune_speed_preset_100" width="0" flex_grow="1" height="#u1_touch_target" style_min_width="0" style_pad_hor="0" text="100%" variant="secondary" style_radius="#u1_card_radius" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                <bind_style_if_eq name="styles.choice_selected" subject="tune_speed_percent" ref_value="100"/>
+                <bind_style_if_not_eq name="styles.choice_idle" subject="tune_speed_percent" ref_value="100"/>
+                <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="100"/>
+              </ui_button>
+              <ui_button name="btn_tune_speed_preset_125" width="0" flex_grow="1" height="#u1_touch_target" style_min_width="0" style_pad_hor="0" text="125%" variant="secondary" style_radius="#u1_card_radius" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                <bind_style_if_eq name="styles.choice_selected" subject="tune_speed_percent" ref_value="125"/>
+                <bind_style_if_not_eq name="styles.choice_idle" subject="tune_speed_percent" ref_value="125"/>
+                <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="125"/>
+              </ui_button>
+              <ui_button name="btn_tune_speed_preset_150" width="0" flex_grow="1" height="#u1_touch_target" style_min_width="0" style_pad_hor="0" text="150%" variant="secondary" style_radius="#u1_card_radius" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                <bind_style_if_eq name="styles.choice_selected" subject="tune_speed_percent" ref_value="150"/>
+                <bind_style_if_not_eq name="styles.choice_idle" subject="tune_speed_percent" ref_value="150"/>
+                <event_cb trigger="clicked" callback="on_tune_speed_preset" user_data="150"/>
+              </ui_button>
+            </lv_obj>
+          </lv_obj>
+          <!-- Flow control -->
+          <lv_obj name="flow_section" height="content" style_min_width="0" style_pad_all="#u1_card_pad" flex_flow="column" style_pad_gap="#u1_compact_gap" scrollable="false">
+            <style name="styles.u1_card"/>
+            <bind_style_if name="adjustment_card_half" cond="not ui_is_portrait and ui_breakpoint gt 0"/>
+            <bind_style_if name="adjustment_card_full" cond="ui_is_portrait or ui_breakpoint eq 0"/>
+            <lv_obj name="flow_readout" width="100%" height="content" style_min_height="#u1_touch_target" style_pad_all="0" scrollable="false"
+                    flex_flow="column" style_flex_main_place="center" style_pad_gap="0" clickable="true" style_radius="#u1_card_radius">
+              <style name="styles.press_wash" selector="pressed"/>
+              <event_cb trigger="clicked" callback="on_tune_units_toggle"/>
+              <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0"
+                      style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+                <text_small text="挤出流量" width="0" flex_grow="1" style_text_font="#u1_aux_font"
+                            long_mode="dots" clickable="false" event_bubble="true"/>
+                <text_heading name="flow_display" bind_text="tune_flow_display" style_text_font="#u1_heading_font" style_text_color="#text"
+                              clickable="false" event_bubble="true"/>
+              </lv_obj>
+              <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0"
+                      style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+                <icon src="swap_horizontal" size="xs" variant="secondary" clickable="false" event_bubble="true"/>
+                <text_small name="actual_flow_display" width="0" flex_grow="1" bind_text="tune_actual_flow_display"
+                            style_text_font="#u1_aux_font" style_text_color="#text_muted" long_mode="dots" clickable="false" event_bubble="true"/>
+              </lv_obj>
+            </lv_obj>
+            <lv_obj width="100%" height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#space_xxs" scrollable="false">
+              <ui_button name="btn_flow_minus_5" width="0" style_min_width="0" style_pad_hor="0" height="#u1_touch_target" flex_grow="1" text="-5%" variant="outline" style_radius="#u1_card_radius" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                <event_cb trigger="clicked" callback="on_tune_flow_adjust" user_data="-5"/>
+              </ui_button>
+              <ui_button name="btn_flow_minus_1" width="0" style_min_width="0" style_pad_hor="0" height="#u1_touch_target" flex_grow="1" text="-1%" variant="outline" style_radius="#u1_card_radius" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                <event_cb trigger="clicked" callback="on_tune_flow_adjust" user_data="-1"/>
+              </ui_button>
+              <ui_button name="btn_flow_plus_1" width="0" style_min_width="0" style_pad_hor="0" height="#u1_touch_target" flex_grow="1" text="+1%" variant="outline" style_radius="#u1_card_radius" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                <event_cb trigger="clicked" callback="on_tune_flow_adjust" user_data="1"/>
+              </ui_button>
+              <ui_button name="btn_flow_plus_5" width="0" style_min_width="0" style_pad_hor="0" height="#u1_touch_target" flex_grow="1" text="+5%" variant="outline" style_radius="#u1_card_radius" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                <event_cb trigger="clicked" callback="on_tune_flow_adjust" user_data="5"/>
+              </ui_button>
+            </lv_obj>
+          </lv_obj>
+        </lv_obj>
+        <!-- Reset Speed & Flow, with live pressure advance beside it; the PA group
+             wraps under the button where the row is too narrow for both. -->
+        <lv_obj name="reset_pa_row" width="100%" height="content" style_pad_all="0" flex_flow="row_wrap" style_pad_gap="#space_xs" style_flex_cross_place="center" scrollable="false">
+          <ui_button name="btn_reset" variant="secondary" height="#u1_touch_target" flex_grow="1" style_min_width="40%" icon="refresh" text="恢复速度与流量 100%" style_pad_hor="#u1_compact_gap" style_radius="#u1_card_radius" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+            <event_cb trigger="clicked" callback="on_tune_reset_clicked"/>
+          </ui_button>
+          <tune_pa_row name="tune_pa_row"/>
+        </lv_obj>
+        <!-- Z-Offset Baby Stepping Section (flex_grow claims remaining space, content aligned to bottom) -->
+        <lv_obj name="z_offset_section" width="100%" height="content" style_pad_all="#u1_card_pad" flex_flow="column" style_pad_gap="#space_xs" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_border_width="1" style_border_color="#border">
+          <!-- Header Row -->
+          <lv_obj width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center" style_pad_column="#space_sm">
+            <text_body text="Z-Offset" flex_grow="1"/>
+            <!-- The offset in the printer config and what a save turns it into:
+                 context for the adjustment, which stays the big number. -->
+            <text_small name="z_offset_saved_line" bind_text="tune_z_offset_saved_text" style_text_color="#text_muted">
+              <bind_flag_if_eq subject="tune_z_offset_saved_visible" flag="hidden" ref_value="0"/>
+            </text_small>
+            <text_heading name="z_offset_display" bind_text="tune_z_offset_display"/>
+          </lv_obj>
+          <!-- Indicator (left) + Controls (right) side-by-side -->
+          <lv_obj width="100%" height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#space_sm" scrollable="false">
+            <!-- Nozzle-over-bed visual indicator -->
+            <z_offset_indicator name="z_offset_indicator" width="#z_tune_indicator_w" height="#z_tune_indicator_h"/>
+            <!-- Controls column: amount buttons row with direction buttons stacked on the right -->
+            <lv_obj height="content" flex_grow="1" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+              <!-- Amount selectors (left) + direction buttons (right) -->
+              <lv_obj width="100%" height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#space_sm" style_flex_cross_place="center" scrollable="false">
+                <!-- Amount selector buttons (radio-style: one active at a time) -->
+                <lv_obj height="content" flex_grow="1" style_pad_all="0" flex_flow="row" style_pad_gap="#space_xxs" scrollable="false">
+                  <ui_button name="btn_z_step_0" height="#u1_touch_target" flex_grow="1" text="0.05" style_pad_hor="#u1_compact_gap" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                    <bind_style_if name="z_step_selected" cond="z_step_selected_idx eq 0"/>
+                    <bind_style_if name="z_step_unselected" cond="z_step_selected_idx ne 0"/>
+                    <event_cb trigger="clicked" callback="on_tune_z_step" user_data="0"/>
+                  </ui_button>
+                  <ui_button name="btn_z_step_1" height="#u1_touch_target" flex_grow="1" text="0.025" style_pad_hor="#u1_compact_gap" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                    <bind_style_if name="z_step_selected" cond="z_step_selected_idx eq 1"/>
+                    <bind_style_if name="z_step_unselected" cond="z_step_selected_idx ne 1"/>
+                    <event_cb trigger="clicked" callback="on_tune_z_step" user_data="1"/>
+                  </ui_button>
+                  <ui_button name="btn_z_step_2" height="#u1_touch_target" flex_grow="1" text="0.01" style_pad_hor="#u1_compact_gap" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                    <bind_style_if name="z_step_selected" cond="z_step_selected_idx eq 2"/>
+                    <bind_style_if name="z_step_unselected" cond="z_step_selected_idx ne 2"/>
+                    <event_cb trigger="clicked" callback="on_tune_z_step" user_data="2"/>
+                  </ui_button>
+                  <ui_button name="btn_z_step_3" height="#u1_touch_target" flex_grow="1" text="0.005" style_pad_hor="#u1_compact_gap" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                    <bind_style_if name="z_step_selected" cond="z_step_selected_idx eq 3"/>
+                    <bind_style_if name="z_step_unselected" cond="z_step_selected_idx ne 3"/>
+                    <event_cb trigger="clicked" callback="on_tune_z_step" user_data="3"/>
+                  </ui_button>
+                </lv_obj>
+                <!-- Direction buttons stacked vertically -->
+                <lv_obj width="#z_tune_dir_col_w" height="content" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+                  <ui_button name="btn_z_farther" width="100%" icon="arrow_up" bind_icon="tune_z_farther_icon">
+                    <event_cb trigger="clicked" callback="on_tune_z_adjust" user_data="1"/>
+                  </ui_button>
+                  <ui_button name="btn_z_closer" width="100%" icon="arrow_down" bind_icon="tune_z_closer_icon">
+                    <event_cb trigger="clicked" callback="on_tune_z_adjust" user_data="-1"/>
+                  </ui_button>
+                </lv_obj>
+              </lv_obj>
+              <!-- Help text. Wraps rather than setting the row's minimum width:
+                   an unwrapped label here is what pushes the whole z-offset row
+                   past the screen edge once the string is longer than the box,
+                   which English fits on one line but translations need not.
+
+                   Hidden on a tool changer, where the target selector below takes
+                   this slot. The swap is what keeps the section the same height:
+                   the controls column has ~28px of slack under the indicator at
+                   800x480 and ~23px at 480x272, enough for the taller selector
+                   only because the label goes away. -->
+              <text_small width="100%" long_mode="wrap" text="Closer = more squish | Farther = less squish">
+                <bind_flag_if_eq subject="per_tool_z_supported" flag="hidden" ref_value="1"/>
+              </text_small>
+              <!-- Which z-offset the buttons above drive. Only a tool changer has
+                   two: Klipper's machine-wide gcode_move offset, and the active
+                   tool's own. They are independent — the firmware applies both —
+                   so this picks a target rather than a mode. -->
+              <lv_obj name="z_target_row" width="100%" height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#space_xxs" style_flex_cross_place="center" scrollable="false" hidden="true">
+                <bind_flag_if_eq subject="per_tool_z_supported" flag="hidden" ref_value="0"/>
+                <ui_button name="btn_z_target_global" height="#u1_touch_target" flex_grow="1" text="Global" style_pad_hor="#u1_compact_gap" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                  <bind_style_if name="z_step_selected" cond="z_tune_target eq 0"/>
+                  <bind_style_if name="z_step_unselected" cond="z_tune_target ne 0"/>
+                  <event_cb trigger="clicked" callback="on_tune_z_target" user_data="0"/>
+                </ui_button>
+                <ui_button name="btn_z_target_tool" height="#u1_touch_target" flex_grow="1" bind_text="tune_z_tool_label" style_pad_hor="#u1_compact_gap" style_pad_top="#u1_compact_gap" style_pad_bottom="#u1_compact_gap">
+                  <bind_style_if name="z_step_selected" cond="z_tune_target eq 1"/>
+                  <bind_style_if name="z_step_unselected" cond="z_tune_target ne 1"/>
+                  <event_cb trigger="clicked" callback="on_tune_z_target" user_data="1"/>
+                </ui_button>
+                <!-- The target you are NOT on, so both numbers are visible without
+                     a second row. Muted: it is context, not the value the buttons
+                     act on. -->
+                <text_small name="z_target_other" width="content" bind_text="tune_z_other_display" style_text_color="#text_muted"/>
+              </lv_obj>
+            </lv_obj>
+          </lv_obj>
+          <!-- One of five, picked by z_offset_tune_hint (ZOffsetTuneHint in
+               include/printer_profile_state.h). -->
+          <text_small name="z_offset_help_text_manual" width="100%" long_mode="wrap" text="Temporary adjustment for this print, unless saved on Controls panel" hidden="true">
+            <bind_flag_if_not_eq subject="z_offset_tune_hint" flag="hidden" ref_value="0"/>
+          </text_small>
+          <text_small name="z_offset_help_text_auto" width="100%" long_mode="wrap" text="Z-offset is auto-saved by firmware" hidden="true">
+            <bind_flag_if_not_eq subject="z_offset_tune_hint" flag="hidden" ref_value="1"/>
+          </text_small>
+          <text_small name="z_offset_help_text_temporary" width="100%" long_mode="wrap" text="Temporary adjustment for this print" hidden="true">
+            <bind_flag_if_not_eq subject="z_offset_tune_hint" flag="hidden" ref_value="2"/>
+          </text_small>
+          <text_small name="z_offset_help_text_tool_change" width="100%" long_mode="wrap" text="Temporary for this print; a tool change resets it" hidden="true">
+            <bind_flag_if_not_eq subject="z_offset_tune_hint" flag="hidden" ref_value="3"/>
+          </text_small>
+          <text_small name="z_offset_help_text_per_head" width="100%" long_mode="wrap" text="Saved for the mounted head; other heads keep their own" hidden="true">
+            <bind_flag_if_not_eq subject="z_offset_tune_hint" flag="hidden" ref_value="4"/>
+          </text_small>
+        </lv_obj>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

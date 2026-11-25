@@ -1,0 +1,39 @@
+{
+  "scope": "Independent source/layout/storage-header review only; not full image execution or physical proof",
+  "image_sha256": "d1609754ecdc30d9ff75b0724646bed36eb5063f19ffe5025485555f97f5b98b",
+  "elf_sha256": "1856dc12dd3f005975ef67721a884172a2840e5fc4b923a1d2683ce510f90413",
+  "linked_source_mismatches": [],
+  "old_rf_snapshot_unchanged": true,
+  "literal_arm_payload_header_assertions": 90022,
+  "v2_factory_and_version_assertions": 22,
+  "asan_ubsan": "pass",
+  "arm_layout": {
+    "tail": 184,
+    "payload": 216,
+    "rf_offset": 16,
+    "ex_offset": 76,
+    "ph_offset": 144,
+    "rf_size": 60,
+    "ex_size": 68,
+    "ph_size": 40,
+    "magic": 1163416626,
+    "ready": 1380210994,
+    "ph_readers_offset": 16,
+    "reader_lane_offset": 4
+  },
+  "reviewed_sources": {
+    "experimental_binding.h": "fe570a1c9a21303d39b046c0706c0b8bcd7af0754ca6fdde5c10a58100475c6e",
+    "event_storage.c": "fc251b411227cda401cc248153a252209048accac31b2259e60cc89f1dff7959",
+    "preload_hooks.c": "529d86dc574fd89ce214a000ff606c85dd1901d0786cd22f8032ac3970636ed9",
+    "preload_hooks.h": "5d18bddf88e04209c63fbcd78e0320d3d560a192921693a85e52e4f1c222ae3e",
+    "preload_hooks.S": "f18f6d2205b744bde3ae7c1cd7745f4fe6be4133503edd581729067e6ab1398a"
+  },
+  "proof_limits": [
+    "event-group free/reuse and lifecycle unproven",
+    "boot/session ABA unproven",
+    "no nonzero heap or stack headroom lower bound",
+    "storage-ready and zero blocked flags are not RF/motor-ready",
+    "ordinary reset barrier does not cover exception behavior",
+    "no device tests or flashing"
+  ]
+}

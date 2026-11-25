@@ -1,0 +1,11 @@
+{
+  "1": {
+    "error": "<HTTPError 400: '[multiACE] ACE 2 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=1 again'>"
+  },
+  "2": {
+    "error": "<HTTPError 400: '[multiACE] ACE 3 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=2 again'>"
+  },
+  "3": {
+    "error": "<HTTPError 400: '[multiACE] ACE 4 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=3 again'>"
+  }
+}

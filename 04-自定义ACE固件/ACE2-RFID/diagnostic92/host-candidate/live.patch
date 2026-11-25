@@ -1,0 +1,71 @@
+--- diagnostic92/live/filament_feed_ace.py	2026-11-07 18:02:09
++++ diagnostic92/host-candidate/filament_feed_ace.py	2026-11-07 18:07:15
+@@ -1547,7 +1547,10 @@
+                             else:
+ 
+                                 self.ace._disable_feed_assist_all()
+-                                self.ace.wait_ace_ready()
++                                self.ace.wait_ace_ready_on(ace_idx)
++                                if self.ace._active_device_index != ace_idx:
++                                    self.channel_error[ch] = FEED_ERR_STATE_MISMATCH
++                                    raise ValueError('ACE load mapping changed before feed')
+                                 _head_idx = self.filament_ch[ch]
+                                 _ace_slot = self.ace._ace_slot_for_head(_head_idx)
+                                 if _ace_slot != _head_idx:
+@@ -1565,10 +1568,15 @@
+                                 self.ace._dwell_fan(True)
+                                 for load_attempt in range(load_retries + 1):
+                                     if load_attempt > 0:
++                                        if (self.ace._active_device_index != ace_idx
++                                                or self.ace._ace_slot_for_head(_head_idx) != _ace_slot):
++                                            self.channel_error[ch] = FEED_ERR_STATE_MISMATCH
++                                            self.ace._dwell_fan(False)
++                                            raise ValueError('ACE load mapping changed before retry')
+                                         logging.info("[feed_loading] retry %d/%d: retracting %dmm",
+                                                      load_attempt, load_retries, load_retry_retract)
+                                         self.ace._retract(_ace_slot, load_retry_retract, self.ace.retract_speed, head=_head_idx, ace=ace_idx)
+-                                        self.ace.wait_ace_ready()
++                                        self.ace.wait_ace_ready_on(ace_idx)
+ 
+                                     _ll = self.ace.get_load_length(ace_idx, _ace_slot)
+                                     self.ace._feed(_ace_slot, _ll, self.ace.feed_speed, 0, ace=ace_idx)
+@@ -1607,15 +1615,25 @@
+                                     load_found = False
+                                     while 1:
+                                         self.reactor.pause(self.reactor.monotonic() + 0.105)
++                                        if (self.ace._active_device_index != ace_idx
++                                                or self.ace._ace_slot_for_head(_head_idx) != _ace_slot):
++                                            try:
++                                                self._stop_load_or_latch(ace_idx, _ace_slot)
++                                            finally:
++                                                self.ace._dwell_fan(False)
++                                            self.channel_error[ch] = FEED_ERR_STATE_MISMATCH
++                                            raise ValueError('ACE load mapping changed during feed')
+                                         port_detect = self._port[ch].get_filament_detected()
+                                         runout_detect = self.runout_sensor[ch].get_status(0)['filament_detected']
+ 
+                                         if self.reactor.monotonic() > _feed_deadline:
+-                                            logging.info(
+-                                                "[feed_loading] attempt %d: feed wait deadline hit"
+-                                                " - treating as sensor-not-reached",
+-                                                load_attempt + 1)
+-                                            break
++                                            try:
++                                                self._stop_load_or_latch(ace_idx, _ace_slot)
++                                            finally:
++                                                self.ace._dwell_fan(False)
++                                            self.channel_error[ch] = FEED_ERR_TIMEOUT
++                                            self.exception_code[ch] = 34
++                                            raise ValueError('ACE feed deadline exceeded')
+                                         if runout_detect == True:
+                                             try:
+                                                 self._stop_load_or_latch(ace_idx, _ace_slot)
+@@ -1644,7 +1662,7 @@
+                                             # GATE_EMPTY (0); UNKNOWN (-1) or a
+                                             # comms gap keeps waiting - the
+                                             # deadline/retry path recovers.
+-                                            _src_ace = self.ace._active_device_index
++                                            _src_ace = ace_idx
+                                             _raw_gate = -1
+                                             try:
+                                                 _gates = self.ace._gate_status_per_ace.get(_src_ace)

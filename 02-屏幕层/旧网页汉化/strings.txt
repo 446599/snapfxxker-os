@@ -1,0 +1,382 @@
+192.168.1.100
+
+1920x1080 @ 15fps
+
+1920x1080 @ 25fps
+
+1920x1080 @ 30fps
+
+1920x1080 @ 5fps
+
+AFC Lite via Fluidd/Mainsail
+
+Aggressive
+
+Allow TIMELAPSE_START to bypass the Snapmaker timelapse preference? Your slicer must call TIMELAPSE_START, TIMELAPSE_TAKE_FRAME, and TIMELAPSE_STOP.
+
+Apply the MCU bypass to Toolhead 1? Use this only if Toolhead 1's board is dead or its cable is disconnected. This makes Toolhead 1's stepper and heater fully inert - it cannot move, extrude, or heat at all - but lets the printer boot and keep using the other toolheads.
+
+Apply the MCU bypass to Toolhead 2? Use this only if Toolhead 2's board is dead or its cable is disconnected. This makes Toolhead 2's stepper and heater fully inert - it cannot move, extrude, or heat at all - but lets the printer boot and keep using the other toolheads.
+
+Apply the MCU bypass to Toolhead 3? Use this only if Toolhead 3's board is dead or its cable is disconnected. This makes Toolhead 3's stepper and heater fully inert - it cannot move, extrude, or heat at all - but lets the printer boot and keep using the other toolheads.
+
+Apply the MCU bypass to Toolhead 4? Use this only if Toolhead 4's board is dead or its cable is disconnected. This makes Toolhead 4's stepper and heater fully inert - it cannot move, extrude, or heat at all - but lets the printer boot and keep using the other toolheads.
+
+Apply the faulty toolhead bypass to Toolhead 1? This disables normal temperature fault handling for Toolhead 1 so the printer can keep using the other toolheads. Do not heat or print with the faulty toolhead while this bypass is enabled.
+
+Apply the faulty toolhead bypass to Toolhead 2? This disables normal temperature fault handling for Toolhead 2 so the printer can keep using the other toolheads. Do not heat or print with the faulty toolhead while this bypass is enabled.
+
+Apply the faulty toolhead bypass to Toolhead 3? This disables normal temperature fault handling for Toolhead 3 so the printer can keep using the other toolheads. Do not heat or print with the faulty toolhead while this bypass is enabled.
+
+Apply the faulty toolhead bypass to Toolhead 4? This disables normal temperature fault handling for Toolhead 4 so the printer can keep using the other toolheads. Do not heat or print with the faulty toolhead while this bypass is enabled.
+
+BIQU Panda Breath chamber heater and air filter integration, or DragonBreath open firmware on the same board.
+
+BIQU PopStation mini
+
+Balanced
+
+Boot from the backup firmware slot on next reboot.
+
+Bundle and download a system log archive for troubleshooting.
+
+Bypass MCU (Disconnected)
+
+Bypass Thermistor
+
+Camera
+
+Changing the firmware upgrade channel requires a reboot. Reboot now?
+
+Choose between Fluidd and Mainsail as the web interface.
+
+Clear all extended settings and reboot to a clean state.
+
+Clear all extended settings, switch to the backup firmware slot, and reboot.
+
+Cloud Access (Experimental)
+
+Collect System Logs
+
+Collecting system logs might take a few minutes. These logs contain sensitive information like the serial number and Wi-Fi SSID, and should not be shared publicly. Continue?
+
+Connect the printer to a VPN for secure remote access from anywhere.
+
+Default
+
+Develop (bleeding edge)
+
+Disable authentication? Anyone on your network will be able to access the printer.
+
+Disabled
+
+Disabling will remove access to this page. Re-enabling requires editing extended2.cfg manually.
+
+Display firmware version of all connected MCUs.
+
+DragonBreath (Recommended)
+
+DragonBreath Device IP Address
+
+Enable AFC Lite component? This adds support for multi-lane filament management with CHANGE_TOOL and LANE_UNLOAD macros. See documentation for details.
+
+Enable Moonraker object processing? Note: Enabling 'Exclude Object' in your slicer settings is preferred over this option. This can cause long processing times for large gcode files (> 100MB), delays when uploading files, and extended time stuck at 100% in Snapmaker Orca. Only enable if your slicer doesn't support exclude object.
+
+Enable RTSP stream output for the internal camera (paxx12 driver only).
+
+Enable Spoolman integration with Force Generic Vendor? Enter the Spoolman server URL below.
+
+Non-Snapmaker filament vendors will be exposed to the U1 as Generic while Spoolman metadata and tracking remain unchanged.
+
+Enable Spoolman integration? Enter the Spoolman server URL below.
+
+Spoolman tracks filament usage and lets you manage spool metadata from your web frontend.
+
+Enable TMC AutoTune? This optimizes TMC2240 driver settings for quieter operation and better performance. Monitor motor temperatures, print quality, and skipped steps during first use.
+
+Enable TMC Reduced Current? This lowers X/Y motor current from 1.2A to 1.0A for quieter operation and less heat. Monitor motor temperatures and print quality after enabling.
+
+Enable alternative cloud access from outside your network.
+
+Enable authentication? A new admin user with random password will be created. You will need to log in to access Fluidd and Firmware Config. Note: This is experimental and only works with Fluidd. Mainsail does not support this feature.
+
+Enable or disable the paxx12 firmware upgrade feature. Requires usage of Snapmaker Cloud.
+
+Enable or disable this web configuration interface.
+
+Enable remote shell access to the printer over SSH.
+
+Enable streaming from an attached USB camera.
+
+Enabled
+
+Enabled (Force Generic Vendor)
+
+Enables Moonraker object processing for adaptive mesh. Prefer enabling exclude object in your slicer instead.
+
+Experimental. Raises the XY motion limits and speeds up tool changes. Increases wear on your printer and can cause print problems such as Z skipping. Balanced is the recommended starting point, and a calibrated printer is required.
+
+Export Klipper metrics for scraping by Prometheus.
+
+External
+
+Filament Detection
+
+Filament Feeders
+
+Filament Manager
+
+Firmware Config
+
+Firmware Upgrade
+
+Fluidd
+
+Force Adaptive Mesh
+
+Force Bed Mesh Calibration
+
+Force Full Mesh
+
+Force Timelapse
+
+Force adaptive bed mesh calibration before every print? Falls back to full mesh when exclude_object is not active. Make sure to enable 'Exclude Object' in your slicer so Klipper receives object boundary data — without it, adaptive mesh always falls back to a full mesh.
+
+Force full bed mesh calibration before every print?
+
+Forces bed mesh calibration before each print.
+
+Forces timelapse regardless if configured in the Snapmaker app. Your slicer must call TIMELAPSE_START, TIMELAPSE_TAKE_FRAME, and TIMELAPSE_STOP.
+
+Frontend
+
+HelixScreen
+
+I UNDERSTAND
+
+Internal Camera
+
+Internal Camera Resolution
+
+Klipper Metrics Exporter
+
+Lowers X/Y motor current from 1.2A to 1.0A for quieter operation and less heat.
+
+Mainsail
+
+Max Speed
+
+Monitoring & Debugging
+
+Multi-lane filament management with CHANGE_TOOL and LANE_UNLOAD macros.
+
+None
+
+Normal
+
+Object Processing for Adaptive Mesh
+
+OctoEverywhere
+
+OpenRFID
+
+OpenRFID (force generic vendor)
+
+Optimizes TMC2240 driver settings for quieter operation and better performance.
+
+Panda Breath
+
+Panda Breath (Manual mode)
+
+Panda Breath IP Address
+
+PandaBreath / DragonBreath Chamber Heater
+
+Password-protect access to Fluidd and Firmware Config via Moonraker authentication.
+
+Paxx12
+
+Please read the relevant documentation for this feature. Bambu Lab and Creality spools are not enabled by default.
+
+Print Preferences
+
+RTSP Stream (paxx12 only)
+
+Reboot System
+
+Reboot the printer system.
+
+Recovery
+
+Remote Access
+
+Remote Screen
+
+Replace the stock Snapmaker touchscreen UI with HelixScreen?
+
+HelixScreen is a third-party Klipper touchscreen interface and is downloaded on demand (~46 MB). It manages WiFi itself, but reads and writes the same saved-network file as the stock UI, so an already-configured network carries over automatically.
+
+The printer reboots to apply the change.
+
+Reset Extended to Backup Firmware
+
+Reset Extended to Defaults
+
+Reset all extended settings to defaults and reboot?
+
+Reset all extended settings to defaults, switch to backup firmware and reboot?
+
+Resolution and framerate for the built-in MIPI camera. Resolution is always 1080p; only framerate can be lowered.
+
+Restart Klipper
+
+Restart Moonraker
+
+Restart the Klipper firmware service.
+
+Restart the Moonraker API server.
+
+SSH Access
+
+Select the driver for the built-in MIPI camera.
+
+Select the interface shown on the printer's built-in touchscreen.
+
+Selects the filament feeder setup. Feeder setups with a longer path to the toolhead, such as the BIQU PopStation mini, need a longer filament preload length than the stock 950 mm.
+
+Services
+
+Set filament feeders to BIQU PopStation mini? This sets the preload length to 2000 mm on both feeders. Only use this if your feeders are installed in a PopStation mini. On a stock setup, filament may be pushed hard into the toolhead.
+
+Set how filament is detected.
+
+Show MCUs Version
+
+Show current Tailscale connection status and IP address.
+
+Snapmaker
+
+Snapmaker Components
+
+Spoolman Integration
+
+Spoolman URL
+
+Stable (recommended)
+
+Stream the printer touchscreen to the browser.
+
+Switch back to the stock Snapmaker touchscreen UI?
+
+The downloaded HelixScreen files are removed, so switching back to HelixScreen later downloads them again.
+
+The printer reboots to apply the change.
+
+Switch to Backup Firmware
+
+Switch to backup firmware and reboot?
+
+System
+
+TMC AutoTune
+
+TMC Reduced Current
+
+Tailscale
+
+Tailscale Status
+
+Temporary thermistor, heating, and MCU bypass for Toolhead 1.
+
+Temporary thermistor, heating, and MCU bypass for Toolhead 2.
+
+Temporary thermistor, heating, and MCU bypass for Toolhead 3.
+
+Temporary thermistor, heating, and MCU bypass for Toolhead 4.
+
+Testing (pre-releases)
+
+Toolhead 1
+
+Toolhead 2
+
+Toolhead 3
+
+Toolhead 4
+
+Touchscreen GUI (Experimental)
+
+Track filament usage and metadata with Spoolman spool management.
+
+Troubleshooting
+
+Tweaks
+
+Type "I UNDERSTAND" to confirm you have read the documentation and accept the warranty and longevity risks
+
+Type "I UNDERSTAND" to confirm you have read the documentation and accept the warranty, safety, and longevity risks
+
+USB Camera
+
+VPN Provider (Experimental)
+
+WARNING: A chamber heater raises sustained enclosure temperatures, accelerating wear on electronics and motors beyond their rated conditions — likely NOT warranty-covered. Additional motherboard cooling is required (see docs).
+
+DragonBreath is community open firmware for a MAINS-POWERED heater, flashed onto the same Panda Breath board. NO WARRANTY — a fault could cause overheating, fire, or damage. Use at your own risk; never run it unattended.
+
+Before enabling:
+1. Add active cooling to the motherboard (see docs).
+2. Flash DragonBreath firmware onto the Panda Breath board and provision its Wi-Fi (see https://github.com/plastikman/DragonBreath).
+3. Give the DragonBreath device a static DHCP lease — Klipper connects by IP.
+4. Enter its IP below.
+
+(If your Panda Breath is still running stock firmware, use the Panda Auto option above instead.)
+
+Advanced: to use a device control token (NVS ctl_token), add a "token:" line to the DragonBreath config after enabling (see docs).
+
+
+WARNING: EXPERIMENTAL — highest tier. Raises XY velocity to 750 mm/s (stock 500), tool changes to 700 mm/s and dock grab to 50 mm/s.
+This runs the printer well past its rated limits. It increases wear on your printer and can cause print problems such as Z skipping, layer shifts, and ringing.
+Only enable on a fully calibrated printer with tool changes already reliable at stock speeds. Drop back if prints degrade.
+
+WARNING: EXPERIMENTAL. Raises XY velocity to 600 mm/s (stock 500), tool changes to 550 mm/s and dock grab to 30 mm/s.
+This runs the printer past its rated limits. It increases wear on your printer and can cause print problems such as Z skipping, layer shifts, and ringing.
+Only enable on a fully calibrated printer with tool changes already reliable at stock speeds. Set this back to Disabled if prints degrade.
+
+WARNING: Panda Breath significantly raises sustained enclosure temperatures, accelerating wear on electronics, motors, and other components beyond their rated conditions. Any damage attributable to elevated thermal stress is unlikely to be covered under warranty. Additional motherboard cooling is required before use — see the documentation for details.
+
+Before enabling Panda Breath auto mode, complete all of the following steps:
+
+1. Install additional active cooling on the motherboard (see documentation).
+2. Ensure the Panda Breath device is running firmware v1.0.3.
+3. Configure a static DHCP lease for this printer on your router — the printer IP is embedded into the Panda Breath device and must not change after a reboot.
+4. Configure a static DHCP lease for the Panda Breath device on your router — Klipper will connect to it by IP address on every print.
+5. Power-cycle the Panda Breath device and wait at least 5 seconds before proceeding.
+6. Enter the Panda Breath IP address in the field below.
+
+Auto mode heats the chamber with Klipper first, then hands off hold and cool-down behaviour to Panda native auto mode.
+
+(If you have flashed your Panda Breath with DragonBreath open firmware instead, use the DragonBreath option below.)
+
+
+WARNING: Panda Breath significantly raises sustained enclosure temperatures, accelerating wear on electronics, motors, and other components beyond their rated conditions. Any damage attributable to elevated thermal stress is unlikely to be covered under warranty. Additional motherboard cooling is required before use — see the documentation for details.
+
+Before enabling Panda Breath manual mode, complete all of the following steps:
+
+1. Install additional active cooling on the motherboard (see documentation).
+2. Ensure the Panda Breath device is running firmware v1.0.3.
+3. Configure a static DHCP lease for this printer on your router — the printer IP is embedded into the Panda Breath device and must not change after a reboot.
+4. Configure a static DHCP lease for the Panda Breath device on your router — Klipper will connect to it by IP address on every print.
+5. Power-cycle the Panda Breath device and wait at least 5 seconds before proceeding.
+6. Enter the Panda Breath IP address in the field below.
+
+Manual mode is a legacy fallback that may be less safe if the device or network connectivity is lost during a print.
+
+
+Web
+
+Web Authentication (Experimental)
+
+Web Interface
+
+http://192.168.1.100:7912

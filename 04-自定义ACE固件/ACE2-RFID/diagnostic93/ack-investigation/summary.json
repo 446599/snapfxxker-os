@@ -1,0 +1,24 @@
+{
+  "historical_timeout": {
+    "timestamp_utc": "2026-11-07T10:42:10.600Z",
+    "meaning": "host macro 3s timed out; no CMD8 response observed; STOP CMD9 success at 10:42:10.762Z",
+    "device_execution": "unknown",
+    "klippy_window": "klippy-window.log",
+    "usb_kernel": "no matching USB/reset messages in syslog window; not proof of no serial corruption"
+  },
+  "http_reads": {
+    "count": 12,
+    "successes": 12,
+    "min_ms": 151.9,
+    "max_ms": 207.0
+  },
+  "direct_reads": {
+    "count": 12,
+    "successes": 12,
+    "min_ms": 11.0,
+    "max_ms": 11.2
+  },
+  "source_observation": "V2 writer queues once and invokes guarded serial.write once per dequeued request; _v2_dispatch_and_wait does not resend after timeout. This does not prove whether the particular queued command was written or processed.",
+  "unresolved": "no per-request enqueue/write/frame/drop correlation exists for the failed command; cannot distinguish queue delay, lost request, lost reply, parse drop or late callback",
+  "motion": "no new motion or reverse; last 5mm remains unconfirmed"
+}

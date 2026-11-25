@@ -1,0 +1,1010 @@
+#!/bin/bash
+
+# Copyright (c) 2026-2030 Snapmaker - Software Development Team
+# All rights reserved.
+# This is proprietary and confidential code.
+# Unauthorized distribution or copying is strictly prohibited.
+
+PROG_NAME=systemUpgrade.sh
+
+MAIN_MCU_VENDOR_NORMAL=1d50
+MAIN_MCU_PRODUCT_NORMAL=606f
+
+MAIN_MCU_AT32_VENDOR_DFU_MODE=2e3c
+MAIN_MCU_AT32_PRODUCT_DFU_MODE=df11
+
+MAIN_MCU_GD32_VENDOR_DFU_MODE=28e9
+MAIN_MCU_GD32_PRODUCT_DFU_MODE=0189
+
+PRINT_HEAD_MCU_VENDOR_NORMAL=1d50
+PRINT_HEAD_MCU_PRODUCT_NORMAL=614e
+
+PRINT_HEAD_MCU_VENDOR_DFU_MODE=2e3c
+PRINT_HEAD_MCU_PRODUCT_DFU_MODE=df11
+
+MAIN_MCU_AT32_FIRMWARE_DEFAULT_PATH=/home/lava/firmware_MCU/at32f403a.bin
+MAIN_MCU_GD32_FIRMWARE_DEFAULT_PATH=/home/lava/firmware_MCU/gd32h757.bin
+
+PRINT_HEAD_MCU_FIRMWARE_DEFAULT_PATH=/home/lava/firmware_MCU/at32f415.bin
+MCU_FIRMWARE_MD5SUM_FILE=/home/lava/firmware_MCU/md5sum.txt
+MCU_FIRMWARE_VERSION_FILE=/home/lava/firmware_MCU/VERSION
+
+MCU_DEBUG_VERSION_NUMBER="00000000000000-0000000000"
+
+LOG_PREFIX="[UPG]"
+LOG_FILE_DIR="/home/lava/printer_data/ota"
+LOG_FILE_SUFFIX="system_upgrade_all.log"
+
+PRINT_HEAD_0_IS_CONNECTED="Yes"
+PRINT_HEAD_1_IS_CONNECTED="Yes"
+PRINT_HEAD_2_IS_CONNECTED="Yes"
+PRINT_HEAD_3_IS_CONNECTED="Yes"
+
+NOTIFICATION_ENABLE="No"
+
+# It must be placed in the /tmp directory to ensure that the file does not exist after startup.
+RUNNING_FILE_LOCK="/tmp/.system_upgrade.lock"
+
+UPGRADE_UNPACK_TMP_DIR="/userdata/.tmp_upgrade/unpack"
+
+# Main MCU model (at32f403a / gd32h757), cached before MCU power operations
+MAIN_MCU_MODEL=""
+
+# Load the log common function
+LOG_UTILS_SCRIPT="/home/lava/bin/log_utils.sh"
+[ -f "$LOG_UTILS_SCRIPT" ] && source "$LOG_UTILS_SCRIPT"
+
+safe_exit()
+{
+	rm -f "$RUNNING_FILE_LOCK"
+	rm -rf "${UPGRADE_UNPACK_TMP_DIR}"
+	sync
+	exit $1
+}
+
+log_info() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${LOG_PREFIX} ${FUNCNAME[1]:-main}: $*"
+}
+
+# Enable notification only when upgrade the entire firmware.
+
+# Notify upgrading percent
+# Stage:     unpack   mcu0    head0    head1    head2    head3    soc    reboot
+# Percent: 1        9      18       37       56       75       93     99
+notify_progress_via_mqtt()
+{
+	if [ x"$NOTIFICATION_ENABLE" = x"Yes" ] ; then
+		local percent=$1
+		local message=$2
+		json_content="{\"jsonrpc\":\"2.0\",\"method\":\"notify_system_upgrade\",\"params\":[{\"state\":\"upgrading\",\"percent\":${percent},\"message\":\"${message}\"}]}"
+		mosquitto_pub -t system/notification -m "${json_content}" 2>/dev/null
+	fi
+}
+
+# Notify upgrade successful
+notify_success_via_mqtt()
+{
+	if [ x"$NOTIFICATION_ENABLE" = x"Yes" ] ; then
+		json_content="{\"jsonrpc\":\"2.0\",\"method\":\"notify_system_upgrade\",\"params\":[{\"state\":\"success\",\"reason\":\"upgrade\"}]}"
+		mosquitto_pub -t system/notification -m "${json_content}" 2>/dev/null
+	fi
+}
+
+# Notify upgrade failed
+# unit is "CHECK" | "UNPACK" | "MCU0" | "HEAD1" | "HEAD2" | "HEAD3" | "HEAD4" | "SOC"
+notify_failed_via_mqtt()
+{
+	if [ x"$NOTIFICATION_ENABLE" = x"Yes" ] ; then
+		local unit=$1
+		local message=$2
+		json_content="{\"jsonrpc\":\"2.0\",\"method\":\"notify_system_upgrade\",\"params\":[{\"state\":\"failed\",\"reason\":\"upgrade\",\"unit\":\"${unit}\",\"message\":\"${message}\"}]}"
+		mosquitto_pub -t system/notification -m "${json_content}" 2>/dev/null
+	fi
+}
+
+# Notify upgrade warning
+# unit is "UNPACK" | "MCU0" | "HEAD1" | "HEAD2" | "HEAD3" | "HEAD4" | "SOC"
+notify_warning_via_mqtt()
+{
+	if [ x"$NOTIFICATION_ENABLE" = x"Yes" ] ; then
+		local unit=$1
+		local message=$2
+		json_content="{\"jsonrpc\":\"2.0\",\"method\":\"notify_system_upgrade\",\"params\":[{\"state\":\"warning\",\"reason\":\"upgrade\",\"unit\":\"${unit}\",\"message\":\"${message}\"}]}"
+		mosquitto_pub -t system/notification -m "${json_content}" 2>/dev/null
+	fi
+}
+
+get_main_mcu_model_prefix_by_dfu_tools()
+{
+	# Enter DFU mode
+	lava_io set MAIN_MCU_POWER=0 MAIN_MCU_BOOT=0 > /dev/null
+	sleep 1
+	lava_io set MAIN_MCU_POWER=1 > /dev/null
+	sleep 3
+
+	# Check DFU mode
+	if lsusb -d "${MAIN_MCU_GD32_VENDOR_DFU_MODE}:${MAIN_MCU_GD32_PRODUCT_DFU_MODE}" > /dev/null 2>&1; then
+		echo "gd32h"
+	elif lsusb -d "${MAIN_MCU_AT32_VENDOR_DFU_MODE}:${MAIN_MCU_AT32_PRODUCT_DFU_MODE}" > /dev/null 2>&1; then
+		echo "at32f"
+	else
+		echo "unknown"
+	fi
+
+	lava_io set MAIN_MCU_POWER=0 MAIN_MCU_BOOT=1 > /dev/null
+	sleep 1
+	lava_io set MAIN_MCU_POWER=1 > /dev/null
+	sleep 1
+}
+
+get_mcu_model()
+{
+	mcu=$1
+
+	case $1 in
+		mcu0)
+			main_mcu_usb_info=$(lsusb -d "$MAIN_MCU_VENDOR_NORMAL":"$MAIN_MCU_PRODUCT_NORMAL")
+			if [ x"$main_mcu_usb_info" != x"" ] ; then
+				iproduct=$(lsusb -d "$MAIN_MCU_VENDOR_NORMAL":"$MAIN_MCU_PRODUCT_NORMAL" -v 2>/dev/null | grep iProduct | awk '{print $NF}')
+				model=$(echo $iproduct | awk -F'-' '{print $1}')
+				echo "$model"
+			else
+				echo "unknown"
+			fi
+			;;
+		head0|head1|head2|head3)
+			head_mcu_bus=$(lsusb -d "$PRINT_HEAD_MCU_VENDOR_NORMAL":"$PRINT_HEAD_MCU_PRODUCT_NORMAL" | head -n1 | awk '{print $2}')
+			if [ x"$head_mcu_bus" != x"" ] ; then
+				if [ x"$mcu" == x"head0" ] ; then
+					port="003"
+				elif [ x"$mcu" == x"head1" ] ; then
+					port="004"
+				elif [ x"$mcu" == x"head2" ] ; then
+					port="002"
+				elif [ x"$mcu" == x"head3" ] ; then
+					port="001"
+				fi
+
+				head_mcu_usb_info=$(lsusb -t | grep "Class=Communications, Driver=cdc_acm" | grep "Port $port" | awk -F'[,:]' '{print $2}')
+				if [ x"$head_mcu_usb_info" != x"" ] ; then
+					head_devnum=$(echo $head_mcu_usb_info | awk '{print $2}')
+					iproduct=$(lsusb -s "$head_mcu_bus":"$head_devnum" -v 2>/dev/null | grep iProduct | awk '{print $NF}')
+					model=$(echo $iproduct | awk -F'-' '{print $1}')
+					echo "$model"
+				else
+					echo "unknown"
+				fi
+			else
+				echo "unknown"
+			fi
+			;;
+		*)
+			echo "unknown"
+			;;
+	esac
+}
+
+get_mcu_version()
+{
+	mcu=$1
+
+	case $1 in
+		mcu0)
+			main_mcu_usb_info=$(lsusb -d "$MAIN_MCU_VENDOR_NORMAL":"$MAIN_MCU_PRODUCT_NORMAL")
+			if [ x"$main_mcu_usb_info" != x"" ] ; then
+				iproduct=$(lsusb -d "$MAIN_MCU_VENDOR_NORMAL":"$MAIN_MCU_PRODUCT_NORMAL" -v 2>/dev/null | grep iProduct | awk '{print $NF}')
+				version=$(echo $iproduct | awk -F'-' '{print $(NF-1) "-" $(NF)}')
+				echo $version
+			else
+				echo "unknown"
+			fi
+			;;
+		head0|head1|head2|head3)
+			head_mcu_bus=$(lsusb -d "$PRINT_HEAD_MCU_VENDOR_NORMAL":"$PRINT_HEAD_MCU_PRODUCT_NORMAL" | head -n1 | awk '{print $2}')
+			if [ x"$head_mcu_bus" != x"" ] ; then
+				if [ x"$mcu" == x"head0" ] ; then
+					port="003"
+				elif [ x"$mcu" == x"head1" ] ; then
+					port="004"
+				elif [ x"$mcu" == x"head2" ] ; then
+					port="002"
+				elif [ x"$mcu" == x"head3" ] ; then
+					port="001"
+				fi
+
+				head_mcu_usb_info=$(lsusb -t | grep "Class=Communications, Driver=cdc_acm" | grep "Port $port" | awk -F'[,:]' '{print $2}')
+				if [ x"$head_mcu_usb_info" != x"" ] ; then
+					head_devnum=$(echo $head_mcu_usb_info | awk '{print $2}')
+					iproduct=$(lsusb -s "$head_mcu_bus":"$head_devnum" -v 2>/dev/null | grep iProduct | awk '{print $NF}')
+					version=$(echo $iproduct | awk -F'-' '{print $(NF-1) "-" $(NF)}')
+					echo $version
+				else
+					echo "unknown"
+				fi
+			else
+				echo "unknown"
+			fi
+			;;
+		*)
+			echo "unknown"
+			;;
+	esac
+}
+
+get_unmatch()
+{
+	failed_list=""
+	version_store=$(cat ${MCU_FIRMWARE_VERSION_FILE})
+
+	main_mcu_version=$(get_mcu_version mcu0)
+	if [ x"$main_mcu_version" != x"$version_store" ] ; then
+		failed_list="${failed_list} mcu0"
+	fi
+
+	head_mcu_list="head0 head1 head2 head3"
+	for head in $head_mcu_list ; do
+		head_mcu_version=$(get_mcu_version $head)
+		if [ x"$head_mcu_version" != x"$version_store" ] ; then
+			failed_list="${failed_list} ${head}"
+		fi
+	done
+
+	echo "${failed_list}"
+}
+
+revert()
+{
+	mcu_list="$1"
+
+	if [ x"$mcu_list" == x"" ] ; then
+		log_info "No MCU need to revert version."
+		safe_exit 0
+	fi
+
+	log_info "Need to revert: $mcu_list."
+
+	retry_max=3
+	mcu_version_old=$(head -n 1 $MCU_FIRMWARE_VERSION_FILE)
+
+	# Only revert MCU firmware, do not check
+	for mcu in $mcu_list ; do
+		case $mcu in
+			mcu0)
+				for i in $(seq 1 $retry_max) ; do
+					# Debug version, do not upgrade
+					main_mcu_version=$(get_mcu_version mcu0)
+					if [ x"$main_mcu_version" == x"$MCU_DEBUG_VERSION_NUMBER" ] ; then
+						log_info "Main MCU use debug version, do not revert."
+						break
+					fi
+					# Get the matching firmware file
+					mcu_model=$(get_mcu_model "mcu0")
+					case "$mcu_model" in
+						*gd32h757*)
+							main_mcu_default_firmware_path="${MAIN_MCU_GD32_FIRMWARE_DEFAULT_PATH}"
+							;;
+						*unknown*)
+							main_mcu_model_prefix=$(get_main_mcu_model_prefix_by_dfu_tools)
+							case "$main_mcu_model_prefix" in
+								*gd32h*)
+									main_mcu_default_firmware_path="${MAIN_MCU_GD32_FIRMWARE_DEFAULT_PATH}"
+									;;
+								*at32f*)
+									main_mcu_default_firmware_path="${MAIN_MCU_AT32_FIRMWARE_DEFAULT_PATH}"
+									;;
+								*)
+									log_info "Can not get main MCU model (by dfu tool)."
+									break
+									;;
+							esac
+							;;
+						*)
+							main_mcu_default_firmware_path="${MAIN_MCU_AT32_FIRMWARE_DEFAULT_PATH}"
+							;;
+					esac
+					upgrade_main_mcu "${main_mcu_default_firmware_path}"
+					sleep 1
+					# Retry max 6 times
+					for ii in $(seq 1 6) ; do
+						main_mcu_version=$(get_mcu_version mcu0)
+						if [ x"$main_mcu_version" == x"unknown" ] ; then
+							sleep 1
+						else
+							break
+						fi
+					done
+					if [ x"$mcu_version_old" == x"$main_mcu_version" ] ; then
+						log_info "Main MCU version revert succeed."
+						break
+					else
+						log_info "Main MCU version revert failed. retry $i."
+					fi
+
+				done
+				;;
+			head0|head1|head2|head3)
+				for i in $(seq 1 $retry_max) ; do
+					head_mcu_version=$(get_mcu_version $mcu)
+					# This print head MCU offline, do not upgrade
+					if [ x"$head_mcu_version" == x"unknown" ] ; then
+						log_info "Print head $mcu offline, try revert."
+						# break
+					fi
+					# Debug version, do not upgrade
+					if [ x"$head_mcu_version" == x"$MCU_DEBUG_VERSION_NUMBER" ] ; then
+						log_info "Print head $mcu use debug version, do not revert."
+						break
+					fi
+
+					upgrade_head_mcu $mcu $PRINT_HEAD_MCU_FIRMWARE_DEFAULT_PATH
+
+					if { [ "$mcu" = "head0" ] && [ "$PRINT_HEAD_0_IS_CONNECTED" = "No" ]; } ||
+						{ [ "$mcu" = "head1" ] && [ "$PRINT_HEAD_1_IS_CONNECTED" = "No" ]; } ||
+						{ [ "$mcu" = "head2" ] && [ "$PRINT_HEAD_2_IS_CONNECTED" = "No" ]; } ||
+						{ [ "$mcu" = "head3" ] && [ "$PRINT_HEAD_3_IS_CONNECTED" = "No" ]; } ; then
+						log_info "Print head $mcu is disconnected, do not revert."
+						break
+					fi
+					sleep 2
+					# Retry max 6 times
+					for ii in $(seq 1 6) ; do
+						head_mcu_version=$(get_mcu_version $mcu)
+						if [ x"$head_mcu_version" == x"unknown" ] ; then
+							sleep 1
+						else
+							break
+						fi
+					done
+					if [ x"$mcu_version_old" == x"$head_mcu_version" ] ; then
+						log_info "Print head $mcu version revert succeed."
+						break
+					else
+						log_info "Print head $mcu version revert failed. retry $i."
+					fi
+				done
+				;;
+			*)
+				;;
+		esac
+	done
+}
+
+additional_operations_before_upgrade_all()
+{
+	log_info "Additional operations before upgrade all."
+	sync
+	/etc/init.d/S61moonraker stop
+	/etc/init.d/S60klipper stop
+	echo 3 > /proc/sys/vm/drop_caches
+}
+
+additional_operations_after_unpack_failed()
+{
+	log_info "Additional operations after unpack failed."
+	lava_io set MAIN_MCU_POWER=0 MAIN_MCU_BOOT=1 > /dev/null
+	sleep 1
+	lava_io set MAIN_MCU_POWER=1 HEAD_MCU_POWER=1 > /dev/null
+	sleep 1
+	/etc/init.d/S60klipper start
+	/etc/init.d/S61moonraker start
+}
+
+upgrade_all()
+{
+	firmware="$1"
+
+	if [ x"$firmware" == x"" ] ; then
+		log_info "You must specify a firmware path."
+		safe_exit 1
+	fi
+	if [ ! -f "$firmware" ]; then
+		log_info "$firmware doesn't exist, please check."
+		safe_exit 1
+	fi
+
+	# Cache the main MCU model before any operation that may power off or reset the MCU
+	MAIN_MCU_MODEL=$(get_mcu_model "mcu0")
+
+	# md5_value=$(md5sum "$firmware" | awk '{print $1}')
+	# log_info "MD5 of $firmware is $md5_value"
+
+	start_time=$(date "+%Y-%m-%d %H:%M:%S")
+	start_time_s=$(date +%s -d "$start_time")
+	log_info "Upgrade all start: $start_time"
+
+	# Check if the firmware is valid
+	upfileUnpack -i "$firmware" -c
+	if [ ! $? -eq 0 ] ; then
+		log_info "Check upgrade file failed. Upgrade abort."
+		notify_failed_via_mqtt "UNPACK" "Unpack upgrade file failed"
+		safe_exit 2
+	fi
+
+	# Check if firmware file supports gd32h757
+	mcu_model="$MAIN_MCU_MODEL"
+	case "$mcu_model" in
+		*gd32h757*)
+			log_info "Main MCU is GD32H757, checking firmware support..."
+			if upfileUnpack -i "$firmware" -c 2>/dev/null | grep -q "Name.*gd32h757"; then
+				log_info "Firmware supports GD32H757, proceeding with upgrade."
+			else
+				log_info "Main MCU is GD32H757 but firmware package does not contain gd32h757.bin"
+				notify_failed_via_mqtt "CHECK" "Failed to check whether the firmware supports GD32H757"
+				safe_exit 2
+			fi
+			;;
+		*)
+			log_info "Main MCU model is $mcu_model"
+			;;
+	esac
+
+	# Do upgrade
+	additional_operations_before_upgrade_all
+
+	notify_progress_via_mqtt 1 "Unpacking"
+	rm -rf "${UPGRADE_UNPACK_TMP_DIR}"
+	mkdir -p "${UPGRADE_UNPACK_TMP_DIR}"
+
+	# Unpack firmware file
+	upfileUnpack -i "$firmware" -o "${UPGRADE_UNPACK_TMP_DIR}"
+	if [ ! $? -eq 0 ] ; then
+		log_info "Unpack upgrade file failed. Upgrade abort."
+		notify_failed_via_mqtt "UNPACK" "Unpack upgrade file failed"
+		additional_operations_after_unpack_failed
+		safe_exit 2
+	fi
+
+	end_time_unpack=$(date "+%Y-%m-%d %H:%M:%S")
+	end_time_unpack_s=$(date +%s -d "$end_time_unpack")
+	duration_unpack_s=$((end_time_unpack_s-start_time_s))
+	log_info "Unpack duration: ${duration_unpack_s}s"
+
+	notify_progress_via_mqtt 9 "Main MCU"
+	# Shutdown klipper process
+	log_info "Shutdown klipper process."
+	/etc/init.d/S60klipper stop
+	sleep 1
+	lava_io set MAIN_MCU_POWER=1 HEAD_MCU_POWER=1 > /dev/null
+	sleep 3
+
+	# Check whether the MCU is upgraded successfully
+	revert_mcu_list=""
+	retry_max=3
+	mcu_version_new=$(head -n 1 ${UPGRADE_UNPACK_TMP_DIR}/MCU_DESC)
+	mcu_version_old=$(head -n 1 $MCU_FIRMWARE_VERSION_FILE)
+
+	log_info "Prepare to upgrade MCU0."
+	have_failure="Yes"
+	# Get the matching firmware file
+	if [ x"$MAIN_MCU_MODEL" == x"unknown" ] ; then
+		MAIN_MCU_MODEL=$(get_mcu_model "mcu0")
+	fi
+	mcu_model="$MAIN_MCU_MODEL"
+	case "$mcu_model" in
+		*gd32h757*)
+			main_mcu_firmware_path="${UPGRADE_UNPACK_TMP_DIR}/gd32h757.bin"
+			;;
+		*)
+			main_mcu_firmware_path="${UPGRADE_UNPACK_TMP_DIR}/at32f403a.bin"
+			;;
+	esac
+	for i in $(seq 1 $retry_max) ; do
+		upgrade_main_mcu "${main_mcu_firmware_path}"
+		sleep 1
+		# Retry max 6 times
+		for ii in $(seq 1 6) ; do
+			main_mcu_version=$(get_mcu_version mcu0)
+			if [ x"$main_mcu_version" == x"unknown" ] ; then
+				sleep 1
+			else
+				break
+			fi
+		done
+		if [ x"$mcu_version_new" == x"$main_mcu_version" ] ; then
+			have_failure="No"
+			# Add the successful MCU
+			revert_mcu_list="mcu0"
+			log_info "The MCU0 upgrade was successful."
+			notify_progress_via_mqtt 18 "Extruder 1"
+			break
+		else
+			log_info "Main MCU version ($main_mcu_version) check failed after upgrade. retry $i."
+		fi
+	done
+	if [ x"$have_failure" == x"Yes" ] ; then
+		log_info "Main MCU upgrade failed, revert to old version. Upgrade abort."
+		# Revert myself
+		revert_mcu_list="mcu0"
+		revert "$revert_mcu_list"
+		# Notify failed
+		notify_failed_via_mqtt "MCU0" "Main MCU upgrade failed"
+		# No more upgrade others
+		safe_exit 3
+	fi
+
+	head_mcu_list="head0 head1 head2 head3"
+	for head in $head_mcu_list ; do
+		log_info "Prepare to upgrade $head."
+		have_failure="Yes"
+		for i in $(seq 1 $retry_max) ; do
+			head_mcu_version=$(get_mcu_version $head)
+			# This print head MCU offline, do not upgrade and think it is successful.
+			if [ x"$head_mcu_version" == x"unknown" ] ; then
+				log_info "Print head $head offline, do not upgrade."
+				have_failure="No"
+				# Notify warning
+				case $head in
+					head0)
+						notify_warning_via_mqtt "HEAD1" "Extruder 1 offline"
+						notify_progress_via_mqtt 37 "Extruder 2"
+						;;
+					head1)
+						notify_warning_via_mqtt "HEAD2" "Extruder 2 offline"
+						notify_progress_via_mqtt 56 "Extruder 3"
+						;;
+					head2)
+						notify_warning_via_mqtt "HEAD3" "Extruder 3 offline"
+						notify_progress_via_mqtt 75 "Extruder 4"
+						;;
+					head3)
+						notify_warning_via_mqtt "HEAD4" "Extruder 4 offline"
+						notify_progress_via_mqtt 93 "Main chip"
+						;;
+					*) ;;
+				esac
+				break
+			fi
+			upgrade_head_mcu $head ${UPGRADE_UNPACK_TMP_DIR}/at32f415.bin
+			sleep 2
+			# Retry max 6 times
+			for ii in $(seq 1 6) ; do
+				head_mcu_version=$(get_mcu_version $head)
+				if [ x"$head_mcu_version" == x"unknown" ] ; then
+					sleep 1
+				else
+					break
+				fi
+			done
+			if [ x"$mcu_version_new" == x"$head_mcu_version" ] ; then
+				have_failure="No"
+				# Add this successful MCU
+				revert_mcu_list="$revert_mcu_list $head"
+				log_info "The Print head $head upgrade was successful."
+				case $head in
+					head0) notify_progress_via_mqtt 37 "Extruder 2" ;;
+					head1) notify_progress_via_mqtt 56 "Extruder 3" ;;
+					head2) notify_progress_via_mqtt 75 "Extruder 4" ;;
+					head3) notify_progress_via_mqtt 93 "Main chip" ;;
+					*) ;;
+				esac
+				break
+			else
+				log_info "Print head MCU version ($head_mcu_version) check failed. retry $i."
+			fi
+		done
+		if [ x"$have_failure" == x"Yes" ] ; then
+			log_info "Print head MCU upgrade failed, revert to old version. Upgrade abort."
+			# Revert myself
+			revert_mcu_list="$revert_mcu_list $head"
+			revert "$revert_mcu_list"
+			# Notify failed
+			case $head in
+				head0) notify_failed_via_mqtt "HEAD1" "Extruder 1 upgrade failed" ;;
+				head1) notify_failed_via_mqtt "HEAD2" "Extruder 2 upgrade failed" ;;
+				head2) notify_failed_via_mqtt "HEAD3" "Extruder 3 upgrade failed" ;;
+				head3) notify_failed_via_mqtt "HEAD4" "Extruder 4 upgrade failed" ;;
+				*) ;;
+			esac
+			# No more upgrade others
+			safe_exit 3
+		fi
+	done
+
+	log_info "Prepare to upgrade SOC."
+	upgrade_soc ${UPGRADE_UNPACK_TMP_DIR}/update.img
+}
+
+additional_operations_before_active()
+{
+	log_info "Additional operations before activating the soc firmware."
+	[ -e "/oem/.printer_data" ] && rm -f /oem/.printer_data
+	[ -e "/oem/.debug" ] && rm -f /oem/.debug
+	sync
+}
+
+upgrade_soc()
+{
+	firmware="$1"
+
+	if [ x"$firmware" == x"" ] ; then
+		log_info "You must specify a firmware path."
+		safe_exit 1
+	fi
+	if [ ! -f "$firmware" ]; then
+		log_info "$firmware doesn't exist, please check."
+		safe_exit 1
+	fi
+
+	cmdline=$(cat /proc/cmdline)
+	for para in $cmdline ; do
+		slotsufix1=$(echo $para | grep "android_slotsufix")
+		slotsufix2=$(echo $para | grep "androidboot.slot_suffix")
+		if [ x"$slotsufix1" != x"" -o x"$slotsufix2" != x"" ] ; then
+			slot=$(echo $slotsufix1 | cut -d '=' -f2)
+			if [ x"$slot" == x"" ] ; then
+				slot=$(echo $slotsufix2 | cut -d '=' -f2)
+			fi
+			if [ x"$slot" == x"_a" ] ; then
+				slot="A"
+				slot_other="B"
+			else
+				slot="B"
+				slot_other="A"
+			fi
+			log_info "Current slot is $slot, upgrade $slot_other and reboot to active."
+			break
+		fi
+	done
+
+	updateEngine --image_url="$firmware" --update
+	sleep 1
+	additional_operations_before_active
+	rm -rf "${UPGRADE_UNPACK_TMP_DIR}"
+	sync
+
+	notify_progress_via_mqtt 99 "Ready to reboot"
+	log_info "upgrade soc finish, prepare to reboot."
+	sleep 1
+	reboot
+
+	notify_success_via_mqtt
+
+	# It usually doesn't be here
+	sleep 20
+	log_info "reboot failed ? reset force."
+	echo b > /proc/sysrq-trigger
+}
+
+# If there is no option, do not check whether it is successful.
+upgrade_main_mcu()
+{
+	firmware="$1"
+	option=$1
+	local dfu_vid=""
+	local dfu_pid=""
+
+	if [ ! -f "$firmware" ]; then
+		log_info "$firmware doesn't exist, please check."
+		safe_exit 1
+	fi
+
+	# Check whether the required variables are defined
+	if [ -z "${MAIN_MCU_GD32_VENDOR_DFU_MODE}" ] || [ -z "${MAIN_MCU_GD32_PRODUCT_DFU_MODE}" ]; then
+		log_info "ERROR - GD32 DFU VID/PID not defined"
+		return
+	fi
+
+	if [ -z "${MAIN_MCU_AT32_VENDOR_DFU_MODE}" ] || [ -z "${MAIN_MCU_AT32_PRODUCT_DFU_MODE}" ]; then
+		log_info "ERROR - AT32 DFU VID/PID not defined"
+		return
+	fi
+
+	# Enter DFU mode
+	log_info "Main MCU power off."
+	lava_io set MAIN_MCU_POWER=0 MAIN_MCU_BOOT=0 > /dev/null
+	sleep 1
+
+	log_info "Main MCU enter DFU mode and power on."
+	lava_io set MAIN_MCU_POWER=1 > /dev/null
+	sleep 3
+
+	# Check DFU mode
+	if lsusb -d "${MAIN_MCU_GD32_VENDOR_DFU_MODE}:${MAIN_MCU_GD32_PRODUCT_DFU_MODE}" > /dev/null 2>&1; then
+		dfu_vid="${MAIN_MCU_GD32_VENDOR_DFU_MODE}"
+		dfu_pid="${MAIN_MCU_GD32_PRODUCT_DFU_MODE}"
+		log_info "Detected GD32H757 MCU (VID:PID = ${dfu_vid}:${dfu_pid})"
+	elif lsusb -d "${MAIN_MCU_AT32_VENDOR_DFU_MODE}:${MAIN_MCU_AT32_PRODUCT_DFU_MODE}" > /dev/null 2>&1; then
+		dfu_vid="${MAIN_MCU_AT32_VENDOR_DFU_MODE}"
+		dfu_pid="${MAIN_MCU_AT32_PRODUCT_DFU_MODE}"
+		log_info "Detected AT32F403A MCU (VID:PID = ${dfu_vid}:${dfu_pid})"
+	else
+		log_info "No supported MCU detected in DFU mode! do not upgrade main MCU and return to normal mode. Upgrade abort."
+		lava_io set MAIN_MCU_POWER=0 MAIN_MCU_BOOT=1 > /dev/null
+		sleep 1
+		lava_io set MAIN_MCU_POWER=1 > /dev/null
+		return
+	fi
+
+	log_info "Flash firmware to MCU by DFU tool."
+	dfu-util -d ,"${dfu_vid}:${dfu_pid}" -a 0 -s 0x8000000:leave -D "${firmware}"
+	sleep 1
+
+	log_info "Main MCU power off and enter normal mode."
+	lava_io set MAIN_MCU_POWER=0 MAIN_MCU_BOOT=1 > /dev/null
+	sleep 1
+
+	log_info "Main MCU power on."
+	lava_io set MAIN_MCU_POWER=1 > /dev/null
+
+	log_info "Done."
+}
+
+# If there is no option, do not check whether it is successful.
+upgrade_head_mcu()
+{
+	mcu=$1
+	firmware="$2"
+	option=$2
+
+	if [ ! -f "$firmware" ]; then
+		log_info "$firmware doesn't exist, please check."
+		safe_exit 1
+	fi
+
+	log_info "Print head MCU power off."
+	lava_io set HEAD_MCU_POWER=0 > /dev/null
+
+	log_info "Print head MCU $mcu enter DFU mode."
+	if [ x"$mcu" == x"head0" ] ; then
+		lava_io set HEAD_MCU2_BOOT=0 > /dev/null
+	elif [ x"$mcu" == x"head1" ] ; then
+		lava_io set HEAD_MCU3_BOOT=0 > /dev/null
+	elif [ x"$mcu" == x"head2" ] ; then
+		lava_io set HEAD_MCU1_BOOT=0 > /dev/null
+	elif [ x"$mcu" == x"head3" ] ; then
+		lava_io set HEAD_MCU0_BOOT=0 > /dev/null
+	fi
+	# !! must waiting for 10s to avoid MCU being broken
+	# Reason for T2:
+	#   Power off and quickly power on the 5V power supply of the print head,
+	#   will causes the voltage to rise to 24V, and damage the print head.
+	# sleep 10
+	# for PR1:
+	# The new version of the hardware no longer requires waiting for as long as the above one (10s).
+	sleep 2
+
+
+	log_info "Print head MCU power on."
+	lava_io set HEAD_MCU_POWER=1 > /dev/null
+	sleep 2
+
+	# Check DFU mode
+	dfu_mode_usb_info=$(lsusb -d "$MAIN_MCU_AT32_VENDOR_DFU_MODE":"$MAIN_MCU_AT32_PRODUCT_DFU_MODE")
+	if [ x"$dfu_mode_usb_info" == x"" ] ; then
+		log_info "Check DFU mode failed, do not upgrade $mcu and return to normal mode. Upgrade abort."
+		lava_io set HEAD_MCU_POWER=0 > /dev/null
+		if [ x"$mcu" == x"head0" ] ; then
+			lava_io set HEAD_MCU2_BOOT=1 > /dev/null
+			PRINT_HEAD_0_IS_CONNECTED="No"
+		elif [ x"$mcu" == x"head1" ] ; then
+			lava_io set HEAD_MCU3_BOOT=1 > /dev/null
+			PRINT_HEAD_1_IS_CONNECTED="No"
+		elif [ x"$mcu" == x"head2" ] ; then
+			lava_io set HEAD_MCU1_BOOT=1 > /dev/null
+			PRINT_HEAD_2_IS_CONNECTED="No"
+		elif [ x"$mcu" == x"head3" ] ; then
+			lava_io set HEAD_MCU0_BOOT=1 > /dev/null
+			PRINT_HEAD_3_IS_CONNECTED="No"
+		fi
+		sleep 1
+		lava_io set HEAD_MCU_POWER=1 > /dev/null
+		return
+	fi
+
+	log_info "Flash firmware to MCU $mcu by DFU tool."
+	dfu-util -d ,$PRINT_HEAD_MCU_VENDOR_DFU_MODE:$PRINT_HEAD_MCU_PRODUCT_DFU_MODE -a 0 -s 0x8000000:leave -D "$firmware"
+	sleep 1
+
+	log_info "Print head MCU power off."
+	lava_io set HEAD_MCU_POWER=0 > /dev/null
+
+	log_info "Print head MCU "$mcu" enter normal mode."
+	if [ x"$mcu" == x"head0" ] ; then
+		lava_io set HEAD_MCU2_BOOT=1 > /dev/null
+	elif [ x"$mcu" == x"head1" ] ; then
+		lava_io set HEAD_MCU3_BOOT=1 > /dev/null
+	elif [ x"$mcu" == x"head2" ] ; then
+		lava_io set HEAD_MCU1_BOOT=1 > /dev/null
+	elif [ x"$mcu" == x"head3" ] ; then
+		lava_io set HEAD_MCU0_BOOT=1 > /dev/null
+	fi
+	sleep 1
+
+	log_info "Print head MCU power on"
+	lava_io set HEAD_MCU_POWER=1 > /dev/null
+
+	log_info "$mcu Done."
+}
+
+show_model()
+{
+	local mcu=$1
+
+	get_mcu_model "$mcu"
+}
+
+show_status()
+{
+	echo "Name                State    Build time      Version"
+	echo "Main processor      N/A      "$(cat /etc/FULLVERSION | cut -d_ -f2)"  "$(cat /etc/FULLVERSION | cut -d_ -f1)
+
+	main_mcu_version=$(get_mcu_version mcu0)
+	if [ x"$main_mcu_version" != x"unknown" ] ; then
+		build_time=$(echo $main_mcu_version | awk -F'-' '{print $1}')
+		git_hash=$(echo $main_mcu_version | awk -F'-' '{print $2}')
+		echo "Main MCU            online   ${build_time}  $git_hash"
+	else
+		echo "Main MCU            offline  N/A             N/A"
+	fi
+
+	head_mcu_list="head0 head1 head2 head3"
+	for head in $head_mcu_list ; do
+		head_mcu_version=$(get_mcu_version $head)
+		if [ x"$head_mcu_version" != x"unknown" ] ; then
+			build_time=$(echo $head_mcu_version | awk -F'-' '{print $1}')
+			git_hash=$(echo $head_mcu_version | awk -F'-' '{print $2}')
+			echo "Print $head MCU     online   ${build_time}  $git_hash"
+		else
+			echo "Print $head MCU     offline  N/A             N/A"
+		fi
+	done
+}
+
+check()
+{
+	result=$(get_unmatch)
+	if [ x"$result" != x"" ] ; then
+		echo "MCU version check failed, list: ${result}"
+		safe_exit 3
+	else
+		echo "All passed"
+		safe_exit 0
+	fi
+}
+
+check_restore()
+{
+	result=$(get_unmatch)
+	if [ x"$result" != x"" ] ; then
+		revert "$result"
+		sleep 1
+		lava_io set MAIN_MCU_POWER=0 HEAD_MCU_POWER=0
+		sleep 1
+		lava_io set MAIN_MCU_POWER=1 HEAD_MCU_POWER=1
+	fi
+
+	safe_exit 0
+}
+
+#        HUB Port   Boot0 ctrl
+# head0  003        HEAD_MCU2_BOOT
+# head1  004        HEAD_MCU3_BOOT
+# head2  002        HEAD_MCU1_BOOT
+# head3  001        HEAD_MCU0_BOOT
+show_topo()
+{
+	echo "USB Connection topology:"
+	echo "                        /(P3) -- Print head 0 MCU"
+	echo "                       / (P4) -- Print head 1 MCU"
+	echo "   USB0 -- USB HUB0 --("
+	echo "  /                    \ (P2) -- Print head 2 MCU"
+	echo "SOC                     \(P1) -- Print head 3 MCU"
+	echo "  \\"
+	echo "   USB1 -- USB HUB1 --(P4)-- Main MCU"
+}
+
+upgrade()
+{
+	unit=$1
+	firmware="$2"
+	option=$2
+
+	if [ x"$firmware" == x"" ] ; then
+		echo "Parameters incomplete, please check."
+		safe_exit 1
+	fi
+	if [ ! -f "$firmware" ] ; then
+		echo "File $firmware does not exist, please check and retry."
+		safe_exit 1
+	fi
+
+	case "$unit" in
+		all)
+			NOTIFICATION_ENABLE="Yes"
+			cleanup_by_index_range "$LOG_FILE_DIR" "$MAX_LOG_COUNT"
+			log_file_path=$(get_log_file_path $LOG_FILE_DIR $LOG_FILE_SUFFIX)
+			[ -f "$log_file_path" ] && rm -f "$log_file_path"
+			exec > >(tee "$log_file_path") 2>&1
+			show_status
+			additional_operations_before_active
+			upgrade_all "$firmware"
+			;;
+		soc)
+			upgrade_soc "$firmware"
+			;;
+		mcu0)
+			upgrade_main_mcu "$firmware"
+			;;
+		head0|head1|head2|head3)
+			upgrade_head_mcu $unit "$firmware"
+			;;
+		headall)
+			upgrade_head_mcu head0 "$firmware"
+			upgrade_head_mcu head1 "$firmware"
+			upgrade_head_mcu head2 "$firmware"
+			upgrade_head_mcu head3 "$firmware"
+			;;
+		*)
+			echo "Parameter <which unit> error, please enter '$PROG_NAME help' to view help information."
+			safe_exit 1
+			;;
+	esac
+}
+
+usage()
+{
+	echo "usage: $PROG_NAME <command> [<which unit> <firmware path | option>]"
+	echo "command:"
+	echo "  help           Display this help information"
+	echo "  check          Check whether the MCU version matches"
+	echo "  check-restore  Check whether the MCU version matches and restore"
+	echo "  show-status    Display SOC & MCU status and version"
+	echo "  show-topo      Display USB connection topology information"
+	echo "  show-model     Display the model of specified MCU"
+	echo "  upgrade        Upgrade SOC/MCU firmware"
+	echo
+	echo "which unit:"
+	echo "  all            Main processor and all MCU"
+	echo "  soc            Main processor"
+	echo "  mcu0           Main MCU"
+	echo "  head0          Print head 0 MCU"
+	echo "  head1          Print head 1 MCU"
+	echo "  head2          Print head 2 MCU"
+	echo "  head3          Print head 3 MCU"
+	echo "  headall        All print head MCU"
+	echo
+	echo "example:"
+	echo "  $PROG_NAME show-status"
+	echo "  $PROG_NAME show-model mcu0"
+	echo "  $PROG_NAME check"
+	echo "  $PROG_NAME upgrade all /tmp/upgrade.bin"
+	echo "  $PROG_NAME upgrade soc /tmp/update.img"
+	echo "  $PROG_NAME upgrade mcu0 /tmp/at32f403a.bin"
+	echo "  $PROG_NAME upgrade head0 /tmp/at32f415.bin"
+	echo "  $PROG_NAME upgrade headall /tmp/at32f415.bin"
+}
+
+if [ -f "$RUNNING_FILE_LOCK" ] ; then
+	echo "The upgrade is in progress."
+	exit 5
+fi
+touch "$RUNNING_FILE_LOCK"
+
+case "$1" in
+	show-status)
+		show_status
+		;;
+	show-topo)
+		show_topo
+		;;
+	show-model)
+		show_model "$2"
+		;;
+	upgrade|up)
+		upgrade $2 "$3"
+		;;
+	check)
+		check
+		;;
+	check-restore)
+		check_restore
+		;;
+	help)
+		usage
+		;;
+	*)
+		usage
+		;;
+esac
+
+safe_exit 0

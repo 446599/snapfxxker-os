@@ -1,0 +1,23 @@
+{
+  "uid": {
+    "uid1": 808780566,
+    "uid2": 17445170,
+    "uid3": 942880330
+  },
+  "firmware": "V1.1.95O",
+  "reader0_state": 0,
+  "enable_rfid": 1,
+  "lanes": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "heads": [
+    false,
+    false,
+    true,
+    false
+  ],
+  "fw_hold": false
+}

@@ -1,0 +1,56 @@
+{
+  "version": "V1.1.91O",
+  "release_kind": "private bench candidate",
+  "sha256": "34a8a3c76b8e127262baf05fb22639ee9f2ce588450eb04559c1c15d506fe323",
+  "md5": "b5789351ed50d97223cfd9c8f46ed535",
+  "size": 78720,
+  "ota_crc_init_ffff": 45579,
+  "announce_version": "1.1.31",
+  "base_sha256": "a468e366226e7c483d3dd96b444223e89cbf0d1b10573d42b6263843ffd6be3e",
+  "baseline_60O_sha256": "35d154abb9b6e037f9c6e10640bdce05fa62e2ecaa47fc5b3b21dac9607e5360",
+  "reproducible": true,
+  "patch_roundtrip": true,
+  "app_vectors_unchanged": true,
+  "existing_app_changed_byte_count": 14,
+  "allowed_existing_changes": [
+    "0x800e836",
+    "0x800e7da",
+    "0x800e842",
+    "0x800fe3c",
+    "0x800e228",
+    "0x800fe36",
+    "0x8018c20"
+  ],
+  "all_other_existing_app_bytes_unchanged": true,
+  "protected_regions": {
+    "iap_handlers": {
+      "start": "0x800d4e4",
+      "end_exclusive": "0x800d600",
+      "sha256": "ed4c6b56c0cb73c79434974e559aefa4e8a647f4f3ecd878272e46ad5d21a2ce"
+    },
+    "iap_task": {
+      "start": "0x8013fb8",
+      "end_exclusive": "0x8014300",
+      "sha256": "1f348e7d20e9d412dcc774ce0c9327e56c2b5f28bf8573f381f7fdbbcbc028ca"
+    }
+  },
+  "bootloader_in_image": false,
+  "iap_trailer_preserved": true,
+  "source_files": {
+    "firmware/apply_patch.py": "c3afe6b438a9a2c8d0d8fd692d821ca4954e4ecfbcdb63fc83ff44f4c0d803dc",
+    "firmware/build_patch.py": "0dde9939322f28a3f8e12cffe1e8481f59e0a114e0114f8b9d8968f66af315ff",
+    "firmware/native_tag_decoder.c": "adbc74a9cf7a4e6e0a6dedd3e22b8febf9ddb46a62edd1a0ed269a0bf43f6920",
+    "firmware/pageread_gate_stub.s": "2e0e4f41aa6a9079d3830bd06065d88883ffbd4aa1bbbbef7c0b2194bef200bb",
+    "firmware/patch.json": "2e6ba8568c2d252959eae8a607d46b4424ca90f512107df49252a967c16b51ec",
+    "firmware/rawtag_cache_stub.s": "4f0e72723f425866177a73314b494b237216fe0d26eefc383b85a5aa6d00a4cf",
+    "firmware/rawtag_extract_stub.s": "dc433007fb931fab76c7780a6e99ac7018ab1772120646e81030ae70082b70f0",
+    "firmware/rawtag_stub.s": "9762acbdaa8463cb0a600a848a252d82b8927dc0c29b202e96958dbd1186041d",
+    "firmware/rc522_stub.s": "ad621951d30af2073281fb2784ab43bddcefb840a1d4ce8f22d582446fc2f5ed",
+    "firmware/test_bambu_verified.c": "ebf6b6b95e29cf1bb9ac952f23992afc09a2fd363c2a1d4fe40782f040300ef1",
+    "firmware/test_decoder.c": "dbe093663215cbd9c6d4347f4f1257259c240c40dcfbed084a6464c4e9dba497",
+    "firmware/test_rc522_boundary.c": "d6c3a5d5757853bee648270a56e9540c7224f4553d864b59446f2d8132d49e02",
+    "firmware/uid_stub.s": "44fe4ef62227d8c098be64dac2e434e4f754f00163b2adabd0fe52e5ae446bad"
+  },
+  "device_tests_run": false,
+  "hardware_ota_cycle_verified": false
+}

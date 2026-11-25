@@ -1,0 +1,392 @@
+[
+  {
+    "status": {
+      "_status_wire_valid": true,
+      "cont_assist_time": 0.0,
+      "dryer_status": {
+        "duration": 0,
+        "remain_time": 0,
+        "status": "stop",
+        "target_temp": 0
+      },
+      "enable_rfid": 1,
+      "fan_speed": 0,
+      "feed_assist_count": 0,
+      "humidity": 48,
+      "rfid1_enable_raw": 1,
+      "rfid2_enable_raw": 1,
+      "slots": [
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 0,
+          "rfid": 0,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "unknown",
+          "type": ""
+        },
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 1,
+          "rfid": 0,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "empty",
+          "type": ""
+        },
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 2,
+          "rfid": 2,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "ready",
+          "type": ""
+        },
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 3,
+          "rfid": 0,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "empty",
+          "type": ""
+        }
+      ],
+      "status": "ready",
+      "temp": 24
+    },
+    "feed": {
+      "_feed_wire_valid": true,
+      "feed_info": [
+        {
+          "_decoder_present": false,
+          "_wire_valid": true,
+          "decoder": 0,
+          "index": 0,
+          "length": 0,
+          "steps": 6
+        },
+        {
+          "_decoder_present": true,
+          "_wire_valid": true,
+          "decoder": 18446744073709551424,
+          "index": 1,
+          "length": 0,
+          "steps": 6
+        },
+        {
+          "_decoder_present": true,
+          "_wire_valid": true,
+          "decoder": 18446744073709550870,
+          "index": 2,
+          "length": 787,
+          "steps": 9725
+        },
+        {
+          "_decoder_present": false,
+          "_wire_valid": true,
+          "decoder": 0,
+          "index": 3,
+          "length": 20,
+          "steps": 247
+        }
+      ]
+    },
+    "key": {
+      "fields": {
+        "1": 17733
+      }
+    },
+    "heads": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  {
+    "status": {
+      "_status_wire_valid": true,
+      "cont_assist_time": 0.0,
+      "dryer_status": {
+        "duration": 0,
+        "remain_time": 0,
+        "status": "stop",
+        "target_temp": 0
+      },
+      "enable_rfid": 1,
+      "fan_speed": 0,
+      "feed_assist_count": 0,
+      "humidity": 48,
+      "rfid1_enable_raw": 1,
+      "rfid2_enable_raw": 1,
+      "slots": [
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 0,
+          "rfid": 0,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "unknown",
+          "type": ""
+        },
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 1,
+          "rfid": 0,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "empty",
+          "type": ""
+        },
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 2,
+          "rfid": 2,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "ready",
+          "type": ""
+        },
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 3,
+          "rfid": 0,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "empty",
+          "type": ""
+        }
+      ],
+      "status": "ready",
+      "temp": 24
+    },
+    "feed": {
+      "_feed_wire_valid": true,
+      "feed_info": [
+        {
+          "_decoder_present": false,
+          "_wire_valid": true,
+          "decoder": 0,
+          "index": 0,
+          "length": 0,
+          "steps": 6
+        },
+        {
+          "_decoder_present": true,
+          "_wire_valid": true,
+          "decoder": 18446744073709551424,
+          "index": 1,
+          "length": 0,
+          "steps": 6
+        },
+        {
+          "_decoder_present": true,
+          "_wire_valid": true,
+          "decoder": 18446744073709550870,
+          "index": 2,
+          "length": 787,
+          "steps": 9725
+        },
+        {
+          "_decoder_present": false,
+          "_wire_valid": true,
+          "decoder": 0,
+          "index": 3,
+          "length": 20,
+          "steps": 247
+        }
+      ]
+    },
+    "key": {
+      "fields": {
+        "1": 17733
+      }
+    },
+    "heads": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  {
+    "status": {
+      "_status_wire_valid": true,
+      "cont_assist_time": 0.0,
+      "dryer_status": {
+        "duration": 0,
+        "remain_time": 0,
+        "status": "stop",
+        "target_temp": 0
+      },
+      "enable_rfid": 1,
+      "fan_speed": 0,
+      "feed_assist_count": 0,
+      "humidity": 48,
+      "rfid1_enable_raw": 1,
+      "rfid2_enable_raw": 1,
+      "slots": [
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 0,
+          "rfid": 0,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "unknown",
+          "type": ""
+        },
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 1,
+          "rfid": 0,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "empty",
+          "type": ""
+        },
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 2,
+          "rfid": 2,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "ready",
+          "type": ""
+        },
+        {
+          "_wire_valid": true,
+          "brand": "",
+          "color": [
+            0,
+            0,
+            0
+          ],
+          "index": 3,
+          "rfid": 0,
+          "sku": "",
+          "slot_status": "ready",
+          "status": "empty",
+          "type": ""
+        }
+      ],
+      "status": "ready",
+      "temp": 24
+    },
+    "feed": {
+      "_feed_wire_valid": true,
+      "feed_info": [
+        {
+          "_decoder_present": false,
+          "_wire_valid": true,
+          "decoder": 0,
+          "index": 0,
+          "length": 0,
+          "steps": 6
+        },
+        {
+          "_decoder_present": true,
+          "_wire_valid": true,
+          "decoder": 18446744073709551424,
+          "index": 1,
+          "length": 0,
+          "steps": 6
+        },
+        {
+          "_decoder_present": true,
+          "_wire_valid": true,
+          "decoder": 18446744073709550870,
+          "index": 2,
+          "length": 787,
+          "steps": 9725
+        },
+        {
+          "_decoder_present": false,
+          "_wire_valid": true,
+          "decoder": 0,
+          "index": 3,
+          "length": 20,
+          "steps": 247
+        }
+      ]
+    },
+    "key": {
+      "fields": {
+        "1": 17733
+      }
+    },
+    "heads": [
+      false,
+      false,
+      false,
+      false
+    ]
+  }
+]

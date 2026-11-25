@@ -1,0 +1,18 @@
+/firmware/
+tmp/
+*.o
+*.so
+tools/upfile/upfile
+tools/rk2918_tools/afptool
+tools/rk2918_tools/img_maker
+tools/rk2918_tools/img_unpack
+tools/rk2918_tools/mkkrnlimg
+_site/
+__pycache__/
+
+# Native runtime is rebuilt in CI; source patches and build recipes are tracked.
+/overlays/233-native-ui/root/usr/local/share/233-firmware/*.tar.gz
+/overlays/233-native-ui/root/usr/local/share/233-firmware/native-ui.json
+/overlays/233-native-ui/root/usr/local/share/extended-pkg/helixscreen
+/overlays/233-native-ui/root/etc/FULLVERSION
+/bundles/native-ui/runtime-files.json

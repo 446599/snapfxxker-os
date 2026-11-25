@@ -1,0 +1,3862 @@
+# Filament Management (Developer Guide)
+
+Multi-material system support in HelixScreen: architecture, backend implementations, mock testing, and extension guide.
+
+**User-facing doc**: [docs/user/USER_GUIDE.md](../user/USER_GUIDE.md) (filament panel usage, slot operations, troubleshooting)
+
+---
+
+## Architecture Overview
+
+HelixScreen uses a backend abstraction layer to support multiple multi-filament and multi-tool systems through a single UI. The `AmsBackend` interface hides all backend-specific protocols and exposes a uniform API for the UI layer.
+
+```
+                         ┌─────────────┐
+                         │  AmsState   │  Singleton LVGL subject bridge
+                         │ (ams_state) │  Thread-safe subject updates
+                         └──────┬──────┘
+                                │ owns backends_[] vector
+              ┌─────────────────┼─────────────────┐
+              ▼                 ▼                  ▼
+       Backend 0 (primary)   Backend 1        Backend N
+       flat slot subjects    BackendSlot-      BackendSlot-
+       (backward compat)     Subjects          Subjects
+              │                 │                  │
+    ┌─────────▼─────────┐      │                  │
+    │     AmsBackend     │  Abstract interface     │
+    │  (ams_backend.h)   │  Factory: create() / create_mock()
+    └─────────┬──────────┘                         │
+     ┌────────┼─────────┬───────────┬──────────────┘
+     ▼        ▼         ▼           ▼           ▼           ▼           ▼
+  ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ ┌──────────┐
+  │Happy   │ │  AFC   │ │  ACE   │ │  Tool    │ │ AD5X IFS │ │  CFS   │ │  Mock    │
+  │Hare    │ │Backend │ │Backend │ │ Changer  │ │ Backend  │ │Backend │ │ Backend  │
+  └────────┘ └────────┘ └────────┘ └──────────┘ └──────────┘ └────────┘ └──────────┘
+       │          │          │           │            │           │            │
+  Moonraker  Moonraker   REST API   Moonraker   Moonraker  Moonraker    In-memory
+  WebSocket  WebSocket   Polling    WebSocket   WebSocket  WebSocket    simulation
+
+                         ┌─────────────┐
+                         │  ToolState  │  Singleton: tool abstraction
+                         │(tool_state) │  Maps tools ↔ AMS backends
+                         └─────────────┘
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `include/ams_backend.h` | Abstract interface with factory methods |
+| `include/ams_types.h` | Shared types: `AmsType`, `SlotInfo`, `AmsAction`, `PathTopology`, etc. |
+| `include/ams_error.h` | Error types with user-friendly messages |
+| `include/ams_state.h` | LVGL subject bridge (singleton) |
+| `include/ams_environment_zone.h` | `EnvironmentZone`: the filament-box model the environment UI selects, renders and controls ([FILAMENT_ENVIRONMENT_ZONES.md](FILAMENT_ENVIRONMENT_ZONES.md)) |
+| `include/slot_registry.h` | SlotRegistry: single source of truth for per-slot state |
+| `src/printer/slot_registry.cpp` | SlotRegistry implementation (name/index mapping, reorganize, tool map) |
+| `include/ams_backend_happy_hare.h` | Happy Hare MMU implementation |
+| `include/ams_backend_afc.h` | AFC (Armored Turtle / Box Turtle) implementation |
+| `include/ams_backend_openams.h` | klipper_openams through its versioned `oams_manager` API; `include/openams_api.h` holds the contract's "supported" test |
+| `include/ams_backend_ace.h` | ACE (Anycubic ACE Pro) implementation |
+| `include/ams_backend_toolchanger.h` | Physical tool changer (viesturz/klipper-toolchanger) |
+| `include/ams_backend_ad5x_ifs.h` | FlashForge AD5X IFS (Intelligent Filament Switching) |
+| `include/ams_backend_cfs.h` | Creality Filament System (K2 series, RS-485) |
+| `include/ams_backend_mock.h` | Mock backend for development and testing |
+| `src/printer/ams_backend.cpp` | Factory methods, plus the shared endless-spool validation / reset / eligibility base |
+| `src/printer/ams_endless_spool.cpp` | Backend-agnostic endless-spool model: restriction text, group builders, the one group-to-edge projection ([§ Endless Spool](#endless-spool-shared-model)) |
+| `include/printer_discovery.h` | Hardware detection from Klipper object list |
+| `include/tool_state.h` | Tool abstraction: `ToolInfo`, `ToolState` singleton, tool-backend mapping |
+| `include/printer_temperature_state.h` | `ExtruderInfo` struct, multi-extruder dynamic subjects |
+| `include/preflight_validator.h` | Pre-print tool-vs-slot validation; takes bypass as a required input ([§ Bypass suppresses the pre-print filament gates](#bypass-suppresses-the-pre-print-filament-gates)) |
+| `include/print_start_checks.h` | Print-start gate pipeline pure core (context, rules, ordered gate list) |
+| `include/ui_ams_context_menu.h` | Slot context menu: actions only (load, unload, check, preload, edit, spoolman) |
+| `include/ui_ams_lane_settings.h` | A lane's Assigned Tool and Endless Spool backup: what the editor's two dropdowns offer, refuse and write |
+| `include/ui_ams_device_operations_overlay.h` | Device operations overlay (home, recover, bypass, etc.) |
+
+### Data Flow
+
+1. **Discovery**: `PrinterDiscovery::parse_objects()` scans Klipper's `printer.objects.list` for `mmu`, `AFC`, `toolchanger`, `ace`, `AFC_stepper lane*`, `AFC_hub *`, `tool T*`, and `filament_switch_sensor _ifs_port_sensor_*` objects. A system whose name cannot decide the claim (`oams_manager`) is settled from its status by `claim_status_query()` / `settle_status_claims()` before the hardware callback fires ([FILAMENT_BACKEND_OPENAMS.md](FILAMENT_BACKEND_OPENAMS.md)).
+2. **Backend Creation**: `AmsState::init_backend_from_hardware()` calls `AmsBackend::create()` with the detected `AmsType` and Moonraker dependencies.
+3. **Slot State**: Each backend stores per-slot state in its `SlotRegistry` instance (`slots_`), which provides indexed access, name lookup, and multi-unit reorganization. Moonraker status updates write to the registry under the backend's mutex.
+4. **State Sync**: Backend emits events (`STATE_CHANGED`, `SLOT_CHANGED`, etc.) which `AmsState` translates to LVGL subject updates.
+5. **UI Binding**: XML widgets bind to subjects (`ams_type`, `ams_action`, `current_slot`, `slots_version`, etc.) for reactive updates.
+
+### SlotRegistry (Per-Slot State)
+
+`helix::printer::SlotRegistry` (`include/slot_registry.h`) holds a backend's per-slot state in one indexed container. Four backends own one as `slots_`: Mock, AFC, AD5X IFS and Happy Hare. ACE, CFS, Qidi, Snapmaker, ToolChanger and OpenAMS keep their slots in `system_info_.units` and reach them through `AmsSystemInfo::get_slot()` / `get_slot_global()`; the backends built on `AmsSubscriptionBackend` validate a slot index through its `validate_slot_index_locked()` either way.
+
+**What SlotRegistry manages:**
+- Slot names and bidirectional name-to-index lookup (`index_of`, `name_of`, `find_by_name`)
+- Each slot's `SlotInfo` and endless-spool backup
+- Units and each unit's slot range
+- The tool-to-slot map, in both directions, with `firmware_mapping_generation()` advancing only on firmware-sourced writes
+- Multi-unit reorganization that keeps slot data when the unit topology changes
+
+It does not hold sensor readings: a backend parses its own sensors and keys them the way it addresses slots (AFC's `AfcLaneSensors` by lane name, Happy Hare's `HappyHareGateSensor` by gate index).
+
+**How backends use it:**
+
+```cpp
+// Initialize (once, when the slot list is known)
+slots_.initialize("IFS", slot_names);          // one unit
+slots_.initialize_units(unit_slot_names);      // several units
+
+// Read and write under the backend's mutex
+int idx = slots_.index_of("lane3");
+auto* entry = slots_.get_mut(idx);
+entry->info.color_rgb = 0xFF0000;
+
+// Multi-unit reorganization (AFC topology changes)
+slots_.reorganize(unit_lane_map);
+
+// Snapshot for get_system_info()
+AmsSystemInfo info = slots_.build_system_info(system_info_);
+```
+
+**The snapshot rule.** `build_system_info(base)` starts from the backend's own `system_info_` and replaces only what the registry owns: `total_slots`, `tool_to_slot_map`, and each unit's index, slot range and slots. Every other field, unit metadata included, passes through, so a field a backend writes reaches the UI without being copied by name. A backend then applies only what it genuinely computes on top (AD5X IFS's 16-entry tool map, Happy Hare's per-unit environment, the mock's environment data). A base unit past the registry's count is dropped; a registry unit the base lacks takes the registry's name.
+
+**Key design decisions:**
+- SlotRegistry holds no mutex; the owning backend's mutex protects every access
+- `reorganize()` takes an ordered list of units and their slot names, so the caller controls unit order
+- Slot names stay backend-specific ("lane1" for AFC, "0" for a Happy Hare gate); the registry does not interpret them
+
+### Per-Slot Load Authority
+
+Two `AmsBackend` predicates answer "is *this* slot loaded?" and everything the user can
+tap about a slot is derived from them: the active-lane highlight, the Load/Unload gate on
+the filament panel, and the context menu's Unload/Eject/Recover choice.
+
+| Predicate | Question | Default |
+|-----------|----------|---------|
+| `slot_is_actively_loaded(i)` | Firmware considers this slot seated at the toolhead | see below |
+| `slot_has_filament_at_toolhead(i)` | A per-slot toolhead sensor is tripped | `false` |
+| `can_unload_from_toolhead(i)` | Offer Unload (and suppress Load) | `status == LOADED`, or `is_present()` on PARALLEL |
+| `slot_unloads_to_toolhead(i, hint)` | The unload is a heated toolhead unload, not a cold eject | `hint` |
+
+`slot_is_actively_loaded()` has **two** rules, chosen by
+`has_per_slot_loaded_authority()` (default `false`):
+
+- **`false`** — derive from the aggregate pair `get_current_slot() + is_filament_loaded()`.
+- **`true`** — read the slot's own `SlotStatus::LOADED`.
+
+The aggregate rule is only as good as our tracking of a single active-slot pointer. When
+that pointer names the wrong slot or lags a toolchange, every affordance above inherits
+the wrong answer — that was #1194, which surfaced as Load staying enabled on an AFC lane
+the firmware had already seated (#1183) and as Recover being offered on a lane that only
+reached the hub.
+
+**Opting a backend in is not free.** The per-slot rule believes `get_slot_info(i).status`,
+so a backend that never stamps `LOADED` on its seated slot would report *every* slot
+unloaded and blank the active-lane highlight. Before flipping a backend to `true`, confirm
+its parse sets `SlotStatus::LOADED` on the seated slot on **every** path that also sets the
+aggregate, and add a test that fails if it stops.
+
+| Backend | Authority | Basis |
+|---------|-----------|-------|
+| AFC | `true` | `AFC_stepper.<lane>.tool_loaded` (#1194) |
+| OpenAMS | `true` | `oams_manager.units[].slots[].loaded`, plus each lane's `current_slot` |
+| Snapmaker | overrides outright | returns `status == LOADED` verbatim |
+| AD5X IFS | `true` | firmware active-lane pointer + head sensor (#1199) |
+| QIDI Box | `true` | `save_variables slot<N> == 2` (#1199) |
+| CFS | `true` | `T{n}.filament` letter + toolhead switch (#1199) |
+| ACE | `true` | arbitrated seated slot, stamped every parse path (#1199) |
+| Happy Hare | `false` | `mmu.gate` / `mmu.filament` *are* the firmware truth |
+| Toolchanger | `false` | `toolchanger.tool_number` *is* the firmware truth; no per-tool filament signal exists |
+
+Every backend that opted in derives its stamp from the same inputs the aggregate pair is
+assigned from, so the per-slot and aggregate rules cannot disagree. That is deliberate: it
+makes "believing the per-slot status blanks the highlight" structurally impossible rather
+than merely tested against. The value of opting in is not divergence-fixing but that
+`can_unload_from_toolhead()` — which keys on `status == LOADED` for serial topologies —
+finally reads true on a seated slot.
+
+AFC's opt-in rests on `AFC_stepper.<lane>.tool_loaded`, which upstream's `set_loaded()` /
+`set_unloaded()` assign in lockstep with `AFC.current_load` and
+`AFC_extruder.lane_loaded`. Note that AFC's lane `status == "Loaded"` means *loaded to
+hub*, not to the toolhead — only `tool_loaded` answers the toolhead question, which is why
+`apply_lane_status` maps `"Loaded"` to `AVAILABLE`.
+
+**Which lane a parked head holds.** `build_ams_topology()` asks `slot_is_actively_loaded()`
+of every tool's lane and hands the answers to ToolState as `ToolTopology::tool_seated`.
+Where a hub feeds several lanes into one head, `PhysicalHead::seated_tool` is the lane that
+head holds, and `PhysicalHead::representative_tool()` prefers it over the head's lowest
+lane. The home tool switcher's head tap and the preheat widget's head target both resolve
+through it, so selecting a parked head keeps its filament instead of swapping lanes on the
+way (prestonbrown/helixscreen#1811). Two lanes claiming one head decide nothing, and the
+lowest lane stands.
+
+AD5X IFS derives its stamp from the same two inputs `system_info_.filament_loaded` is
+assigned from, so the two cannot disagree — but only after dropping the lane's own port
+sensor from the condition. A runout clears `port_presence_` while the filament that lane
+fed is still at the toolhead (#995, the state `can_unload_from_toolhead()` keeps the unload
+gate open for); requiring the port sensor demoted the lane to `EMPTY` at exactly the moment
+the user needs to recover it.
+
+QIDI Box is the opposite shape: `slot<N> == 2` is the Box's own per-slot statement and
+needs no active-slot pointer, while the aggregate pair is written *only* from
+`last_load_slot` — so a Box that never writes that variable reported nothing loaded at all.
+`parse_save_variables()` reconciles the stamp against the aggregate at the end of every
+pass, since the `slot<N>` loop runs before the `last_load_slot` block and would otherwise
+demote the seated slot on a payload that repeated one without the other.
+
+Happy Hare deliberately stays on the aggregate rule. `mmu.gate` and `mmu.filament` are
+Happy Hare's own values parsed verbatim from one object, so the aggregate is already
+firmware truth; `gate_status` carries fill state, not seating, so the per-gate stamp is
+derived *from* the aggregate and believing it back would only add staleness. It would also
+drop the highlight on a gate that ran out (`gate_status 0`) while its filament is still at
+the toolhead. The stamp itself is re-derived on every `printer.mmu` frame
+(`refresh_gate_statuses_locked()`) because `gate_status`, `gate` and `filament` arrive in
+independent deltas — a toolchange typically carries the latter two alone.
+
+Toolchanger stays on the aggregate rule too, and for a reason none of the others have: it
+carries **no filament signal at all**. `get_slot_filament_segment()` returns `NOZZLE`
+unconditionally, no per-tool switch is read, and `is_filament_loaded()` is nothing more than
+`tool_number >= 0`. The only fact the parse can state is *which tool is on the carriage*,
+which is single-valued — precisely what the aggregate pair encodes, assigned verbatim from
+klipper-toolchanger's own `toolchanger.tool_number`. Being `PARALLEL` does not change that:
+the topology describes independent filament paths, but this backend cannot see filament in
+any of them, and its load/unload verbs are `SELECT_TOOL` / `UNSELECT_TOOL` — mount and
+unmount, of which exactly one tool at a time is the subject.
+
+`tool <name>.mounted` is emphatically *not* that authority. It arrives on a separate
+Moonraker object from the one that writes the aggregate, and an all-tools-mounted payload is
+a shape HelixScreen emits itself in mock mode (`moonraker_client_mock_objects.cpp` gives
+every `tool T<n>` `mounted: true`). The parse used to write `mounted ? LOADED : AVAILABLE`
+straight into `slot.status` from that object alone, so such a payload marked every tool
+`LOADED` — the exact state that would make an opt-in report every tool as the active one.
+`refresh_slot_statuses_locked()` now derives the stamp from the carriage tool on every parse
+path, so the two writers cannot disagree; opting in afterwards would be safe but pointless,
+since the stamp is derived *from* the aggregate.
+
+The `PARALLEL` arm of `can_unload_from_toolhead()` is the part that did need fixing.
+`is_present()` is true for every toolchanger slot forever — a slot here is a physical
+toolhead, never `EMPTY` or `UNKNOWN` — so it read true everywhere. Through
+`decide_can_load()`'s inverted `!toolhead_unload` factor that left **Load disabled on every
+tool**, and through `decide_unload_mode()` it offered Unload (`UNSELECT_TOOL T=<n>`) on
+tools parked in their docks. The backend overrides it with `slot_index == current_tool`.
+`slot_unloads_to_toolhead()` stays on the base rule: an unmount *is* a toolhead operation,
+and with no lane eject or lane recovery a docked tool correctly lands on
+`UnloadMode::Unavailable`.
+
+CFS earns it differently, and the difference is worth naming: its firmware publishes no
+per-slot loaded flag at all. The seated bay is the intersection of two signals that arrive
+on separate notifications — the per-unit `T{n}.filament` letter ("A".."D") naming the
+engaged lane, and `filament_switch_sensor filament_sensor.filament_detected` at the
+toolhead. `handle_status()` derives `SlotStatus::LOADED` from that pair at the end
+of every frame, so the per-slot status can never disagree with the aggregate rather than
+being independently authoritative. That still buys the real fix: before it, CFS wrote only
+`AVAILABLE`/`EMPTY`, so `can_unload_from_toolhead()` — `status == LOADED` on a HUB
+backend — was false on every CFS slot and the panel never offered Unload (#1199). The
+stamp is applied even over a bay firmware calls `EMPTY`: a spool pulled while still
+threaded leaves filament at the toolhead the user has to be able to unload. Removing it
+restores the status the parse wrote, not a guessed `AVAILABLE`.
+
+ACE derives it the same way, and its opt-in is a case study in *not* believing a firmware
+string. The per-slot `"loaded"` token that its `slot_status_from_string()` maps to
+`AVAILABLE` exists only in the community ValgACE dialect, where it sits in the same
+enumeration as `"available"` and `"ready"` — the same slot-local trap as AFC's `"Loaded"`
+meaning loaded-to-hub. Native Anycubic GoKlipper has no per-slot `"loaded"` at all; its
+vocabulary is `empty`/`ready`/`preload`/`running`/`runout` and it answers the seated
+question with the separate top-level `current_filament` (`"<unitId>-<localIndex>"`). So the
+vocabulary map is left alone. Instead `apply_seated_slot_stamp_locked()` stamps whichever
+slot the parse *arbitrated* to — from the ValgACE `"loaded"` scan, `loaded_slot`, or
+`current_filament`, in that precedence — and a HUB backend has exactly one. The REST
+fallback needs both ends of the stamp because `/status` owns `loaded_slot` while `/slots`
+owns the slot vector: without it, each `/slots` poll would demote the seated slot and
+report a spurious change every 500 ms.
+
+ACE's Kobra-S1 driver also states a per-slot `park_state` (`unknown` / `parked` / `loaded`).
+It drives one thing: an idle slot (not the seat, no toolchange or load in flight) the driver
+calls `parked` draws its filament staged at the hub (`PathSegment::OUTPUT`, what the hub
+sensor shows) instead of at the spool. `parked` means an RDM-verified park just short of the
+hub or a fixed-length toolhead-only unload, which is not necessarily at the hub; until the
+driver separates them both draw at the hub. A missing field or unknown string draws as before,
+and the seat, the path sensors and the toolchange phases outrank it
+(`docs/devel/FILAMENT_BACKEND_ACE.md`).
+
+`slot_has_filament_at_toolhead()` stays at its `false` default unless the sensor genuinely
+exists *and* is attributable to one slot. AFC's `AFC_extruder` carries
+`tool_start_status` / `tool_end_status` plus the `lane_loaded` that owns them; a trip with
+no owning lane reads `false` rather than being blamed on an arbitrary lane.
+
+### Threading Model
+
+RPC response callbacks arrive on a libhv background thread, and backends marshal them to the main thread before touching state. `notify_status_update` frames are marshalled the same way: `AmsSubscriptionBackend` defers every one through its lifetime token, so `handle_status` runs on the main thread, under the backend mutex. `AmsState` posts subject updates to the LVGL thread via `helix::ui::queue_update()`. The UI never directly accesses backend state.
+
+### Status Frame Shape: Parse, Apply, Dispatch
+
+Moonraker status frames are deltas: a frame names only the fields that changed. The Snapmaker, Happy Hare and CFS backends therefore split `handle_status` into three steps:
+
+1. **Parse** (`snapmaker_status_parse`, `happy_hare_status_parse`, `cfs_status_parse`): pure functions over the frame that return structs of `std::optional` fields. An omitted, null or mistyped field reads as `nullopt`, so a parse can never reset state. Per-lane arrays read through `ams::read_indexed` / `ams::read_array` (`include/ams_status_json.h`). The parse runs before the backend mutex is taken.
+2. **Apply**: named `apply_*_locked` steps run under `mutex_` in a fixed order, each overlaying only what its slice of the frame carried onto the state the backend holds. The order is load-bearing (for example the Snapmaker RFID step runs before the feed step, and the Happy Hare fault edge reads `reason_for_pause` before the selector step rewrites it); the golden-sequence tests (`[golden]`) pin it.
+3. **Dispatch**: anything that reaches outside the backend mutex (`AmsState` calls, `queue_update`, gcode, `emit_event`) is collected in a `FrameEffects` / `MmuFrame` struct while locked and run after the lock is released.
+
+A new status field means a new optional in the parse struct, an overlay in the owning apply step, and a line in the golden sequence if it changes what the frame leaves behind.
+
+---
+
+## Multi-Backend Architecture
+
+Some printers have multiple filament management systems simultaneously (e.g., a tool changer where each toolhead has its own AFC unit). AmsState supports multiple concurrent backends via a `backends_` vector that replaces the former single `backend_` pointer.
+
+### Backend Storage
+
+```cpp
+// AmsState private members
+std::vector<std::unique_ptr<AmsBackend>> backends_;       // All backends
+std::vector<BackendSlotSubjects> secondary_slot_subjects_; // Per-backend subjects (index 1+)
+```
+
+- **Primary backend (index 0)** uses the existing flat `slot_colors_[kMaxSlots]` and `slot_statuses_[kMaxSlots]` subject arrays. This preserves backward compatibility with all existing XML bindings and single-backend printers.
+- **Secondary backends (index 1+)** each get a `BackendSlotSubjects` struct with dynamically allocated `lv_subject_t` vectors:
+
+```cpp
+struct BackendSlotSubjects {
+    std::vector<lv_subject_t> colors;
+    std::vector<lv_subject_t> statuses;
+    std::vector<lv_subject_t> fills;  // int: fill percent 0-100, -1 = unknown
+    std::vector<lv_subject_t> lane_states; // int: helix::ui::LaneState
+    std::vector<lv_subject_t> has_errors;
+    std::vector<lv_subject_t> severities;  // int: SlotError::Severity
+    std::vector<lv_subject_t> materials;   // string: "PLA", "PETG", ... or ""
+    int slot_count = 0;
+    // Lifetime token shared by every subject in this struct: these subjects are
+    // DYNAMIC (destroyed in deinit() on backend rediscovery), so any observer
+    // bound to them MUST hold a copy of this token. deinit() invalidates it.
+    SubjectLifetime lifetime;
+    void init(int count);   // Allocate and init subjects
+    void deinit();          // Deinit subjects, invalidate lifetime
+};
+```
+
+### Discovery of Multiple Systems
+
+`PrinterDiscovery::parse_objects()` collects all detected AMS/filament systems into a `detected_ams_systems_` vector of `DetectedAmsSystem` structs:
+
+```cpp
+struct DetectedAmsSystem {
+    AmsType type = AmsType::NONE;
+    std::string name;  // "Happy Hare", "AFC", "Tool Changer"
+};
+```
+
+A printer with both a tool changer and an AFC unit will have two entries. The `init_backends_from_hardware()` method iterates this list and creates a backend for each detected system.
+
+### Backend Selection
+
+Two new subjects track backend selection:
+
+| Subject | Type | Description |
+|---------|------|-------------|
+| `backend_count_` | int | Number of registered backends |
+| `active_backend_` | int | Index of the currently selected backend |
+
+The AMS panel UI shows a backend selector when `backend_count > 1`, allowing users to switch between systems. API:
+
+- `active_backend_index()` -- returns the currently selected backend index
+- `set_active_backend(int)` -- switches the active backend (bounds-checked)
+
+### Per-Backend Event Routing
+
+When backends are added via `add_backend()`, each backend's event callback captures its backend index at registration time:
+
+```
+Backend 0 emits STATE_CHANGED  -->  on_backend_event(0, "STATE_CHANGED", ...)
+Backend 1 emits SLOT_CHANGED   -->  on_backend_event(1, "SLOT_CHANGED", ...)
+```
+
+The `on_backend_event()` handler routes to `sync_backend(int)` or `update_slot_for_backend(int, int)` which update the correct set of subjects. All subject updates are posted via `ui_queue_update()` for thread safety.
+
+### Per-Backend Subject Access
+
+Two-argument overloads of `get_slot_color_subject()` and `get_slot_status_subject()` route to the correct subject storage:
+
+```cpp
+// Backend 0: flat arrays (backward compat)
+lv_subject_t* get_slot_color_subject(0, slot_index);  // -> slot_colors_[slot_index]
+
+// Backend 1+: per-backend storage
+lv_subject_t* get_slot_color_subject(1, slot_index);  // -> secondary_slot_subjects_[0].colors[slot_index]
+```
+
+### Tool-Backend Integration
+
+The `ToolState` singleton (see `tool_state.h`) maps tools to specific AMS backends via two fields on `ToolInfo`:
+
+```cpp
+struct ToolInfo {
+    int backend_index = -1;  // Which AMS backend feeds this tool (-1 = direct drive)
+    int backend_slot = -1;   // Fixed slot in that backend (-1 = any/dynamic)
+    // ... other fields
+};
+```
+
+- `backend_index = -1` means the tool uses direct-drive filament (no AMS).
+- `backend_index >= 0` maps the tool to a specific AMS backend. For example, on a dual-toolhead printer where each head has its own AFC unit, T0 might map to backend 0 and T1 to backend 1.
+- `backend_slot` pins the tool to a specific slot within that backend, or `-1` for dynamic slot selection (e.g., Happy Hare tool-to-gate mapping).
+
+`ToolState` and `AmsState` coordinate through `PrinterDiscovery`: tools are discovered from `tool T*` Klipper objects, and the mapping between tools and AMS backends is established during `init_backends_from_hardware()`.
+
+---
+
+## Persistence of slot metadata
+
+HelixScreen writes user-edited slot metadata (brand, spool name, Spoolman
+link, weights, color/material) to the Moonraker `lane_data` namespace,
+following the AFC-originated convention. This is the same namespace
+OrcaSlicer 2.3.2+ reads for filament sync, so user edits automatically
+flow to the slicer on Moonraker-based printers. The flow is one-directional:
+HelixScreen writes, OrcaSlicer reads (it never writes `lane_data` back), so
+"round-trip" here means the user's edit reaching the slicer's filament
+panel — not a slicer-to-printer write.
+
+- **Wire-format spec (public):** [`../specs/filament_slots.md`](../specs/filament_slots.md)
+- **Implementation notes (internal):** [`FILAMENT_SLOT_METADATA.md`](FILAMENT_SLOT_METADATA.md)
+- **Lane source model (the read path):** [`architecture/07-filament-ams.md`](architecture/07-filament-ams.md) § "Lane identity by source" - the per-source `Observation` / `resolve()` model that carries where a value came from instead of inferring it from the value's shape. All nine backends file their readings there, the lane records read from Moonraker are filed whole as `Record`, a human slot edit is filed as `Pending` until its write echoes, fails or times out, and every backend's parse ends by laying the resolved lane back onto the `SlotInfo` it just built, so what a user sees is what `resolve()` ranked. `FilamentSlotOverride` is the shape a record is read into and written from; there is no local copy of it. Editing is disabled until a backend's first lane-record read lands (`ams_lane_records_ready`): [`FILAMENT_SLOT_METADATA.md`](FILAMENT_SLOT_METADATA.md) § "Editing waits for the first read".
+
+### Material names as G-code parameter values
+
+Some backends persist the material by putting the name on a G-code line rather
+than writing a database record, so it has to survive Klipper's argument parser.
+Two validators exist and they are **not** interchangeable:
+
+| Helper | Charset | Use for |
+|--------|---------|---------|
+| `IMoonrakerAPI::is_safe_gcode_param()` (`is_safe_identifier()`) | `[A-Za-z0-9_ ]` | Lane names, macro names, object names - identifiers Klipper itself constrains |
+| `IMoonrakerAPI::is_safe_material_param()` | alphanumeric plus `+ - _ . ( ) /` and space | Material names |
+
+`is_safe_material_param()` is deliberately the wider of the two. `PLA+`, `PA6-CF`,
+`PETG-CF`, `PC-ABS` and `Silk PLA` all ship in `include/filament_database.h`, so
+gating a material send on the identifier charset made the app offer materials its
+own persistence layer refused to send: the write was dropped, a warning nobody
+reads was logged, and the save reported success.
+
+What it still rejects, and why each one matters: CR/LF (Moonraker runs a
+`printer.gcode.script` body line by line, so a newline is the one real
+multi-command vector), `;` and `#` (Klipper's comment characters - they truncate
+the rest of the command silently), `*` (checksum separator), `"` and `\` (both
+meaningful to the quoting pass below, so letting them through would let a value
+escape its own quotes), `=`, control characters, and non-ASCII bytes.
+
+**Quoting is mandatory, not cosmetic.** Klipper parses an extended command's
+arguments - anything that is not a bare `G`/`M` code, which `SET_MATERIAL` and
+`MMU_GATE_MAP` both are - with `shlex.shlex(posix=True, whitespace_split=True,
+commenters="#;")`, then splits each token on its first `=` (verified in Kalico
+klippy/gcode.py, the extended-command parameter parser). An unquoted `MATERIAL=Silk PLA`
+therefore arrives as two tokens, the second with no `=` anywhere in it, and
+Klipper answers "Malformed command" - the value never reaches firmware at all, so
+a space in a material name was never merely dropped, it broke the whole command.
+`IMoonrakerAPI::gcode_param_value()` quotes a value only when it contains
+whitespace, so every value that worked before goes out byte-for-byte unchanged.
+Its precondition is a validator that rejects `"` and `\`; pair it with
+`is_safe_material_param()`, never use it on unvalidated input.
+
+Per backend:
+
+| Backend | Command | Protection |
+|---------|---------|------------|
+| AFC | `SET_MATERIAL LANE={lane} MATERIAL={material}` | `is_safe_material_param()` + `gcode_param_value()` |
+| Happy Hare | `MMU_GATE_MAP GATE={n} … MATERIAL={material}` | same pair |
+| CFS | `_BOX_SLOT_SET SLOT={n} MATERIAL=… BRAND=… NAME=…` | local `quote_gcode_param()` (`ams_backend_cfs.cpp`) - always quotes, escapes `\` and `"`, folds CR/LF to a space. It escapes rather than rejects because `BRAND`/`NAME` are free-form strings arriving from RFID, not values the user picked from a list |
+| AD5X IFS | `_IFS_VARS types="['PLA', …]"` | `build_type_list_value()` emits an already-quoted Python list literal. This is a mirror to the lessWaste/bambufy plugin, not the primary persistence path |
+| Tool changer (Z-Mod) | `CHANGE_ZCOLOR SLOT={n} HEX={RRGGBB} TYPE={material} SILENT=1` | `SLOT` is 1-based: the backend's 0-based slot index plus one. `HEX` and `TYPE` are both required for a prompt-free write, so the send always carries the slot's current colour too, snapped to the firmware palette first; `normalize_material()` maps into `zmod_color.valid_types` by compat group, then `is_safe_material_param()` + `gcode_param_value()` (`src/printer/ams_backend_toolchanger.cpp#apply_user_edit`). See [FILAMENT_BACKEND_TOOLCHANGER.md](FILAMENT_BACKEND_TOOLCHANGER.md#z-mod-on-the-creator-5-pro) |
+
+Backends that persist through `FilamentSlotOverrideStore` (IFS, Snapmaker, ACE)
+or through a numeric id (QIDI Box's `SAVE_VARIABLE VARIABLE=filament_slot{n}`)
+never put the string on a G-code line and need neither helper.
+
+The same shlex mechanism bites `SDCARD_PRINT_FILE FILENAME=` on the power-loss
+resume path, which needs a *blocklist* rather than an allowlist because a slicer
+filename legitimately carries characters no material name would - see
+[`POWER_LOSS_RECOVERY.md`](POWER_LOSS_RECOVERY.md). Do not merge the two.
+
+**A rejected material is an error, not a silent skip.** `AmsBackendAfc::apply_user_edit()`
+and `AmsBackendHappyHare::apply_user_edit()` issue every *other* write first, then
+return `AmsResult::COMMAND_FAILED` naming the material. The user keeps the color,
+weight and Spoolman link and is told which part did not land; returning success
+for a write that never happened is what made this invisible for so long.
+
+### CFS: telling Creality's daemon about an edit
+
+On Creality OS a daemon serves a WebSocket on `127.0.0.1:9999` that Creality Print and the
+Creality Cloud app read slot state from. It does not watch Klipper's `tn_data`, so a slot written
+with `BOX_MODIFY_TN_DATA` stays stale in both apps until the daemon is told (#2048, protocol and
+captures from a K1C by firestorm986). After Klipper acknowledges the write, `AmsBackendCfs` sends
+the frame Creality Print itself sends for an edit:
+
+```json
+{"method":"set","params":{"modifyMaterial":{"boxId":1,"id":0,"rfid":"00003","type":"PETG",
+ "vendor":"Generic","name":"PETG","color":"#0ff0000","minTemp":220.0,"maxTemp":270.0,
+ "pressure":"0.04"}}}
+```
+
+| Field | Source |
+|-------|--------|
+| `boxId`, `id` | unit T1..T4 = 1..4 (0 = external spool holder), bay A..D = 0..3 |
+| `color` | `'#'` + the same `0RRGGBB` written to `color_value`; the `boxsInfo` capture reports every color that way |
+| `rfid` | the 5-char catalog code of the `material_type` written, `""` for a color-only write |
+| `type`, `vendor`, `name` | the edit, then the catalog product of that code |
+| `minTemp`, `maxTemp` | the slot's temps, else that catalog product's |
+| `pressure` | always `"0.04"`, the value in the capture: HelixScreen keeps no per-slot pressure advance |
+
+The send is strictly best effort (`include/cfs_daemon_sync.h`): one connection per edit on an
+`HttpExecutor::fast()` worker, a 150 ms connect timeout and a 750 ms budget end to end, no reply
+read, every failure a debug line. A write Klipper rejects sends nothing. The ESP32 firmware has
+no transport for it and sends nothing.
+
+### Gcode Tool Remapper
+
+`helix::GcodeToolRemapper` (`src/rendering/gcode_tool_remapper.cpp`, `include/gcode_tool_remapper.h`) rewrites the tool numbers inside a sliced G-code file when a logical tool must print from a different physical head. It stays generic: pure text in, changed lines out, no `AmsBackend`, Moonraker, or LVGL dependency, because the problem lives at the file level, not the backend level. A slicer bakes tool numbers into several command families, and a remap that moves one but not the others runs the right filament at the wrong temperature, or from a head nothing heated.
+
+**What it rewrites.** Four families, each matched conservatively so comment lines and unrelated commands never change:
+
+1. Prestart macros: `SM_PRINT_AUTO_FEED` / `SM_PRINT_EXTRUDER_PREHEAT` / `SM_PRINT_FLOW_CALIBRATE` with `EXTRUDER=<n>` (the Snapmaker U1 family)
+2. Body: bare `T<n>` toolchange lines
+3. Temperatures: `M104` / `M109` lines carrying a `T<n>` token
+4. Tool parameters: an `INITIAL_TOOL=<n>` or `TOOL=<n>` parameter on any command line. The whole key must match, case-insensitively (Klipper parameters are), the value must be all digits, and nothing after a `;` is read, so `XTOOL=`, `TOOLS=`, `TOOL_TEMP=` and `TOOL=T0` are left alone. `INITIAL_TOOL` is the name of the OrcaSlicer placeholder (`[initial_tool]`) a start macro is handed the first tool by; `TOOL=<n>` is how tool-changer macros commonly name a tool (`SET_TOOL_TEMPERATURE TOOL=1`). Both are read as a tool number with no other plausible meaning. Several on one line are each mapped from their original value.
+
+**What it does not rewrite.** Everything else, deliberately:
+
+- Other per-tool parameters passed to a start macro: `EXTRUDER_TEMP`, `EXTRUDER1_TEMP`, `T0_TEMP`, `TOOL_TEMP`, `EXTRUDER=` and the like. Their names are the user's own macro convention. `EXTRUDER_TEMP` is tool 0's temperature in one config and "the print temperature for whichever tool starts" in another, and a permutation applied to the wrong reading heats the wrong head. Guessing is worse than saying so, so these are reported instead (below).
+- `SET_PRESSURE_ADVANCE EXTRUDER=...`, `ACTIVATE_EXTRUDER EXTRUDER=...`, `SET_GCODE_VARIABLE` and any other command naming a tool that is not in the list above.
+- Anything inside the user's Klipper macros. The rewrite sees only the file.
+
+Each line is transformed from its ORIGINAL text and no line needs to see any other, so a swap (`1<->2`) cannot chain. That independence is what lets the rule run file to file: `apply_to_file(in_path, out_path, remap)` holds one line at a time, so a 400MB job costs what a 4KB one does. `apply_to_string()` runs the same per-line rule over content a caller already holds; a file being printed goes through `apply_to_file()`. Byte-for-byte contract either way: unmatched lines pass through untouched, CRLF survives, and a final line with no trailing newline keeps it that way.
+
+**The warning for what it leaves.** `GcodeToolRemapper::unremapped_tool_params(line)` returns the keys of the tool-naming `KEY=VALUE` parameters on a line that the rewrite leaves alone: any key containing `EXTRUDER` or `TOOL`, a bare `T` key (MedusaHC's own `MHC_SET T=<n>`), or a `T<digits>` key. `INITIAL_TOOL` and `TOOL` are reported only when their value is not a plain number (`TOOL=T0`), because that is exactly when the rewrite leaves them. It lives beside the rewrite so the two read one key list (`kToolParamKeys`): a key the rewrite learns to handle stops being reported in the same change. `helix::printer::start_params_remap_leaves()` (`include/ams_remap.h`) adds the strategy half: only `GcodeRewrite` edits the file, so only it can leave a stale tool number there, and every other strategy answers empty. `PrintSelectPanel::start_macro_remap_note()` feeds it the `PRINT_START`/`START_PRINT` line the ops scan already cached for the selected file (`PrintPreparationManager::print_start_for()`, which answers only for the file the scan was built for, and which the pre-print temperature pass reads too), and the Filament Mapping dialog shows the result as a warning banner above the tool rows (`FilamentMappingModal::set_start_macro_note()`, `ui_xml/filament_mapping_modal.xml`). No scan for this file, no start line, or no reported keys means no banner.
+
+The banner also follows the picks. The key list is computed once per open, but whether it shows is decided by `helix::printer::start_macro_note_shown()`, true only while the dialog's current picks move at least one tool off its own number. Those picks are read through `helix::printer::gcode_rewrite_remap()`, the same function `PrintSelectPanel::apply_remap()` builds its rewrite map with, so an auto or unmapped pick (`mapped_slot` -1) is not a move here for the same reason the rewrite leaves it alone. Identity picks rewrite no tool number and leave the start line consistent with the body, so they show nothing. `FilamentMappingModal::rebuild_rows()` publishes the visibility, and every change to the picks (a row pick, the auto-color toggle, a recalculation, a show after Cancel restored the originals) ends there. The banner is advisory: it does not block the remap, because a macro that already heats every tool it is handed is correct as sliced.
+
+The detector is a name heuristic. It reports `EXTRUDER=285` on a line where that is a temperature, and it cannot see a macro that heats a tool it looks up some other way. The first costs one unnecessary warning; the second is why the user guide recommends putting tool heating in plain `M104`/`M109 T<n>` lines the rewrite does move.
+
+Backends are consumers, not implementers: `AmsBackend::get_remap_strategy()` routes (`include/ams_backend.h`). `Native` (Happy Hare, AFC, CFS, AD5X IFS, Tool Changer with klipper-toolchanger, QIDI Box) and `PrePrintSend` (the U1 emits firmware-native `print_task_config` gcode, no file rewrite) never reach the remapper. `GcodeRewrite` is the generic fallback for firmware with no internal routing table. A tool changer driving swaps with its own `T<n>` commands rather than klipper-toolchanger takes it (`AmsBackendToolChanger::get_remap_strategy`), because `ASSIGN_TOOL` does not exist there and Klipper answers an unknown command by logging it and carrying on, so a remap sent to such a machine reads as applied and prints the firmware's own mapping. Every MedusaHC takes it, with or without klipper-toolchanger beside its controller, because its own `T<n>` macros do the swap and `ASSIGN_TOOL` never changes them ([FILAMENT_BACKEND_MEDUSAHC.md](FILAMENT_BACKEND_MEDUSAHC.md#tool-mapping)). ACE will adopt it once its `ACE_CHANGE_TOOL` family is implemented and validated, and until then ACE stays `None` (`include/ams_backend_ace.h`).
+
+When it runs, the production path is `PrintSelectPanel::apply_remap()` -> `PrintPreparationManager::modify_and_print_with_remap()` (`src/ui/print/ui_print_preparation_manager.cpp`), file to file at every stage: download the original to a temp file, rewrite it to a second temp file through `apply_to_file()`, upload that, and print it via the HelixPrint plugin under the ORIGINAL filename. No stage holds the job in memory. A remap that changes no line prints the original directly, no copy. When the plugin reports its `server_edits` feature ready, nothing is downloaded or uploaded: the remap travels as a one-edit `tool_remap` list to `server.helix.print_edited`, and the plugin applies the same per-line rule beside the file (`moonraker-plugin/helix_edits.py`), pinned to `apply_to_file()` byte for byte by `tests/fixtures/gcode_edits/` ([PRINT_START_INTEGRATION.md § How a choice reaches the sliced file](PRINT_START_INTEGRATION.md#how-a-choice-reaches-the-sliced-file)). That copy prints even when it changes nothing. The staged upload path is built by `helix::gcode::make_rewritten_gcode_path()`, the one spelling of that name, because the post-print cleanup, the startup sweep and `resolve_gcode_filename()` all recognise a staged copy by its prefix, and a path built any other way is invisible to all three at once.
+
+The strategy is guarded in `open_remap_modal()` (`include/ui_panel_print_select.h`), which asks `PrintPreparationManager::check_modification_capability()` rather than testing for the plugin itself: rewriting a file before printing is the same act the pre-print options perform, and two copies of "may we modify this file" is how one of them ends up offering a picker the other would refuse. `tests/unit/test_gcode_tool_remapper.cpp` pins the four families, the detector and the swap collision-safety; `tests/unit/test_remap_strategy.cpp` pins the strategy half and the pick rule; `tests/unit/test_start_macro_remap_note.cpp` pins the scan lookup and the note text; `tests/unit/test_filament_mapping_modal_cancel.cpp` pins that the banner tracks the picks and never leaks into a show that set no note (the subjects behind it are process-wide).
+
+User-facing counterpart: [Filament Mapping § Printers that map filament by rewriting the file](../user/guide/filament.md#printers-that-map-filament-by-rewriting-the-file).
+
+### AD5X IFS material/color reconcile (insert, #1065/#1071)
+
+Native ZMOD has **no per-port RFID or spool identity**: the only per-lane
+signals are a color (`ffmColor`) and a material type (`ffmType`), read via
+`GET_ZCOLOR` / `IFS_STATUS`, plus a presence bit from `IFS_STATUS Ports`. Colour
+and material are firmware's, filed as the lane's `Firmware` observation; a user's
+colour or material edit is written to `Adventurer5M.json` and shows as `Pending`
+until firmware states it back. Brand, spool name, the Spoolman link and weights
+exist only in the lane's record, which is retained across an eject/insert cycle
+so a re-inserted spool keeps its assignment (**#1071**).
+
+**The reconcile detectors** live in `ams_backend_ad5x_ifs.cpp`:
+`check_external_color_change` and `check_external_type_change`, both called from
+`update_slot_from_state`. Each keeps a per-slot baseline (`last_firmware_color_`
+/ `last_firmware_material_`); a baseline-to-observed delta on a *present* lane
+fires `sync_override_to_firmware_locked`, which runs the `OverwriteAlways`
+auto-mirror (`mirror_firmware_to_lane_data`), so the record follows what firmware
+holds.
+
+**Baseline swallow on presence lag** (#1065; keep it fixed). On modern ZMOD the
+firmware color/type can surface one parse frame *before* `IFS_STATUS Ports` flips
+the slot present. The detectors must **hold** the baseline while the slot reads
+not-present (advancing it only for a genuine empty-lane/`""` eject reading). If
+the baseline advances during the lag, the delta is consumed while the sync is
+skipped, and when presence catches up there's no delta left: the change is
+swallowed (classic symptom: *color updated on screen, material stuck*).
+
+**Spool retention on eject.** On AFC and Happy Hare the firmware states the
+lane's spool id, so a lane's link is whatever firmware says now, and Spoolman's
+details count only for that id. **Firmware that has its own retention setting
+owns it.** AFC reports a per-lane `remember_spool`; a lane at `false` that
+empties drops every HelixScreen record of its spool
+(`AmsBackendAfc::forget_lane_spool_locked()`), so the screen shows what AFC and
+Mainsail show. Once every lane reports it,
+`AmsBackend::firmware_owns_spool_retention()` is true and the overlay shows a
+switch bound to `ams_device_ops_printer_retains_spool_info`
+(`printer_retains_spool_info()`, true when every lane remembers) that writes
+through `set_firmware_spool_retention()` (`AFC_SET_REMEMBER_SPOOL` per lane).
+
+### OrcaSlicer compatibility — by backend
+
+All HelixScreen-managed AMS backends write the AFC-standard `lane_data`
+record on edit, so every one of them round-trips to OrcaSlicer with no
+additional configuration. **Verified against OrcaSlicer upstream/main
+(post-2.4.0-beta nightly)**, source MoonrakerPrinterAgent.cpp
+`fetch_moonraker_filament_data()`.
+
+| Backend | Writer | Key style | How OrcaSlicer picks it up |
+|---------|--------|-----------|----------------------------|
+| AD5X IFS | HelixScreen (`FilamentSlotOverrideStore`) | `laneN` (1-based) | `lane_data` namespace |
+| Snapmaker U1 | HelixScreen (`FilamentSlotOverrideStore`) | `T<n>` (0-based) — tool changer | `lane_data` namespace |
+| ACE (Anycubic ACE Pro) | HelixScreen (`FilamentSlotOverrideStore`) | `laneN` (1-based) | `lane_data` namespace |
+| CFS (Creality K2) | HelixScreen (`FilamentSlotOverrideStore`) | `laneN` (1-based) | `lane_data` namespace |
+| OpenAMS (klipper_openams) | HelixScreen (`FilamentSlotOverrideStore`) | `laneN` (1-based) | `lane_data` namespace |
+| AFC / Box Turtle | AFC's own Klipper plugin | `T(n)` per mapping (virtual-tools firmware, #832); `laneN` (1-based) before | `lane_data` namespace (AFC is the originator) |
+| Happy Hare | Happy Hare's own Klipper plugin (components/mmu_server.py `push_lane_data`) | `laneN` (1-based) | `lane_data` namespace — Orca prefers it over the live `mmu` object |
+| Tool Changer | HelixScreen (`FilamentSlotOverrideStore`) | `T<n>` (0-based) | `lane_data` namespace |
+
+The key style is derived from the AMS type (`lane_key_style_for(get_type())`),
+not hardcoded per backend: tool changers (Snapmaker U1, generic
+klipper-toolchanger) write `T<n>`, filament systems write `laneN`. See the
+interoperability subsection below.
+
+IFS, Snapmaker, ACE, CFS, and OpenAMS share the `FilamentSlotOverrideStore`
+infrastructure and publish to `lane_data`; AFC and Happy Hare each write
+`lane_data` via their own Klipper plugins. **HelixScreen never writes
+`lane_data` for the AFC or Happy Hare backends** — those plugins own their
+records, and HelixScreen's AFC/HH backends route user edits through G-code
+(`SET_COLOR`/`SET_MATERIAL`, `MMU_GATE_MAP`) only. The reason is stronger than
+clobber risk: AFC deletes every key in the namespace on each Klipper boot
+(AFC.py `delete_lane_data()`) and rebuilds it lane by lane as PREP advances,
+so a record we wrote there would vanish on reboot, and a *read* landing in that
+window sees a partial namespace. Treat `lane_data` as neither durable nor
+atomic for AFC. User overrides go to a private namespace instead (#1158).
+(Earlier docs said HH reached Orca solely via the live `mmu` Klipper object.
+That is outdated: HH's `push_lane_data` now writes the namespace directly and
+Orca prefers it; the `mmu` object is the fallback.)
+
+**AFC moved its outer key from `laneN` to `T<n>`** (shipped on upstream `DEV`
+2026-08-16, Klipper-Add-On #832 — the 1.3 release line). One lane can answer
+to several `T` commands under virtual tools, which a lane-name key cannot
+express, so each mapping gets its own record and the record carries no lane
+identity. Two HelixScreen changes followed: the live AFC reader
+(`apply_lane_data` in `ams_backend_afc.cpp`) joins `T(n)` keys through the
+firmware-asserted tool mapping (parking a payload that lands before any
+mapping and replaying it once one arrives — the DB query is one-shot), and
+`reset_tool_mappings()` sends `AFC_RESET_MAPPING` on firmware that reports
+`multiple_tool_mapping` (#832 deregistered the old name). The override-store
+reader needed nothing: it is key-agnostic and HelixScreen authors no records
+on AFC printers. Full analysis, including the new key-space overlap with
+Mainsail, is in
+[`../specs/filament_slots.md` § "Shipped: AFC moved from `laneN` to
+`T<n>`"](../specs/filament_slots.md#shipped-afc-moved-from-lanen-to-tn-virtual-tools-firmware).
+
+#### Schema lineage and what Orca actually matches on
+
+- **AFC pioneered the base schema** — keys `color` / `material` / `bed_temp` /
+  `nozzle_temp` / `scan_time` / `td` / `lane` / `spool_id`, DB key 1-based
+  (`lane1`…), inner `lane` field 0-based. Older AFC emits **no** vendor field.
+- **Happy Hare extended it** with `vendor_name`, `name`, and `filament_id`
+  (`push_lane_data`, authored by `ammmze`). HH's `filament_id` is a **Spoolman**
+  DB id, not an OrcaSlicer preset id.
+- **AFC then adopted HH's two keys verbatim**, plus `initial_weight`
+  ([AFCProject/AFC-Klipper-Add-On#833](https://github.com/AFCProject/AFC-Klipper-Add-On/pull/833),
+  closing #808). `lane_data` is a shared namespace, so the deliberate call was
+  one spelling per value across backends rather than each writer using its own
+  attribute names. **`lane_data` and AFC's `get_status` therefore disagree on
+  purpose**: status reports the same brand as `spool_vendor` (and the name as
+  `filament_name`), because that dict mirrors `AFCLane`'s attributes and is
+  AFC's own surface, not a shared one.
+- **OrcaSlicer reads only `lane` / `material` / `color` / `bed_temp` /
+  `nozzle_temp`**, and matches a lane to a filament preset **by the `material`
+  type string alone** (`filament_id_by_type`, falling back to generic
+  OrcaFilamentLibrary ids like `OGFL99`). It ignores `vendor_name` and
+  `filament_id` today, and never writes `lane_data` back. So brand has no
+  effect on the slicer's preset pick — "Generic PLA" and "Elegoo PLA+" both
+  resolve to a generic PLA preset. Emit canonical material strings (`PLA`,
+  `PETG`, `ABS`…); marketing names won't match. (Vendor-aware matching for the
+  generic Moonraker sync is proposed upstream on
+  `feat/moonraker-vendor-aware-filament-match`; until it lands, assume the
+  type-only behaviour above.)
+
+#### Two-string identity: `material` (Orca wire) vs `filament_type` (HelixScreen)
+
+A lane's display type and its Orca match string are **not the same string**.
+HelixScreen stores the precise identity the user chose — `ASA-GF`, `PLA Silk`,
+`PPS-CF` — but Orca can only match a type string its own library carries. Writing
+the precise string verbatim is what caused the original bug: OrcaSlicer resolves an
+unmatched `material` to **the first library preset whose name contains "PLA"**
+(Preset.cpp:3300), and because that bogus id then resolves cleanly it
+**short-circuits the similarity search** that would otherwise have found a closer
+type (PresetBundle.cpp:3320-3346). So `ASA-GF` synced as *Generic PLA* — PLA
+temperatures on a glass-filled ASA — while the color came through untouched.
+(Verified against the pinned OrcaSlicer source, not secondhand docs.)
+
+`to_lane_data_record()` therefore emits two keys:
+
+- **`material`** — the Orca wire string, derived by `filament::orca_match_type()`
+  (`filament_variants.cpp`): explicit `orca_type_overrides` entry → the type itself
+  if Orca's library carries it → the base polymer with the type's one filler
+  (`PA12-CF` → `PA-CF`) if the library carries that → `extract_base_material()`
+  base polymer if the
+  library carries *that* → otherwise `null` (better an empty tray in
+  Orca than a confident wrong match). The library-type set and the override table
+  are generated into `assets/filaments.json` (`orca_library_types`,
+  `orca_type_overrides`) by `scripts/import_orca_filaments.py`.
+- **`filament_type`**: the precise identity. Orca ignores it; HelixScreen's
+  reader (`from_lane_data_record()`) prefers it over `material`, then the legacy
+  `helix_material` older HelixScreen records carry, so the on-device AMS screen
+  still shows `ASA-GF` even though the same lane synced to Orca as `ASA`.
+
+Nothing rewrites an older record in place: it reads through the legacy
+spellings, and the next edit writes the RFC 0001 shape. The Orca tables are
+pre-warmed on the main thread at startup (`filament::warm_orca_tables()`, called
+from `SubjectInitializer`) so the first match never parses the asset on a
+WebSocket background thread.
+
+#### Vendor / product-name aliases (`vendor_name` / `name`)
+
+Brand and product name have **one agreed spelling in `lane_data`** — HH's
+`vendor_name` / `name`, which AFC adopted in #833 — plus the legacy keys we
+emitted before that settled:
+
+| Value | `lane_data` (AFC + HH) | HelixScreen legacy | AFC `get_status` only |
+|-------|------------------------|--------------------|-----------------------|
+| Brand | `vendor_name` | `vendor` | `spool_vendor` |
+| Product name | `name` | `spool_name` | `filament_name` |
+
+The third column is **not** a `lane_data` spelling — it is what AFC's status
+dict calls the same values, and `AmsBackendAfc` meets it only on the status
+path.
+
+HelixScreen's writer (`to_lane_data_record()` in
+`filament_slot_override_store.cpp`) emits the shared keys only. Its reader
+(`from_lane_data_record()`) reads the shared keys first and falls back to our
+legacy ones, so records an older HelixScreen wrote still read.
+`AmsBackendAfc::read_vendor()` runs a wider ladder because it serves both
+surfaces: `vendor_name` (lane_data), `spool_vendor` (status), then `vendor` /
+`brand` defensively. **`filament_id` is never guessed:** it carries the linked
+spool's own Orca id, else an id the catalog records for the one product picked,
+else `null`. There is no deterministic (vendor, material) to Orca `setting_id`
+mapping (the ids number in the hundreds and churn across releases).
+
+### `lane_data` interoperability (outer-key contract)
+
+`lane_data` is a **shared namespace with multiple writers and multiple
+readers**. The authoritative, source-verified contract lives in the public
+spec — [`../specs/filament_slots.md` § "Interoperating readers and
+writers"](../specs/filament_slots.md#8-interoperating-readers-and-writers).
+Read that section before touching key formatting or the read path. The
+summary:
+
+- **Writers and their key style**: HelixScreen (`T<n>` on tool changers,
+  `laneN` otherwise), AFC (`T(n)` per mapping since the virtual-tools firmware,
+  `laneN` before), Happy Hare (`laneN`), Mainsail #2510
+  (`T<n>` on Spoolman + tool changer).
+- **Readers**: OrcaSlicer is **key-opaque** (reads the inner `lane` field, never
+  the outer key — MoonrakerPrinterAgent.cpp:780), requires the inner `lane`
+  to be a JSON **string**, and does **no deduplication**. HelixScreen's reader
+  is **key-agnostic** and prefers the canonical key for its own style on
+  duplicates (`parse_namespace_document` in `filament_slot_override_store.cpp`).
+- **The collision hazard is not a wrong outer key** — it is the **same inner
+  `lane` under two different outer keys**, which Orca renders as two trays for
+  one slot. A tool changer converges on `T<n>` (matching Mainsail) to avoid
+  exactly this.
+
+**Lesson (recorded inline so we don't re-derive it):** verify wire-format
+claims against the tools' **source**, not their PR or release text. Mainsail
+#2510's companion PR broadened an AFC `map` TypeScript type to `string[]`,
+which looked like a schema change but was speculative — upstream AFC still
+emits a scalar `map`. Confirming against MoonrakerPrinterAgent.cpp (Orca) and
+the AFC plugin source, not the PR descriptions, is what kept this change
+correct. Cite exact source lines in the spec so a future reader re-verifies the
+same way.
+
+---
+
+## Filament Catalog (`filaments.json`)
+
+HelixScreen ships one data file, `assets/filaments.json`, holding two tables:
+the material **types** (PLA, ABS, PETG, … with their temperature, drying,
+density and compat-group data) and the **branded** products that inherit from
+them. The catalog is generic infrastructure, not CFS-specific: the CFS backend
+decodes material ids through it, and the catalog picker, the AMS edit overlay
+and the material settings manager all read it (consumers below).
+
+### Material types
+
+The `types` array is the only copy of the per-type table. It is hand-maintained
+inside the generated file: `scripts/import_orca_filaments.py` reads it back from
+the existing output, uses its nozzle ranges to fill products that carry none,
+and writes it through unchanged (it refuses to write an output with no `types`).
+
+```json
+{"name": "PLA", "category": "Standard", "nozzle_min": 190, "nozzle_max": 220,
+ "bed": 60, "chamber": 0, "dry_temp": 45, "dry_time": 240, "density": 1.24,
+ "compat_group": "PLA", "note": "why a value is what it is (ignored at runtime)"}
+```
+
+At runtime `filament::materials()` (`include/filament_database.h`,
+`src/printer/filament_database.cpp`) is the effective table: the shipped
+`types` with the user overlay's `types` merged in (below). It is an immutable
+`shared_ptr` snapshot swapped under a mutex, safe to read from any thread, and
+every `const char*` a `MaterialInfo` carries points into an append-only intern
+pool, so a name handed out before a reload stays valid after it.
+`filament::shipped_materials()` is the shipped rows alone, the defaults a user
+override is measured against. `find_material()`, the category and compat-group
+helpers and the drying presets all read `materials()`.
+
+- **Loading.** First use loads it; `SubjectInitializer::init_core_and_state()`
+  warms it on the main thread next to the Orca tables. A parse callback discards
+  every top-level key but `types`, so the 360 products are never materialized.
+  `reload_materials()` re-reads both files after an overlay write.
+- **Missing or unparseable asset.** The table is empty and an error is logged.
+  `find_material()` misses for every name, so temps read 0 and compatibility
+  reads "unknown, compatible": visibly wrong rather than confidently wrong. A
+  broken install is the only way to get here (fonts and XML live beside it).
+  There is deliberately no compiled-in fallback copy: two copies drift.
+
+### Schema
+
+Each entry in the `filaments` array is one branded product:
+
+```json
+{
+  "id": "creality-cr-abs",     // stable slug; user overrides target this
+  "brand": "Creality",
+  "name": "CR-ABS",            // display = "{brand} {name}"
+  "type": "ABS",               // resolves to a `types` entry
+  "nozzle": 260,                // recommended nozzle temp (°C)
+  "bed": 60,                    // recommended bed temp (°C)
+  "nozzle_min": 240,            // OPTIONAL — only emitted when it differs from the type's range
+  "nozzle_max": 280,            // OPTIONAL
+  "density": 1.24,              // OPTIONAL — else inherit type
+  "codes": { "cfs": "07001" },  // OPTIONAL, open scheme-keyed map (see below)
+  "orca_id": "OGF...",          // provenance: OrcaSlicer filament_id (NOT a CFS code)
+  "source": "orca"              // provenance: orca | cfs-seed | helix-seed | vendor-spec | user
+}
+```
+
+Most Orca-derived entries are **thin** — just `id, brand, name, type, nozzle,
+bed, source`. Everything else (nozzle range, bed if unset, chamber temp, dry
+temp/time, `compat_group`, density) **inherits from the base `type`**, the
+same way a product does at runtime (see `EffectiveFilament` below). A field is
+only written to the file when it *differs* from what the type would already
+supply — keeps the catalog small and keeps regen diffs meaningful.
+
+### Type inheritance
+
+Products don't duplicate physical data — they carry deltas over their base
+material type:
+
+```
+EffectiveFilament = filament::find_material(product.type)   // type (shipped ◀ user `types`)
+                     ◀ product's own JSON fields              // product overrides
+                     ◀ user overlay entry (same id), if any    // user overrides
+```
+
+`nozzle_min` / `nozzle_max` / `bed` / `density` / `chamber_temp_c` /
+`dry_temp_c` / `dry_time_min` / `compat_group` all come from the type unless
+the product JSON explicitly sets them. Every product's `type` must resolve to
+a type in `filament_database.h` (directly or through an alias); the data-integrity
+checks in `tests/unit/test_filament_data_invariants.cpp` fail on one that does not.
+
+### The `codes` map (scheme-keyed, open-ended)
+
+Hardware/RFID codes live in a scheme-keyed map so multiple, possibly-colliding
+namespaces coexist and a new decoder drops in with **no schema change**:
+
+| scheme | meaning | status |
+|--------|---------|--------|
+| `cfs` | Creality Filament System numeric hardware code | **live** — decodes CFS box-reported material codes |
+| `rfid` | future vendor-neutral / generic RFID standard | reserved (not populated) |
+| `snapmaker` | Snapmaker U1 `filament_sku` | reserved — U1 exposes a real per-material SKU (`print_task_config.filament_sku`), but no seed table exists yet |
+| `bambu` | Bambu `filament_id`/RFID (`GFA00`…) | reserved — could auto-derive from `orca_id` later |
+
+Each scheme is indexed independently (`by_code[scheme][code] -> product`), so
+a `cfs` code can never collide with an `rfid` or `snapmaker` code that happens
+to share the same digits.
+
+### `FilamentCatalog` — transient, on-demand access layer
+
+`include/filament_catalog.h` / `src/printer/filament_catalog.cpp`. **No
+`::instance()` singleton** — unlike the rest of the printer-state layer, this
+is a scoped value type: construct it, query it, let it fall out of scope. Idle
+RAM footprint is zero; nothing is parsed until something asks for it.
+
+```cpp
+// Small slice: only products carrying a code in one scheme. Used by CFS decode —
+// built once at the top of a box-state enrichment pass, destroyed at the end.
+auto cat = FilamentCatalog::load_codes("cfs");
+const EffectiveFilament* mat = cat.resolve_code("cfs", mat_id);
+
+// Whole catalog + user overlay merged in. What the catalog picker browses;
+// transient for the lifetime of a picker session, not resident otherwise.
+auto full = FilamentCatalog::load_full();
+```
+
+Other query methods: `resolve_id(id)`, `products_for_type(type)`,
+`products_for_brand(brand)`, `all_brands()`, `all_products()`. The tradeoff
+(accepted): CFS re-parses its small coded slice on every poll rather than
+caching — worth it for zero idle RAM on memory-constrained devices (AD5M,
+K1). A debounce cache is a future escape hatch only if profiling ever shows
+the re-parse cost matters.
+
+**Consumers.** `AmsBackendCfs` decodes material ids through
+`FilamentCatalog::load_codes("cfs").resolve_code("cfs", mat_id)`
+(`src/printer/ams_backend_cfs.cpp`). On the UI side,
+`FilamentCatalogSelector` (`src/ui/filament/ui_filament_catalog_selector.cpp`) is the
+vendor/type/product browser; `FilamentCatalogPickerModal`
+(`src/ui/filament/ui_filament_catalog_picker.cpp`) is a thin `Modal` over it, which the
+spool editor opens from "Browse catalog..." (§ "Edit Spool"). The editor's
+dropdowns read the pure family queries `all_families()`,
+`variants_in_family()`, `brands_in_family()` and `products_in_family()`, keyed
+on `filament::display_family()`; a recycled grade (`rPLA`) files under its
+polymer there as the Recycled variant, while `extract_base_material()` keeps it a
+material of its own for compatibility and temperatures. `FilamentProductEditModal`
+(`src/ui/filament/ui_filament_product_edit_modal.cpp`) is the production author of the
+user overlay: its form handler builds the product objects and calls
+`FilamentCatalog::save_user_products()`. `material_settings_manager.cpp`,
+`filament_variants.cpp` and the subject/XML registration path round out the
+reader list.
+
+**Favorites.** Catalog rows can be starred (#1100). The ids persist globally
+in Config at `/filament/favorite_ids` - a root-level path, deliberately
+outside the per-printer prefix, because a starred filament is a user
+preference that follows the user across printer profiles
+(`include/filament_favorites.h`). `load_favorite_ids()` re-reads Config on
+every selector rebuild with no cache, so a star toggled anywhere is visible
+everywhere; `toggle_favorite()` persists immediately, with no separate save
+step. In the selector, favorites surface as a pseudo-vendor row that leads
+the vendor list (a control byte in its internal name keeps it from colliding
+with a real vendor), and starred rows float to the top of their vendor's
+list.
+
+### User overlay format
+
+user_filaments.json (resolved through `writable_path()`, so it follows
+`HELIX_CONFIG_DIR`, and linked into `printer_data` by the installer) is the one
+file for everything a user contributes about filaments: material types,
+products, and Orca-type hints. It is also the file users hand-edit, and the user
+guide documents its shape (`docs/user/guide/settings/printing.md` § "Editing
+materials and brands by hand"), so treat field names as a public format.
+
+```jsonc
+{
+  "types": [
+    // A name matching a shipped type (any case, aliases resolved) is a sparse
+    // merge_patch over it; the shipped spelling stays canonical. A new name
+    // defines a type: category defaults to "Custom" and compat_group to its own
+    // name, so endless spool never cross-matches it. Entries with no name are
+    // skipped. preheat_macro / macro_handles_heating live here too.
+    // Hand edits are sanitized: a known numeric field holding a non-number
+    // (a quoted "205", or null, which merge_patch reads as delete) is dropped
+    // with a warning so the shipped value stands, and a new type without
+    // nozzle_min > 0 && nozzle_max >= nozzle_min is skipped with a warning.
+    {"name": "PLA", "bed": 65},
+    {"name": "PEKK", "nozzle_min": 330, "nozzle_max": 360, "bed": 120}
+  ],
+  "filaments": [
+    // Product entries: override built-ins by id, or add new ones. Merged by
+    // FilamentCatalog::load_with_overlay(). See the "effective filament"
+    // structure in include/filament_catalog.h for the full field set.
+    {"id": "polymaker-abs-pro", "nozzle_min": 265, "nozzle_max": 285, "source": "user"},
+    {"id": "acme-custom-petg", "brand": "Acme", "name": "Custom PETG",
+     "type": "PETG", "nozzle": 240, "source": "user"}
+  ],
+  "orca_type_map": {
+    // Helix display name -> Orca wire string. Single map by design — users
+    // contribute *overrides*, not library-type membership, which stays a
+    // shipped-asset concept (assets/filaments.json's `orca_library_types`).
+    // Resolution at orca_match_type() step 1 makes user entries always win
+    // over shipped ones. An empty-string value is the documented "suppress"
+    // case: emit nothing for this type rather than a wrong match. See the
+    // spec's § Drift for the safety rationale.
+    "PLA-BioTough": "PLA",
+    "WeirdResin": "",
+    "CustomASA": "ASA"
+  }
+}
+```
+
+**Material overrides.** `MaterialSettingsManager` is the sparse view of the
+overlay's `types` (which of `nozzle_min`, `nozzle_max`, `bed`, `chamber`,
+`preheat_macro`, `macro_handles_heating` the user set) and their writer: the
+Material Temperatures screen calls `set_override()` / `clear_override()`,
+which read-modify-write only those six keys of one entry, keep any other key a
+user hand-authored, drop an entry left with nothing but its name, then reload
+the table. `clear_override()` on a user-defined type does nothing (its temps
+are its definition) and the screen hides Reset for it. Quick-button choices
+(`preset_materials`) stay in `settings.json`: they are a UI choice, not material
+data.
+
+**Migration from `settings.json`.** `MaterialSettingsManager::init()` moves any
+`material_overrides` left in `settings.json` into the overlay's `types`
+(`bed_temp` becomes `bed`, `chamber_temp` becomes `chamber`; a field the overlay
+already has wins), writes the overlay, and only then erases the key and saves
+settings. It is keyed on the key's presence rather than a `config_version`
+bump: a versioned migration would bump the version even when the overlay
+write failed and never retry, while this one leaves settings holding the only
+copy and retries next start. An overlay that exists but does not parse blocks
+the migration the same way (an empty or whitespace-only file is no overlay yet,
+for every reader and the writer alike), since saving over it would replace the user's hand
+edits with the migrated entries alone. A settings restore from the rolling
+backup brings the key back, and the merge is idempotent. The move is one-way: an
+older build reads only `settings.json`, so a downgrade loses these overrides.
+
+The sections are independent: a user can carry any of `types`, `filaments`
+and `orca_type_map`, or none. A bare array is a product-only overlay (the
+installer seeds `[]`). The shipped asset
+(`assets/filaments.json`) keeps its own split between `orca_library_types`
+(list) and `orca_type_overrides` (map) because the importer generates those
+two differently — that distinction does not propagate to the user overlay.
+
+**Wiring.** `SubjectInitializer::init_core_and_state()` warms the Orca tables
+on the main thread (`warm_orca_tables()`), then immediately calls
+`FilamentCatalog::load_user_orca_type_map()` and feeds the result to
+`filament::merge_user_orca_overrides()`. The merge runs under
+`g_orca_mutex`, so it is safe against concurrent `orca_match_type()` callers.
+User entries land in `g_orca_overrides`, where resolution step 1 picks them
+up before any shipped lookup. An empty `orca_type_map` (the common case when
+no user overlay exists) is a no-op.
+
+**Writing the overlay.** `FilamentCatalog::save_user_products(products)` and
+`save_user_types(types)` each replace one section through one writer, a
+temp-file + `rename` (POSIX rename is
+atomic within a filesystem, so a **process** crash mid-write never leaves a
+partial overlay — the rename either fully happens or doesn't). It does **not**
+`fsync`, so this is not a power-loss durability guarantee; on the rare power
+cut mid-save a filesystem could still surface a truncated file. That trade is
+deliberate: the overlay is written only on user filament edits, and the
+original is never modified until the rename succeeds. It performs
+read-modify-write to preserve the other sections, migrates legacy
+bare-array overlays to object form on first save (keeping their products), recovers from a corrupt
+existing file rather than blocking the save (preserving the unparseable
+original as `<path>.bak` for hand-recovery), and creates missing parent
+directories. On a fresh install where no overlay exists yet, the write target
+falls back to the primary path, `writable_path("user_filaments.json")`, so the first save can
+create the file. The caller supplies pre-built
+`nlohmann::json` product objects (one per entry, minimum field `id`) —
+typically the modal's form-handler builds these. `orca_type_map` has no
+write API today: contributing Orca-type hints is a power-user hand-edit
+concern (see issue #1120 and the design spec's § Drift for the rationale —
+a UI that invites "add Orca type" misleads users into thinking HelixScreen
+can teach Orca new presets, which it cannot; Orca only matches against
+types already in its own library).
+
+### Regenerating the catalog
+
+```bash
+make regen-filaments                     # ORCA_TAG and ORCA_ID_TAG default to pinned tags in mk/filaments.mk
+make regen-filaments ORCA_TAG=v2.4.1 ORCA_ID_TAG=v2.5.0-beta
+```
+
+This shallow-clones OrcaSlicer's `resources/profiles` at `ORCA_TAG` into
+`build/orca-profiles` and at `ORCA_ID_TAG` into `build/orca-id-profiles` (sparse
+checkouts, blob-filtered), runs
+`scripts/import_orca_filaments.py` to resolve `inherits` chains, extract
+facts, and union them with the preserved CFS-code seed
+(`scripts/fixtures/filament_seed.json`), carries the hand-maintained `types` table
+through from the existing file, writes `assets/filaments.json`, and discards the
+cloned Orca checkout. Nothing from the Orca clone is committed — only the
+derived output. Bump `ORCA_TAG` to refresh against newer Orca data.
+
+Products come from the shared `OrcaFilamentLibrary` and from the vendor packs
+named in `VENDOR_PACKS` (`scripts/import_orca_filaments.py`), for filament
+brands Orca profiles only under their own printers (Eryone). To add a brand
+whose pack is `resources/profiles/<Vendor>/filament`, add `<Vendor>` there and
+regenerate. A pack's `@<nozzle>` and `@<printer>` variants are skipped in favour
+of the base profile, and a profile that changes material from its template
+keeps only the temps, range and density it sets itself. Pack types never join
+`orca_library_types`: Orca shows those presets on that vendor's printers only.
+
+A product's `orca_id` is the `filament_id` its profile declares, or the one it
+inherits from a template when no other product inherits that same id. A
+template shared by several products (Elegoo's `PLA @base` under fourteen PLA
+variants) names none of them, so those products carry no `orca_id` and Orca
+matches them by material type. The shipped catalog takes its temps from v2.4.1
+and its `orca_id`s from v2.5.0-beta (`_attribution` says so): `ORCA_TAG` gives
+the products and temps, and `ORCA_ID_TAG` replaces every product's `orca_id` with
+the one the same (brand, name) carries at that tag
+(`scripts/import_orca_filaments.py#overlay_orca_ids`). A product the ids tag has
+no id for carries none. The importer refuses to overwrite a catalog whose
+`_attribution` names a different ids tag than the one passed; moving to a new ids
+tag is `make regen-filaments ORCA_ID_TAG=<tag> ALLOW_ID_TAG_CHANGE=1`.
+
+Products that Orca does not profile live in `scripts/fixtures/filament_seed.json`
+(`source` `cfs-seed`, `helix-seed`, `vendor-spec`), never only in
+`assets/filaments.json`: a regen rebuilds every row from Orca plus the seed, so a
+row added to the catalog by hand is gone after the next one.
+
+`assets/filaments.json` is **generated but committed** (same pattern as fonts
+and translations) — cross-compiled targets need the file present without
+running Python/git-clone during the build.
+
+### Licensing and attribution
+
+OrcaSlicer is AGPL-3.0; HelixScreen is GPL-3.0-or-later. HelixScreen never
+ships OrcaSlicer's profile files — the importer clones them into scratch,
+derives **facts** (nozzle/bed temps, density — not copyrightable expression),
+and discards the clone. `filaments.json` carries a top-level `_attribution`
+field naming OrcaSlicer, its repo URL, the pinned tag, and its license, e.g.:
+
+```json
+"_attribution": "Factual filament data derived from OrcaSlicer (github.com/SoftFever/OrcaSlicer, tag v2.4.1, AGPL-3.0). No OrcaSlicer profile files are shipped."
+```
+
+---
+
+## How a lane presents itself
+
+Every surface that draws an AMS lane answers the same question first: does this
+lane have filament, did it keep an identity after being ejected, or is it simply
+unused. That question has one implementation — `classify_lane()` in
+`include/ams_lane_state.h` — and three answers:
+
+| `LaneState` | Meaning | Spool rendering | Bar rendering |
+|-------------|---------|-----------------|---------------|
+| `Present` | has filament | spool at fill level | bar at fill level |
+| `Ghosted` | ejected, identity retained (#1071) | whole cell dimmed, last known fill | same |
+| `Empty` | no filament, no identity | placeholder + "Empty" | nothing — the gap is the signal |
+
+Two things about this are deliberate and easy to undo by accident:
+
+**Ghosting dims the whole cell, never one element.** The spool, the material
+label and the percent fade together, applied with `lv_obj_set_style_opa()` on the
+widget root using the `ghost_opacity` token. A per-element opacity produces a
+ghost too faint to read — a bar's fill is only a pixel or two tall at the sizes
+bar mode actually runs at, so the dimming has to be what carries the signal.
+
+**A ghosted lane shows its last known fill.** That reverses `a106413f6`, where an
+emptied lane rendered a full-strength 75% bar and read as loaded. It is safe only
+because the whole cell is dimmed: the dimming is the disclaimer. Do not reuse
+`lane_fill_level()`'s ghosted value on a surface that does not dim.
+
+`UNKNOWN` is classified exactly as `EMPTY`, so it inherits the identity split. It
+is not a steady state on any backend — every `SlotStatus::UNKNOWN` assignment is
+skeleton construction before firmware data lands — so treating it as `Present`
+would briefly show filament in a lane that has none.
+
+Loaded-ness and error are **decorations** layered over a base state, from their
+own subjects. A blocked lane still has filament; an active lane is still
+`Present`.
+
+The classification is published per lane as `ams_slot_<n>_lane_state`;
+`ams_lane_bar` consumes it. Converting the remaining surfaces
+(`ui_ams_mini_status` bar and spool modes, `ui_panel_ams_overview` mini-bars,
+`ams_slot`) is tracked in prestonbrown/helixscreen#1368, which also carries the
+open question of how much of the per-lane loop can be expressed in XML.
+
+---
+
+### Insert prompts
+
+`FilamentInsertWatcher` opens the slot editor on a lane's `slot_insert_presence()`
+going empty to present, unless the lane's tag reader names the spool
+(`slot_insert_identity()`, `lane_insert_action()` in `include/filament_insert_policy.h`).
+While it waits on the reader or holds the editor open it claims the lane
+(`claim_insert_prompt()`, `include/ui_insert_notice.h`), and the "Same spool?"
+notice stays quiet for a claimed lane. That suppression only works when the
+reader answers after the presence edge, as on the U1's Pending path. A backend
+that queues the notice from the same parse as the edge can still show both.
+
+## UI Panels
+
+### AMS Panel (`ui_panel_ams`)
+
+The detail panel showing slots, path visualization, hub sensors, and the currently loaded filament for a single backend. Opened as an overlay from the Filament nav panel or from the AMS Overview Panel.
+
+Key features:
+- Slot grid with overlap layout for >4 slots (shared via `ui_ams_slot_layout.h`)
+- Path canvas showing filament routing from slots through hub to toolhead. On a PARALLEL
+  path a tap on another tool's head offers to switch to it through `offer_tool_change()`
+  (`TOOL_ABSTRACTION.md` § "Requesting a Tool Change from the UI"); a tube, spool, the
+  mounted head or a head mapped to no tool opens the slot context menu
+  (`FILAMENT_PATH_CANVAS.md` § "Cache & Invalidation" has the hit-test)
+- Backend selector (shown when `backend_count > 1`)
+- Unit scoping: can display a subset of slots for a single unit within a multi-unit backend
+
+#### The dry-box unit (`ams_detail_update_tray`)
+
+A backend with a physical tray draws its slots as spools standing on the floor of a
+box, under a glass lid when it has any climate data. The pure math is
+`include/ams_tray_projection.h` (`helix::ui::tray`, tested by `[ams][tray]`); the
+drawing is `src/ui/filament/ui_ams_detail.cpp`.
+
+- **One camera.** `proj(x, y, z) = (x + K*z, y - RISE*z/DZ)`: x along the row, y
+  screen-down at the front plane, z depth from the front wall (0) to the back wall (DZ).
+  `K = DEPTH_SKEW = 0.45` is also the spool flanges' ellipse ratio, so spools, box and
+  lid share one projection. `DZ = box_depth(spool)` is a spool diameter plus 10%,
+  `RISE = box_rise(DZ)` 9% of it; the back wall is `space_md` taller than the front.
+- **Box.** Behind the spools (`slot_grid` `DRAW_MAIN`): back wall, floor, left wall.
+  In front (`slot_tray` `DRAW_POST`): the translucent front wall, the right side face,
+  the edges. Its x extent comes from the slot row: the outer lane lids
+  (`lane_lid_half_width`) meet its corners. Spools stand on the floor, flange bottom
+  `kSpoolFloorGap` above the floor's front edge, drawn at mid-depth; up to four slots
+  stand at `spool_pitch()` (72 px at 800x480) from the left, and the slot layout
+  (`ams_detail_slot_layout`) reserves the box's overhang.
+- **Lid.** `lid_mode()`: no physical tray, no lid; a unit reading or a supported dryer
+  gets one lid over the row; per-lane readings get one lid per lane, and each lane
+  shows its humidity behind a droplet above its material label instead of the unit
+  readout. The lid is a half ellipse on the chord from the front-wall top to the
+  back-wall top whose crest clears the spool tops by `kLidGap`. Behind the spools a
+  tinted shell (the back wall repainted over it); in front clear glass, a denser right
+  cap, one diffuse sheen (`sheen_rows`: a blurred 7 px band at profile angle 112°,
+  fading in from the left cap and out before the right), the silhouette edge and the
+  cap rims. `reduced_effects()` keeps outlines only.
+- **Labels.** Lane labels sit `space_md` above `unit_top_y()` (the lid's top) or,
+  without a lid, above the back-wall top and the spool tops. What a label reads is
+  `src/printer/filament_display_name.cpp#slot_card_lines`, applied by
+  `src/ui/filament/ui_ams_slot.cpp#apply_slot_label`. With up to four lanes
+  (`kSlotCardMaxTwoLineCount`) a named spool shows its name over its material: the name
+  is `slot_card_name()` (`spool_name`, then the Spoolman identity's `filament_name`, then
+  `color_name`, with no algorithmic colour fallback), and the lower line is
+  `ui::lane_material_text()` ("Empty", "--" or the material). The label drops to one line
+  for an empty lane or a lane nothing names (the material text), and for a name that
+  already states the material (`helix::name_states_material`: case-insensitive, every
+  material token contained in the name, so "PLA+ Bone White" states "PLA+") or a lane with
+  no material (the name). With five or more lanes the label is always the material line
+  alone, and a non-Empty material is cut to `kSlotCardCrowdedMaterialBytes` (4) bytes.
+  Up to four lanes share one row. Five or more stagger so neighbours never share a row
+  (`include/ui_ams_slot_layout.h#ams_stagger_row`): below the medium breakpoint they
+  alternate between two rows (odd lanes nearest the spools) in `font_xs`, one line
+  apart (`ams_stagger_row_height`), each ellipsized to its two-lane span
+  (`ams_stagger_label_width`); from medium up seven or more lanes take three rows and
+  five or six two, 1.5 lines apart, running high, mid, low, mid. A dashed leader runs
+  from a raised label down to its spool. The narrow label band is what keeps the
+  toolhead whole at 480x272 with eight lanes: the path canvas reports the glyph's drawn
+  box (`ui_filament_path_canvas_get_toolhead_box()`), and `[ams][tray]` pins it inside
+  the canvas there.
+- **Badges.** Each lane's number badge stands on the box's front face
+  (`tray::lane_badge_origin`): its right edge inside the lane's lid edge, or centred on
+  the lane when the pitch is too tight, never below the box. The per-slot tool badges
+  (T0, T1, ...) show only when they add something to the lane numbers
+  (`include/display_numbering.h#tool_badges_add_information`): an identity map in index
+  space (tool N feeds slot N, which displays as lane N+1) hides them; a remap, a tool
+  with no lane, or an empty map shows them.
+- **Environment pill.** `ams_env_pill.xml` (instance `env_indicator` in
+  `ams_unit_detail.xml`) is a flex sibling of the slot container, so it takes its width
+  from the unit's row: the box narrows to make room and box and pill centre as one.
+  `ams_detail_update_tray()` stands it against the box's right end
+  (`tray::pill_left_x`, the back-right corner) at the box's height, unit top to front
+  bottom. It holds two rows, a thermometer beside the temperature over a droplet beside
+  the humidity (colour-coded by the material comfort range); the box is too short at
+  the small sizes to stack each icon over its value. While the unit dries the
+  temperature row turns to the heat icon and the dryer's short status (time left) in the
+  warning colour. It hides with no environment data, and the box gets the width back.
+  Tapping it opens the environment overlay for its unit.
+- Face and glass colors are `ams_unit_detail.xml` tokens (`tray_*_dark` and
+  `tray_*_light`).
+
+#### The operation sidebar (`ams_sidebar.xml`)
+
+The right column, shared by the AMS panel and the overview's unit view
+(`AmsOperationSidebar`), top to bottom:
+
+- **Loaded strip** (`ams_loaded_card.xml`), a ghost card (the plain `ui_card` on the panel
+  background, like the print status temperature card): a colour bar (`loaded_swatch_narrow_w`) beside
+  two lines, `ams_current_slot_text` ("Current: Gate 1") with the remaining weight, then the
+  filament's name on one line (`ams_loaded_name_line_h`), ellipsized. The clog and buffer
+  meters sit under the lines in landscape and on their right in portrait while the unit is
+  idle, and hide during any operation (`ams_action ne 0`). From the medium breakpoint up they keep their full form (arc over
+  reading over source; slider over reading over label); below it they shrink to one small
+  row (a small arc beside its reading, the `swap_vertical` icon beside the buffer reading).
+- **Status** (`status_section`): the action detail in `text_body`, on its own line at every
+  size. While the sidebar preheats for a load it reads "Heating nozzle"
+  (`preheat_status_text`): the step list's heat step carries the live "current / target"
+  reading, so the reading appears once. Only with no step list does the status carry it.
+- **Step progress** (`progress_stepper_container`): shown during an operation, in the room
+  the hidden meters and action buttons leave. A four-step swap load fits without scrolling
+  at 480x272.
+- **Actions** (`action_buttons_container`): the bypass row, then the buttons two to a row
+  at every size, icon over label in landscape (`stacked_subject="ams_actions_stacked"`,
+  a `<subject_expr>` in the sidebar). The grid is `styles.action_grid` on
+  the container and `styles.action_cell` on each button (48% wide, height pinned to
+  `touch_target_min`: a stacked `ui_button` asks for 100% of a content-height parent, which
+  in a wrapping row never settles). Each row is centred, so a row the buttons do not fill
+  (AFC's Unload, Home, Settings leaves Settings alone) keeps the cell width and stands in
+  the middle. The whole action area hides during any operation.
+
+With the bypass row and four buttons (Unload, Home, Check slots, Settings, the most any
+mock backend shows) the column does not scroll at 480x272, 480x320 or 800x480. A backend
+that shows a fifth button adds a third row, which scrolls at 480x272.
+
+#### Portrait
+
+`ams_panel.xml` and `ams_overview_panel.xml` are one tree each, restyled on `ui_is_portrait`
+(`bind_style_if_eq` pairs on the panel, its content column, the left column, the path
+containers and the right column). In portrait the panel is a column, top to bottom: the
+header; the loaded strip and the status line (with the Bypass toggle at its end); the
+diagram full width, its tube run capped at `ams_portrait_path_h` (125 px at 272x480 and
+320x480, 170 at 480x800, 300 at 600x1024) so it ends at the toolhead, the canvas tucking
+12 px under the box instead of 8; and the right column as the bottom section, holding the
+actions and, during an operation, the step progress.
+
+The strip and the status line are one instance each. They live at the top of the sidebar,
+and `AmsOperationSidebar` moves them into the panel's `portrait_summary_slot` in portrait
+and back on rotation (`src/ui/filament/ui_ams_sidebar.cpp#place_summary`). The
+meters are constructed from the strip itself and the swatch is looked up in it, so they
+follow it; the slot carries the sidebar instance in its user data, so the Bypass toggle's
+callback (`bypass_inline`, shown only in portrait, hidden during any operation like the
+landscape `bypass_row`) routes from either place.
+
+The portrait header names the system instead of the screen: [back] [logo] NAME on both
+panels (the AMS panel's `ams_system_name`/`ams_system_logo`, the unit view's
+`ams_page_unit_name`/`ams_page_unit_logo`), the "Multi-Filament" title and ":" hidden, the
+logo and name centred in the header's height (`flex_track_place` center, the name at
+content height). The logo hides when the system has none (`ams_system_has_logo`,
+`ams_page_has_logo`). The name is the backend's type name, else its type, so it is never
+empty while a backend exists. Landscape keeps its rule: title, then ":" + logo + name from
+SMALL up.
+
+The full-width box takes the same rules as landscape at the same breakpoint: two label rows
+below medium, three from medium up; the environment pill still costs the row its width.
+The sidebar tightens for portrait: its gaps drop to `space_xxs` and the status line's
+vertical padding to 0. The strip's meters stand on the right of its two lines and follow
+the breakpoint like landscape: the small row below medium (the strip stays 37 px), the full
+form from medium up (the clog arc's growth is capped by `ams_clog_arc_max`). From medium up
+the text column is wide, so the weight follows the position (`position_hug`, at most 70% of
+the column) instead of ending the line beside the meters; below medium it ends the line.
+Below medium, where the bottom section is about 70 px, the four
+actions sit in one row (`styles.action_cell_quarter`, stacked icon over label: a 60 px cell
+has no room for both side by side), and the step progress is a row instead of a list
+(`include/ui_ams_slot_layout.h#ams_stepper_horizontal`): a four-step list needs about 90 px
+there. The row shows only the current step's label, centred under its dots
+(`ui_step_progress_set_current_label_only`), because a label under each of four 66 px steps
+collides; the row is 39 px. The portrait 2x2 cells (480x800 and up) lay each button's icon beside its
+label: the longest, "Check slots", takes 126 px of a 223 px cell at 480x800. In the overview's unit view the page dots float
+over the canvas's empty bottom-left corner in portrait (`dots_portrait`, half the width,
+`floating`), and the unit view's row gap is `space_xxs`, so the unit view fits 272x480 and
+320x480 without scrolling. `[portrait]`
+pins the 272x480 panel: the strip and status above the diagram, the bottom section under
+it, the capped canvas with the toolhead whole, eight lane badges apart.
+
+### AMS Overview Panel (`ui_panel_ams_overview`)
+
+Grid of unit cards showing all units across the system, above the system path canvas. Each card is a miniature visualization of the unit's slots. Clicking a card zooms inline into the **unit view**, which pages through the units starting on the tapped one (see "The unit view" below). Back from the unit view returns to the cards; Back from the cards leaves the panel, and reopening the panel opens the cards.
+
+Key files:
+| File | Purpose |
+|------|---------|
+| `include/ui_panel_ams_overview.h` | Class with the overview's cards and the unit view's page state |
+| `src/ui/filament/ui_panel_ams_overview.cpp` | Card creation, the unit view, paging, slot layout |
+| `ui_xml/ams_overview_panel.xml` | Two-column layout: cards and system path, or the unit view, on the left; loaded info right |
+| `ui_xml/ams_unit_card.xml` | Mini unit card with slot bars and hub sensor dot |
+| `include/ams_unit_pages.h`, `src/ui/filament/ams_unit_pages.cpp` | The page model: `build_unit_pages()`, `page_of_unit()`, `initial_unit_page()`. Pure data, no LVGL |
+| `src/ui/filament/ui_filament_path_plan.cpp` | Off-page stub geometry (`layout_offpage_stub`), widened hub |
+
+**The one model**: every overview draws chains of `units -> hub -> buffer -> toolhead`. A hub joins the paths of every unit on it (units naming the same non-empty `AmsUnit::hub_id`; a unit with none is a hub of its own). A hub has at most one buffer (the FPS of an OpenAMS lane), and a buffer belongs to exactly one hub. `ams_draw::compute_system_tool_layout()` computes `SystemToolLayout::hub_groups` (each hub's units and toolhead). The one-toolhead drawing is the one-chain case: every unit joins one combiner hub. The several-toolhead drawing places one hub box per hub group, with its buffer box between the hub and its toolhead. A hub's buffer box is the box the unit view shows for the hub's first unit (`ams_detail_buffer_box()`, same label and tint); the one-toolhead drawing shows the system reading's box the same way. A toolhead badge names the extruder (`E<n>`), or its position when the backend publishes no extruder, never a filament group. Bypass stays system-level in the one-toolhead drawing.
+
+**Current scope**: The overview panel queries `get_backend(0)` and displays all units from that single backend's `AmsSystemInfo`. This covers the common case of a single multi-unit AMS system (e.g., AFC with multiple Box Turtle units).
+
+**Future: multi-backend aggregation**: When multiple backends are active simultaneously (e.g., an AFC system on one toolhead + a Happy Hare on another), the overview panel should iterate all backends via `AmsState::get_backend(i)` for `i` in `0..backend_count` and aggregate their units into the card grid. The per-backend slot subject storage (`secondary_slot_subjects_`) and event routing already support this — the UI aggregation is the remaining integration point.
+
+#### Per-unit environment subjects and the `kMaxUnits` cap
+
+Every unit card binds its temperature/humidity badge to a set of seven per-unit
+subjects named `ams_env_ind_<unit>_{temp_text, humidity_text, humidity_status,
+humidity_visible, visible, drying_active, drying_text}`. `AmsState` allocates
+those statically, one set per unit, up to `AmsState::kMaxUnits` - **16**. That value is
+`helix::kAmsMaxUnits` (`include/ams_types.h`), which also sizes
+`SystemPathData::kMaxUnits`, so the widest rig the path canvas draws always has a
+badge to bind. Each unit adds 11 registered subjects and 64 bytes of text buffers.
+
+Cards are created for **every** unit the backend reports, cap or no cap.
+`AmsState::env_indicator_subject_names(unit_index)` is the single place that
+decides which names a card gets: the unit's own set below the cap, and the
+always-off placeholders `ams_env_ind_off_flag` / `ams_env_ind_off_text` at or
+above it. Past the cap the badge is simply hidden - slots, hub dot and error badge
+all still render - and `create_unit_cards()` logs one line naming the cap.
+
+**Do not expand the `ams_env_ind_%d_*` names at the call site.** Every card past
+the cap would then bind seven names nothing has registered: seven `No subject was
+found` parser warnings each, plus a permanently dark badge with nothing in the log
+explaining it. `AmsState` owns the cap and the registrations, so it owns the naming
+as well; raising the cap stays a one-constant change (`kAmsMaxUnits`).
+
+The badge is per **unit** because a unit card is; what it opens is not. Tapping it
+calls `open_environment_for_unit(unit)`, which resolves that unit's environment
+**zones** and picks the detail view, a tab strip or the list from their shape - a unit
+whose lanes each have their own box opens a list of boxes, not one card.
+[FILAMENT_ENVIRONMENT_ZONES.md](FILAMENT_ENVIRONMENT_ZONES.md) has the model.
+
+#### The unit view: one unit per page
+
+Tapping a unit card zooms into the unit view (the container `unit_detail_container`; the
+cards row and the system path hide while it shows). It shows **one unit per page**: the
+unit's spool box above the filament path drawn the whole way, lanes through the hub and
+buffer to the toolhead, as `AmsPanel` draws it. Paging swaps the unit and its lanes and
+leaves everything downstream where it is. The overview itself is unchanged by it:
+`AmsState::set_unit_view_active()` (`ams_unit_view_active`) is the one switch between
+the two, and the header, the cards row, the system path area and the unit view bind it.
+
+**Pages.** `build_unit_pages(info, is_drying)` turns the backend's units into pages. Units
+naming the same non-empty `AmsUnit::hub_id` are consecutive pages (one group per hub, in
+the order of each group's first unit); a unit with no `hub_id` is a group of one. Only
+`AmsBackendOpenAms` publishes a `hub_id` (from the unit's FPS lane), so every other
+backend gets one page per unit and no stubs: that is the honest picture, and generic code
+never invents a hub. Absent units (an address held for a box not on the bus) get no page.
+So the cards (in nozzle order) and the pages (grouped by hub) can list the units
+differently; a card names its unit, and the view opens on that unit's page.
+`UnitPage::unit_index` is the unit's **position** in `AmsSystemInfo::units`; the unit's own
+number (`AmsUnit::unit_index`, which some backends never assign) is what
+`AmsState::set_viewed_unit()` and `set_detail_env_unit()` are keyed on, so the panel
+converts explicitly. A page is recognised across a rebuild by its unit's name (its first
+slot when it has none), since neither a unit's position nor its first slot survives a
+backend that sorts its units.
+
+**Opening and updating.** The view opens on the page of the tapped card's unit and never
+jumps pages on later state changes: when the system changes shape (units appear late, one
+goes absent) the pages are rebuilt, the shown unit stays shown while it still has a page,
+and the page number is clamped when it does not. A panel covered by an overlay and
+reactivated keeps its page; closing the panel returns it to the overview. A closed panel's
+observers skip everything; the next open syncs once. The drying flag on the stubs follows
+`AmsState::get_units_dryer_version_subject()`, which bumps whenever the *set* of units with
+a running dryer changes (a unit on another page has no subject of its own to watch).
+
+**Declarative surface.** `AmsState` publishes `ams_page_count`, `ams_page_current`
+(0-based), `ams_page_has_prev`, `ams_page_has_next` (1 only when a neighboring page
+exists), `ams_page_unit_name` and `ams_page_unit_logo` through `set_unit_page()` and
+`set_unit_page_header()`. The arrows hide with `bind_flag_if_eq` on the has-prev/has-next
+subjects and click through `on_ams_page_prev_clicked` / `on_ams_page_next_clicked`; the
+dots are `<repeat count="ams_page_count">` in their own container, each styled by
+`bind_style_if_eq ... ref_value="$i"` against `ams_page_current` (white from the text
+token, the current page's in the accent). An action that is unavailable is hidden, never
+disabled. The header reads "Multi-Filament", a colon, the unit's logo and its name; below
+the SMALL breakpoint the title and the colon give way to the logo and name.
+
+**A hub that holds still.** `ui_filament_path_canvas_set_fixed_hub(canvas, lanes)` stands
+the hub, buffer and toolhead on the canvas's own center line instead of the center of the
+shown unit's spools, and sizes the hub box for the widest unit of the hub (the panel passes
+the largest `slot_count` in the page's group), so a one-bay unit and a four-bay unit sit
+over the same hub. The hub box's *width* still follows the lanes' geometry (a unit with
+fewer lanes leaves it narrower); its position does not move.
+
+**Measured layout (C++).** The arrows are 48 px touch targets at every breakpoint
+(`ams_page_arrow_hit`, with a smaller disc drawn inside where room is tight). They float
+over the path canvas's left and right edges, level with the hub box, which only the canvas
+knows (`ui_filament_path_canvas_get_hub_box()`); the panel repositions them on every page
+and whenever the canvas resizes. On a canvas so narrow that the hub box leaves no room for
+an arrow beside it (480x272 and 480x320, where the hub spans the spools) they sit just
+below the box, either side of the trunk, and the stubs get the room the arrows no longer
+claim. The dot pitch starts at `space_sm` and closes toward a
+floor of `space_xxs` as pages are added, so the row keeps fitting. Past the floor the row
+keeps that pitch and scrolls to keep the current page's dot in view.
+
+**Swipe.** A horizontal swipe anywhere over the unit view pages: left is next, right is
+previous, ignored where that arrow is hidden. `unit_detail_container` is declared
+`gesture_bubble="false"` because LVGL sends a gesture to the first ancestor that does not
+bubble it; every child bubbles by default, so taps on spools, the environment pill and the
+canvas are untouched. Only the unit view listens: a swipe over the overview pages nothing, and the
+cards row scrolls as before. The plain swipe direction (`lv_indev_get_gesture_dir`) does not need
+`LV_USE_GESTURE_RECOGNITION`, which gates only the multi-touch recognizers. The handler
+calls `lv_indev_wait_release()` so the release that ends a swipe is not a click on the spool
+it began on.
+
+**Off-page stubs.** When other units of the shown unit's hub lie on earlier pages the hub
+draws one dashed stub on its left; units on later pages draw one on its right. Each stub is
+a lane that is only suggested: a short run outward (about 5/6 of the hub width, shrinking to
+a floor so it and its label stay clear of the arrows), a diagonal at the slope of the
+outermost real lane on that side, and a drop into the top of the hub box like the lanes'.
+It ends in a label, `N units` (`1 unit`), with the heat glyph the environment pill shows
+while drying before it, while one of those units is drying. A canvas with no room for the label beside the diagonal
+(the smallest screens) draws the stub bare, a dashed hint without its count. The canvas takes the counts through
+`ui_filament_path_canvas_set_offpage_units()`. While either stub exists the merge fan
+reserves one entry beside its outermost lanes on **both** sides (`reserve_each_side` in
+`pathgeo::build_merge_fan()`), so the hub box is a fixed width across a hub's pages and the
+real lanes do not move when a page has one stub or two. LINEAR, MIXED, PARALLEL and
+on-toolhead hubs draw no stub.
+
+**Bypass.** The bypass spool floats beside the path as on `AmsPanel`
+(`bypass_spool_sync_from_state()` is the shared state push); the canvas draws the
+connecting tube. The overview keeps its own overlay on the system path canvas.
+
+**The environment pill follows the unit on screen.** The pill on the spool box's end binds
+the `ams_env_ind_detail_*` subjects, which `AmsState::set_detail_env_unit()` points at one
+unit and re-mirrors on every sync. The mirror is computed straight from that unit's data
+(`compute_unit_env_indicator`), so it is right for any unit number, including those past
+`AmsState::kMaxUnits` that have no per-unit subjects. The environment overlay watches the
+unit's per-unit subjects and, for a unit without them, the same mirror.
+
+### Filament Mapping Card (`ui_filament_mapping_card`)
+
+The FILAMENTS card on the print detail view: one chip per used G-code tool, each a header
+band in the file's colour labelled with the file's material, over a body with the mapped
+slot's spool dot, its label and a caret. The body carries no words, which would clip in a
+52-80 px chip in other languages: an unmapped tool is an empty dashed spool
+(`filament_outline`) and the caret inside the red outline; the dropdown keeps its words. The outline carries the only warning signal; the
+card header has no lamps.
+
+| Piece | Where |
+|-------|-------|
+| What a chip says (pure, no LVGL) | `include/filament_chip_model.h`, `src/printer/filament_chip_model.cpp` |
+| Chip row and chip | `ui_xml/components/filament_chip_row.xml`, `ui_xml/components/filament_swatch.xml` |
+| Publishing the chip subjects | `src/ui/filament/ui_filament_mapping_card.cpp#publish_chips` |
+| The slot dropdown | `include/ui_filament_slot_picker.h`, `ui_xml/components/filament_slot_picker.xml` (+ `_row`, `_choice`) |
+| Recording one pick | `src/printer/filament_mapper.cpp#pick_slot` |
+| The tap gate | `include/ui_print_select_detail_view.h#PrintSelectDetailView/remap_tap_allowed` |
+
+**The model.** Every decision a chip shows is a pure function in `filament_chip_model.h`,
+and every match question inside them is answered by `FilamentMapper` (`materials_match`,
+`classify_mismatches`, `color_distance`); nothing re-implements one.
+
+- `chip_severity(tool, resolved)` -> `ChipSeverity`: `Block` (red) for no slot, an empty
+  slot or a material mismatch; `Warn` (amber) for a colour mismatch, only when the file's
+  colour is known; `Ok` (grey) otherwise, including Auto once it resolves.
+- `chip_slot_label(slot, all_slots)`: the 1-based slot number ("3") when the slots span one
+  unit, else unit and slot joined by `kUnitSeparator` ("2·1"). Units are counted by
+  (backend, unit) in the order the slots first appear, which is the order the dropdown lists
+  them, so "2·1" and the dropdown's "Turtle 2 · Lane 1" name the same lane. The G-code side
+  is always `tool_label()` ("T4"), never renumbered.
+- `rank_slots_for_tool()` / `slot_fit_text()`: the dropdown's order (Exact, ColorDiffers,
+  MaterialDiffers, Empty; physical order inside a tier; an unknown file colour never demotes)
+  and its translated reasons ("exact match", "color differs", "material differs", "empty",
+  plus ", also T0" for every other tool mapped to the slot).
+- `used_materials_text()`: the details row's material, the used tools' materials
+  deduplicated by exact spelling in tool order and joined by ", " ("PLA, PETG"); every
+  material in the file until the used-tools set is known. The detail view publishes it
+  (`PrintSelectDetailView::publish_material_text`) whenever the used tools or the palette
+  change, so the row and the chips never disagree. The list view's per-file material is
+  untouched.
+- `loaded_severity()` / `LoadedRole`: the no-filament-system comparison, below.
+
+**Subjects, not widgets.** The card creates no widget. It publishes
+`filament_chip_count`, the per-chip indexed subjects `filament_chip_<i>_material`, `_slot`,
+`_file_color`, `_file_color_known`, `_ink` (header text: 0 theme, 1 black, 2 white, from
+`theme_manager_get_readable_on`), `_slot_color`, `_slot_colors`, `_slot_finish`,
+`_slot_state` (0 no slot, 1 loaded, 2 empty, 3 swap, 4 unknown loaded filament) and `_severity` (the `ChipSeverity` value),
+plus `filament_chip_more_count` and `filament_chip_more_text`.
+`filament_chip_row.xml` repeats `filament_swatch` over `<repeat count="filament_chip_count">`
+in a container of its own, then the "+N" pill. Severity drives `bind_style_if_eq` outlines,
+and the colours bind through `<swatch_paint bind_color>` and `<color_dot color_subject>`
+(`docs/devel/COLOR_SWATCHES.md`). Bound properties live in the component's `<styles>`, never
+inline, because an inline `style_*` outranks a bound style. Subjects exist for
+`kMaxFilamentChips` chips; past the row's fit (`chips_that_fit`, never below
+`kMinVisibleChips`) the pill stands in. The chip width is the `#filament_chip_width` token
+(52 to 80 px by breakpoint) and the header font the `#font_chip_material` ladder (bold from
+the medium breakpoint, light 10 below, where a bold "ABS-GF" does not fit).
+
+**A chip tap.** The chip's `filament_chip_clicked_cb` reaches the detail view's
+`on_chip_clicked`, which passes the same gate the card's header tap does,
+`remap_tap_allowed()`: `NeedsPlugin` opens the install help modal, any other
+`RemapBlock` does nothing, `None` opens the picker. The caret binds
+`color_card_remappable`, so it hides exactly when the tap would be refused. The header tap
+still opens the full mapping modal.
+
+**The dropdown.** `FilamentMappingCard::open_slot_picker()` shows the card's own
+`FilamentSlotPicker` under the chip, headed "T2 · PLA", with Auto first, the ranked rows and
+reasons, the current pick highlighted, and "More options…" as the extra row, which takes the
+header tap's path (so it is gated the same way) into the modal. A pick goes through
+`FilamentMapper::pick_slot`, the one path the modal's row picker uses too (slot, backend,
+`is_auto`, `user_picked`, re-classification), then `set_mappings()` republishes the chips.
+The picker is the same declarative component everywhere it appears (mapping modal rows, the
+unload lane choice): it publishes `filament_picker_title`, `_row_count`, `_offer_auto`,
+`_auto_selected`, `_has_extra`, `_has_cancel` and friends, and per row
+`filament_picker_row_<i>_label`, `_material`, `_reason`, `_color`, `_colors`, `_finish`,
+`_selected`, `_empty`, `_warn`, up to `FilamentSlotPicker::kMaxPickerRows`. Taps arrive on
+one `filament_picker_row_cb`. One picker shows at a time, since the subjects are global.
+
+**No filament system.** On a printer with one toolhead (`ToolState::has_multiple_toolheads()`
+false) and no filament system, `FilamentMappingCard::shows_loaded_for()` shows the card
+whenever a used tool names a material; `shows_mapping_for()` and the print-start gate are
+unchanged, so the bypass dead-control rule still holds. Chips compare the file against the
+external spool (`get_external_spool_info()`): the first used tool's body is just the spool dot
+in the loaded filament's colour (a `help_circle` icon with a grey outline when nothing says
+what is loaded), and later tools show a `swap_horizontal` icon and are always grey.
+`current_remap_block()` returns `NoStrategy` in this mode, so the caret hides and a tap
+does nothing, even on a backend that has a remap strategy but presents no filament system.
+
+### Edit Spool (`ui_ams_edit_overlay`)
+
+The lane context menu's **Edit Spool** opens `AmsEditOverlay`
+(`src/ui/filament/ui_ams_edit_overlay.cpp`) straight into its editor view; **Select
+Spool** opens it on the spool picker instead. The title is the lane in the
+backend's noun ("Gate 3"). The header carries Save (`action_button`, dirty-gated)
+and, where Spoolman is configured, two round icon buttons left of it on the
+title's centre line: Choose from Spoolman and Scan QR (`ams_edit_scan_enabled`
+also carries the no-camera build gate). They sit in `header_bar`'s
+`header_content` slot, drawn by `styles.header_icon_button` like the header's own
+`action_icon`, in a row padded by their `ext_click_area` reach so each reaches
+the header's height (or 44px) while staying inside its parent's hit box.
+
+**The lane's own settings** sit in one row above More (`lane_section`): **Assigned
+Tool**, shown only where `helix::printer::can_write_mapping_table()` says a mapping
+write lands (`ams_edit_tool_row_visible`), and the Endless Spool backup
+(`ams_edit_backup_row_visible`, read-only and disabled per
+`lane_settings::show_backup_row()`), with the `ams_endless_status` line under them.
+They are properties of the lane, not the spool, so they never enter `SlotInfo`: the
+dropdowns stage `LaneSettings`, Save writes the difference through
+`helix::ui::lane_settings` (`set_tool_mapping()`, `set_endless_spool_backup()`)
+before the slot's own commit, and a Save that changed nothing else closes without a
+slot edit. An incompatible backup is refused at the pick, with a toast, and the
+dropdown goes back to what is staged. The colour grid keeps one row of presets
+stacked and two in the short-landscape split column (the rainbow tile opens the
+rest), which keeps the row in view on open at 800x480, 480x320 and 480x272. At
+320x480 the two dropdowns stack and the backup's reaches the fold.
+
+**Identity is a dropdown cascade**: Material (families, Spoolman recents first,
+else PLA/PETG/ABS/ASA/PA/TPU/PC lead), Variant (the family's catalog variants),
+Brand (Generic once, then the family's makers, recents first) and Product (that
+brand's lines, hidden under Generic). Material and Brand end in "Browse
+catalog...", which opens `FilamentCatalogPickerModal`; a pick there seeds all
+four rows. The callbacks read `lv_dropdown_get_selected()` on the event target
+(the event_cb carries no user_data). The rules live in pure statics
+(`include/ui_ams_edit_overlay.h#AmsEditOverlay`): `selection_from_slot()` keeps a
+value the catalog lacks as its own selected option, so an untouched open+Save
+writes nothing; `apply_family_change()` keeps the brand when it makes the new
+material, else Generic, resets the variant to Basic and drops the product.
+Re-picking the selected option is a no-op.
+
+**Layout.** Two layouts are always built and one is hidden by `bind_flag`: the
+split one (form left, colour column right) at the short landscape class, the
+stacked one elsewhere. They cannot be one `<if>`, because the engine refuses a
+`<repeat>` inside `<if>`. Each colour grid leads with `custom_color_swatch`
+(a count change rebuilds a `<repeat>` at the end of its row, so the fixed tile
+goes first), and `size_color_grids()` sets each grid's preset count from its
+measured width in whole rows: three in the split column, two in the stacked
+grid, one at the small class and below. It runs again from `on_activate()`,
+because the push sets the overlay's final width after the editor was built.
+Both grids size from the shared `swatch_grid_*` tokens and are padded by
+`swatch_grid_gap_half`, so every swatch, the edge rows included, has a 7 mm
+target (`COLOR_SWATCHES.md` § "Preset grids and touch targets"). A grid tap
+stages the colour; the custom tile and the summary swatch (the primary 44px
+colour entry) open the colour view. The ring follows `color_ring_index()`: the
+first visible preset that matches, else the custom tile (-2) for a colour none
+of the shown presets holds, else none. The split layout carries the
+temperature line under the form, where the colour column leaves room.
+Every non-swatch control reaches 44px: Reset to tag, More and the Add link sit
+in one short bar and reach it through `ext_click_area`, as the weight pill does.
+The editor fits without scrolling at 800x480, 480x320, 480x272 and 320x480,
+including the tag-badged worst case; only the opened More section scrolls.
+
+**The colour view** (`ams_edit_view` 2) holds the 30-swatch `color_swatch_grid`
+and the HSV picker (hex field, Select). `update_color_fit()` measures both panes
+with both shown against the overlay's content area, and `color_panes_fit()`
+(pure) says whether they fit side by side or stacked without scrolling
+(`ams_edit_color_fits`). Where they do (800x480 and larger) both show and the
+picker never covers a swatch. Where they do not (480x320, 480x272, 320x480)
+one pane fills the view at a time (`ams_edit_color_pane`): the presets lead
+with the grid's own custom tile (`lead_hidden="false"`), which swaps in the
+picker, and the picker's Presets button swaps back. Both panes are fixed-size,
+so the verdict is cached per room (`color_fit_room_w_`/`_h_`) and the subject
+moves only when it changes: each flip rebuilds the grid. A preset tap applies
+the colour and returns to the editor; Select applies the picker's.
+
+**Summary, temperatures, tags.** The summary line ("eSUN Silk PETG, Blue") and
+the temperature line follow the selection live: a picked product's range, else
+the material database's range once the selection moved, else the slot's stored
+values. A backend's `tag_reading()` drives a "from tag" badge (`tag_badge`
+component) on the summary and on every row whose shown value is the tag's
+(`ams::tag_provenance()` over the form's current values), and Reset to tag
+restores every field the tag states through `ams::reset_to_tag()`.
+
+**Spools in use elsewhere.** The picker list disables (state `DISABLED`, not
+clickable) every spool another lane of the primary backend links
+(`src/ui/filament/ui_ams_edit_overlay.cpp#render_spool_list`), because one physical spool
+cannot feed two places; a tool holds no spool of its own. The external spool
+editor runs with `slot_index_ == -2`, which is no lane, so every lane-linked spool is
+disabled there. The Home Active Spool widget opens that editor whenever no lane
+is loaded (`src/ui/panel_widgets/active_spool_widget.cpp#handle_clicked`), and the
+loaded lane's editor otherwise. Which spool becomes Moonraker's active spool is
+`architecture/07-filament-ams.md` § "Spoolman without AMS".
+
+**Saving.** Save in the header is dirty-gated, a More-field edit included. A
+spool picked in a picker-entry session (`open_on_picker`) commits at once
+(`commit_and_close()`); one picked from the editor's header button returns to
+the editor with the spool applied, to be saved. Back
+with unsaved edits asks Save or Discard; a dismissal keeps the editor open.
+On a Spoolman-linked slot an identity change (material, brand or colour) asks
+**Update in Spoolman** (`SpoolmanSlotSaver::LinkIntent::UpdateLinked`:
+find-or-create a filament and repoint the spool, never editing the shared
+filament record) or **Unlink, keep on this slot** (the logistics fields are
+dropped with the link). An untracked slot reaches Spoolman only through **Add to
+Spoolman + label** (`LinkIntent::CreateAndRebind`), which prints the new spool's
+label when a label printer is set up. The More fields (price, location, lot,
+notes) PATCH the spool the slot names, and only once that spool's record has
+landed: a picker relink or QR scan blanks them until the new record arrives,
+and a late record for a spool the slot no longer names is dropped.
+
+**Lifetime.** `show_for_slot()` resets every per-session field, because a
+picker-entry session reaches the editor without `enter_editor()`. One fetch of
+the linked spool feeds identity and More; a cover (keypad, QR scanner) drops it
+with `lifetime_`, and `on_activate()` re-arms it. Save completions are owed to
+Spoolman and the slot, so they run on `object_lifetime_`. Every save runs from
+a `SaveCapture` (`capture_save()`): the slot it commits, its original and saved
+values and the callback it began with. A Spoolman save and a More-field PATCH
+both finish from that capture through `commit_capture()`, so each commits even
+when the editor closed before Spoolman answered; only closing the editor checks
+that the session is still the one showing. Back, the weight keypad and the
+scanner stay shut while a save is in flight, so its completion never pops
+something pushed on top. While a save for a slot is still running, that slot's
+editor does not reopen ("Still saving this spool…"), so a newer session never
+edits the pre-save slot or races the late commit. A record landing after Reset
+to tag leaves the reset alone. Save with More edits whose record never loaded
+keeps them and says so; with Spoolman offline it commits the slot's own edits
+and keeps the More edits in the editor. A More PATCH that fails, or lands ahead
+of a Spoolman save that fails, is named in the toast. The More fields are all
+spool-level, so the editor never writes the shared filament record.
+
+### Error State Visualization
+
+Per-slot error indicators and per-unit error badges, driven by `SlotInfo.error` and `AmsUnit::buffer_health` from the backend layer. (The original 2026-02-15 error-state-visualization design doc is no longer in-tree; the data model below is the surviving summary.)
+
+**Data model** (`ams_types.h`):
+- `SlotError` — message + severity (INFO/WARNING/ERROR), `std::optional` on `SlotInfo`
+- `BufferHealth` - AFC buffer fault proximity data, `std::optional` on **`AmsUnit`**, not `SlotInfo`. A TurtleNeck sits between the hub and the toolhead, so it belongs to the unit; there is one per unit and it cannot say which lane it is regulating except through its own `active_lane` field
+- `AmsUnit::has_any_error()` — rolls up per-slot errors for overview badge
+
+**Detail view** (`ui_ams_slot.cpp`):
+- 14px error badge at top-right of spool (red for ERROR, yellow for WARNING), pulled from `SlotInfo` during refresh (same pattern as material/tool badge)
+
+**Path canvas** (`ui_ams_detail.cpp`):
+- Buffer fault tint on the hub, from the *displayed unit's* `buffer_health` (green / yellow / red by `distance_to_fault`), with Happy Hare's `sync_feedback_bias` feeding the same three states when there is no AFC buffer
+- Buffer presence and compressed/tension state, from that same `buffer_health.state`
+
+**Overview view** (`ui_panel_ams_overview.cpp`):
+- 12px error badge at top-right of unit card (worst severity across slots)
+- Mini-bar status lines colored by error severity
+
+**Backend integration**:
+- AFC: per-lane error from `status` field + buffer health from `AFC_buffer` objects, attributed to units by `apply_buffer_health_to_units()` (see the AFC section)
+- Happy Hare: system-level error mapped to `current_slot` via `reason_for_pause`
+- Mock: `set_slot_error()` / `set_unit_buffer_health()` + pre-populated errors in AFC mode
+
+### Clog / flow meter
+
+Three backend sources (encoder, Flowguard, AFC buffer) feed one set of `clog_meter_*`
+subjects, derived in `AmsState::sync_clog_meter_from_info()`
+(`src/printer/ams_state_clog.cpp`). Source precedence is **flowguard > encoder > AFC
+buffer** (then the legacy `clog_detection` flag), overridable per widget via
+`set_source_override()` (0 auto, 1 encoder, 2 flowguard, 3 AFC). A buffer's
+position is not clog detection and never reaches these subjects; see
+[Filament buffer reading](#filament-buffer-reading).
+
+**Last: a plain Klipper `filament_motion_sensor`** (`ClogMeterMode::Motion`, #1823),
+used only when the backend reports none of the three, whatever the override says,
+so it also covers printers with no AMS at all. `FilamentSensorManager::clog_motion_sensor()`
+picks it among the motion sensors Settings > Filament sensors lists and has enabled (AMS-owned
+sensors, `PrinterHardware::is_ams_sensor()`, are excluded): the one on
+the active lane, else the first armed one reporting no movement (the worst reading: an
+idle encoder keeps reading detected), else the first one Klipper has armed, else the first. It is a state,
+not a gauge (`motion_sensor_value()` -> `kMotion*Value`): moving is OK with an empty fill,
+a jam is the warning flag with a full fill, and a sensor Klipper has disarmed reads
+`ClogMeterStatus::Off`. No movement is a jam only while `print_job_running()` (printing
+or paused): outside a print there is nothing to move, and a backend may run the sensor
+as a presence switch (the U1's heads), so an idle empty sensor reads OK.
+There is no danger band or peak (`clog_meter_is_state()`). Sensor frames reach the meter
+without a backend sync through the manager's `filament_motion_signature` subject, which
+`AmsState::install_motion_sensor_observer()` watches; the meter also re-evaluates on
+every `print_lifecycle` change.
+
+**Two presentations, one model.** `UiClogBar` draws a wide horizontal scale,
+`UiClogMeter` a compact arc. Neither owns any interpretation:
+
+| Piece | Where | What it decides |
+|-------|-------|-----------------|
+| `ClogMeterSample` | `include/clog_meter_geometry.h` | `is_safe()`, `is_symmetrical()`, `status()` — pure, tested without LVGL |
+| `clog_bar_geometry()` | same | Track-local pixel layout for the bar |
+| `clog_meter_tint()` | same | Indicator colour, as token names rather than resolved colours |
+| `ClogMeterModel` | `include/clog_meter_model.h` | Subscribes to the five subjects once, publishes whole samples |
+
+Both renderers hold a `ClogMeterModel` and are handed a complete
+`ClogMeterSample` on every change — never a single changed field, or a renderer
+would position a new value against an old threshold for one frame. Anything both
+presentations must answer identically goes on the sample; when it lived in the
+renderers they drifted (the arc treated an untracked AFC buffer as "nothing to
+report" while the bar drew an empty track).
+
+Construct the model **last**, after the by-name widget lookups, and destroy it
+**first**, before clearing those pointers — its callback reads them. It also
+suppresses the initial observer fire, which lands while the owning renderer is
+still in its constructor.
+
+**One job per text slot.** The subjects are authored so no slot repeats another:
+`clog_meter_mode_text` names only the source, `clog_meter_center_text` is the one
+number, `clog_meter_label_{left,right}` are the axis ends and are **empty in the
+linear modes** (only Flowguard's two directions mean different faults).
+`clog_meter_status` is an int driving a glyph, not a status word.
+
+> `clog_meter_mode_text` is drawn in `ams_loaded_card.xml` under the arc, in a
+> content-sized meter column, from the medium breakpoint up (hidden below it).
+> Anything appended to it widens the meter row under the strip's lines. Keep it to
+> the source's name.
+
+**Where it renders:** `clog_bar_body.xml` is the bar itself at content height;
+`panel_widget_clog_detection.xml` and `buffer_status_modal.xml` embed it directly. The arc lives in
+`ams_loaded_card.xml`; `UiClogMeter` finds its named children (e.g.
+`clog_safe_icon`) there by name, and silently finds nothing if one is missing.
+
+**Mock scenarios:** `helix-screen ctl scenario <name>` drives the mock *backend*,
+so the whole derivation runs — `clog_healthy`, `clog_warning`, `clog_blocked`,
+`flowguard_neutral`, `flowguard_tangle`, `flowguard_tangle_boosted`, `flowguard_clog`, `buffer_safe`,
+`buffer_fault`, `clog_off`. The buffer-reading scenarios are listed under
+[Filament buffer reading](#filament-buffer-reading).
+
+**Note line.** The bar carries a note under its reading (`clog_meter_note_text`, hidden by
+`clog_meter_note_kind`): a tripped FlowGuard's reason, else tangle prevention active or boosted.
+The firmware reason wraps rather than ellipsizing; the two fixed phrases hold one line.
+`helix::ui::clog_meter_note()` holds the precedence.
+
+### AFC buffers: switched vs FPS_PSF
+
+`AFC_buffer` accepts `type: switched` (TurtleNeck, two endstops — the default and
+what every BoxTurtle ships with) or `type: FPS_PSF` (`AFCFPSBuffer`, AFC v1.2.0+),
+which reads an analog filament pressure sensor over ADC.
+
+An FPS buffer adds exactly three keys to `get_status`: `fps_value`,
+`smoothed_fps` and `set_point`. **`low_point`, `high_point` and `deadband` are
+config-only and never published**, so the tuning range cannot be read at runtime
+— `BufferHealth::fps_to_bias()` normalizes each side against the sensor's own
+0..1 rail instead. Read `smoothed_fps`, not `fps_value`: AFC's own
+advance/trailing triggers compare the smoothed one.
+
+The result lives on the unit's `BufferHealth`, and `helix::buffer_reading()` turns it
+into the same reading Happy Hare's sync feedback gives, so the buffer surfaces work on
+both without knowing the backend. OpenAMS lanes carry the same sensor the same way. A
+switched buffer sends none of these keys, leaves `fps_reported` false, and has no
+reading.
+
+> **Unverified on hardware.** The only AFC rig here is a BoxTurtle with a
+> switched buffer; its live status carries none of the FPS fields. The key names
+> and the scale come from a source read of AFC v1.2.0 (`a06f14d`).
+> `tests/unit/test_buffer_reading.cpp` pins `fps_to_bias()` on that scale, and
+> `tests/unit/test_afc_status_parse.cpp` feeds an `AFC_buffer` frame built from
+> that release's `AFCFPSBuffer.get_status()` through `afc::parse_buffer()`.
+> Re-check both against a real FPS_PSF buffer before trusting them.
+
+### Filament buffer reading
+
+A filament buffer sits between the feeder (AMS hub motor, Happy Hare gear) and the
+extruder and absorbs the speed difference between them. Its **reading** is where the
+slack sits right now: the feeder steers it toward a set point, so it moves all the time
+in a normal print. That is a different measurement from **clog detection**, which is how
+close the printer is to pausing: it accumulates over extruded distance and should sit
+near zero. The two never share subjects or widgets, and a printer can have either, both
+or neither.
+
+| | Buffer reading | Clog detection |
+|---|---|---|
+| Measures | Slack position, tight to loose around a set point | Distance toward a pause |
+| Sources | OpenAMS FPS (`lanes[].pressure` + `set_point`), AFC `FPS_PSF` buffer (`smoothed_fps` + `set_point`), Happy Hare `sync_feedback_bias_modelled` | Happy Hare encoder (`clog_detection` 1 or 2), Happy Hare FlowGuard (`flowguard.enabled`), AFC buffer fault distance (`fault_detection_enabled`), a CFS fork that publishes `path.buffer.active` |
+| Subjects | `buffer_*` | `clog_meter_*` |
+| Surfaces | Filament Buffer widget, loaded card slider, path box, Buffer Status modal | Clog Detection widget, loaded card arc, the modal's top bar |
+
+OpenAMS has a buffer reading and no clog detection (klipper_openams publishes none). A
+switched AFC buffer (TurtleNeck) has clog detection through its fault distance and no
+reading. An `FPS_PSF` buffer has both. Happy Hare has the reading and, with its encoder
+or FlowGuard, clog detection.
+
+| Piece | Where |
+|---|---|
+| FPS to bias | `BufferHealth::fps_to_bias()` (`include/ams_types.h`): AFC `FPS_PSF` carries its sensor as `AmsUnit::buffer_health` and nothing else; no backend writes `sync_feedback_bias` for it. A sensor with `BufferHealth::compression_only` (OpenAMS: 0 none .. 1 full, never tension) never goes through it: `buffer_reading()` makes it a fill reading |
+| Gauge kind | `BufferReading::gauge`: `BufferGauge::Bias` (two-ended, tight/loose: Happy Hare, AFC `FPS_PSF`) or `BufferGauge::Fill` (one-sided pressure, `compression_only`). A fill reading has `bias` 0, a `value_pct`, a `target_pct` (or -1) and a rail-based `status`; every consumer branches on `gauge`, never on a backend |
+| Which sensor | `buffer_reading(info, unit)` (`include/buffer_reading.h`): a unit's own pressure sensor; a unit with a switched buffer reads nothing; any other unit, and -1, reads the system: the sensor feeding the toolhead (`AmsSystemInfo::feeding_pressure_unit()`), else Happy Hare's `sync_feedback_bias` (only Happy Hare writes it) |
+| Which unit's rows | `buffer_view_unit(info, unit)`: the unit itself, else the unit the system reading came from, else 0. The path box and the modal both use it, so they name the same unit's AFC rows |
+| Bands and color | `pressure_status()`, `pressure_status_of_bias()` and `buffer_status_token()` in `include/clog_meter_geometry.h`; `buffer_lean()` for the words. A fill reading uses `fill_pressure_status()` (`kPressureFullWarningPct` 85, `kPressureFullFaultPct` 95, `kPressureEmptyWarningPct` 5 while loaded) and `pressure_target_side()` (`kPressureTargetDeadbandPct` 5) for "At / Above / Below target" |
+| Subjects | `AmsState` publishes the system-level reading as `buffer_present`, `buffer_slider`, `buffer_bias_pct`, `buffer_status`, `buffer_gauge` (0 bias, 1 fill), `buffer_value_pct` and `buffer_target_pct` (a fill reading's pressure and set point; -1 target without one), `buffer_label`, `buffer_value_text`, `buffer_short_text`, `buffer_target_text`, `buffer_lean_text` (`src/printer/ams_state_buffer.cpp`). `buffer_bias_pct` is 0 for a fill reading |
+| Text | `buffer_label()` ("FPS" for a pressure sensor, "Sync" for Happy Hare), `buffer_value_text()` / `buffer_short_text()` / `buffer_target_text()` ("target N%"), `buffer_lean_text()` |
+| History | `AmsState::buffer_trace(unit)`: a `BufferTrace` per unit and for -1, about 60 s stamped on `buffer_clock_ms()` (monotonic). Readings arrive on change, so each point holds until the next (a step line); a reading that never changes still draws across the window. A sensorless unit records the system reading, or a gap when there is none. Main thread only; dropped with the unit |
+| Renderer | `UiBufferSlider` (`include/ui_buffer_slider.h`) paints the slider (a bias reading) or the fill gauge (a fill reading), and optionally the trace, into XML-authored objects. Layout is pure: `buffer_slider_geometry()`, `buffer_fill_geometry()`, `buffer_fill_trace_y()`, `buffer_trace_polylines()` and `buffer_trace_unrecorded_x()` in `include/buffer_slider_geometry.h`, tested without LVGL. The trace redraws once a second so it scrolls with no new reading |
+
+**Colour rule.** From the bias (-1 tight .. +1 loose around the set point), one rule on
+every surface: below 0.3 neutral grey (`text_muted`), 0.3 up to 0.7 `warning`, 0.7 and
+above `danger`. A switched AFC buffer keeps its own two states, drawn in the `warning` and `success` tokens. A pressure reading
+with no set point has nothing to center on: a bias reading shows the pressure as text
+("Pressure: N%"), with no slider, no trace and no tint. The rule above is the **bias**
+rule. A **fill** reading (OpenAMS, `compression_only`) is not judged against its target at
+all: it is neutral until the pressure nears a rail (85% warning, 95% danger, 5% or under
+warning while the lane has filament loaded), and the words are "At target" (within 5
+points), "Above target" or "Below target"; with no set point it keeps the gauge and the
+rail colors and shows "Pressure: N%" with no word.
+
+**The number.** For a pressure sensor (AFC `FPS_PSF`, OpenAMS, source "FPS") it is the
+pressure as a percentage, `smoothed_fps * 100` rounded and clamped to 0..100, and the
+target is the sensor's set point on the same scale. They are different quantities: 32%
+against a 50% target means the sensor reads below where the unit tries to hold it, so
+the filament is running tight, and the bias is how far off that is. For Happy Hare
+(source "Sync") it is the sync-feedback bias as a signed percentage (-100 tight .. +100
+loose) and there is no target.
+
+**Modal liveness.** `BufferStatusModal` re-reads the backend, not the tick that woke it,
+on every `ams_data_revision` change and every `backend_count` change, so it follows the
+reading while open. When the backend goes away it reads an empty snapshot and falls back
+to the "does not report buffer or flow data" message instead of the last backend's rows.
+
+**Known gap.** The CFS clog source reads only the fork's `active` flag
+(`src/printer/ams_backend_cfs.cpp#parse_flat_box_status`'s buffer block), because the other
+buffer fields are undocumented. The Clog Detection widget can therefore appear with no
+distance data behind it.
+
+**The slider.** Drawn upright on every surface, as filament flows top to bottom on the
+path canvas: loose up, tight down. A housing on the filament strand with a dashed target
+window, faint end zones past 0.7 either way, and a grip block that rides the strand. Only
+the block moves and takes the status colour, so it cannot read as a progress bar. The
+trace is a 2 px step line with no panel behind it (`styles.buffer_trace_area`) over a
+very faint dashed target line. Each step is drawn in the colour of its own reading's
+band (`buffer_trace_segment_status`, the worse end for the step between two), so a
+past excursion stays visible in its colour. Newest is at the slider side, older readings
+run away from it, a status dot marks the newest end, and the part of the 60 s window
+with no history yet is a dotted baseline.
+
+**Surfaces.**
+
+| Surface | Content |
+|---|---|
+| **Filament Buffer** home widget (`filament_buffer`, `src/ui/panel_widgets/filament_buffer_widget.cpp`) | 1x1: the slider beside a big status-coloured number over its label. 2x1: the number with "target N%", the trace, then the label and the lean in words ("Running tight", "Running loose", "Balanced"; a compression-only fill reads "At target", "Above target" or "Below target"). No set point: 1x1 keeps the number over the label, 2x1 says "Pressure: N%". Tap opens the modal. Padding is the `buffer_tile_pad` token, so the tile keeps its padding at 480x320 |
+| Loaded strip (`ams_loaded_card.xml`) | Under the strip's two lines, while idle. From the medium breakpoint up a small slider (`buffer_mini_h`) over the short number and the FPS/Sync label; below medium the `swap_vertical` icon beside the short number, slider and label hidden. Hidden during any operation. The colour bar is `loaded_swatch_narrow_w` wide |
+| Path canvas buffer box (`ams_detail_buffer_box()`) | The existing labeled FPS/BUF box, tinted live by the color rule as the reading moves; a pressure with no set point is untinted. A fill reading passes no bias and tints only at a rail. Tap opens the modal on the buffer feeding the toolhead |
+| Buffer Status modal (`BufferStatusModal::show_for`, `buffer_status_modal.xml`) | The clog bar (hidden with no detector), then the tall slider with the reading, target and lean in words beside it, the trace and its caption ("last 60 s"), and the backend's own rows (Happy Hare spool motor, gear sync, flow; AFC state, distance to fault). Live while open; closes only with its X |
+
+A fill reading's tall gauge in the modal and the mini gauge on the card and widget share the slider's footprint; the modal's trace caption becomes "last 60 s · pressure, target dashed".
+
+The Clog Detection widget never shows a buffer reading. `show_for(-1)` opens the modal on
+the buffer feeding the toolhead.
+
+**No reading.** The widget's hardware gate is `buffer_present`, so with no reading it
+stays placed, dimmed and badged like any gated widget (the catalog lists it as
+unavailable with "Requires a filament pressure sensor or sync feedback") and comes back
+live when a reading appears. See [09-home-widgets.md](architecture/09-home-widgets.md).
+
+**Mock scenarios** (`src/remote/mock_scenarios.cpp`; `helix-screen ctl scenario <name>`),
+catalogued in [MOCK_ENVIRONMENT_VARIABLES.md](MOCK_ENVIRONMENT_VARIABLES.md#buffer-reading-scenarios):
+`buffer_fps`, `buffer_fps_loose`, `buffer_fps_on_target`, `buffer_fps_danger`,
+`buffer_fps_no_target`, `buffer_fps_with_clog` (any mock type but Happy Hare; the
+two-ended AFC `FPS_PSF` path), the one-sided `buffer_pressure_on_target`,
+`buffer_pressure_below`, `buffer_pressure_above`, `buffer_pressure_full`,
+`buffer_pressure_empty_loaded`, `buffer_pressure_empty_unloaded`,
+`buffer_pressure_no_target` and `sync_feedback_tight` (Happy Hare).
+
+### Two error channels
+
+A backend fault reaches the user through one of **two independent channels**. They are not alternatives and not a fallback pair — they are fed by different transports, fire at different moments, and a backend may implement either, both, or neither. Getting this wrong is how a fault double-surfaces or vanishes.
+
+| | **Channel A — line driven** | **Channel B — status driven** |
+|---|---|---|
+| Hook | `AmsBackend::classify_error(raw_line, ctx)` | `AmsBackend::current_error()` |
+| Transport | Moonraker `notify_gcode_response` | Moonraker `notify_status_update` |
+| Dispatched from | `GcodeErrorRouter::process_line()`, `src/application/gcode_error_router.cpp#on_notify_gcode_response` — **exactly once per line**, before the generic `error_classify::classify()` | `AmsErrorBridge::on_action_changed()`, `src/application/ams_error_bridge.cpp#on_action_changed` — **only on the rising edge** into `AmsAction::ERROR` |
+| Pre-filtering | **None.** Every response line is handed to every backend. Each override gates itself | The `AmsAction::ERROR` edge is the entire gate. A backend that never assigns that action is never asked, even if it overrides the hook |
+| Presentation | `decide_presentation()` → toast / modal / `MODAL_WITH_RECOVER` | `RecoveryModalPresenter::present()` directly |
+| Returning `nullopt` | Defers to `error_classify::classify()` | Falls through to the bridge's last-resort toast (`surface_unhandled_error()`) |
+
+**A fault standing while the print is paused.** Channel B also fires off the pause:
+`StandingFaultTrigger` (`include/ams_standing_fault.h`) raises a fault once when
+`current_error_with_cause()` has one while the print is paused (or, on the firmware, while no
+print runs), fed on every action, pause and `print_stop_reason` change, so it does not matter
+which came first or whether `error_state` was already set before the load that failed.
+`current_error_with_cause(cause)` is `current_error()` told by the stop reason (the newest `!!`
+line near the pause) or, outside a pause, the newest `!!` line within `kEventCauseWindowS`
+(`recent_gcode_error()`), since a queued `AFC.message` can be an earlier fault's; AFC also
+takes the faulted lane from it for Eject. The desktop presents it through `AmsErrorBridge`
+(the ERROR edge covers faults outside a pause); the firmware, which has no bridge, through
+`helix::ui::AmsStandingFaultDialog`, the AMS panel's loading-error dialog raised whether the
+panel is open or not. The panel's own dialog still stands aside for a backend with
+`current_error()` on both targets.
+
+**Per-backend gates and recovery sets:**
+
+| Backend | Channel A gate | Channel B gate | Recovery actions (`build_recovery_actions()`) |
+|---------|----------------|----------------|-----------------------------------------------|
+| **AFC** | `is_bang_line()`, then a `tool_end` jam/break/runout signature, else any pausing `!!` while `error_state_` | `error_state_` set (the stuck-action latch returns `nullopt` — that fault is ours, not AFC's) | Resume (primary, hot) · Unload (hot) *or* Eject lane (cold) depending on `tool_start_sensor_` · AFC_RESET (danger) |
+| **Happy Hare** | `is_bang_line()`, then an HH-authored `MMU issue` line (in a print `MMU issue detected. ...\nReason: <reason>`; outside one, where HH never pauses, `MMU issue: <reason>`), or any line while paused with a non-empty `reason_for_pause_`. The detail is the line's own reason (HH keeps only the first in `reason_for_pause`), newlines shown as ". " | — (HH publishes no Error `action`; a fault is `print_state: pause_locked` plus `reason_for_pause`, which the backend turns into the slot error and path highlight, cleared when the reason goes empty on resume or cancel) | Backend-derived; title is "Filament runout" when the detail says runout. `duplicates_firmware_prompt()` claims HH's own `Happy Hare Error Notice` prompt, which the presenter closes when the popup shows |
+| **AD5X IFS** | — | `AmsAction::ERROR`, raised by `evaluate_runout_locked()` or by an operation timeout | Runout: Resume (primary, hot) · Purge (hot): `_GOTO_TRASH`+`PURGE_FILAMENT` on zMod, else `M83`+`G1 E` · `IFS_UNLOCK` (danger, cold). Timeout: `IFS_UNLOCK` alone. **No "Load slot N"** — every IFS load path self-homes and trash-moves into the part |
+| **CFS** | **inverted** — `is_bang_line()` returns `nullopt`, so `!!` `key8xx` codes stay with the generic classifier. Claims only paused `respond_info` lines matching the auto-refill give-up wording | — (never assigns `AmsAction::ERROR`) | Resume (primary, hot) · Reset CFS = `BOX_ERROR_CLEAR` (danger, cold) |
+| **QIDI Box** | — | `AmsAction::ERROR`, raised by a negative `slot<N>` state word (blocked lane) | Lone dismiss — recovery gcode unknown, clearance is manual (#1041) |
+| **Snapmaker** | `is_bang_line()`, while paused or printing, then the firmware's `e<N> not edit filament` resume refusal, as "Filament not set" with `command_refusal` set (§ third channel below) | — | Lone OK dismiss: no one-tap gcode sets a filament type. Runout itself is the generic modal's, as below |
+| **ACE**, **Tool changer** | — | — | — (generic runout modal owns these; see below) |
+
+**There is a third channel, and it decides whether Channel A speaks at all.** When the fault
+originated in a macro *we* sent, the same rejection also comes back as the JSON-RPC error reply
+to our `printer.gcode.script` request — a third transport, arriving milliseconds before or
+after the `!!` line. `MoonrakerRequestTracker` decides on that reply who owns the report, and
+if the answer is "the caller's own UI", it records the message and `GcodeErrorRouter` skips its
+`!!` toast — Channel A never runs its presentation. This is why a backend's dispatch path must
+declare `caller_surfaces_errors` honestly: a log-only `on_error` that claims the report
+silences Channel A for a fault nobody saw. See `RPC_ERROR_OWNERSHIP.md`.
+
+A backend can take the other side of that trade for a refusal it explains better than the
+caller can. An `ErrorEvent` with `command_refusal` set is never suppressed as "already
+reported via RPC"; instead the caller routes its own report through
+`rpc_error_correlation::report_unless_explained()`, which the router claims when the active
+backend's `classify_error()` of the `!!` copy is a command refusal it will present. The
+caller's report then runs only if the explanation has not surfaced 1.5 s later. Resume
+(`dispatch_prepared_resume()`) and recovery-button sends (`RecoveryModalPresenter`) report
+this way, so the U1's `e<N> not edit filament` reads as "Filament not set" rather than a
+raw "Failed to resume:" toast. `RPC_ERROR_OWNERSHIP.md` § "A refusal the classifier
+explains" has the mechanism.
+
+**Why CFS inverts the usual gate.** Creality's box reports coded faults as `!!` lines carrying a `key8xx` JSON payload, which `error_classify::classify()` already decodes into a CRITICAL event (and a "Reset CFS" button for `key840`). Claiming those in `classify_error()` would either duplicate that path or silently replace it. The runout give-up messages ride the *other* half of the same channel — plain `respond_info` output that no classifier looks at — so taking non-`!!` lines and only non-`!!` lines is what keeps the two from colliding.
+
+**Cross-channel dedup — there are TWO ledgers, and they guard different pairs.** Both are exact-string, both prune on read, and confusing them leads to debugging the wrong window.
+
+| Ledger | Window | Guards | Recorded by | Checked by |
+|--------|--------|--------|-------------|------------|
+| `rpc_error_correlation` (`src/api/rpc_error_correlation.cpp`) | 1.5 s | JSON-RPC error reply ↔ the `!!` broadcast of the same rejection | `MoonrakerRequestTracker::route_response()`, only when `rpc_error_policy::decide()` says someone is definitely reporting it | `GcodeErrorRouter::already_reported_via_rpc()` (`src/application/gcode_error_router.cpp#already_reported_via_rpc`), including a re-check when the deferred toast timer fires |
+| `fault_surface_correlation` (`src/application/fault_surface_correlation.cpp`) | 3 s | Channel A ↔ Channel B | `GcodeErrorRouter` records every detail it surfaces | `AmsErrorBridge`'s fallback toast, and the router's own toast arms (`src/application/gcode_error_router.cpp#process_line`) |
+
+A merely-`silent` request records **nothing** in the RPC ledger. `silent` means "no automatic toast from us", not "the user was told" — recording on it would mute the `!!` copy for a failure that reached no one. Only a caller that declared `caller_surfaces_errors`, or the generic fallback actually firing, earns a record. See `RPC_ERROR_OWNERSHIP.md`.
+
+`RecoveryModalPresenter` separately dedups on `detail` **plus** the action set (a `command_refusal` event first clears that memory, since it answers the command just sent) — the action set is part of the identity because AFC legitimately emits byte-identical text on both channels with different affordances (#1171). Backends should populate `ErrorEvent::raw_detail` with the firmware's untranslated wording when `detail` has been rewritten, or the ledger has nothing the other channel can match.
+
+**Who owns the runout surface.** Both channels compete with a third, older surface: the generic sensor-driven modal (`FilamentRunoutHandler` on the pause edge, `PrintStatusWidget` when idle), gated by `RuntimeConfig::should_show_runout_modal()`. A fourth entry point, the home-panel "Filament Sensor" tile (`FilamentSensorWidget`), opens the same `RunoutGuidanceModal` on a deliberate tap while printing or paused, and `SensorSettingsOverlay` when the tracked sensor is disabled - see "The five dispatch surfaces" below. The rule is **one surface per printer**: that predicate returns false exactly for the backends in the table above that raise their own runout fault (AFC, Happy Hare, AD5X IFS, CFS), and true for hub backends that raise nothing (ACE, QIDI Box) — which the old blanket "is it a hub AMS" test silenced with nothing put in its place (#1250).
+
+Note that for AFC, Happy Hare, AD5X IFS and CFS the generic surface is *also* structurally blind: each claims its own sensors through `owns_filament_sensor()`, so `PrinterHardware::is_ams_sensor()` hides them from the wizard's sensor picker, they never get a `FilamentSensorRole`, and `FilamentSensorManager::has_real_runout()` skips them. The suppression above is belt-and-braces for the configs where an AMS lane sensor *does* carry a role (AFC's `...eN_filament` naming is the case `has_real_runout()`'s lane-mapping branch exists for).
+
+Every runout ALERT additionally requires the firmware to be *running* the sensor: Klipper's `filament_switch_sensor`/`filament_motion_sensor` status carries `enabled` (`SET_FILAMENT_SENSOR ENABLE=0/1`), and a stood-down sensor still reports `filament_detected` live but takes no runout action of its own, so `monitors_runout()` (config enabled + role + `state.enabled`) gates `has_any_runout()`/`has_real_runout()` and the edge toasts. Presence queries do NOT honour the firmware flag: `is_filament_detected()`/`is_sensor_available()` answer "is filament physically there" for the pre-print check (which runs between PRINT_END's `ENABLE=0` and PRINT_START's `ENABLE=1` and must still warn "No Filament Detected") and the toolhead load/unload buttons, so they read a stood-down sensor and only require config enabled; with several holders of a role they prefer the firmware-running one, then the first holder. The role subjects use the same pick, so the sensor tile keeps displaying what the hardware reports while the alert decisions ignore it. A sensor that has never reported the field counts as running, and a Moonraker delta omitting it does not reset it (#1714).
+
+---
+
+## Filament Op Dispatch: Which Surface Owns What
+
+More than one screen can start a Load. Every time one of them grew its own answer to
+"what do I do when there is no AMS backend?", the answers diverged: a full three-tier
+fallback on the Filament panel, a silent return in the AMS sidebar, and a navigate-away in
+both runout dialogs. The already-mounted guard existed only in the sidebar, so the same
+firmware no-op that the sidebar refused left the Filament panel's Load button spinning for
+the full 120 s guard timeout (bundle 9KRXZ62P). On Snapmaker U1 the two surfaces sent
+*different G-code for the same button label* — `T{n}`, which seats the carriage and feeds
+nothing, versus `AUTO_FEEDING EXTRUDER={n} LOAD=1`.
+
+The decision is now one shared, display-free layer; the surfaces own only how the answer is
+presented.
+
+| Header | Owns |
+|--------|------|
+| `include/filament_op_dispatch.h` | `plan_load()` / `plan_unload()` — which tier, which backend call, or which refusal. Also `unload_target_is_loaded()`. Header-only, takes plain values (`AmsSystemInfo` + `BackendCaps`), no `AmsBackend*` |
+| `include/filament_op_slot_resolver.h` | `resolve_op_button_slot()` — which slot a tool's buttons act on; `compute_op_button_gating()` — whether Load/Unload are enabled |
+| `src/ui/filament_op_router.{h,cpp}` | Tiers 2 and 3: `dispatch_filament_macro()` with its `ParamPolicy`, the shared `MacroParamModal`, and `filament_load_fallback_gcode()` / `filament_unload_fallback_gcode()` / `filament_purge_fallback_gcode()` |
+| `include/filament_op_execute.h` | `execute_filament_load()` / `execute_filament_unload()` / `execute_filament_purge()` - shared EXECUTION of a plan once `plan_load()`/`plan_unload()` has picked the tier: switches over `FilamentTier`, dispatches the configured macro or falls back to raw gcode. Used by `PrintStatusWidget`, `FilamentRunoutHandler`, and `FilamentSensorWidget` |
+
+Tier 1 deliberately stays with the callers on `FilamentPanel` and `AmsOperationSidebar` - the
+backend call there is inseparable from each surface's own guard, stepper, and spinner
+bookkeeping (the preheat state machine on the sidebar, `operation_guard_` and the on-button
+spinner on the panel). The other three surfaces share one execution layer instead
+(`filament_op_execute.h`) because none of them carry that kind of surface-owned bookkeeping.
+
+### The five dispatch surfaces
+
+| Surface | Entry point | Raised by | Dispatches? |
+|---------|-------------|-----------|-------------|
+| Filament panel | `FilamentPanel::execute_load()` / `execute_unload()` | The Load / Unload buttons on the Filament nav panel | Yes - full ladder, `ParamPolicy::Prompt`, own execution |
+| AMS operation sidebar | `AmsOperationSidebar::handle_load_with_preheat(slot)` / `handle_unload(slot)` | Slot grid + context menu on the AMS panel and the AMS Overview panel (both own a `unique_ptr` to one) | Yes - full ladder, `ParamPolicy::Prompt`, own execution |
+| Mid-print runout dialog | `FilamentRunoutHandler::dispatch_load()` | `RunoutGuidanceModal`'s Load button during a print or runout pause | Yes - full ladder, `ParamPolicy::Suppress`, via `filament_op_execute.h` |
+| Idle runout dialog | `PrintStatusWidget::show_idle_runout_modal()` | A real runout detected while STANDBY / COMPLETE / CANCELLED | Yes - `PrintStatusWidget::dispatch_load()` calls `filament_op_execute.h` directly (`src/ui/panel_widgets/print_status_widget.cpp#set_config`); it does not hand off to the Filament panel |
+| Home tile | `FilamentSensorWidget::handle_click()` | Tap on the "Filament Sensor" home-panel tile | Depends on state - disabled sensor opens `SensorSettingsOverlay` (no dispatch); printing shows `RunoutGuidanceModal` status-only (no dispatch); otherwise the full Load/Unload/Purge modal dispatches via `filament_op_execute.h`, same as the runout dialogs |
+
+None of the five surfaces navigate away to dispatch anymore. `plan_load()` /
+`plan_unload()` answer the tier decision for all of them; `filament_op_execute.h` runs
+that decision for the three surfaces above that don't own a per-surface execution ladder.
+
+**The head picker** (`BatchFilamentModal`, `include/ui_batch_filament_modal.h`) is what the
+sidebar's Load and Unload open, described in
+[§ Backend-neutral filament operations](#backend-neutral-filament-operations). It decides
+nothing: it hands the chosen heads back to the sidebar. One head takes the per-slot path
+above; several (a backend whose `max_heads_per_filament_op()` is above one, the Snapmaker
+U1 today) run through `load_filament_batch()` / `unload_filament_batch()`, which route
+through the same `run_filament_op()` executor as a single-slot op. The per-backend script
+shapes live in each backend's doc ([Snapmaker U1](FILAMENT_BACKEND_SNAPMAKER_U1.md)).
+
+### Backend-neutral filament operations
+
+**Load and Unload mean filament on every printer.** They never mount or park a tool:
+mounting is the toolhead tap (`offer_tool_change()`, `include/tool_change_request.h`) and
+the sidebar's Mount cell, parking is `request_tool_park()`. A backend that needs a tool on
+the carriage to feed it mounts the tool inside its own load. The UI never asks which
+backend it is on: `scripts/check_filament_ops_neutral.py` fails a `get_type()` call or an
+`AmsType::` name in the filament-op files.
+
+The backend answers per-head questions (`include/ams_backend.h`, "Heads"), none of which
+read the current tool or slot:
+
+| Query | Answers |
+|-------|---------|
+| `filament_head_count()` | Nozzles filament is fed into. 1 on a shared toolhead |
+| `head_for_slot(slot)` | The head a slot feeds; nullopt for one routed nowhere (an unrouted multiACE bay) |
+| `head_source_slot(head, info)` | The head's Assigned Tool slot: what a Load feeds |
+| `head_filament_ops(head)` | `FilamentOpSupport` per direction (Automatic, Manual, Unavailable) with a translated reason for anything but Automatic |
+| `head_has_filament(head)` | Filament an Unload would act on; nullopt where nothing senses it |
+| `max_heads_per_filament_op()` | How many heads one op may name; above one means a batch |
+| `supports_reset()` | Whether the sidebar's Reset means anything (a trait) |
+
+`include/filament_action_set.h` turns those answers into what a surface offers, as plain
+values a test can build: `read_filament_head_view()` (`include/filament_op_execute.h`)
+reads a `FilamentHeadView` off the live backend, and three pure functions decide.
+
+- `decide_filament_actions()` is the sidebar. Load opens the head picker on every printer;
+  Unload is one tap on one head and the picker on several. A docking machine
+  (`carriage_can_be_empty()`) where no head has an automatic filament op shows **Mount...**
+  and **Park** in their place. Where heads dock and a feed exists, Park stands beside Load
+  and Unload. A direction no head can do by machine is disabled with the head's reason,
+  shown in the line under the grid.
+- `decide_slot_actions(view, head)` is the slot context menu. Load and Unload stay,
+  disabled with the head's reason where it is not automatic; a head with no automatic op
+  on a docking machine adds Mount (disabled with "Already mounted" on the mounted one) and,
+  on the mounted head, Park.
+- `decide_head_picker_rows(view, op)` is the picker. A row names the slot the op uses; a
+  head with no assigned slot is disabled with "Assign a slot first". The preselection is
+  the selected head, else the mounted one, and only when that head can act. It is a
+  preselection, never a precondition.
+
+Busy and print gating disable every action with no reason (the stepper or the print says
+why). The shared executor (`execute_filament_load()` / `execute_filament_unload()`) and
+the sidebar's per-slot handlers refuse a non-automatic head through
+`notify_if_filament_op_unavailable()`, which toasts the reason and sends nothing, so a
+runout dialog or the sensor tile explains instead of mounting. The runout surfaces take
+their head from the runout itself: `FilamentSensorManager::real_runout_lane()` through
+`runout_target_slot()`.
+
+| Backend | Heads | Load / Unload |
+|---|---|---|
+| Happy Hare, AFC (one extruder), ACE, CFS, QIDI, AD5X IFS, OpenAMS | 1 | Automatic |
+| Snapmaker U1, multiACE | 4 | Automatic, batch of 4; a multiACE bay maps to its routed head |
+| Creator 5 with the afclite feed | one per tool | Load Automatic (the feed), Unload Manual (cut at the head) |
+| MedusaHC (one extruder drive) | one per tool | Automatic: the backend mounts the tool, heats, prompts the operator, purges and restores the carriage ([FILAMENT_BACKEND_MEDUSAHC.md](FILAMENT_BACKEND_MEDUSAHC.md#loading-and-unloading-filament)) |
+| klipper-toolchanger with no feed | one per tool | Manual: the sidebar shows Mount and Park |
+| AFC with a toolchanger | one per tool | Automatic: Load is `CHANGE_TOOL LANE=<lane>` and AFC swaps heads itself |
+
+### The dispatch ladder
+
+| Order | What runs | Chosen when |
+|-------|-----------|-------------|
+| 0 `FilamentTier::Macro` (**user override**) | The macro the user assigned in Settings > Printing > Macro Buttons, via `dispatch_filament_macro()` | `StandardMacroInfo::get_source() == MacroSource::CONFIGURED`. Outranks everything, on load and unload alike |
+| 1 `FilamentTier::AmsBackend` | `load_filament()`, `unload_filament()`, or `change_tool()` — carried in `FilamentOpPlan::ams_call` / `ams_arg` | A backend owns the operation (see the asymmetry below) |
+| 2 `FilamentTier::Macro` (auto-detected) | The `StandardMacroSlot::LoadFilament` / `UnloadFilament` we pattern-matched, or a `HELIX_*` fallback | No tier 1, and the slot is non-empty |
+| 3 `FilamentTier::RawGcode` | `filament_load_fallback_gcode()` (fast bowden move, then a slow push into the melt zone) or `filament_unload_fallback_gcode()` (tip-shape, then a long retract) | Nothing else is configured |
+| — `FilamentTier::Refused` | Nothing. `FilamentOpPlan::refusal` says why | See the refusal table |
+
+**Order 0 keys on the SOURCE of the macro, not its presence.** `plan_load()` and
+`plan_unload()` take `macro_available` and `macro_user_configured` separately, and only the
+latter jumps the backend. The distinction is load-bearing: the auto-detector matches
+`QUIT_MATERIAL` for `UnloadFilament`, so on a CFS printer a presence-based rule would hand
+every bypass unload to a vendor macro that cannot finish the job (see
+[§ CFS bypass: why the two vendor macros are not symmetric](#cfs-bypass-why-the-two-vendor-macros-are-not-symmetric)).
+
+An override **replaces** the backend call rather than running alongside it, so the backend's
+bookkeeping goes with it — on AFC that means `TOOL_UNLOAD` does not run, and lane state and
+shuttle parking become the macro's responsibility. That is the intended meaning of the
+setting: a user with extra steps to run gets to own the whole operation. It is documented for
+users in `docs/user/guide/filament.md`.
+
+`AmsCall::ChangeTool` carries a **tool number**, not a slot index — it comes from the target
+slot's `mapped_tool`. Every other call takes the slot.
+
+| Refusal | Meaning | Reached from |
+|---------|---------|--------------|
+| `SelectSlot` | The backend wants a slot and none resolved | Load only |
+| `NothingLoaded` | No slot resolved, or nothing at that slot worth pulling | Unload only — its *only* refusal |
+
+### Stock load macros that are one step of a wizard
+
+Some firmware's own screen treats its load macro as the first step of a wizard and sends
+the rest itself. Each such macro is a row in `kMacroProfiles`
+(`src/printer/filament_macro_profiles.cpp`) carrying a `GuidedLoadProfile`: its temperature
+parameter and default, the status that reports the wait, and the step scripts as `{temp}`
+templates. Today that is QIDI's `M604`. Generic code never sees those pieces: it asks
+`guided_load(macro, sent_params)` for rendered scripts (the profile picks its own temperature
+out of the params), sends `guided_load_status_query()`, and reads the reply with
+`guided_load_waits()`. When the macro tier's load succeeds and the macro has a wizard,
+`start_guided_load()` in `src/ui/filament/filament_op_execute.cpp` does exactly that and opens
+`GuidedLoadModal` (`src/ui/filament/ui_guided_load_modal.cpp`). The modal declines to open while a
+job holds the machine (`GuidedLoadModal::opens_during()`, over `job_holds_machine()` in
+`include/print_lifecycle_state.h`): a load is allowed on a paused print for runout recovery,
+but the wizard's Extrude and Done are motion-gated during a job and its cleanup would cool
+the nozzle under the paused print. While a step runs it offers Cancel. For `M604`:
+
+| The printer reports | The modal opens on | Steps |
+|---|---|---|
+| The waiting value (`push_filamenting`: QIDI 01.01.02.x) | Push filament in | a 0-to-1 edge on `filament_runout_detected`, or Extrude, sends the feed (`bit_filamenting` + `M604 T1`); then the question; Done sends the flush (`M604 T2`) |
+| Anything else, or no answer (QIDI 1.1.x: no such object) | Is new filament coming out | Extrude more sends `M604 T1`; Done sends the cleanup only |
+
+Every ending sends the cleanup (`M104 S0`, `ENABLE_ALL_SENSOR`): the macro leaves the nozzle
+hot and the filament sensor switched off. A cancel on the waiting generation also releases
+the printer's load state (`SET_PRINT_MAIN_STATUS MAIN_STATUS=ready`). Commands only the
+waiting generation knows are never sent to the other: an unknown command aborts the whole
+script it sits in. `GuidedLoadFlow` (`include/guided_load_flow.h`) makes every decision
+without UI or I/O, so `[guided_load]` tests it directly; `helix-screen ctl demo guided-load`
+and `guided-load-confirm` open the two starting views on `guided_load_example()`.
+
+A second firmware with a wizard of the same shape is one more row in that file. One whose
+steps differ grows `GuidedLoad` and the flow, never the callers.
+
+The unload side has the matching question: `filament_macros::restore_after()` names what a
+stock unload leaves undone (a column of the same table; `M603`: `ENABLE_ALL_SENSOR`), sent
+after the macro tier's unload and appended by `AmsBackendQidi` to its own `M603`.
+
+### One deliberate asymmetry between load and unload
+
+**Bypass falls through on load and stays on the backend for unload.**
+
+`plan_load()` gates tier 1 on `caps.present && caps.requires_slot_selection_for_load`, not on
+the backend merely existing. `AmsBackend::requires_slot_selection_for_load()` defaults to
+`!is_bypass_active()`, so an active bypass drops past the backend to an auto-detected
+`LOAD_FILAMENT` macro — on a stock Creality printer that is `LOAD_MATERIAL`, and it is how a
+bypass spool loads at all.
+
+`plan_unload()` gates tier 1 on `caps.present` alone, because the CFS backend has to own the
+bypass unload: the vendor's `QUIT_MATERIAL` does not finish it. See the next section.
+
+There used to be a second reason recorded here — that AFC runs the user's unload macro as part
+of its own unload, so tier 2 would run it twice. That hazard belonged to a design where both
+fired; order 0 above *replaces* the backend call, so an override runs exactly once.
+
+Load/unload dispatch is not the only thing bypass reaches — it also suppresses both pre-print
+filament gates. See [§ Bypass suppresses the pre-print filament gates](#bypass-suppresses-the-pre-print-filament-gates).
+
+### CFS bypass: why the two vendor macros are not symmetric
+
+Creality ships an external-spool pair alongside the `BOX_*` family, and only half of it is
+self-sufficient. Both verified on a K2 Plus, 2026-08-19, by watching the extruder axis:
+
+| Macro | What it does | Extruder delta measured |
+|-------|--------------|-------------------------|
+| `LOAD_MATERIAL` | `BOX_GO_TO_EXTRUDE_POS` / `FILAMENT_RACK_SAVE_FAN` / `FILAMENT_RACK_PRE_FLUSH` / `FILAMENT_RACK_SET_TEMP` / `FILAMENT_RACK_FLUSH` / park + `SET_COOL_TEMP`. Feed and purge both gated on the toolhead switch | **+370 mm** — a complete load |
+| `QUIT_MATERIAL` | `BOX_GO_TO_EXTRUDE_POS` / `FILAMENT_RACK_SET_TEMP` / `BOX_MOVE_TO_CUT` / `G0 E-10` / park + `SET_COOL_TEMP` | **-13.99 mm** — filament still gripped by the gears |
+
+The asymmetry is in `[box]` itself: `tn_extrude = 140` against `tn_retrude = -10`. A bay unload
+only needs the extruder to break its grip because the box's own feeder motors reel the
+remaining ~130 mm back down the tube. **A bypass spool has no feeder**, so the extruder has to
+cover the whole path alone.
+
+`AmsBackendCfs::bypass_unload_gcode()` therefore emits `QUIT_MATERIAL` plus an 80 mm retract of
+its own; `bypass_load_gcode()` emits `LOAD_MATERIAL` bare, because nothing is missing there.
+80 mm because the release point measured near 64 mm (`QUIT_MATERIAL`'s 14 plus 50 more by hand
+before the filament came free), and it is the length `filament_unload_fallback_gcode()` already
+uses for the same physical job.
+
+This is also why an auto-detected `QUIT_MATERIAL` must not outrank the backend: it is a real
+unload macro, it matches the detector, and on bypass it silently leaves filament in the
+extruder.
+
+### Load-vs-swap and already-mounted exist only on the load side
+
+A machine with filament already seated cannot simply feed another lane, so when
+`needs_unload_before_load(info)` is true and the target slot has a `mapped_tool`, `plan_load()`
+rewrites the call to `change_tool(mapped_tool)`. Centralized so the UI and the backend agree
+(#968). A target with **no** tool mapping falls through to a plain `load_filament()` rather
+than synthesising an unload: every backend that arm could reach already chains the unload
+inside its own load (ACE's `change_tool()` *is* `load_filament()`; QIDI prepends the unload
+itself; AFC's `CHANGE_TOOL` is the toolchange verb), and Happy Hare — the one backend whose
+`load_filament()` is a bare `MMU_LOAD GATE={n}` — is precisely the backend the UI is
+forbidden to help (`allows_implicit_chaining()` is false, #1229). Unload asks none of this.
+
+Neither asymmetry is visible in `plan_unload()`'s signature, which is why both call sites
+carry a comment saying so. Read `include/filament_op_dispatch.h` before "fixing" either.
+
+### Shared policy vs per-surface presentation
+
+**Shared — one answer, in the planner.** A second answer here is a user-visible bug.
+
+| Question | Answered by |
+|----------|-------------|
+| Which tier does this operation take? | `plan_load()` / `plan_unload()` |
+| Is this a fresh load or a swap? | `plan_load()` via `needs_unload_before_load()` -> `AmsCall::ChangeTool` |
+| Can this head's Load or Unload run on this printer at all? | `AmsBackend::head_filament_ops()`, asked through `filament_action_set.h` and `notify_if_filament_op_unavailable()` |
+| Is there anything at this slot to unload? | `unload_target_is_loaded()` — actively loaded, **or** filament at the toolhead, **or** it is the current slot (the runout-recovery case, #995 / #1199). The `kActiveHeadSlot` sentinel (-1) counts only while the backend reports the toolhead unaccounted (#1324) |
+| Which slot do this tool's buttons act on? | `resolve_op_button_slot()` |
+| Are Load / Unload enabled right now? | `compute_op_button_gating()` — load state *and* print state |
+| How does a plan actually run? | `filament_op_execute.h` - `execute_filament_load()` / `execute_filament_unload()` / `execute_filament_purge()`, shared by `PrintStatusWidget`, `FilamentRunoutHandler`, `FilamentSensorWidget`, the external-spool menu, bed drying, and the panel's and sidebar's macro tiers |
+| Must the nozzle heat first, to what, and when is it hot? | `filament_op_heater.h` - `decide_preheat()` (pure rule) and `FilamentOpHeater` (owned by `SubjectInitializer`, `get_filament_op_heater()`). Every `execute_filament_*()` runs through it; the panel's extrude/retract/purge and the sidebar's tier-1 ladder call `run_after_preheat()` directly. It cools down only what it heated for (a hand preheat or a self-heating backend is not its to turn off), and abandons a preheat whose target never lands, that runs past its timeout, whose target is taken away, or that a print start overtakes |
+
+**Per-surface — presentation, and correctly different.**
+
+| Surface | Owns |
+|---------|------|
+| `FilamentPanel` | `begin_operation_guard()` / `operation_guard_`, the `backend_op_active_` gate on `ams_action_observer_`, the on-button spinner (`op_started` / `op_succeeded` / `op_failed`), and `navigate_to_ams_panel()` on `SelectSlot` |
+| `AmsOperationSidebar` | The step model (`start_operation(StepOperationType::LOAD_FRESH / LOAD_SWAP / UNLOAD)`, which marks the operation busy with its first step's projected action, `HEATING` for the legacy bar) and the Heat step drawn from `FilamentOpHeater`'s progress reports (`run_backend_op_after_preheat()`) |
+| `FilamentRunoutHandler` | Staying put. Every outcome is a toast; navigating would tear down the dialog the user is standing in |
+| `FilamentSensorWidget` (home tile) | No navigation either - toast-only refusals, and the modal stays up for a repeated Purge tap. Also owns the tap-routing decision itself (`decide_tap_destination()` in `filament_widget_tap_policy.h`): disabled sensor vs. printing vs. everything else |
+| All of the above | Toast copy, and whether to toast at all. On a *dispatch* failure that is not purely presentational: the send's `caller_surfaces_errors` says whether this surface's `on_error` really shows the user something, and a surface that claims it silences `GcodeErrorRouter`'s `!!` report of the same rejection. A surface that only logs must pass `false` — see `RPC_ERROR_OWNERSHIP.md` |
+
+Two consequences worth naming, because they look like bugs and are not:
+
+- **The sidebar is silent on a refusal; the panel toasts.** The AMS grid already highlights
+  the mounted slot and greys the unpickable ones, so a toast there narrates what the user
+  can see. On the Filament panel the button is the only feedback there is.
+- **Tool changers skip the sidebar's stepper and the preheat.** `SELECT_TOOL` owns its own
+  heat sequence (the backend claims `supports_auto_heat_on_load`, so `preheat_skip_reason()`
+  skips) and the backend sets `SELECTING` at dispatch, resolving on the macro ack (#1183);
+  an optimistic `HEATING` stepper would fight it. Only the *decision* is shared.
+- **A preheat outlives the surface that asked.** A dialog can be dismissed and the AMS panel
+  closed mid-heat; `FilamentOpHeater` runs the op once the nozzle is hot either way. The same
+  request again (op, slot and owning surface) while it waits cancels it (the heater goes back
+  off if it was off); a different op from the same surface is refused with a toast, since the
+  runout dialog stays open after Load offering Purge; a request from another surface replaces
+  it. A reload asked for during a pause is dropped when the pause ends (Resume sits on the
+  same open dialog), so it never runs into the resumed print. A surface whose user
+  waits on the op's end sets `FilamentOpSurface::on_preheat_ended` (bed drying does), which
+  also fires when its own request is not run. The cooldown afterwards turns off the
+  extruder that was heated, which need not be the active one.
+- **The optimistic action outlives backend silence.** A backend that declares
+  `BackendTraits::holds_optimistic_action` (Happy Hare, Snapmaker U1) sets no action at dispatch and
+  reports `IDLE` through the UI preheat and until its firmware starts, and every sync (the
+  sidebar's 1.5s stall watchdog included) would copy that. For those, `start_operation()`
+  calls `AmsState::hold_optimistic_action()`, so a backend `IDLE` leaves the action alone
+  until the backend reports a busy action of its own, which takes over for the rest of the
+  operation. Dispatch restarts the budget (`hand_operation_to_backend()`). The hold ends on
+  a refused dispatch, a backend `kEventError` (Happy Hare emits one when its gcode or the
+  pre-op G28 fails, the U1 when its `AUTO_FEEDING` fails), a backend
+  `kEventLoadComplete` / `kEventUnloadComplete` (the U1 raises one when its
+  `AUTO_FEEDING` answers OK), an abandoned preheat (sidebar torn down, or the nozzle target taken
+  away), a backend swap, or the budget running out (prestonbrown/helixscreen#1057).
+
+Two more where the surface deliberately does **not** use the plan's value:
+
+- An op that waited on a preheat **re-plans** when the nozzle is hot instead of replaying the
+  plan computed before heating (the executor's deferred path, the sidebar's
+  `dispatch_backend_load()`) — the firmware may have picked up or dropped a tool while
+  the nozzle came up, which flips load-vs-swap.
+- The sidebar passes its caller's raw `slot_index` to `unload_filament()`, **not**
+  `plan.ams_arg`: its own Unload button means "whatever is active" and passes `-1`, which the
+  AD5X IFS backend keys on to send `IFS_REMOVE_CURRENT_PRUTOK`. The Filament panel does the
+  opposite and passes its resolved slot explicitly, because re-resolving `current_slot` inside
+  the backend was the U1 wrong-tool unload bug.
+
+### The lifetime hazard in tier 2
+
+`helix::get_macro_param_modal()` returns the one `MacroParamModal` every prompting surface
+shares, a `lazy_global` that lives for the printer session. `MacroParamModal` stores its
+`on_execute_` callback and **does not clear it on dismiss**; only the next `show_for_*()`
+overwrites it. A callback handed to that modal can therefore fire arbitrarily later, long
+after the object that built it is gone.
+
+| Surface | Lifetime | What tier 2 must capture |
+|---------|----------|--------------------------|
+| `FilamentPanel` | Immortal singleton | Bare `[this]` is safe, annotated `[L012]` |
+| `AmsOperationSidebar` | `unique_ptr` on the AMS / AMS Overview panel — destroyed when the panel closes | **Must** capture `lifetime_.token()` and re-enter through `token.defer(tag, ...)`, which re-checks the generation on the main thread. A bare `this` here is a live use-after-free |
+| `FilamentRunoutHandler` | Owned by the print-status panel | Uses `ParamPolicy::Suppress`, so `run` fires synchronously inside `dispatch_filament_macro()` and is never retained |
+
+`ParamPolicy::Suppress` is not only a lifetime dodge — it is required for any surface that
+already owns a dialog. A `MacroParamModal` raised from the runout dialog would stack on top of
+a live modal whose observers keep firing underneath it.
+
+`dispatch_filament_macro()` returns **true when a prompt was raised**, which is exactly the
+"your callback outlived this call" signal. `false` means `run` already executed, before the
+call returned: with an empty `MacroParamResult` (Suppress, or a macro that takes no
+parameters), or with the surface's known values when they fill every parameter a
+`KNOWN_PARAMS` macro takes, and no prompt. Tests reach the prompt branch without a screen via
+`set_filament_param_prompter()`; pass a default-constructed `ParamPrompter` to restore the
+shared modal.
+
+The known values the Filament panel and the AMS sidebar pass are
+`nozzle_temp_prefill()`: the hotter of the live extruder target and the material the surface
+would preheat for, offered as `EXTRUDER_TEMP` / `NOZZLE_TEMP` / `TEMP` to Load and Unload and
+as `PURGE_TEMP` to Purge. It shares `filament_op_nozzle_temp()` with the sidebar's backend load,
+but not the temperature that rule is fed: the backend load raises the material to the latched
+last non-zero target (Swap Preheat, below), while the prefill raises it only to the live target,
+so a nozzle whose target is 0 is offered the material temperature alone.
+
+Load and Unload reach the shared executor with those values through
+`FilamentOpSurface::macro_prefill`, which only `FilamentPanel::op_surface()` and
+`AmsOperationSidebar::op_surface()` set; the panel's Purge and the sidebar's no-backend Unload
+pass them to `dispatch_filament_macro()` directly. Every other executor surface keeps the hook
+unset and runs `ParamPolicy::Suppress`, which sends no parameters at all.
+
+Nothing is offered at or below the printer's minimum extrusion temperature
+(`temperature::extrusion_floor_c()`, rounded up to a whole degree), or above the hotend's
+`max_temp` (`temperature::nozzle_max_temp_c()`). M109 returns within a degree of its target and
+Klipper compares its smoothed temperature with the minimum, so a nozzle heated to exactly the
+minimum can still be refused; a target above `max_temp` is refused outright. A nozzle parked at a
+standby temperature, or a material hotter than the hotend allows, opens the dialog instead.
+
+### Rules for contributors
+
+**Adding a fifth dispatch surface.** Do not write another ladder.
+
+1. Read the backend's answers into a `BackendCaps` (`present`,
+   `requires_slot_selection_for_load()`, `needs_unload_before_load(info)`, `get_type() ==
+   AmsType::TOOL_CHANGER`) — the existing surfaces do this in three or four lines each.
+2. Call `plan_load()` / `plan_unload()` and `switch` on `plan.tier`. Handle all four arms,
+   including `Refused`.
+3. Tier 1 is yours (the backend call sits inside your own guard/stepper bookkeeping). Tiers 2
+   and 3 come from `dispatch_filament_macro()` and the two fallback-G-code helpers — do not
+   re-derive either.
+4. Pick a `ParamPolicy`: `Suppress` if your surface already owns a dialog, `Prompt`
+   otherwise. If you pick `Prompt` and you are not immortal, capture a lifetime token.
+5. Add a case to `tests/unit/test_filament_dispatch_surfaces.cpp` — its whole point is that
+   all surfaces answer the same question the same way.
+
+**Adding a new backend.** Do not add a UI branch for it. The plan is driven entirely by
+`requires_slot_selection_for_load()`, `needs_unload_before_load()`, `is_bypass_active()`,
+`get_type()`, `slot_is_actively_loaded()`, and `slot_has_filament_at_toolhead()`. If the plan
+is wrong for your hardware, the fix is in one of those predicates or in
+`filament_op_dispatch.h` — never in a surface. See also "Per-Slot Load Authority" and
+"Developer Guide: Adding a New Backend".
+
+**Deciding whether a new question is shared policy or presentation.** In order:
+
+1. *Would two surfaces answering it differently be a bug the user could see?* Yes -> shared.
+   The four divergences above all failed this test.
+2. *Does the answer depend on the printer, the firmware, or the backend — or on which screen
+   the user is standing on?* Printer -> shared. Screen -> presentation.
+3. *Does answering it need a widget, a timer, a stepper, or `this`?* If yes it cannot live in
+   the planner, which takes plain values by design so the whole decision compiles and runs in
+   a binary with no printer and no display (`tests/unit/test_filament_op_dispatch.cpp`,
+   `test_filament_op_slot_resolver.cpp`). If a question fails 3 but passes 1, split it: the
+   *rule* goes in the planner, the *effect* stays in the surface. That split is exactly what
+   `plan.ams_call` is.
+
+---
+
+## Swap Preheat: Hold Previous Filament Temp
+
+When a user switches filament, the nozzle must stay hot enough to purge the material already in the melt zone. Dropping straight to the new material's temperature (e.g. ABS 250 → TPU 230) leaves un-purged high-temp filament clogging the path.
+
+**The rule.** A "switching material" send floors the nozzle target at:
+
+```
+load_target = max(new_material_temp, last_nonzero_nozzle_target, current_actual_nozzle_temp)
+```
+
+- `new_material_temp` — what the load op requested.
+- `last_nonzero_nozzle_target` — an **in-session latch** of the last non-zero nozzle target. It **survives the target cooling to 0**, so even a cold swap reheats to the old material's temp to purge it. Latched in `PrinterTemperatureState::update_from_status()` (per-`ExtruderInfo.last_nonzero_target`, per-extruder).
+- `current_actual_nozzle_temp` — covers a physically-hot nozzle whose target was already cleared.
+
+**Latch lifecycle.**
+- **Set:** every status update with `target > 0` (per extruder).
+- **Survives:** cooldown to 0 (the whole point).
+- **Reset:** on **unload only** — the filament is physically pulled, so nothing is left to purge. Every unload clears it at dispatch, after any preheat (which heats to it): the executor's `dispatch_unload()` and the sidebar's `dispatch_backend_unload()` call `clear_load_latch()`.
+- **Not persisted** across restart — a power cycle means a cold printer that reheats anyway, and persistence is where staleness would bite.
+
+**Where the guard lives.** `TemperatureController::set_target(HeaterType, celsius, opts)` applies the floor when `opts.keep_previous_hot` is set. Nozzle only — bed/chamber and any send without the flag are untouched, so cooldown-to-0 and deliberate manual keypad lowers still work.
+
+**Which calls set `keep_previous_hot`.**
+| Call site | Flag | Rationale |
+|-----------|------|-----------|
+| Material preset tap (`handle_preset_button`, `handle_spool_preset_button`, Home `PreheatWidget`) | ❌ off | a request for that temperature; load/unload apply the floor when the swap happens |
+| Filament-op preheat (`FilamentOpHeater::run_after_preheat` — every load/unload/purge/extrude/retract surface) | ✅ on | controller computes the max; `decide_preheat()` folds the latch into the wait too, so a cooled nozzle still reheats to purge |
+| Manual keypad entry (`handle_custom_nozzle_confirmed`) | ❌ off | deliberate override |
+| Cooldown-to-0 | ❌ off | must still reach 0 |
+
+**User feedback.** When (and only when) the guard raises the target above the request, an info toast fires: *"Holding nozzle at N°C to purge previous filament."* (plus an `spdlog::info` line). No toast when the request already clears the floor.
+
+---
+
+## Supported Backends
+
+Each backend has its own leaf doc covering the protocol, data sources, G-code commands, topology, and capability table. This hub keeps what they share: the dispatch ladder, slot metadata, the endless spool model, UI panels, dryer control, device operations, mock mode, and the add-a-backend guide.
+
+| Backend | Hardware | Leaf doc |
+|---------|----------|----------|
+| Happy Hare | ERCF / Tradrack and other selector-based MMUs (Klipper add-on) | [FILAMENT_BACKEND_HAPPY_HARE.md](FILAMENT_BACKEND_HAPPY_HARE.md) |
+| AFC | Box Turtle, OpenAMS, Toolchanger units (AFC-Klipper-Add-On) | [FILAMENT_BACKEND_AFC.md](FILAMENT_BACKEND_AFC.md) |
+| OpenAMS | klipper_openams on its own, through the `oams_manager` UI API (AFC, when present, keeps the printer) | [FILAMENT_BACKEND_OPENAMS.md](FILAMENT_BACKEND_OPENAMS.md) |
+| ACE | Anycubic ACE Pro 4-slot hub (native GoKlipper/Rinkhals; ValgACE REST fallback) | [FILAMENT_BACKEND_ACE.md](FILAMENT_BACKEND_ACE.md) |
+| Tool Changer | viesturz/klipper-toolchanger physical toolheads | [FILAMENT_BACKEND_TOOLCHANGER.md](FILAMENT_BACKEND_TOOLCHANGER.md) |
+| INDX | Bondtech INDX: docked passive nozzles on one extruder and heater | [FILAMENT_BACKEND_INDX.md](FILAMENT_BACKEND_INDX.md) |
+| AD5X IFS | FlashForge Adventurer 5X Intelligent Filament Switching via ZMOD | [FILAMENT_BACKEND_AD5X_IFS.md](FILAMENT_BACKEND_AD5X_IFS.md) |
+| CFS | Creality Filament System (K2 built-in; K1/K1C/K1 Max upgrade) | [FILAMENT_BACKEND_CFS.md](FILAMENT_BACKEND_CFS.md) |
+| QIDI Box | QIDI PLUS4 / Q2 / MAX4 RFID hub, chainable to 4 boxes | [FILAMENT_BACKEND_QIDI_BOX.md](FILAMENT_BACKEND_QIDI_BOX.md) |
+| Snapmaker U1 | SnapSwap 4-toolhead parallel toolchanger with per-channel RFID | [FILAMENT_BACKEND_SNAPMAKER_U1.md](FILAMENT_BACKEND_SNAPMAKER_U1.md) |
+| multiACE | Snapmaker U1 with 1-4 ACE Pro units upstream of its heads; the U1 backend plus ACE units, chosen in the factory from the discovered hardware | [FILAMENT_BACKEND_MULTIACE.md](FILAMENT_BACKEND_MULTIACE.md) |
+
+### AmsType Enum
+
+```cpp
+enum class AmsType {
+    NONE = 0,         // No AMS detected
+    HAPPY_HARE = 1,   // Happy Hare MMU (mmu object in Moonraker)
+    AFC = 2,          // AFC-Klipper-Add-On (AFC object, lane_data database)
+    ACE = 3,          // AnyCubic ACE Pro (ValgACE/BunnyACE/DuckACE Klipper drivers)
+    TOOL_CHANGER = 4, // Physical tool changer (viesturz/klipper-toolchanger)
+    AD5X_IFS = 5,     // FlashForge AD5X IFS (Intelligent Filament Switching)
+    CFS = 6,          // Creality Filament System (K2 series, RS-485)
+    SNAPMAKER = 7,    // Snapmaker U1 SnapSwap toolchanger
+    QIDI_BOX = 8,     // QIDI Box (PLUS4 / Q2 / MAX4, hub-style, 4 slots chainable to 16)
+    OPENAMS = 9       // klipper_openams through its versioned oams_manager API
+};
+```
+
+Helper functions: `is_tool_changer()` and `is_filament_system()` distinguish between the two categories.
+
+---
+
+## Endless Spool (shared model)
+
+Every backend means the same thing by "endless spool" - when a slot runs dry mid-print,
+something switches to another slot that can stand in for it - but each firmware answers a
+different set of questions about it. The shared model is three things:
+
+| Piece | Where |
+|-------|-------|
+| `EndlessSpoolCapabilities` - what a backend can do, on three axes | `include/ams_types.h` § "Endless Spool Types" |
+| `EndlessSpoolConfig` / `EndlessSpoolGroup` - the relation itself | same |
+| Restriction text, the two config builders, the one projection | `src/printer/ams_endless_spool.cpp` |
+
+Nothing in `ams_endless_spool.cpp` touches a backend, a mutex or LVGL, so it is directly
+unit-testable (`tests/unit/test_ams_endless_spool.cpp`).
+
+### Three axes, not one bool
+
+| Axis | Type | Values |
+|------|------|--------|
+| Availability | `EndlessSpoolAvailability` | `Unsupported` / `RequiresPlugin` / `Available` |
+| Enablement | `EndlessSpoolEnabled` | `Unknown` / `Off` / `On` / `OnWithoutBackup` |
+| Editability | `EndlessSpoolEditability` | `ReadOnly` / `PerSlot` / `Group` |
+
+The axes are independent because real backends occupy the corners. CFS is
+available-and-read-only whether auto-refill is on or off, so a single `supported` bool
+rendered both states identically. `RequiresPlugin` is retained in the enum for a future
+backend whose package genuinely can be missing; no backend currently uses it, since the
+AD5X stock-zMod path moved to `Available`/`FirmwareManaged` once source-read of
+`ANALOG_PRUTOK` established that switchover is always-on there. `Unknown` is not `Off`: only
+`Off` justifies telling the user that no automatic switchover will happen. `OnWithoutBackup`
+(CFS, #1391) is `On` plus a grouping-derived negative: the setting is on, but no two lanes
+currently group, so a runout would stop the print anyway.
+
+Editability carries a shape, not just a yes/no, because the write shape matters to the UI: a
+`PerSlot` write touches one slot (AFC `SET_RUNOUT`), while a `Group` write can move other
+slots' relations as a side effect because the transport rewrites the whole partition (Happy
+Hare `GROUPS=<csv>`).
+
+`EndlessSpoolRestriction` says **why** editing is restricted, as an enum: `None`,
+`MultiUnit`, `FirmwareManaged`, `NotReady`, `PluginMissing`, `PluginReadOnly`. Display text
+comes from `endless_spool_restriction_text()`, which is the only place `lv_tr()` is involved.
+The struct's one free-text field is `provider`, the proper noun of the package implementing
+the feature (`"lessWaste"`, `"bambufy"`), empty when the backend or firmware implements it
+natively - a product name is never translated, which is why it is allowed to be free text.
+`available()` and `editable()` are the convenience predicates callers use; `editable()`
+implies `available()`.
+
+This replaced `{bool supported; bool editable; std::string description;}`, where
+`description` was never displayed yet carried load-bearing state as untranslated English
+("Auto-refill enabled", "...read-only on multi-unit") that no UI could safely show in any
+language but ours.
+
+### Groups, and the single projection
+
+`get_endless_spool_config()` returns **one** `EndlessSpoolConfig` for the whole system,
+holding `std::vector<EndlessSpoolGroup>`. A group has `id` (the backend's own group number,
+or -1 for one we synthesised), `members` (global slot indices) and `ordered`:
+
+- `ordered = true` - `members[i]` hands off to `members[i+1]`; the last member has no
+  successor. An AFC `SET_RUNOUT` edge is a two-member ordered group. Overlapping ordered
+  groups are legal: AFC permits 0->2 and 1->2, which is two pairs sharing slot 2.
+- `ordered = false` - any member substitutes for any other. Happy Hare's gate group is one
+  undirected group of arbitrary size, and an unordered relation is a partition.
+
+Two builders construct it. `endless_spool_config_from_edges(edges)` takes per-slot directed
+backups (`-1` or a self-edge is skipped) and emits one two-member ordered group per edge.
+`endless_spool_config_from_groups(group_ids)` takes per-slot group ids - Happy Hare's shape -
+and emits one unordered group per id, dropping any group with fewer than two members: a group
+of one backs nothing up, and emitting it would make "is grouped" and "has a backup" disagree,
+which matters because Happy Hare gives every ungrouped gate its own standalone id.
+
+Anything that needs one successor per slot calls the projection and never re-derives it:
+`endless_spool_backup_edges(cfg, slot_count)` for a whole system,
+`endless_spool_backup_for(cfg, slot)` for one slot. Ordered groups project along their order.
+Unordered groups project onto a **ring**: `members[i] -> members[i+1]`, last back to first.
+Both entry points agree that the first group to give a slot a successor wins, so they cannot
+disagree on a hand-built config with two successors for one slot. The production caller is
+`helix::ui::lane_settings::backup_of()` (`src/ui/filament/ui_ams_lane_settings.cpp`), behind the spool
+editor's backup dropdown, which can show only one backup per slot.
+
+**Why a ring and not "the first other member".** Pointing every member at the first *other*
+member draws a 4-gate group as 0->1, 1->0, 2->0, 3->0, which says "gate 1 is everyone's
+backup", and a clique does not say that. A ring gives every member exactly one successor and
+visits the whole group, which is the closest a one-target-per-source view can get to "any
+member substitutes for any other".
+
+**The slot-row drawing takes groups, not edges.** `ui_endless_spool_arrows`
+(`src/ui/filament/ui_endless_spool_arrows.cpp`) is handed the whole `EndlessSpoolConfig` by
+`AmsPanel::update_endless_arrows_from_backend()` (`ui_endless_spool_arrows_set_groups`) and
+decides per group what to draw. The decision is the pure function
+`helix::ui::endless_spool_marks(config, slot_count)`, tested in `test_ams_endless_spool.cpp`
+(`[marks]`) without LVGL; the draw callback only paints its output.
+
+| Group | Mark |
+|-------|------|
+| Unordered (Happy Hare gate group, ACE groups) | A **bracket**: one bar from the leftmost to the rightmost member, a tick down to each member ending in a dot. No arrowheads: the members are interchangeable |
+| Ordered (AFC `SET_RUNOUT`, AD5X) | One routed **arrow** per hand-off, up from the source, over, down into an arrowhead at the target. A slot keeps only its first successor, as in the projection |
+
+Every hop of an ordered group must read on its own, so no two arrows share a column or a
+bar. Each arrow end takes a **lane** beside its slot centre. A slot is the source of at most
+one arrow (the first-successor rule), which leaves one lane left of the centre; an arrowhead
+lands one lane right of it, and a second arrowhead into the same slot one lane further right.
+A slot that is both the target of one hop and the source of the next therefore shows two
+lines. Bracket ticks stay centred.
+
+`endless_spool_marks()` also takes `EndlessSpoolMarkLimits`, what the canvas can hold, and
+turns lanes into pixels itself (`EndlessSpoolColumn::offset_px`): the painter passes the
+theme's `space_md` as the lane width, the slot spacing, and the deepest height level the
+canvas fits. Lanes narrow on a crowded row so an end stays inside its slot's half of the
+spacing, except that where two arrowheads share a slot a lane never narrows below what two
+of the smallest heads need. An arrowhead is full size unless it shares its slot, in which
+case its half-width (`head_px`) shrinks so the two heads never overlap.
+
+Marks whose bars overlap horizontally, lanes included, take different height levels. Wider
+spans are placed first, and a mark always sits below every mark whose extent contains its
+own, so a nested group sits under the group spanning it. Within that, each mark takes the
+first level from the top that no overlapping mark holds, so a chain alternates between two
+levels. Past the deepest level the canvas fits, marks share that bar, and the crossing gaps
+are placed from those clamped levels. Every line is solid, and a bar is broken for a few
+pixels wherever another mark's vertical passes through it, never reaching the bar's own
+junctions, so interleaved groups (`{1,3}` and `{2,4}`) read as two groups rather than one.
+All marks use `text_muted` and no per-group tint, because a tint would read as filament
+colour. Members at or beyond the slot count, and slots past 16, are not drawn.
+
+### The status line
+
+Capabilities are only worth having if the user can see them. `endless_spool_status(caps)`
+(`src/printer/ams_endless_spool.cpp`) is the one place the enums become a sentence. It returns
+`{EndlessSpoolStatusKind kind, std::string text}`; `AmsState::sync_endless_spool_from_backend()`
+publishes those on two backend-neutral XML subjects, from `sync_from_backend()` — main thread,
+because the `EVENT_STATE_CHANGED` handler already marshals through `helix::ui::queue_update()`.
+
+| Subject | Type | Meaning |
+|---------|------|---------|
+| `ams_endless_state` | int, `EndlessSpoolStatusKind` | `Hidden` 0 / `On` 1 / `Off` 2 / `Unknown` 3 / `NeedsPlugin` 4. A UI contract — append, never renumber. `Hidden` is 0 so one `bind_flag_if_eq ref_value="0"` hides the row |
+| `ams_endless_text` | string | The translated sentence, possibly with an embedded newline. Bind to a `long_mode="wrap"` label |
+
+Wording rules, all pinned by tests in `test_ams_endless_spool.cpp`:
+
+- `Unsupported` renders **nothing**. Not "off": a printer with no such mechanism is not a
+  printer with the mechanism switched off, and the row disappears rather than asserting
+  something about a feature that does not exist.
+- `Unknown` is phrased as unknown. Only `Off` says "nothing will switch" — that is the whole
+  reason enablement is tri-state, and flattening `Unknown` to `Off` is a promise we cannot
+  keep.
+- `RequiresPlugin` names `provider` when the backend knows the package
+  ("Needs the lessWaste package to switch spools") and otherwise falls back to the restriction
+  text. **No backend populates `provider` in that state today**: AD5X cannot know whether the
+  user would install lessWaste or bambufy, so the generic
+  "No automatic backup-spool package is installed" is what actually renders on stock zMod.
+- A non-`None` restriction is appended on its own line, from
+  `endless_spool_restriction_text()` and never a second copy of that prose. "It will not
+  switch" and "and here is why you cannot change that from here" are two different facts.
+- A non-empty `provider` is attributed parenthetically ("… on runout (bambufy)"). A proper
+  noun needs no translation, so this costs no string.
+
+**Where it renders, and where it deliberately does not.** Two homes, one component
+(`ui_xml/components/ams_endless_status.xml`, which registers on first use, wherever it is nested). The component is entirely
+subject-driven and needs no C++ of its own.
+
+| Surface | Why |
+|---------|-----|
+| AMS panel, inside `slot_area` under the slots | It explains the arrows at the top of that same container. Growth is absorbed by `path_container`, which is `flex_grow="1"` and whose canvas scales. Note it goes in `slot_area`, not directly in `ams_unit_card` — the card has no `flex_flow`, so a second child there stacks *on top of* the slots |
+| Spool editor (`AmsEditOverlay`), under `backup_dropdown_row` | Where the disabled-or-absent backup dropdown actually is, and the only surface a CFS user reaches at all: CFS hides the dropdown row entirely (no per-slot relation), so without this line the editor would say nothing about runout behaviour |
+
+**Not on the filament panel**, despite it being the obvious second home. Its `left_column` is a
+fixed height budget with `temp_graph_card` as the flexible remainder
+(`FilamentPanel::apply_left_column_sizing()`), so any row added to `spool_card` is paid for
+entirely by the temperature graph. Measured with a two-line status: 172 -> 76 px at LARGE,
+118 -> 30 px at MEDIUM; and at MICRO it does not fit at all (`spool_card` is 74 px there, 48 of
+it `ams_manage_row`).
+
+**Measured at 480x272 (MICRO).** Label width 259 px in the AMS card, 15 px per line. Every
+headline fits one line in all nine languages. Four of the five restriction texts need two lines
+in `ru` and `es`, two do in `fr`, two in `pt`, one in `de`; `en`, `it` and `zh` fit all five on
+one line, `ja` needs two for one. Worst total is therefore 3 lines / 45 px, which takes
+`path_canvas` from 112 to 97 px with `scroll_bottom` staying negative — nothing clips, because
+`long_mode="wrap"` cannot clip. The Russian `Unknown` headline was shortened to
+"Резервная катушка: состояние неизвестно" precisely to hold that 3-line ceiling; at its
+original length the worst case was 4 lines / 60 px and `path_canvas` fell to 82 px.
+
+### What the base owns, what a backend supplies
+
+`AmsBackend::set_endless_spool_backup()` is **deliberately not virtual**
+(`src/printer/ams_backend.cpp` § "Endless Spool - shared validation"). It owns every
+rejection, in order: feature unavailable; feature read-only (carrying the translated
+restriction reason); `endless_spool_slot_count() <= 0`, reported as `NotReady`; `slot_index`
+out of range; `backup_slot` out of range; `backup_slot == slot_index`. Three backends used to
+write those same guards with three different phrasings of the self-backup error.
+
+A backend supplies only these:
+
+| Hook | Responsibility |
+|------|----------------|
+| `apply_endless_spool_backup(slot, backup)` (protected virtual) | Transport only. Reached **after** the base accepted the write, so it must not re-check availability, editability, ranges or self-backup - and must not update a local mirror of the mapping before its transport has accepted the command. |
+| `endless_spool_slot_count()` (protected virtual) | How many slots the relation spans; drives range validation and the reset loop. Default `get_system_info().total_slots`. Override when the transport's slot space differs, or to report 0 while not ready. |
+| `endless_spool_backup_eligibility(slot, backup)` | May this lane stand in for that one? Returns `BackupEligibility` (`Eligible` / `GradeDiffers` / `Incompatible`), not a bool. The base default asks two questions in order: `filament::materials_compatible()` for the polymer, then `filament::grades_match()` for the grade, so a filled variant of the right polymer answers `GradeDiffers` - tagged in the dropdown, still selectable, because a swap that keeps the print alive beats a print that dies at a runout. An unknown material on either side stays `Eligible` rather than blocking a slot the user simply has not labelled. AD5X IFS overrides it with the rule its firmware actually enforces - exact material **and** exact colour **and** the port reporting filament present - sharing `backup_eligible_locked()` with `find_backup_slot_locked()` so its runout hint text and its eligibility answer cannot diverge, and answering only `Eligible`/`Incompatible` because a lane its firmware will not select is not a choice worth offering. |
+
+`reset_endless_spool()` has a real base implementation: walk
+`set_endless_spool_backup(slot, -1)` over every slot, continue past failures so it clears as
+many as it can, return the first error. That loop was AFC's private implementation; AFC
+deleted its copy and every editable backend gets it now. Happy Hare overrides it because its
+firmware has an actual primitive.
+
+`get_endless_spool_capabilities()` and `get_endless_spool_config()` overrides take the
+backend's own `mutex_`, so callers must not hold it. `set_endless_spool_backup()` holds no
+lock and hands off to the hook with no lock held.
+
+### `endless_spool_enabled` is a carrier, not a second answer
+
+`AmsSystemInfo::endless_spool_enabled` is the ENABLE axis only. It exists because the
+status parse builds an `AmsSystemInfo` and commits it under the backend mutex, so the
+parsed bit needs a home in that struct: CFS `box.auto_refill` (stock) /
+`box.runout_swap_enabled` (flat fork), Happy Hare `mmu.endless_spool_enabled`, AD5X
+`variable_backup` from the `_ifs_vars` macro's status dict.
+`get_endless_spool_capabilities()` is the single source of truth for all three axes and
+**derives** `caps.enabled` rather than answering independently, so the two cannot diverge.
+Read the capabilities, not the field.
+
+CFS, Happy Hare and the mock read the field directly. Two backends are one step removed and
+say so at the site: AD5X IFS keeps a `std::optional<bool>` (`ifs_backup_variable_`) as its
+source of truth because a plain bool cannot express `Unknown`, and mirrors it into the field
+so `get_system_info()` agrees; AFC has no enable bit to read at all and reports `On`
+unconditionally, its field seeded once from `afc_default_capabilities()`.
+
+The field replaced `AmsSystemInfo::supports_endless_spool`, which answered the *availability*
+question a second time and provably disagreed with `get_endless_spool_capabilities()` on CFS
+whenever auto-refill was off.
+
+### Per-backend state
+
+| Backend | Availability | `enabled` derived from | Editability | Restriction | Per-slot relation? |
+|---------|--------------|------------------------|-------------|-------------|--------------------|
+| AFC | `Available` | Hardcoded `On` - a lane either names a runout lane or it does not, so there is no on/off switch to read | `PerSlot` (`SET_RUNOUT LANE= RUNOUT=`) | `None` | Yes - `endless_spool_config_from_edges(slots_.backup_edges())` |
+| Happy Hare | `Available` | `mmu.endless_spool_enabled`; forced to `Unknown` before `slots_` is initialised | `Group` on a single unit, `ReadOnly` otherwise | `None`; `MultiUnit` on a multi-unit rig; `NotReady` before the registry initialises | Yes - `endless_spool_config_from_groups()` over each gate's `endless_spool_group` |
+| CFS | `Available` | `box.auto_refill` / `box.runout_swap_enabled` | `ReadOnly` | `FirmwareManaged` | **No, deliberately** - see below |
+| AD5X IFS | `Available` in all three modes (stock zMod, bambufy, lessWaste) | stock zMod: always `On` (ANALOG_PRUTOK has no toggle); plugin path: `variable_backup`, with a genuine `Unknown` when it was never read | `ReadOnly` | `FirmwareManaged` on stock zMod; `PluginReadOnly` on the plugin path | No |
+| ACE, QIDI Box, Snapmaker U1, Tool Changer | `Unsupported` (base default; no override at all) | -- | `ReadOnly` | `None` | No |
+| Mock | `set_endless_spool_supported()` | `system_info_.endless_spool_enabled` | `PerSlot` when `set_endless_spool_editable(true)`, else `ReadOnly` | `FirmwareManaged` when read-only | Yes - edges from its `SlotRegistry` |
+
+CFS, and AD5X IFS in every mode (stock zMod, bambufy, lessWaste), report `Available` while
+leaving `get_endless_spool_config()` unoverridden. That is the truthful answer, not an
+omission: the firmware picks the backup itself and exposes no per-slot mapping to read, so
+the base's empty relation is correct, and it is what keeps the spool editor from drawing a
+dropdown that could only ever read "None" (see [Lane Settings in the Spool Editor](#lane-settings-in-the-spool-editor)).
+
+---
+
+## Dryer / Box-Heater Control
+
+Some AMS backends include an integrated filament dryer — a heated chamber that removes moisture from hygroscopic filaments (Nylon, PA-CF, TPU, PETG, etc.) before or during a print. HelixScreen exposes a common dryer control UI across all backends that support it.
+
+> The zone model - what a box is, how zones are discovered and folded, and which selector
+> shape the user gets - has its own doc: **[FILAMENT_ENVIRONMENT_ZONES.md](FILAMENT_ENVIRONMENT_ZONES.md)**.
+> This section covers the dryer half: the `DryerInfo` contract and the per-backend commands.
+>
+> A chamber appliance can dry too (the stock Panda Breath): it reuses `DryerInfo`, its
+> `clamp_temp()` / `clamp_duration()` and the drying presets, but hangs off the chamber-heater
+> backend rather than an AMS backend. See **[CHAMBER_HEATER.md § Dryer Mode](CHAMBER_HEATER.md#dryer-mode)**.
+
+### Data Flow
+
+```
+IDryer::get_dryer_info(unit)         populates DryerInfo (ams_drying_types.h)
+AmsBackend::get_environment_zones()  zones carry a DryerInfo each
+        │
+        ├──────────────────────────────┐
+        ▼                              ▼
+AmsState::sync_dryer_from_backend()  select_zone_presentation(zones)
+  mirrors ONE unit's DryerInfo to      │
+  the scalar dryer_* subjects          ├─ List  ──▶ AmsZoneOverviewOverlay
+        │                              │             (ui_ams_zone_overview_overlay.cpp
+        │                              │              + ui_xml/ams_zone_overview_overlay.xml)
+        │                              │             one row per box, drill into detail
+        │                              │                            │
+        ▼                              ▼                            ▼
+AMS panel env badges          AmsEnvironmentOverlay (Tabs / Single)
+                                (ui_ams_environment_overlay.cpp
+                                 + ui_xml/ams_environment_overlay.xml)
+                                readouts, comfort strip, target temp,
+                                duration, start/stop, queued banner
+                                             │
+                                             ▼
+                              start_drying_request / stop_drying_gates (unit = shown zone's unit_index)
+```
+
+`DryerInfo` (declared in `include/ams_drying_types.h`, which `ams_types.h` includes) carries:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `supported` | bool | Whether this backend has a dryer at all |
+| `active` | bool | Dryer is currently running |
+| `allows_during_print` | bool | Can the cycle run while printing |
+| `current_temp_c` | float | Current chamber temperature (°C) |
+| `target_temp_c` | float | Target setpoint (°C, 0 = off) |
+| `duration_min` / `remaining_min` | int | Session length and countdown, minutes |
+| `fan_pct` | int | Current fan speed, 0-100 |
+| `min_temp_c` / `max_temp_c` / `max_duration_min` | float / float / int | Hardware limits. The overlay clamps both the keypad and the Start command to exactly these |
+| `supports_fan_control` | bool | Can fan speed be set independently |
+| `supports_live_temp` / `supports_live_duration` | bool | Whether a running cycle can be retargeted without stopping. Both default false, so an unchecked backend takes the visible stop-and-restart path rather than silently dropping an adjustment |
+| `supports_humidity_target` | bool | Whether a cycle can also end early once the box reads at or below a target %RH. The overlay shows its optional target field only when this is true. Blank sends no target, so the dryer's own default applies; `humidity_target(pct)` turns a field value into the target to send, or none |
+| `default_humidity_target` | optional float | The target, %RH, a start with none applies, when the backend knows it. The blank field's placeholder shows it as `NN%`, or the short `auto` key when unset. Reported only alongside `supports_humidity_target` |
+| `supports_gate_selection` | bool | Whether a cycle can start and stop on a chosen subset of the dryer's gates, true only where each gate has its own heater. The overlay offers its lane chips only then |
+| `supports_rotation` | bool | Whether a cycle can turn the selected spools while it dries (`DryingRequest::rotate`). Needs `supports_gate_selection` |
+
+> **Humidity is not on `DryerInfo`.** It lives on `EnvironmentData`, carried either per unit
+> (`AmsUnit::environment`) or per slot (`SlotInfo::environment`), because humidity is a
+> per-enclosure reading from an environment sensor and not a property of a drying session.
+> `EnvironmentZone` pairs one `EnvironmentData` with one `DryerInfo`, which is what lets a box
+> report humidity with no heater behind it.
+
+> **Per-slot drying state.** A dryer that heats gates one by one (`supports_gate_selection`)
+> also reports each gate's part in the cycle as `SlotInfo::drying_state`, a
+> `helix::printer::ZoneDryingState` (Idle / Queued / Active / Complete / Cancelled; the enum
+> lives in `include/ams_types.h`). It is Idle on every other dryer. `AmsState` publishes it per
+> slot as `ams_slot_<n>_drying` (primary backend only), the slot's drying badge binds to it,
+> and the generic zone walk (`AmsBackend::get_environment_zones`) uses it as a per-slot zone's
+> state instead of the unit's. Happy Hare fills it from the per-gate `drying_state` list; a
+> list shorter than the gate count leaves the remaining slots Idle. The capability flags are
+> per unit: ask `get_dryer_info(unit)`, never assume one unit's answer holds for another.
+
+`AmsEnvironmentOverlay` shows a **set of zones** with one selected, not a unit. It owns its own
+`ams_env_overlay_humidity_visible` subject rather than binding the unit cards'
+`ams_env_ind_<i>_humidity_visible`: both the humidity readout and the Material Comfort strip gate
+on it, and binding a per-unit-indicator subject would mean picking an index at XML-authoring
+time, which answers for whichever unit that index names and not the box on screen. The overlay's
+copy is set from the same rule the badge uses - the zone reports an environment **and** that
+environment has a humidity sensor. Which unit the dryer controls act on comes from the shown
+zone (`src/ui/filament/ui_ams_environment_overlay.cpp#acting_unit_index`), and a zone that cannot be
+attributed to one unit refuses to start or stop rather than guessing.
+
+### Backend Virtual Interface
+
+The dryer is the `IDryer` capability (`include/ams_dryer.h`), reached with `backend->as<IDryer>()`. `helix::dryer_info(backend, unit)` reads a unit's state from any backend, unsupported when it has no `IDryer`. `get_environment_zones()` stays on `AmsBackend` and has a working default, since a passive sensor makes a zone with no dryer behind it. The `Default` column is what a backend gets by inheriting `IDryer` and not overriding; `get_dryer_info()`, `start_drying()` and `stop_drying()` have no default.
+
+| Virtual | Default | Description |
+|---------|---------|-------------|
+| `get_dryer_info(unit)` | none | Read one unit's dryer state |
+| `get_environment_zones(unit)` | Derived from `AmsUnit::environment` / `SlotInfo::environment` + `dryer_info()` | The boxes this system exposes ([FILAMENT_ENVIRONMENT_ZONES.md](FILAMENT_ENVIRONMENT_ZONES.md)) |
+| `start_drying(temp, minutes, fan, unit)` | none | Begin a drying session |
+| `start_drying_to_humidity(temp, minutes, humidity_pct, fan, unit)` | NOT_SUPPORTED | Begin a session that also ends at a humidity target. Only for a dryer reporting `supports_humidity_target`; with no target the overlay calls `start_drying()` |
+| `stop_drying(unit)` | none | End the active session |
+| `start_drying_request(request)` | `start_drying()`, or `start_drying_to_humidity()` with a target; NOT_SUPPORTED with gates or rotation | The overlay's one start call. `DryingRequest` carries temp, minutes, optional humidity target, unit, and optionally `gates` and `rotate`. Override only to take a selection |
+| `stop_drying_gates(unit, gates)` | `stop_drying()` with no gates; NOT_SUPPORTED with some | Stop just those gates; the rest of the cycle keeps running |
+| `update_drying(temp, minutes, fan, unit)` | NOT_SUPPORTED | Change temp/time mid-session |
+| `get_drying_presets()` | `get_default_drying_presets()` | Return material-preset list |
+
+### Backend Support Matrix
+
+**Boxes** is what the backend reports to the environment-zone layer: heated (a sensor and a heater), passive (a sensor, nothing to drive), or none. A passive box still gets a card, a humidity verdict and storage advice; it just has no controls. Zone shapes are [FILAMENT_ENVIRONMENT_ZONES.md](FILAMENT_ENVIRONMENT_ZONES.md) § Backend matrix.
+
+| Backend | Boxes | Drying | Command |
+|---------|-------|--------|---------|
+| ACE (Anycubic ACE Pro) | Heated, one | ✅ | `ACE_START_DRYING TEMP=<t> DURATION=<m>` / `ACE_STOP_DRYING` |
+| Happy Hare | Heated and/or passive, per box or per gate | ✅ | `MMU_HEATER DRY=1 TEMP=<t> TIMER=<mins>` / `MMU_HEATER STOP=1` (TIMER is minutes; see [Happy Hare Specifics](#happy-hare-specifics)) |
+| QIDI Box | Heated, one per box | ✅ | `ENABLE_BOX_DRY BOX=<n> TEMP=<t> END_TIME=<h>` / `DISABLE_BOX_DRY BOX=<n>`, with `SET_HEATER_TEMPERATURE` fallback when `box_extras` is absent. Write-path always enabled (commands verified vs QIDI firmware, #1030). |
+| CFS (Creality K2) | Passive, one per box | ❌ | No drying hardware - CFS reports temperature and humidity only |
+| AFC (Box Turtle / OpenAMS) | None | ❌ | Not supported |
+| AD5X IFS | None | ❌ | Not supported |
+| Snapmaker U1 (SnapSwap) | None | ❌ | Not supported |
+| Tool Changer | None | ❌ | Not applicable |
+
+### QIDI Box Specifics
+
+The QIDI Box dryer uses the printer's standard `heater_generic heater_box<N>` Klipper object — the same safety system (temperature limits, watchdog) that applies to any Klipper heater. The active session timer is tracked via `box_extras.box_drying_state.box<N>` (fields `dry_state` and `end_time`). Remaining time is computed as `(end_time - now) / 60` since there is no native remaining-minutes field.
+
+See [QIDI_BOX_HEATER.md](printer-research/QIDI_BOX_HEATER.md) for full reverse-engineering details: Klipper object schema, firmware command variants, config key spellings, and per-material drying tables.
+
+### Happy Hare Specifics
+
+Happy Hare's filament dryer is driven by the `MMU_HEATER` command and configured under `[mmu_machine]`. HelixScreen reads the dryer's object names from `configfile.settings` once at connect (`query_config_from_printer`, shared with the tip-method, selector-type and defaults readers), then tracks live state over the normal subscription push — **there is no polling**.
+
+**What HelixScreen supports today:**
+
+- **Commands.** `MMU_HEATER DRY=1 TEMP=<°C> TIMER=<minutes>` to start, `MMU_HEATER STOP=1` to stop. `TIMER` is **minutes** (float, `minval=0`), so sub-hour cycles are valid — the duration field in the overlay is a minutes field for this reason.
+- **Humidity target (Happy Hare 4).** `MMU_HEATER DRY=1 TEMP=<°C> TIMER=<minutes> HUMIDITY=<%RH>` ends the cycle once the environment sensor reads at or below the target; `TIMER` still bounds it, and `STOP=1` cancels it like any cycle. `HUMIDITY` is a float with `minval=0` and no maximum; left out, Happy Hare applies its own `heater_default_dry_humidity` (25% by default), so a start with no target sends exactly the temp + time command and the cycle is still humidity-bounded, at that default. The backend reads `heater_default_dry_humidity` from the unit's `[mmu_unit_parameters <unit>]` configfile settings (Klipper reports it even when only defaulted) into `DryerInfo::default_humidity_target`, so the overlay's blank field reads e.g. `25%`, and `auto` until the config has loaded. HelixScreen offers no way to send `HUMIDITY=0` (run the full time regardless of humidity); keypad 0 clears the field back to blank. A sensor with no humidity reading makes Happy Hare ignore the target and run the full time. `get_dryer_info()` reports `supports_humidity_target` only on v4, and a duration change (stop and restart) carries the target of a cycle HelixScreen started into the new cycle. A cycle started elsewhere restarts with no `HUMIDITY=`, so the printer's default applies: Happy Hare publishes only `drying_state` in its status (`mmu_environment_manager.get_status()`), and the running target appears only in the `MMU_HEATER` console report. Verified against [mmu_heater.py](https://github.com/moggieuk/Happy-Hare/blob/1ac0303c6f83c09f4ae8254dbebf8b4128e637c5/extras/mmu/commands/mmu_heater.py) and [mmu_environment_manager.py](https://github.com/moggieuk/Happy-Hare/blob/1ac0303c6f83c09f4ae8254dbebf8b4128e637c5/extras/mmu/unit/mmu_environment_manager.py) at Happy-Hare `main` @ 1ac0303c.
+- **Box temperature.** Read from the `filament_heater` `heater_generic` object's live `temperature`.
+- **Box humidity.** Happy Hare's `mmu` object deliberately does **not** republish temp/humidity (`mmu_environment_manager.get_status()` omits them by design); the client must read the environment sensor object directly. Humidity therefore comes from the **backing humidity chip** — `bme280` / `htu21d` / `sht3x` / `aht10` `<name>`, where `<name>` is the bare second token of the `environment_sensor` value (e.g. `temperature_sensor box` → `htu21d box`). Discovery subscribes these chips and requests the `humidity` field on all temperature sensors (only objects present in `objects.list` are subscribed, so this is safe for printers without them).
+- **Per-unit / multi-MMU resolution.** Happy Hare has two mutually-exclusive enclosure forms: a **shared** enclosure (scalar `filament_heater` / `environment_sensor`) or **per-gate** hardware (plural `filament_heaters` / `environment_sensors`, one entry per gate, distributed across units for multi-MMU). `get_system_info()` resolves **each unit's** heater + sensor — the scalar form applies to every unit; the per-gate lists map each unit to the object at its first gate (`first_slot_global_index`). So a multi-MMU rig with distinct box sensors shows the correct temp/humidity per unit in the panel indicator and overlay.
+- **Per-gate zones and state.** The per-gate `filament_heaters` / `environment_sensors` lists collapse into `EnvironmentZone`s, and the per-gate `drying_state` array folds per zone, so a box that is waiting behind another shows as Queued rather than idle. `heater_suffix_locked()` appends `GATES=` (and, on a multi-unit Happy Hare 4, `UNIT=`) to every `MMU_HEATER` command on a multi-unit rig. See [FILAMENT_ENVIRONMENT_ZONES.md](FILAMENT_ENVIRONMENT_ZONES.md) § Happy Hare specifics.
+
+**What is NOT yet supported (boundary):**
+
+- **Per-gate countdowns.** Happy Hare tracks one setpoint and one end-of-cycle clock, so `target_temp_c` / `duration_min` / `remaining_min` are the same on every zone. A chosen subset of gates can be dried on Happy Hare 4 per-gate heaters (`GATES=`, `ROTATE=1`; see [FILAMENT_ENVIRONMENT_ZONES.md](FILAMENT_ENVIRONMENT_ZONES.md) § Happy Hare specifics), but with every lane chip selected, the default, the start is the whole-unit command above. Verified against [mmu_heater.py](https://github.com/moggieuk/Happy-Hare/blob/ee30acdd/extras/mmu/commands/mmu_heater.py) at Happy-Hare `main` @ ee30acdd; untested on hardware.
+
+> Note: the per-gate paths are unit-tested against synthetic status frames (scalar + 2-unit per-gate) and unverified on real hardware - we own no EMU rig. The QIDI Box (the common Happy-Hare-on-a-box case) is a single shared sensor.
+
+### Adding Dryer Support to a New Backend
+
+Inherit `IDryer` and return it from `capability()`. Implement `get_dryer_info()` — the UI polls this to drive the display — and `start_drying()` and `stop_drying()`, which make the controls functional. `update_drying()` and `get_drying_presets()` are optional enhancements.
+
+`get_environment_zones()` stays on `AmsBackend`. Its working default derives zones from `AmsUnit::environment` / `SlotInfo::environment` plus `dryer_info()`, so most backends never override it - publishing an `EnvironmentData` is enough to get a box on screen, with or without a heater behind it. [FILAMENT_ENVIRONMENT_ZONES.md](FILAMENT_ENVIRONMENT_ZONES.md) § "Adding environment support to a new backend" has the full recipe and says when an override is actually needed.
+
+Dryer status flows into `AmsState::sync_dryer_from_backend()` the same way slot state does — no additional wiring is required in `AmsState`.
+
+---
+
+## Context Menu Actions
+
+The `AmsContextMenu` (`ui_ams_context_menu.h`) is actions only, so it never scrolls: with
+plugin items it goes side by side, and where even that is wider than the screen the groups
+that do not fit wrap under the others (`ContextMenu::decide_column_flow()`).
+
+| Action | Description | Availability |
+|--------|-------------|------------|
+| **Load** | Load filament from this slot | When slot has filament and not at toolhead |
+| **Unload** | Unload filament from extruder | When filament is loaded to extruder |
+| **Eject** | Eject filament from hub back to spool | When hub-loaded but not at toolhead, and `supports_lane_eject()` is true (AFC and Happy Hare) |
+| **Check Slot** | Check this gate's sensor | `supports_gate_check()` |
+| **Preload** | Park the lane's filament ready for a later load | `supports_lane_preload()` |
+| **Edit Spool** | Open the spool editor, which also holds the lane's Assigned Tool and Endless Spool backup | Always |
+| **Select Spool** / **Scan QR Code** | Assign a Spoolman spool to this slot | With Spoolman |
+| **Clear Spool** | Clear the slot's assignment | When the slot carries one |
+
+Moving the selector to a gate is the selector menu's (`ams_selector_menu.xml`), not this one's.
+
+## Lane Settings in the Spool Editor
+
+The editor's Assigned Tool dropdown is populated from `backend->get_tool_mapping()`.
+
+The backup dropdown is populated from `backend->get_endless_spool_config()`, which is a
+*group* relation, projected to this slot's single successor with
+`helix::printer::endless_spool_backup_for()` - the same projection the panel's arrow renderer
+uses (see [Endless Spool](#endless-spool-shared-model)). Its row visibility is the pure
+predicate `helix::ui::lane_settings::show_backup_row(caps, cfg, slot)`:
+
+- Not `available()` - hidden.
+- `editable()` - shown, because there is something to write even before anything is set.
+- Read-only **and** there is a relation to display - shown, but the dropdown gets
+  `LV_STATE_DISABLED`.
+- Read-only with no relation - hidden. This is the stock CFS and AD5X IFS case: the firmware
+  picks the backup and publishes no mapping, so a visible dropdown could only ever read "None".
+  The CFS fork dialect does publish one (`box.runout.chain`), so with swapping on and a bay
+  loaded its row shows `loaded slot -> chain[0]`, disabled (#1464).
+
+Backup options are tagged from `AmsBackend::endless_spool_backup_eligibility()`, so a backend
+that tightens the rule (AD5X IFS) tightens the label too. The verdict is tri-state and the two
+non-empty answers are tagged differently, because they mean different things to the user:
+
+| Verdict | Suffix | Selectable? |
+|---------|--------|-------------|
+| `Eligible` | none | yes |
+| `GradeDiffers` | `(different grade)` | **yes** - same polymer, filled variant; it will print |
+| `Incompatible` | `(incompatible)` | no - `lane_settings::backup_refused()` bounces it with a toast |
+
+`GradeDiffers` is the only verdict where the label and the refusal deliberately disagree, and
+it is why the enum exists: refusing a PLA-CF backup for a PLA lane would leave a print dead at
+a runout with a usable spool one lane over, while waving it through silently hides that the
+swap brings an abrasive, slower filament mid-print with nobody watching.
+
+---
+
+## Device Operations Overlay
+
+The `AmsDeviceOperationsOverlay` (`ui_ams_device_operations_overlay.h`) consolidates device-specific controls:
+
+### Fixed Actions (all backends)
+
+| Action | G-code (varies by backend) | Description |
+|--------|---------------------------|-------------|
+| Home | `MMU_HOME` / `AFC_RESET` | Reset to home position (label follows `IGateSelector::reset_button_label()`, else `Reset`; AFC sends `AFC_RESET`, not `AFC_HOME`) |
+| Recover | `MMU_RECOVER` / `AFC_RESET` | Attempt error recovery. A backend answering `supports_recover_with_state()` opens `AmsRecoverStateModal` instead, which sends the user's asserted slot and loaded state through `recover_with_state()` |
+| Abort | `cancel()` | Cancel current operation |
+| Bypass Toggle | `enable_bypass()` / `disable_bypass()` | Toggle bypass mode (if supported) |
+
+### The Bypass Toggle row: one shared policy for all three surfaces
+
+The table's last row names the backend calls, not the UI path. Three surfaces flip bypass,
+and all three route through one shared policy object, `BypassToggleController`
+(`src/ui/filament/ui_bypass_toggle_controller.cpp`, extracted from the sidebar's handler in
+03f784219): the AMS sidebar's toggle (`include/ui_ams_sidebar.h#bypass_toggle_`), the home-panel
+Bypass tile (`src/ui/panel_widgets/bypass_widget.h#toggle_`), and this overlay's own switch
+(`include/ui_ams_device_operations_overlay.h`). Each owns an instance and forwards its
+click to `toggle()`, which runs every guard before touching the backend:
+
+- **Print guard** (`:26-36`) — "Bypass cannot be changed while printing". Asked of the
+  print lifecycle via `job_holds_machine()`, not `print_stats.state`: Preparing and Paused
+  count too, because filament is already staged mid-path and a pre-start block may be
+  homing.
+- **Hardware-sensor refusal** (`:44-49`) — `has_hardware_bypass_sensor` means firmware owns
+  bypass; the toggle only reports it.
+- **Unload-first chaining** (`:62-79`) — enabling while a lane is loaded, on a backend that
+  allows implicit chaining, first unloads the active lane and arms an `ams_action`
+  observer; the UNLOADING→IDLE edge issues the `enable_bypass()`, an ERROR edge disarms
+  without enabling. The controller observes the action subject itself while the chain is
+  armed — before the extraction only the sidebar fed that subject, so a chain started from
+  the home tile never saw its completing edge.
+
+The overlay switch was the last holdout: its handler called `enable_bypass()` /
+`disable_bypass()` directly, with its own hardware-sensor check but neither the print guard
+nor the unload chain. On a backend whose `enable_bypass()` carries no filament-loaded
+refusal of its own — AD5X IFS — a tap mid-print therefore reached the firmware, and on the
+rest it stranded the loaded lane's filament behind the external feed.
+
+Both switch surfaces (this one and the sidebar's) additionally re-publish
+`ams_bypass_active` after `toggle()` returns. A `ui_switch` flips its own CHECKED state
+*before* the handler runs, so a refusal leaves the widget claiming a state the backend
+never entered — and `lv_subject_set_int()` does not notify when the value is unchanged,
+which is exactly the refusal case, hence the explicit `lv_subject_notify()`. Both also bind
+`disabled` to `job_holds_machine`, matching the home tile: the binding dims them, the
+controller refuses regardless (`helix-screen ctl click` reaches a disabled widget's handler,
+and so does a stale tap mid-transition). The switch's checked state follows the live
+`ams_bypass_active` subject rather than an overlay-local snapshot, so an enable that
+completes asynchronously behind the unload chain shows up when the backend actually gets
+there instead of when the gcode was queued.
+
+### Bypass visibility and the force override
+
+Two pure predicates decide whether any bypass UI exists. Both had been inlined at four render
+sites, where three of the four had already drifted apart, so neither may be re-derived locally:
+
+| Predicate | Header | Rule |
+|-----------|--------|------|
+| `bypass_available(supports_bypass, force_override)` | `ams_bypass_policy.h` | `supports_bypass \|\| force_override` - folds the user's override into the firmware's report |
+| `bypass_node_visible(supports_bypass, bypass_active, bypass_is_virtual, always_show)` | `ui_bypass_spool_widget.h` | Additionally hides a *virtual* bypass sensor (`AmsBackend::bypass_is_virtual()`, AFC) while disengaged (#1229) unless `always_show` |
+
+`bypass_available_for(bool)` and `bypass_node_visible_for(const AmsBackend*)` gather the live
+inputs from `SettingsManager` and the backend; the render sites call the `_for` variants. The
+firmware's own `supports_bypass` is never overwritten, so switching the override off restores
+reality without a re-parse.
+
+Settings keys (per-printer, under `df() + "ams/"`): `force_bypass_controls`,
+`always_show_bypass_spool`. The **Enable Bypass Controls** row in `ams_device_operations.xml`
+binds `hidden` to `ams_device_ops_fw_supports_bypass == 1`, so it self-hides on hardware that
+already reports a bypass. Flipping it calls `AmsState::sync_from_backend()` +
+`update_from_backend()` because both gating subjects are recomputed from the backend, not from
+the setting, and neither moves on its own.
+
+Where the override lands, by backend:
+
+| Backend | `supports_bypass` | Override row shown | `enable_bypass()` with override on |
+|---------|-------------------|--------------------|------------------------------------|
+| AFC | `afc_defaults` caps, default `true` | no | Consults `bypass_available_for()` |
+| AD5X IFS | Hardcoded `false` (`src/printer/ams_backend_ad5x_ifs.cpp#AmsSubscriptionBackend`) - no bypass is fitted | yes | Writes `external=1`, but the false capability keeps every caller from offering it |
+| Happy Hare | Runtime from `[mmu_machine] has_bypass`; `false` until first status | Only when `has_bypass: 0` | Consults `bypass_available_for()`; `MMU_SELECT_BYPASS` runs |
+| CFS | Converges on first full box frame: true (Fork: + payload `external` entry) | no | Consults `bypass_available_for()` — real `T<external>` on Fork, sensor-derived declaration on stock |
+| ACE | Hardcoded `false` (`src/printer/ams_backend_ace.cpp#AmsSubscriptionBackend`) | yes | `not_supported` |
+| Snapmaker | Hardcoded `false` (`src/printer/ams_backend_snapmaker.cpp#AmsSubscriptionBackend`) | yes | `not_supported` |
+| Tool Changer | Hardcoded `false` (`src/printer/ams_backend_toolchanger.cpp#AmsSubscriptionBackend`) | yes | `not_supported` |
+| QIDI Box | Hardcoded `false` (`src/printer/ams_backend_qidi.cpp#AmsSubscriptionBackend`) | yes | `not_supported` |
+
+Happy Hare is the one backend where the override changes machine behavior rather than only the
+UI: `cmd_MMU_SELECT_BYPASS` never checks `has_bypass`, it deselects the gear steppers and
+reports gate -2 either way, while `has_bypass` defaults to `0` for `mmu_vendor: Other` (a QIDI
+Box driven through Happy Hare reports exactly that) and is ANDed with the calibrated bypass
+offset on type-A selectors.
+
+### Bypass suppresses the pre-print filament gates
+
+An engaged bypass feeds the extruder without passing through any slot, and
+`AmsState::collect_available_slots()` deliberately does not emit one for it. Anything reasoning
+over that vector therefore concludes that every tool in the file is unfed. Two gates sit on the
+same Print tap and both did exactly that, so a bypass print was blocked by
+`"T<n> has no filament loaded — this print will run out."` and then, once past it, by the
+`"Color Mismatch"` dialog:
+
+| Gate | Where | Input |
+|------|-------|-------|
+| Pre-flight empty-slot block | `PreflightValidator::validate()`, 4th parameter | `PrintSelectDetailView::recompute_preflight()` |
+| Unresolved-tool / color-mismatch dialog | `PrintStartController::unresolved_tools_for()`, 3rd parameter | `PrintStartController::find_unresolved_tools()` |
+
+Both take the flag as a **required** parameter rather than reading `AmsState` themselves, so
+they stay pure and unit-testable and a new caller cannot silently omit it.
+
+The input is `AmsState::any_bypass_active()`, which polls every backend's `is_bypass_active()`.
+Two things it is deliberately **not**:
+
+- **Not `AmsSystemInfo::current_slot == -2`.** The AFC backend sets that at
+  `src/printer/ams_backend_afc.cpp#apply_afc_state` while parsing `bypass_state`, but nine later writes in the same
+  file can overwrite it — including the mount-state derivation from #1229, which is
+  intentionally unguarded so it cannot re-latch. `is_bypass_active()` returns the firmware's own
+  report and is stable.
+- **Not the `ams_bypass_active` subject**, which is derived from that same `current_slot == -2`
+  and inherits the problem.
+
+Engaging bypass moves no slot, so the per-slot delta scan never bumps `slots_version` — and
+`slots_version` is the only thing that re-runs the detail view's cached pre-flight result.
+`sync_from_backend()` therefore bumps it on the `any_bypass_active()` edge (both directions), or
+engaging bypass with a file already open would leave the stale block in place. Verified on a
+Voron/BoxTurtle with AFC's `virtual_bypass`: the log shows
+`Bypass -> true, bumping slots_version` followed immediately by a recompute from `block=true` to
+`block=false`.
+
+Only the backends whose `is_bypass_active()` can return `true` reach any of this — the five
+display-and-tracking rows below never suppress anything.
+
+On the bottom five rows the override is display-and-tracking only. Their `is_bypass_active()`
+returns a literal `false`, so `bypass_node_visible()` reaches the `!bypass_is_virtual` branch and renders
+the node; tapping it opens `show_external_spool_menu()`, which writes the bypass spool's lane
+record (`AmsState::set_external_spool_info()`) and sends no G-code. The sidebar
+toggle, however, is gated on the same `ams_supports_bypass` subject, so it appears too and then
+fails with the backend's `not_supported`.
+
+> **Adding a backend:** if the override is meant to engage a command the firmware can actually
+> run, guard `enable_bypass()` with `bypass_available_for(system_info_.supports_bypass)` rather
+> than `system_info_.supports_bypass` directly - that is what AFC, Happy Hare and the mock do.
+> A hardcoded `not_supported` is the correct answer only when no command exists at all.
+
+**Where the at-tap chain lives now.** The dialog half of the table above is the print-start
+gate pipeline: `PrintStartController::run_gates_from()` iterates
+`default_print_start_gates()` (`include/print_start_checks.h`) — pure gates over a single
+`gather_print_start_context()` snapshot, in order. The file's own questions come first: a
+command this printer treats as an emergency stop (`printer_stopping_command`), then whether the
+file fits the printer at all (`fit_check`: travel, heater limits, tools, nozzle and model;
+`include/fit_check.h`, documented with the HelixPrint plugin's `fit_check_blocks_autostart`),
+then whether the file's materials can share one print (`mixed_temperature_materials`, below).
+The filament gates follow:
+
+1. `insufficient_spool_weight` — spoolman remaining weight vs. the file's need; its lane-fed
+   twin `insufficient_lane_weight` follows it
+2. `bypass_engaged_lane_print` — bypass engaged **and** the file uses more than one tool;
+   a single-tool bypass print is the legitimate bypass use and stays silent. "Single-tool"
+   is the gcode-scan's used-tool count, not the filament palette size — slicers emit a
+   full-profile palette (e.g. `PLA;ASA-GF;ASA-GF;PLA`) even for a file extruding from one
+   tool, which made the palette-count form of this gate nag every such file (K2 CFS case).
+   How that scan runs — the footer-read fast path and the persistent tools-used cache —
+   is covered in `architecture/16-gcode-pipeline.md`
+3. `unaccounted_toolhead_filament` — filament in the toolhead that no lane accounts for
+4. `required_filament_present` — the empty-lane / runout dialog (at-tap sibling of the
+   pre-flight block above); a single-tool bypass print skips lane truth entirely — its
+   mapped lanes describe filament that is not being printed with
+5. `unresolved_tools` — the color-mismatch dialog above
+6. `material_compatibility` — file material vs. loaded spool, in two passes. First
+   `FilamentMapper::materials_match()` decides whether the **polymer** is right; anything it
+   rejects is a material mismatch and shows the "Material Mismatch" dialog. What it accepts
+   then goes to `filament::grades_match()`, which decides whether the **grade** is right, and
+   a difference there shows the separate "Filament Grade Mismatch" dialog
+   (`MaterialMismatchDetail::grade_only`). Under an engaged bypass on a single-tool file both
+   passes run against the **external spool** rather than the mapped lanes.
+
+   The grade axis is whether the filament carries solid particles, not what the marketing
+   calls it. `kVariantAffixes[]` in `src/printer/filament_variants.cpp` carries a `filled`
+   column: CF, GF, AERO, LW, Wood, Marble, Metal and Glow are filled (abrasive and/or
+   flow-altering); `+`, Silk, Matte, HS, HF and HT are not. So a file sliced ASA-GF against a
+   loaded ASA spool warns, PLA against PLA+ does not. The dialog wording is directional -
+   filled filament on an unfilled profile names the hardened-nozzle risk, the reverse only
+   notes it will run slower and hotter than needed. Both are click-through warnings, and
+   neither changes what the mapper ROUTES: `materials_match()` still treats the two grades as
+   interchangeable when picking a lane
+
+#### The mixed-temperature materials gate
+
+`mixed_temperature_materials` warns before a print whose materials cannot share one machine:
+a high-temperature material printed beside one that softens at the conditions it needs. It is
+generic: no printer, firmware or backend name appears in it.
+
+```cpp
+// include/print_start_checks.h
+[[nodiscard]] bool materials_conflict_in_temperature(std::string_view a, std::string_view b);
+struct MixedTemperatureMaterials { std::string cooler; std::string hotter; };
+std::optional<MixedTemperatureMaterials> mixed_temperature_materials_in(const PrintStartContext& ctx);
+```
+
+- **The rule** (`src/printer/print_start_checks.cpp#materials_conflict_in_temperature`): two
+  materials conflict when the hotter one (higher `MaterialInfo::nozzle_recommended()`) needs a
+  heated chamber (`MaterialInfo::needs_enclosure()`) and their nozzle ranges are disjoint
+  (`cooler.nozzle_max < hotter.nozzle_min`). The chamber term is the multi-nozzle risk and keeps
+  open-frame pairs (PLA + PETG, PLA + TPU, PLA + PVA) quiet; the disjoint-range term is the
+  single-nozzle risk and keeps overlapping pairs (PETG + ABS, ABS + PC) quiet. There is no tunable
+  constant: the filament database's ranges are the threshold, so a material edited in the user
+  overlay moves its own verdicts. A single nozzle-gap constant cannot fit the database: PLA + PETG
+  and PLA+ + ABS have the same 40°C gap between recommended temperatures and need opposite answers.
+- **Resolution**: `filament::find_material()` (aliases included), else
+  `find_material(filament::extract_base_material(name))`, so "PLA SnapSpeed" reads as PLA. A name
+  that resolves to nothing never conflicts.
+- **Which materials**: `materials_in_print(ctx)` (shared with the door-open gate): only tools the file extrudes from, `ctx.tools_used` from the G-code scan,
+  else `FileMetadata::filament_weights > 0`. With neither, nothing is reported: a slicer palette
+  lists every profile tool, used or not (`print_lane_requirement()` explains the same trap). A
+  tool's material is the mapping card's `GcodeToolInfo::material`, else the palette entry.
+- **The message** picks its wording from `PrintStartContext::multiple_toolheads`, filled from
+  `ToolState::has_multiple_toolheads()`: separate nozzles share the bed and chamber, one nozzle
+  runs both materials through the same hotend. Lanes feeding one hotend count as one toolhead.
+- **Tests**: `[mixed-temp]` in `tests/unit/test_print_start_gates.cpp` pins the verdict for each
+  material pair, base-polymer resolution, the used-tool rule, the cooler-first ordering and both
+  message variants.
+
+A printer whose toolhead topology is not reflected in `ToolState` gets the single-nozzle wording;
+fixing that belongs in the backend that publishes the topology, not in this gate.
+
+The two bypass suppressions this section describes are entries in that list: gate 4
+(`required_filament_present`) and gate 5 (`unresolved_tools`, whose `unresolved_tools_in()`
+keeps the `ctx.any_bypass_active` early-out). A gate that warns shows one dialog, and "Start
+Anyway" resumes at the next entry — the old proceed-callback chain, flattened.
+
+Gate 2 is the multi-color bypass case the old chain never covered: firmware (AFC's
+`_check_bypass`, verified) refuses a lane load while bypass filament sits in the toolhead,
+so a multi-color file with bypass engaged gets the "Bypass Is Active" warning instead of a
+firmware error mid-print.
+
+Gate 3 asks every backend the `toolhead_filament_unaccounted()` capability question. The
+`AmsBackend` default returns `nullopt` — cannot determine — and the gate stays silent rather
+than guess. AFC, Happy Hare, CFS, and AD5X IFS override it with verified signals; the AD5X
+override trusts the extruder switch pair (`head_switch_seen_` / `head_switch_present_`) and
+never `head_filament_` alone, which is conflated with the motion sensor and reads false on a
+loaded-but-idle lane (see the warning in `include/ams_backend_ad5x_ifs.h`). With no bypass
+engaged, any backend answering `true` produces the "Filament In The Toolhead" warning —
+pull the stray filament or confirm to start anyway. Drive the scenario against the mock
+with `HELIX_MOCK_AMS_STATE=unaccounted` under `--test`.
+
+#### The door-open gate
+
+`door_open` (`src/printer/print_start_checks.cpp#gate_door_open`) is the last entry: a door
+closes in a second, so it is asked after every question about the file and the filament. It
+reads two context fields that `PrintStartController::gather_print_start_context()` fills from
+`helix::sensors::InputSensorManager`:
+
+```cpp
+bool door_check_enabled = false;     // InputSensorManager::door_check_enabled()
+std::vector<std::string> open_doors; // InputSensorManager::open_doors()
+```
+
+An open door only matters to a material that needs a warm enclosure; PLA and PETG want the
+air. The decision is one pure function, shared with the mid-print warning:
+
+```cpp
+// include/print_start_checks.h
+std::vector<std::string> materials_in_print(const PrintStartContext& ctx);
+std::optional<std::string> enclosure_material_in(const std::vector<std::string>& materials);
+std::optional<std::string> door_warning_material(bool door_check_enabled, bool any_door_open,
+                                                 const std::vector<std::string>& materials);
+```
+
+`materials_in_print()` is the same used-tool rule the mixed-temperature gate reads.
+`enclosure_material_in()` resolves each name like that gate does (base polymer fallback) and
+returns the one with the highest `MaterialInfo::chamber_temp_c` among those that
+`needs_enclosure()`; a name that resolves to nothing needs no enclosure. The gate passes when the
+check is off, every door is closed, the print has no file facts, or no material needs an
+enclosure. Otherwise it warns "Door Open", naming every open door and that material, with "Start
+Anyway"; one door and several doors are separate translated strings, and the names join through
+the translated "{}, {}" and "{} and {}" patterns.
+
+Which inputs are doors, how a door reads open, and the check's default (on exactly when the
+printer has a Door input) are the input manager's: see "On/off Inputs" in
+`SENSOR_MANAGEMENT.md`. The gate names no printer. Tests: `[print-start][gate-pipeline][door]`
+in `tests/unit/test_print_start_gates.cpp` (PLA, PETG, unknown and no-file-facts pass; ABS and
+PLA + ASA warn; the warmest material is named). Drive it under `--test` with
+`HELIX_MOCK_DOOR_OPEN=1` on the `creator5` / `creator5_zmod` personas, or any persona with
+`HELIX_MOCK_OBJECTS="gcode_button door"`, and an ABS or ASA file.
+
+### A backend that presents no filament system
+
+A backend can exist and still present nothing to the user: a CFS-ready K2 with no box on the
+bus runs `AmsBackendCfs` for the external spool alone
+(`FILAMENT_BACKEND_CFS.md` § No CFS on the bus). Its bypass is always active, so every
+"bypass engaged" rule above would read it as an AMS user who switched to the external spool,
+and every "a backend exists" rule would show AMS UI for hardware that is not there.
+
+The question is `AmsSystemInfo::presents_filament_system()`; `AmsState::is_available()` asks it
+of the primary backend. Ask it, not `get_backend() != nullptr`, `backend_count() > 0` or
+`get_type() != AmsType::NONE`, whenever the answer decides what the user sees or is told:
+
+| Surface | What reads it |
+|---------|---------------|
+| Type, slot count, bypass toggle, device ops | `AmsState::sync_system_subjects()` / `sync_from_backend()` / `sync_bypass()` |
+| Bypass gate before a print | `gate_bypass_engaged_lane_print()` on `ams_available` |
+| No-filament gate | `gate_required_filament_present()`: the sensor path, through `ams_manages_filament` |
+| Too many tools | `current_fit_machine()` passes `is_available()` |
+| First-run wizard and expected hardware | `WizardAmsIdentifyStep::should_skip()` |
+| Tour | `tour::hardware_has_ams()` |
+| Printer image variant | `src/system/printer_image_manager.cpp#detected_hardware_facts` |
+| Printer manager chips | `src/ui/printers/printer_manager_chips.cpp#gather_capability_chip_facts` |
+
+A sensor a backend claims by name is the printer's own once that backend reports its
+hardware absent: `AmsState::filament_hardware_absent()` (the primary backend's
+`external_spool_only`) feeds `PrinterHardware::is_ams_sensor()`. It is false until the
+backend has reported, so no claim lapses in the window before the first status frame.
+
+Load and Unload are the exception: they still route through the backend, because it owns the
+external-spool scripts.
+
+### Bypass companions: runout arming and the external lane
+
+Two cross-cutting behaviors ride the same `any_bypass_active()` edge in
+`AmsState::sync_from_backend()`. Both live in their own abstraction layers — AmsState only
+notifies; per the vendor/layer rules no backend implements either one itself.
+
+**Runout arming** (`FilamentSensorManager::on_bypass_active_changed`): filament fed through
+the bypass passes no backend lane, so mid-print runout protection falls to the toolhead
+sensor alone — and on firmwares that leave that sensor disabled outside their own filament
+system (Creality's macros toggle it around every CFS operation; the K2 sits at
+`enabled: false` between sequences), a bypass print would run with no protection at all.
+Engaging bypass arms every RUNOUT-role sensor the firmware holds disabled
+(`SET_FILAMENT_SENSOR SENSOR=<name> ENABLE=1`, bare name, same form the vendor macros use);
+disengaging restores exactly what we armed. That is the feature, not a conflict with the
+#1714 rule: on these firmwares the sensor is disabled *because* no filament-system sequence
+is running, and a bypass print is exactly the window where protection must come back.
+Firmware reports of a sensor being disabled behind our back (vendor macro ran mid-bypass)
+drop it from the armed set, so the restore never sends a command for state we no longer
+own. The user's monitoring switches (master enable, per-sensor enable) gate the arming,
+which is a temporary firmware-state change, not a settings change.
+
+**The bypass spool is a lane record** (`lane_name: "bypass"`), so slicers reading
+`lane_data` see it as the "next tool over" (T4 beside T0–T3) on the backends where
+HelixScreen writes `lane_data`. The primary backend keeps it among its own lane records,
+at `AmsSubscriptionBackend::bypass_lane_index_locked()`, and reads it with the same
+refresh and poll as its slots:
+
+| Backend | Index | Store |
+|---------|-------|-------|
+| CFS | Fork: the payload's external slot (`T<that>` is what box.py registers), so `lane5` on one box. Stock: `lane17` (index 16, past every bay) | `lane_data`. The Fork index can be a bay of a box off the bus; a slot's record there is never overwritten or deleted |
+| AFC, Happy Hare | one past the lanes | the extras namespace (`helix-screen-afc-overrides`, `helix-screen-hh-overrides`): HelixScreen never writes `lane_data` on these, so slicers do not see the bypass spool there |
+| Every other `AmsSubscriptionBackend` (AD5X IFS, ACE, QIDI, Snapmaker U1, OpenAMS, tool changers, INDX) | one past the lanes | `lane_data` |
+| No filament backend | lane 0 (`lane1`) | `lane_data`, kept and polled by AmsState |
+
+A record of ours left at an earlier index (the Fork's external slot moves with the chain)
+is deleted on the next write. `docs/devel/FILAMENT_SLOT_METADATA.md` § "The bypass
+spool's record" has the read and write paths.
+
+### Dynamic Actions (backend-specific)
+
+Each backend can expose dynamic device actions via `get_device_sections()` and `get_device_actions()`. The section overlay builds each from the `setting_toggle_row` / `setting_slider_row` / `setting_dropdown_row` / `setting_info_row` components (buttons from `device_action_button`), shows `disable_reason` as the description when an action is disabled, and names a per-tool action's tool from `DeviceAction::tool_index` in the app's tool-label form.
+
+Section ids, labels and icons come from one table, `include/ams_device_sections.h` (`device_section(id, order, description)`): a backend picks ids and writes its own description. Labels and descriptions stay English in the backend (`TR_NOOP` for anything assigned after construction, such as `disable_reason`); the UI translates once.
+
+Values reach `do_execute_device_action()` through `device_action_value<T>()` (`include/ams_device_action_value.h`): numbers by value whatever their type, a missing value refused. An action that moves the printer is marked `with_machine_motion()`: its control greys while motion is blocked (`moves_machine`), and `AmsSubscriptionBackend::execute_device_action()` refuses it during a print with "Printer is busy with a print".
+
+A dropdown option that should not be sent on a single tap is marked with `with_option_confirm(option, message, confirm_label)` (English, `TR_NOOP` both): a pick of that option opens a warning `modal_confirm` first, and Cancel or a backdrop dismissal sends nothing and redraws the section from the backend. A pick of the value the row already shows sends without asking. A confirmed pick is checked against the section's current actions before it is sent, so a row that became disabled, vanished or stopped listing the option while the question was open drops the pick (`src/ui/filament/ui_ams_device_section_detail_overlay.cpp#on_choice_confirmed`). A dropdown pick goes through `run_device_action`, so a backend whose printer answers later reports "set to" or the failure only once it has; one the backend refuses at once also redraws the section, so the row shows the backend's value again. The Snapmaker U1's **Nozzle diameter** rows use it for 0.2 mm ([FILAMENT_BACKEND_SNAPMAKER_U1.md](FILAMENT_BACKEND_SNAPMAKER_U1.md#changing-a-heads-nozzle)).
+
+The section lists live in `src/printer/afc_defaults.cpp` (`afc_default_sections()`) and
+`src/printer/hh_defaults.cpp` (`hh_default_sections()`):
+
+| Backend | Sections |
+|---------|----------|
+| AFC | **Setup**, **Speed**, **Toolhead**, **Maintenance**, **Hub & Cutter**, **Tip Forming**, **Purge & Wipe** (7) |
+| Happy Hare | **Setup**, **Speed**, **Toolhead**, **Accessories**, **Maintenance** (5) |
+
+There is no separate "Calibration" or "LED & Modes" section on AFC. The calibration
+wizard, bowden length, LED toggles and quiet mode all live under **Setup**.
+`AmsBackendAfc::get_device_sections()` drops **Tip Forming** whenever
+`system_info_.tip_method != TipMethod::TIP_FORM`, which is the common case (the default
+capability set is `TipMethod::CUT`), so a stock Box Turtle shows six.
+
+Action counts are not fixed either. `afc_default_actions()` returns 26 static actions, and
+`AmsBackendAfc::get_device_actions()` then adds one **Hub Distance** slider per lane and,
+on a multi-extruder rig, swaps the single bowden / toolhead / toolhead-LED entries for
+per-extruder ones. On an AFC that registers `AFC_TOOLHEAD_CALIBRATION` (learned from
+`printer.gcode.help`), a **Calibrate Toolhead** button leads the Toolhead section. See the [AFC-Specific Features](FILAMENT_BACKEND_AFC.md#afc-specific-features) section for
+details.
+
+#### Guided flows
+
+A `DeviceAction` whose `guided_flow` names a registered flow is started through that flow
+instead of being executed and toasted. `include/ui_guided_device_flow.h` holds the registry
+(`register_guided_device_flow`, `find_guided_device_flow`): a flow supplies `start(label)` and,
+optionally, `attach_status(container)` to append status widgets below the section's buttons.
+The section overlay (`src/ui/filament/ui_ams_device_section_detail_overlay.cpp`) knows only that
+registry. It never names a vendor, and a flow id with no registration is refused with a
+warning rather than executed, because the flow is what asks before moving the machine.
+
+The Creality CFS flows (`cfs_purge_chute`, `cfs_cutter`, `cfs_belt_tension`) live in `src/ui/filament/ui_cfs_device_flows.cpp`
+and are registered by `register_cfs_device_flows()`, one row of the registrar table behind
+`register_builtin_guided_device_flows()` (`src/ui/filament/ui_guided_device_flow.cpp`). Startup calls
+that once, before any overlay builds (`Application::register_xml_components()`, and the ESP32
+`app_boot.cpp` boot path), and never names a vendor. A new vendor's flows are one new file, one
+row in that table, and one `guided_flow` string on its backend's action.
+
+#### Tracked device actions
+
+`AmsBackend::run_device_action(id, value, on_done)` is `execute_device_action()` for an action
+that runs for minutes on the printer: the return says whether it was sent, `on_done` how it
+ended, once, on the main thread. `AmsSubscriptionBackend` runs both through one gate,
+`device_action_refusal()` (not listed, listed disabled, moving the machine while a print holds
+it), so a backend cannot skip it. The default `do_run_device_action()` reports success as soon
+as `do_execute_device_action()` sends; a backend overrides it to answer from the macro's own rpc
+(`src/printer/ams_backend_indx.cpp#do_run_device_action`, which reports a
+Moonraker timeout as `AmsResult::TIMEOUT` so the flow can say the printer may still be at it).
+`DeviceAction::info()` is the read-only row: its value is a `std::string`, shown as is.
+
+#### Recovery actions that ask first
+
+A `RecoveryAction` with a non-empty `confirm_message` is not sent on the tap:
+`src/ui/notify/recovery_modal_presenter.cpp#on_recovery_tapped` opens a confirm
+titled with the action's label, and only its primary button continues to the hot-nozzle check
+and the send. Cancel and a dismissal send nothing; the fault stays handled either way, so it
+does not re-present. For a recovery the user does with their hands (holding a tool while a latch
+opens).
+
+#### Edit follow-ups
+
+After a slot edit commits, `helix::ui::offer_edit_follow_up()` (`src/ui/filament/ui_ams_edit_follow_up.cpp`)
+asks the backend's `edit_follow_up(slot, before, after)` whether the edit implies printer state
+it did not write, and offers it as a confirm; yes runs `run_edit_follow_up(slot, after)`, which
+`AmsSubscriptionBackend` refuses while a print holds the printer, paused included. Every
+`commit_slot_edit()` call site calls it on success or a partial apply. The default offers
+nothing. INDX offers its heater-model update after a material edit.
+
+#### Unavailable operations explain themselves
+
+`AmsBackend::unload_blocked_reason(slot)` and `eject_unavailable_reason(slot)` return a
+translated one-line reason, or empty. The lane context menu binds them to the
+`ams_slot_unload_hint` / `ams_slot_eject_hint` subjects, so the UI never decides which backend
+owes the user an explanation. QIDI Box publishes its lane eject distance and speed as two
+sliders in its **Filament Control** section (`AmsBackendQidi::get_device_actions`).
+
+---
+
+## Mock Mode for Testing
+
+The `AmsBackendMock` simulates any of the supported backend types for UI development and testing.
+
+### Activation
+
+Mock mode is activated when `RuntimeConfig::should_mock_ams()` returns true (typically via the `--test` CLI flag). The factory method `AmsBackend::create()` automatically returns a mock backend in this case.
+
+Pass `--real-ams` alongside `--test` to opt back out and drive a real backend (e.g. `AmsBackendHappyHare`) against the mock Moonraker client instead of `AmsBackendMock`. This is what makes backend-specific chokepoints reachable under `--test` — for example `AmsSubscriptionBackend::ensure_homed_then()`'s G28 in front of an unhomed operation, which `AmsBackendMock` never goes near since it doesn't inherit `AmsSubscriptionBackend`. The mock Moonraker client only simulates a minimal, static `mmu` status for Happy Hare (`moonraker_client_mock_objects.cpp`'s `get_mock_mmu_status()`: 4 gates, a mix of loaded/empty, no operation state machine) — it is a plumbing harness for exercising backend code paths, not a UI development tool. Use plain `--test` + `HELIX_MOCK_AMS` (below) for that.
+
+**`--real-ams` seeds Happy Hare only and does not compose with `HELIX_MOCK_AMS`.** The backend comes from mock hardware discovery, not from `HELIX_MOCK_AMS` — that variable is read inside `AmsBackend::create()`'s mock branch (`src/printer/ams_backend.cpp`), which `--real-ams` bypasses entirely. So `HELIX_MOCK_AMS=toolchanger` combined with `--real-ams` still swaps in a real `AmsBackendToolChanger`, but with zero seeded state — a silently empty panel, not a toolchanger simulation.
+
+The seed dispatches `handle_status` from the main thread (inside an `UpdateQueue` drain), which is also where production runs it: the libhv WebSocket thread only enqueues the notification. A threading bug in a backend's `handle_status` is therefore about its callers on other threads (RPC responses, UI reads under the mutex), which `--real-ams` does not exercise.
+
+```bash
+./build/bin/helix-screen --test --real-ams -vv
+```
+
+### Environment Variables
+
+| Variable | Values | Default | Description |
+|----------|--------|---------|-------------|
+| `HELIX_AMS_GATES` | 1-16 | 4 | Number of simulated slots |
+| `HELIX_MOCK_AMS` | `afc`, `box_turtle`, `boxturtle`, `toolchanger`, `tool_changer`, `tc`, `mixed`, `multi`, `torture`, `stealth`, `vivid`, `ifs`, `ad5x`, `ad5x_ifs`, `htlf_toolchanger`, `htlf_tc`, `htlf`, `snapmaker`, `snapswap`, `u1` | Happy Hare | AMS type to simulate |
+| `HELIX_MOCK_AMS_STATE` | `idle`, `loading`, `error`, `bypass`, `unaccounted`, `grade` | `idle` | Visual scenario to simulate |
+| `HELIX_MOCK_DRYER` | `1`, `true` | Disabled | Simulate integrated dryer |
+| `HELIX_MOCK_DRYER_SPEED` | Integer | 60 | Dryer speed multiplier (60 = 1 real sec = 1 sim min) |
+
+### Mock AFC Mode
+
+```bash
+HELIX_MOCK_AMS=afc ./build/bin/helix-screen --test
+```
+
+When AFC mock mode is enabled:
+
+- Reports `AmsType::AFC` with type name "AFC (Mock)"
+- Uses `PathTopology::HUB` (4 lanes merge through hub)
+- Configures 4 lanes with realistic filament data (PLA, PETG, ABS, ASA)
+- Sets AFC's device sections (`afc_default_sections()`)
+- Includes mock device actions: calibration wizard, bowden length slider, speed multipliers, lane tests, blade change, park, brush, motor reset, LED toggle, quiet mode toggle
+- Uses `TipMethod::CUT`
+- Editable endless spool with pre-configured backup mapping
+- Supports auto-heat on load
+
+### Mock Mixed Topology Mode
+
+```bash
+HELIX_MOCK_AMS=mixed ./build/bin/helix-screen --test
+```
+
+Simulates a real-world 6-toolhead toolchanger with mixed AFC hardware (based on production data):
+
+- **Unit 0**: Box Turtle "Turtle_1" — 4 lanes, PARALLEL, lanes 0-3 → T0-T3, TurtleNeck buffers, no hub sensor
+- **Unit 1**: OpenAMS "AMS_1" — 4 lanes, HUB, lanes 4-7 all → T4, per-lane hubs (Hub_1-Hub_4), no buffers
+- **Unit 2**: OpenAMS "AMS_2" — 4 lanes, HUB, lanes 8-11 all → T5, per-lane hubs (Hub_5-Hub_8), no buffers
+- Total: 12 slots, 6 physical toolheads
+- Per-unit topology via `get_unit_topology()`
+- `tests/unit/test_ams_system_tool_layout.cpp` checks the physical tool layout this setup produces
+
+### Mock Tool Changer Mode
+
+```bash
+HELIX_MOCK_AMS=toolchanger ./build/bin/helix-screen --test
+```
+
+- Reports `AmsType::TOOL_CHANGER`
+- Uses `PathTopology::PARALLEL`
+- Disables bypass mode
+- Labels slots as "T0", "T1", etc.
+
+### Mock AD5X IFS Mode
+
+```bash
+HELIX_MOCK_AMS=ifs ./build/bin/helix-screen --test
+```
+
+- Reports `AmsType::AD5X_IFS` with type name "AD5X IFS"
+- Uses `PathTopology::LINEAR`
+- 4 slots with bypass support
+- Tool mapping enabled; endless spool `Unsupported` - the scenario clears
+  `endless_spool_supported_` / `endless_spool_editable_`, not just
+  `system_info_.endless_spool_enabled`. Clearing only the bit left the mock AD5X with an
+  editable backup dropdown and endless-spool arrows the real backend does not have. The
+  Snapmaker scenario clears the same pair for the same reason.
+
+### Mock Realistic Mode
+
+```bash
+HELIX_MOCK_AMS_STATE=loading ./build/bin/helix-screen --test
+```
+
+Enables multi-phase operation simulation with realistic timing:
+
+- **Load**: HEATING -> LOADING (segment animation) -> IDLE
+- **Unload**: HEATING -> CUTTING -> UNLOADING (animation) -> IDLE
+- Timing respects `--sim-speed` flag with +/-20-30% variance
+
+### Mock-Specific Test Methods
+
+The mock backend exposes additional methods for unit testing:
+
+| Method | Description |
+|--------|-------------|
+| `simulate_error(AmsResult)` | Trigger a specific error condition |
+| `simulate_pause()` | Set PAUSED state (user intervention required) |
+| `resume()` | Resume from PAUSED state |
+| `set_operation_delay(ms)` | Set simulated operation delay |
+| `force_slot_status(slot, status)` | Force a specific slot status |
+| `set_has_hardware_bypass_sensor(bool)` | Toggle hardware vs virtual bypass sensor |
+| `set_endless_spool_supported(bool)` | Availability: `Available` vs `Unsupported`. Also sets `system_info_.endless_spool_enabled`, which is what `caps.enabled` reads |
+| `set_endless_spool_editable(bool)` | Editability: `PerSlot` vs `ReadOnly` + `FirmwareManaged` (the shape CFS and a multi-unit MMU have). When read-only, `set_endless_spool_backup()` is rejected by the base with the translated restriction reason, not by the mock |
+| `set_device_sections(sections)` | Set custom device sections for testing |
+| `set_device_actions(actions)` | Set custom device actions for testing |
+
+---
+
+## Developer Guide: Adding a New Backend
+
+### 1. Define the AmsType
+
+Add a new value to `AmsType` in `ams_types.h`:
+
+```cpp
+enum class AmsType {
+    // ... existing values ...
+    MY_SYSTEM = 5  // New system type
+};
+```
+
+Add its row to `kAmsTypeTraits` (names, telemetry slug) and its row to `kBackendRows` in `src/printer/ams_backend.cpp`. The second row is the whole factory entry: the class's traits, `construct`, `needs_http_poll`, `owns_filament_sensor`, `required_status_objects`, the `tool_changer` / `filament_system` classification, the `ams_type_from_string()` spellings and any telemetry feature. A backend that a build can leave out gets one `HELIX_HAS_*` block at the top of that file and is empty when gated out; the row stays.
+
+### 1a. Declare the status objects and the runout traits
+
+A backend names the Klipper status objects it needs; the subscription builder
+(`src/api/moonraker_discovery_sequence.cpp#build_subscription_objects`) never does. Add a
+static to the backend class:
+
+```cpp
+[[nodiscard]] static nlohmann::json required_status_objects(const helix::PrinterDiscovery& hw);
+```
+
+It returns `{object: field-array-or-null}` and answers only for its own printer (an empty
+map for any other). A field array is a strict allowlist: `null` makes Klipper serialize every
+internal field of the object on every notification, so narrow wherever the parser reads a
+known set. The backend's row hands it to the merge in `AmsBackend::required_status_objects`
+(`src/printer/ams_backend.cpp`). Sensors the backend publishes
+under a non-stock object-type prefix go in `AmsBackend::filament_sensor_object_prefixes()`.
+`tests/unit/test_subscription_parity.cpp` pins the whole subscription map per backend against
+`tests/fixtures/subscription_parity/`; add a fixture for a new one.
+
+Who owns a runout is three `BackendTraits` fields on the backend's `kTraits`, all default
+false: `raises_runout_fault` (the backend raises its own runout event through
+`classify_error()` or `current_error()`, so the generic runout modal stands down),
+`raises_runout_fault_during_job` (that event is already on screen while a job runs, so the
+sensor-edge toast stands down) and `parks_filament_off_toolhead_when_idle` (the firmware parks the
+filament in its hub or box between prints, so an idle head-empty edge is not news). Callers read them through
+`AmsBackend::raises_runout_fault()` and friends, or `AmsState::primary_traits()` off the main
+thread. A backend with no runout fault of its own leaves them false: the generic modal is then
+the only runout surface the user has.
+
+### 1b. Declare the firmware default routing (only if it is not lane-per-tool)
+
+`AmsBackend::firmware_default_routing()` answers which physical head a logical
+tool routes to with **no remap applied** - the firmware's own default map. The
+base implementation is lane-per-tool (tool N owns lane N), which is correct for
+AFC, Happy Hare, klipper-toolchanger, CFS, QIDI and ACE, so most backends
+override nothing.
+
+Override only when the hardware genuinely disagrees:
+
+```cpp
+// Snapmaker U1: four physical heads, up to 32 logical tools -> [0,1,2,3,0,0,...]
+[[nodiscard]] helix::FirmwareRouting firmware_default_routing() const override {
+    return helix::FirmwareRouting::fixed_heads(kNumTools, 0);
+}
+```
+
+`AmsBackendAd5xIfs` is the third shape: it publishes an arbitrary 16-entry
+tool -> port table, so it builds `FirmwareRouting::head_for_tool` directly (ports
+are 1-based there and `5` is the unmapped sentinel).
+
+**This is not the live map.** `AmsSystemInfo::tool_to_slot_map` carries what the
+firmware is doing right now, and it is not uniformly available - an AFC tracks it,
+a U1 freezes `mapped_tool` at 1:1 while its real map lives in
+`print_task_config.extruder_map_table`. Seeding from the live map therefore means
+different things per backend; seed from the default map instead.
+
+Three consumers read this and they must all agree: the mapping-card seed
+(`FilamentMapper::use_current_assignments`), the wire filter
+(`FilamentMapper::identity_filtered_remap`), and the runout lane scan
+(`FilamentSensorManager`). Answering them differently is a silent bug - a
+lane-per-tool identity read as a genuine remap, or a runout watch on lane 0.
+
+**While a print's remap is still on the printer**, the live table a Native
+backend reports as its default is that print's map. Print start records the map
+it displaced in `AmsState::pending_tool_map_restore()` and keeps it until the
+restore is confirmed, even across a deferred (Klipper not ready) or refused
+(unit detached) restore and the next print start. While the record is held,
+`AmsState::collect_firmware_routing()` answers from it, so the next print's seed
+shows the printer's own lanes, and print start sends those lanes for the rows it
+did not change. The record is shared by every `PrintStartController` and is
+dropped on a printer switch. It names the backend type it was taken from, and
+each use (print start, restore, seed) checks that type and ignores or drops a
+record that no longer matches; nothing drops it the moment the type changes.
+Two things bound how long it lives: a print start that finds an entry's lane
+unreported keeps that tool on its live lane and stops restoring it, and a tool
+the user maps by hand outside a print takes that mapping as its entry, so no
+replay reverts it. `<user-config>/pending_remap.json` holds one entry per printer
+id, so a print on one printer never overwrites another's record and startup
+replays only the active printer's (prestonbrown/helixscreen#1859).
+
+### 2. Add Detection in PrinterDiscovery
+
+In `printer_discovery.h`, add detection logic in `parse_objects()`:
+
+```cpp
+else if (name == "my_system") {
+    has_mmu_ = true;
+    mmu_type_ = AmsType::MY_SYSTEM;
+}
+```
+
+Add any component discovery (lane names, tool names, etc.) as needed.
+
+### 3. Implement the Backend Class
+
+Create include/ams_backend_mysystem.h and src/printer/ams_backend_mysystem.cpp. Derive from `AmsSubscriptionBackend` (`include/ams_subscription_backend.h`), as every real backend does: directly, or through a backend it extends (`AmsBackendIndx` through `AmsBackendToolChanger`, `AmsBackendMultiAce` through `AmsBackendSnapmaker`). Only the mock derives from `AmsBackend` directly.
+
+**What the subscription base implements.** Do not write these:
+
+- `start()`, `stop()`, `is_running()`, `set_event_callback()` -- Lifecycle and events (`final`). Use the `on_started()`, `on_stopping()`, `on_stopped()` and `additional_start_checks()` hooks instead
+- `get_current_action()`, `get_current_tool()`, `get_current_slot()`, `is_filament_loaded()` -- State queries (`final`). `get_slot_info()` is implemented too and stays overridable
+- `load_filament()`, `unload_filament()`, `select_slot()`, `change_tool()`, `park_active_tool()`, `load_filament_batch()`, `unload_filament_batch()` -- Filament operations (`final`). Each runs the print-active gate and the one-operation claim, then calls your `do_*` hook, so a backend cannot skip the gate
+
+**Required overrides.** The subscription base's own pure virtuals:
+
+- `handle_status()` -- Parse your status object
+- `backend_log_tag()` -- The log prefix, like `"[AMS AFC]"`
+- `do_load_filament()`, `do_unload_filament()`, `do_select_slot()`, `do_change_tool()` -- The operations, reached only after the gate has passed. When one operation is really another, forward to the sibling `do_*`, never to the public entry point
+
+And the pure virtuals of `AmsBackend` (`include/ams_backend.h`) that the subscription base leaves to you:
+
+- `get_type()`, `get_system_info()` -- State queries
+- `get_topology()`, `get_filament_segment()`, `get_slot_filament_segment()`, `infer_error_segment()` -- Path visualization
+- `recover()`, `reset()`, `cancel()` -- Recovery
+- `apply_user_edit()` -- Filament identity. Every link and identity write is a person's edit
+  through `AmsState::commit_slot_edit()`; a metered weight reaches the live slot through
+  `update_slot_weight_impl()` (the `AmsSubscriptionBackend` default writes the slot and hands a
+  persist to `persist_slot_weight()`)
+- `can_set_tool_mapping()`, `set_tool_mapping_impl()` -- Tool mapping. `set_tool_mapping()` is non-virtual and calls them
+- `enable_bypass()`, `disable_bypass()`, `is_bypass_active()` -- Bypass mode
+
+**Optional `do_*` hooks**, each behind the same gate as its public entry point and each refusing with not-supported by default: `do_park_active_tool()`, `do_filament_batch()`, `do_execute_device_action()`, `do_run_device_action()` (which by default runs `do_execute_device_action()`) and `do_run_edit_follow_up()`. Two more questions shape the gate: `select_slot_moves_toolhead()` and `filament_op_gate()`.
+
+**Constant capabilities go in `kTraits`, not in overrides.** A capability your backend
+answers the same way for its whole life (`has_physical_tray`, `supports_auto_heat_on_load`,
+`has_per_slot_loaded_authority`, `lane_noun`, ...) is a field of `BackendTraits` (`include/ams_backend.h#BackendTraits`).
+Declare one `static constexpr BackendTraits kTraits` that sets the fields you differ on, and
+return it from `traits()`; the predicates of the same names read it and cannot be overridden.
+Any field you leave alone keeps the base answer. A capability that depends on discovery,
+configuration that arrives later, or live status (`manages_active_spool()`,
+`supports_lane_eject()` on QIDI, `delegates_homing_to_printer()` on AFC, ...) is still a
+virtual: override it instead. The mock persona standing in for your system copies your
+`kTraits` (step 5), and `tests/unit/test_ams_backend_traits.cpp` pins that.
+
+```cpp
+static constexpr BackendTraits kTraits = [] {
+    BackendTraits t;
+    t.has_per_slot_loaded_authority = true;
+    t.supports_auto_heat_on_load = true;
+    return t;
+}();
+[[nodiscard]] BackendTraits traits() const override {
+    return kTraits;
+}
+```
+
+**Operations only one family has go behind a capability interface.** Generic code asks
+`backend->as<ICfsCalibration>()` and gets nullptr from every backend that lacks it
+(`include/ams_capability.h`). To publish one, inherit the interface and return
+`static_cast<I*>(this)` from `capability()` for `helix::type_tag<I>()`, deferring to the base for
+any other tag. The interface sits in its own header, so changing it rebuilds only its users.
+A caller spells out what a backend without the interface means: the sidebar's button reads
+`"Reset"`, and an operation reports `AmsErrorHelper::not_supported`.
+
+- `IGateSelector` (`include/ams_gate_selector.h`) -- Selector moves and gate probes, preload,
+  `recover_with_state()`, the sidebar's `reset_button_label()` (Happy Hare: `"Home"`) and
+  `get_bowden_progress()`.
+- `ILaneRecovery` (`include/ams_lane_recovery.h`) -- `recover_lane_position()`, the physical retract
+  of a stranded lane, and the two questions that decide whether to offer it. AFC implements it.
+- `IFeederControl` (`include/ams_feeder_control.h`) -- The frame-side gripper that holds the filament:
+  `set_feeder_open()`, `feeder_open()`, and `supports_feeder_control()`, which is per machine because
+  a controller reports the gripper during discovery. The tool changer backend implements it.
+- `IStepOperation` (`include/ams_step_model.h`) -- A step bar from a firmware phase source: the model,
+  the subject carrying the current step, the operation the backend knows it is running, each step's
+  heater, and which actions the bar follows. The Snapmaker U1, the AD5X IFS and the tool changer
+  implement it. Everything else gets its bar through `operation_step_model()`: the narration template
+  below, or the coarse fallback.
+- `IInsertSignals` (`include/ams_insert_signals.h`) -- A lane's own insert reading and its tag reader's
+  verdict, for the insert watcher (§ Insert prompts). The Snapmaker U1 and MultiACE implement it. Without
+  it an insert is the slot status rising on a lane with a prep sensor, and no reader is waited on.
+- `IDryer` (`include/ams_dryer.h`) -- Drying cycles and the per-unit `DryerInfo` (§ Data Flow above). ACE Pro,
+  MultiACE, OpenAMS, the QIDI box, Happy Hare and the mock implement it; `DryerInfo::supported` says whether
+  this machine's unit has the hardware.
+- `IPrintRouting` (`include/ams_print_routing.h`) -- Gcode the firmware gets ahead of a job: the pre-print
+  step and its refusal, a reprint's recorded routing, standing options and the purge preamble. The Snapmaker U1,
+  MultiACE, CFS, the AD5X IFS and the mock implement it. Without it nothing is sent. Whether a start runs the
+  step is `requires_preprint_send()` in `BackendTraits`, and `firmware_default_routing()` (§ 1b) stays on
+  `AmsBackend`, since every backend answers it.
+- `INarrationMatcher` (`include/ams_narration_matcher.h`) -- What a console line means to the step
+  bar; see the toolchange narration seam below. AFC implements it.
+
+**Optional overrides (with default implementations):**
+
+- `clear_fault()` -- Clear a latched fault, bookkeeping only (default: forwards to `cancel()`)
+- `get_endless_spool_capabilities()`, `get_endless_spool_config()` -- Endless spool state. `set_endless_spool_backup()` is **not** an override point: it is non-virtual and owns every rejection. Supply `apply_endless_spool_backup()` (protected, transport only), `endless_spool_slot_count()` (protected, only if `total_slots` is wrong for you), and `endless_spool_backup_eligibility()` (only to tighten the default polymer-plus-grade rule; return `Eligible`/`Incompatible` only, unless your firmware genuinely has a soft case). `reset_endless_spool()` already works for any editable backend by looping the setter with -1 - override it only if your firmware has a real reset primitive. See § [Endless Spool](#endless-spool-shared-model).
+- `get_remap_strategy()`, `remap_ready()`, `owns_tool_mapping_table()`, `get_tool_mapping()` -- Tool mapping. **Three questions, one spelling each.** `get_remap_strategy()` says HOW a user's tool->lane pick is carried out (`Native` writes your table, `GcodeRewrite` rewrites the job, `PrePrintSend` is a firmware pre-print send, `None` means it cannot be). `remap_ready()` says whether that route is usable YET -- default true, override only where discovery gates it, as AD5X IFS does on `_IFS_VARS`. `owns_tool_mapping_table()` says whether you hold a tool->slot table for `ToolState` to adopt; the Snapmaker U1 answers **no** and still honors every pick, through its pre-print send, which is why this is not the same question as the first two. Ask them through `ams_remap.h` -- never by combining them at a call site, which is how one question came to have six answers that could disagree. Three named predicates there, and the difference between them is `GcodeRewrite`: `can_remap()` asks whether the user's pick will be honored at all (yes), `remap_is_persistent()` whether the answer outlives the send (yes, it is in the job file), `can_write_mapping_table()` whether a `set_tool_mapping()` write lands (no, there is no table).
+- `get_device_sections()`, `get_device_actions()`, `do_execute_device_action()` -- Device-specific actions. `execute_device_action()` is `final` in the subscription base and refuses an id the two lists do not offer
+- `set_discovery()` -- Discovery configuration: pull and resolve what this backend needs from the `PrinterDiscovery` snapshot, before `start()`
+- `supports_auto_heat_on_unload` (`kTraits`) -- The unload counterpart: the backend's unload command heats the hotend itself, or (a tool changer's unmount) moves no filament through it. Set only where what the backend sends provably heats: a wrong claim runs a cold extrude, a missing one costs a second wait. A backend whose unloads differ answers per call through `unload_heats_hotend(slot)` (Snapmaker's bare fallback does not heat); CFS makes no claim. Read through `preheat_skip_reason()` like the load claim.
+- `supports_auto_heat_on_load` (`kTraits`) -- Auto-heat capability. It is one of three reasons a surface skips its own preheat, and **no surface should read it directly**: ask `helix::ui::preheat_skip_reason()` (`include/filament_op_execute.h`), which also covers the "Allow cold load/unload" setting and a stock macro that heats in its own body (`helix::filament_macros::macro_heats_hotend()`, `include/filament_macro_profiles.h`). The AMS sidebar reading only this one is what left that setting ignored on the AMS panel (prestonbrown/helixscreen#1494).
+- `supports_lane_eject()` + `eject_lane()` -- Cold retract of a lane's filament back to the spool. Without the predicate the context menu never offers Eject, whatever `eject_lane()` does.
+- `has_per_slot_loaded_authority` (`kTraits`) -- Set true only when the firmware reports load state **per slot**. Leave it false when your per-slot answer is derived from an aggregate "current slot" pointer, or a mid-toolchange null will drop the highlight.
+
+**The error seam.** All optional, all defaulted to "nothing", and a backend that skips the
+whole group gets **no error dialog at all**, silently. Read § [Two error channels](#two-error-channels)
+before implementing any of them:
+
+- `classify_error()` -- Channel A: claim one gcode-response line and return an `ErrorEvent`. The router applies **no line filtering**, so every override must gate itself (AFC and Happy Hare take only `!!` lines via `helix::is_bang_line`; CFS deliberately takes only non-`!!` lines). Return `nullopt` to defer to the generic classifier. Set `ErrorEvent::command_refusal` only for a line that explains why the firmware refused a command the user just sent: the router also asks the hook ahead of the `!!` copy (`GcodeErrorRouter::explains_rpc_error()`), so a refusal override must be side-effect free and log nothing.
+- `current_error()` -- Channel B: the current actionable fault derived from backend **status**, consulted only by `AmsErrorBridge` on the rising edge into `AmsAction::ERROR`. Independent of channel A, not an alternative to it: AFC overrides both.
+- `build_recovery_actions()` (protected) -- The buttons the user can tap for the current fault. **The caller already holds `mutex_`**, which is non-recursive: an override that locks deadlocks. The base returns an empty vector deliberately: `decide_presentation()` keys off `recovery_actions.empty()` to pick MODAL vs MODAL_WITH_RECOVER, so recovery is strictly opt-in.
+- **Your dispatch path must pass `caller_surfaces_errors=false` when its `on_error` only logs.** `AmsSubscriptionBackend::ensure_homed_then()` and `dispatch_payload()` (`include/ams_subscription_backend.h`) take it as `std::optional<bool>`; unset means "derive from `on_error`". That derivation is wrong whenever the callback ends up in `handle_dispatch_error()`'s default -- log the message and reset the action to `AmsAction::IDLE`, which no user ever sees. Claiming the report there records the rejection for RPC dedup and silences Channel A's `!!` copy, so a failed macro reaches nobody. `scripts/check_gcode_error_ownership.py` gates the log-only shape at zero; the escape hatch is `// ERROR_OWNERSHIP_OK: <reason>`. See `RPC_ERROR_OWNERSHIP.md`.
+
+**The toolchange narration seam.** Also optional; leaving it empty falls back to the
+sidebar's legacy `AmsAction`-driven hardcoded step list, which is a valid choice:
+
+- `toolchange_phase_template(op)` -- The ordered phase list per `StepOperationType`. Order it by **first narration**, not by macro name: a phase whose line fires twice re-reports the earlier index, and the step bar has no notion of a repeated step.
+- `match_narration_phase()` -- Map a `//` narration body to a phase id. Loose substring needles are fine here; the text came from a macro's own `respond_info`.
+- `match_bare_narration_phase()` -- Map an **unprefixed** console line to a phase id. Must match anchored line shapes, never loose substrings. The open console carries user-controlled gcode filenames, so a `cut` needle fires on `haircut.gcode`.
+
+**Runout and spool-assignment routing.** Both default to something reasonable; override
+only if your hardware model diverges:
+
+- `recovers_filament_on_resume` (`kTraits`) -- True when Resume itself re-feeds filament (Snapmaker U1 runs `AUTO_FEEDING` then `RESUME`). Such backends present Resume as the runout dialog's primary action and demote manual Load/Unload/Purge. Default false, which keeps Load prominent. That is correct for AFC, Happy Hare, and every basic runout sensor.
+- `supports_per_tool_spool_assignment()` -- Whether each tool has a lane of its own, so Moonraker's active spool links to the lane feeding the mounted tool. Default is `is_tool_changer(get_type())`; no backend currently overrides it.
+- `lane_record_is_only_identity()` -- Whether HelixScreen's lane record is a lane's only identity (tool changers incl. MedusaHC and INDX, OpenAMS without `[openams_spoolman]`, ACE without ACEPRO). Only there does **Keep Spool Info on Eject** apply and show: when a lane stops holding filament, `AmsState::sync_lanes_emptied()` calls `lane_emptied()`, which writes the record's `loaded: false` and keeps its identity (setting on) or clears it (off). Firmware that holds the spool decides an eject itself; AFC's `remember_spool` keeps its own switch.
+
+### 4. Wire into the Factory
+
+In `src/printer/ams_backend.cpp`, add cases to both `create()` overloads:
+
+```cpp
+case AmsType::MY_SYSTEM:
+    return std::make_unique<AmsBackendMySystem>(api, client);
+```
+
+### 5. Add Mock Support
+
+In `src/printer/ams_backend.cpp`, extend the `HELIX_MOCK_AMS` environment variable handling:
+
+```cpp
+if (type_str == "mysystem") {
+    mock->set_my_system_mode(true);
+}
+```
+
+Add corresponding `set_my_system_mode()` to `AmsBackendMock` if the new system has unique UI characteristics that need simulation. A new persona also gets a case in `AmsBackendMock::traits()` returning your `kTraits`, and a section in `tests/unit/test_ams_backend_traits.cpp`.
+
+### 6. Update AmsState (if needed)
+
+If the new backend has special discovery requirements, update `AmsState::init_backend_from_hardware()` accordingly. For example, ACE supports both object-list detection (`ace` in `printer.objects.list`) and a REST probe fallback.
+
+### 7. Add Tests
+
+Write tests for:
+- State parsing from Moonraker JSON
+- G-code command generation
+- Error handling and recovery
+- Tool/slot mapping
+- Path segment computation
+
+See `tests/unit/test_ams_backend_happy_hare.cpp`, `test_ams_tool_mapping.cpp`, `test_ams_endless_spool.cpp`, and `test_ams_device_actions.cpp` for patterns.
+
+---
+
+## Spoolman Management & Spool Wizard
+
+Beyond slot assignment, HelixScreen provides full Spoolman spool management:
+
+- **SpoolmanPanel overlay** — Browse, search, edit, and delete spools with virtualized list (20-row pool)
+- **New Spool Wizard** — 3-step guided creation: Vendor → Filament → Spool Details
+- **Context menu** — Per-spool actions: Set Active, Edit, Delete
+- **Edit modal** — Update weight, price, lot number, notes via PATCH
+
+### Spool Wizard Architecture
+
+The wizard (`SpoolWizardOverlay`) is a 3-step overlay:
+
+1. **Step 0 — Select Vendor**: Search/filter vendors from Spoolman server, or create a new one via modal (`create_vendor_modal.xml`)
+2. **Step 1 — Select Filament**: Filter filaments by selected vendor (`vendor.id` API param), or create a new one via modal (`create_filament_modal.xml`) with material from `filament::MATERIALS[]` database, color picker, temp ranges, weight
+3. **Step 2 — Spool Details**: Remaining weight, price, lot number, notes — compact 2-column layout
+
+Key patterns:
+- **Modal forms** for vendor/filament creation (not inline) — keeps list scroll area maximized
+- **Vendor filtering**: Filament API uses `vendor.id=X` (Spoolman's dot-notation filter syntax)
+- **Color picker**: HSV picker + preset swatches, launched from filament creation modal
+- **Atomic creation**: Creates vendor → filament → spool in sequence with best-effort rollback on failure
+- **Row selection**: `LV_STATE_CHECKED` with `selected_style` (primary left border + elevated bg)
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `include/ui_spool_wizard.h` | Wizard overlay class declaration |
+| `src/ui/filament/ui_spool_wizard.cpp` | Wizard logic, API calls, callbacks |
+| `ui_xml/spool_wizard.xml` | 3-step wizard layout |
+| `ui_xml/create_vendor_modal.xml` | New vendor modal form |
+| `ui_xml/create_filament_modal.xml` | New filament modal form |
+| `ui_xml/wizard_vendor_row.xml` | Selectable vendor row (lv_button with checked style) |
+| `ui_xml/wizard_filament_row.xml` | Selectable filament row (lv_button with checked style) |
+| `src/ui/components/ui_color_picker.cpp` | Color picker modal (used by filament creation) |
+
+The original spool-wizard visual test plan (2026-02-15) is no longer in-tree; treat the wizard steps above as the reference.
+
+---
+
+## Troubleshooting
+
+### Common Issues by Backend
+
+#### Happy Hare
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| "No multi-filament system detected" | `mmu` object not in Klipper | Verify Happy Hare is installed and `[mmu]` section exists in printer.cfg |
+| Gate status all "Unknown" | Subscription not receiving updates | Check Moonraker connection, verify `printer.mmu` is subscribable |
+| Tool mapping not updating | Stale TTG map | Try reset tool mappings (sends 1:1 mapping for all tools) |
+| Bypass button disabled | Hardware bypass sensor detected | System auto-detects bypass via sensor, manual toggle not available |
+
+#### AFC
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| "No multi-filament system detected" | `AFC` object not in Klipper | Verify AFC-Klipper-Add-On is installed |
+| Lane count wrong | Discovery mismatch | Check for both `AFC_stepper lane*` and `AFC_lane lane*` objects in `printer.objects.list` (OpenAMS uses `AFC_lane`) |
+| Too many nozzles drawn | HUB unit map values treated as separate tools | Verify topology detection — HUB units always have tool_count=1 regardless of `map` field values |
+| Hub sensors not updating | Hub name doesn't match unit name | OpenAMS uses per-lane hubs (Hub_1..Hub_N) — check hub-to-unit ownership in `unit_infos_` |
+| No filament colors/materials | AFC version too old or no Spoolman | `lane_data` database requires v1.0.32+; assign spools in Spoolman |
+| Device actions missing | Backend not returning sections | Verify AFC backend is connected (not mock) |
+| Bowden length slider shows wrong range | Default 450mm being used | Hub data may not be received yet; wait for state sync |
+| Quiet mode not toggling | G-code not recognized | Verify AFC firmware supports `AFC_QUIET_MODE` command |
+
+#### ACE (Anycubic ACE Pro)
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| ACE Pro not detected | Object not in list + REST probe failed | Verify a ValgACE/BunnyACE/DuckACE driver is installed; check `ace` in `printer.objects.list` and `/server/ace/info` endpoint |
+| Stale state | Polling interval | The REST bridge is polled at 500ms, so state may lag slightly; with the HelixPrint plugin's `vendor_ace` feature ready it is pushed on change instead (`FILAMENT_BACKEND_ACE.md`) |
+| Dryer not controllable | Missing REST bridge | BunnyACE/DuckACE users must install ValgACE's `ace_status.py` Moonraker component |
+
+#### Tool Changer
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| No tools shown | `toolchanger` object missing | Verify klipper-toolchanger is installed |
+| Wrong tool count | Discovery mismatch | Check that `tool T*` objects appear in `printer.objects.list` |
+| "Uninitialized" status | Tools not homed | Run `T0` or `SELECT_TOOL TOOL=T0` to initialize |
+
+#### AD5X IFS
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| IFS not detected | Missing or outdated ZMOD firmware | Install ZMOD v1.7.0+ (v1.6.2 hard minimum). Verify zmod_ifs.py is installed and `_ifs_port_sensor_*` sensors appear in `printer.objects.list` |
+| Colors/materials empty | `save_variables` not populated | Run IFS calibration wizard in ZMOD to initialize `less_waste_*` variables |
+| Slots all EMPTY | Port sensors not subscribed | Check that `filament_switch_sensor _ifs_port_sensor_{1-4}` are present |
+| Tool mapping wrong | Stale `less_waste_tools` | Check `save_variables.variables.less_waste_tools` — ports are 1-based, 5=unmapped |
+| Bypass stuck on | `less_waste_external` = 1 | Set via ZMOD UI or `SAVE_VARIABLE VARIABLE=less_waste_external VALUE=0` |
+
+### Debug Logging
+
+Run with `-vv` (DEBUG) or `-vvv` (TRACE) to see backend-specific logging:
+
+```bash
+./build/bin/helix-screen --test -vv
+```
+
+All backends log with prefixes:
+
+| Prefix | Backend |
+|--------|---------|
+| `[AMS Backend]` | Factory/creation |
+| `[AMS Happy Hare]` / `[AmsBackendHappyHare]` | Happy Hare |
+| `[AMS AFC]` | AFC |
+| `[AMS ACE]` | ACE (Anycubic ACE Pro) |
+| `[AMS ToolChanger]` | Tool Changer |
+| `[AMS AD5X-IFS]` | AD5X IFS |
+| `[AmsBackendMock]` | Mock |
+
+### Error Result Codes
+
+See `ams_error.h` for the full `AmsResult` enum. Key results:
+
+| Result | Recoverable | Typical Cause |
+|--------|-------------|---------------|
+| `FILAMENT_JAM` | Yes | Filament stuck in path |
+| `SLOT_BLOCKED` | Yes | Slot obstructed |
+| `EXTRUDER_COLD` | Yes | Nozzle below load temp |
+| `LOAD_FAILED` | Yes | Load did not complete |
+| `UNLOAD_FAILED` | Yes | Unload did not complete |
+| `BUSY` | No (wait) | Another operation in progress |
+| `NOT_SUPPORTED` | No | Feature not available on this backend |
+| `HOMING_FAILED` | Yes | Selector home failed |
+
+`AmsErrorHelper` provides factory methods for creating user-friendly error messages with suggestions for each error type.

@@ -1,0 +1,134 @@
+{
+  "uid": {
+    "uid1": 808780566,
+    "uid2": 17445170,
+    "uid3": 942880330
+  },
+  "info": {
+    "boot_version": "",
+    "firmware": "V1.1.97O",
+    "model": "ACE 2 Pro"
+  },
+  "status": {
+    "_status_wire_valid": true,
+    "cont_assist_time": 0.0,
+    "dryer_status": {
+      "duration": 0,
+      "remain_time": 0,
+      "status": "stop",
+      "target_temp": 0
+    },
+    "enable_rfid": 1,
+    "fan_speed": 0,
+    "feed_assist_count": 0,
+    "humidity": 48,
+    "rfid1_enable_raw": 1,
+    "rfid2_enable_raw": 1,
+    "slots": [
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 0,
+        "rfid": 0,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "unknown",
+        "type": ""
+      },
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 1,
+        "rfid": 0,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "empty",
+        "type": ""
+      },
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 2,
+        "rfid": 2,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "ready",
+        "type": ""
+      },
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 3,
+        "rfid": 2,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "ready",
+        "type": ""
+      }
+    ],
+    "status": "ready",
+    "temp": 24
+  },
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "guard": {
+    "state": "idle",
+    "reason": null,
+    "triggered": [],
+    "event_seq": 0,
+    "stop_count": 0,
+    "target": null,
+    "stop_inflight": false,
+    "stop_error": null,
+    "gate": null,
+    "lane_states": null,
+    "rfid_flags": null,
+    "timer_max_gap": 0.0,
+    "selftest_active": false,
+    "selftest_max_gap": null,
+    "selftest_count": 0,
+    "poll_timeouts": 0,
+    "poll_requests": 0,
+    "poll_replies": 0,
+    "last_request_id": null,
+    "last_reply_id": null,
+    "key_age": null,
+    "status_age": null,
+    "writer_queue": 0,
+    "callback_count": 2,
+    "poll_events": [],
+    "trace_events": [],
+    "telemetry_result": null
+  },
+  "holds": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "printer": "idle"
+}

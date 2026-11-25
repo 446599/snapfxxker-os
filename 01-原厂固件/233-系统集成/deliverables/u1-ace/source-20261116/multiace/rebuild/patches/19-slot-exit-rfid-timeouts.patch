@@ -1,0 +1,430 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -1620,6 +1620,7 @@
+         self.gcode.register_command("ACE_HOT_PARK_RECOVER", self.cmd_ACE_HOT_PARK_RECOVER)
+         self.gcode.register_command("ACE_MEASURED_TRIAL", self.cmd_ACE_MEASURED_TRIAL)
+         self.gcode.register_command('ACE_SLOT_EJECT', self.cmd_location_checked_eject)
++        self.gcode.register_command('ACE_SLOT_EXIT', self._slot_actions.exit_slot)
+         self.gcode.register_command('ACE_SLOT_EJECT_STOP', self._slot_actions.stop)
+         self.gcode.register_command('ACE_SLOT_RFID', self.cmd_ACE_SLOT_RFID)
+         self.gcode.register_command('ACE_SLOT_RFID_STOP', self.cmd_ACE_SLOT_RFID_STOP)
+@@ -3687,7 +3688,7 @@
+             if self._stop_guard.message() is not None or self._get_heads_for_ace_slot(idx, slot):
+                 return False
+             action = getattr(getattr(self, '_slot_actions', None), 'state', {}) or {}
+-            if action.get('state') == 'running':
++            if action.get('state') in ('preparing', 'running'):
+                 return False
+             return True
+         except Exception:
+@@ -10375,7 +10376,9 @@
+         path = getattr(self, '_path_calibration', None)
+         if path is not None and path.task.get('active') and not path.thermal_active:
+             raise gcmd.error('后台料管校准正在进行，请先完成或取消任务')
+-        if self._slot_actions.state.get('state') == 'running':
++        if (self._slot_actions.state.get('state') == 'running'
++                or (self._slot_actions.state.get('state') == 'preparing'
++                    and gcmd is not getattr(self._slot_actions, '_prepare_command', None))):
+             raise gcmd.error('料槽退出正在进行，请等待停止确认')
+ 
+     def cmd_ACE_ENABLE_FEED_ASSIST(self, gcmd):
+@@ -17542,7 +17545,9 @@
+                 if (self._slot_actions.state.get('kind') == 'rfid' and
+                         self._slot_actions.state.get('ace') == ace_idx and
+                         self._slot_actions.state.get('slot') == slot):
+-                    self._slot_actions.state.update(state='complete' if _out['ok'] else 'error',
++                    self._slot_actions.state.update(
++                        state=('cancelled' if self._slot_actions.cancel else
++                               'complete' if _out['ok'] else 'error'),
+                         message=(_out['msg'] or '未识别到标签')[:200])
+ 
+         self.reactor.register_async_callback(_run)
+--- a/klipper/extras/ace_rc522.py
++++ b/klipper/extras/ace_rc522.py
+@@ -201,6 +201,12 @@
+         differently-named positional signature raises TypeError, which the
+         response wrapper only logs, so the reply never arrives and the poll
+         times out. **kw form tolerates both call styles."""
++        deadline = self.ace.reactor.monotonic() + timeout
++        stage_deadline = getattr(self, '_telemetry_deadline', None)
++        if stage_deadline is not None:
++            deadline = min(deadline, stage_deadline)
++        if self.ace.reactor.monotonic() >= deadline:
++            return None
+         box = {}
+ 
+         def _cb(*args, **kw):
+@@ -249,9 +255,8 @@
+         # reply comes back in a few ms. Poll every 5 ms - reads/writes become reply-bound, not
+         # sleep-bound (~5-10x). reactor.pause yields, so a greenlet at 5 ms
+         # does not busy-spin the reactor.
+-        deadline = self.ace.reactor.monotonic() + timeout
+         while 'r' not in box and self.ace.reactor.monotonic() < deadline:
+-            self._pause(0.005)
++            self._pause(min(0.005, deadline - self.ace.reactor.monotonic()))
+         response = box.get('r')
+         if method in ('feed_or_rollback_raw', 'stop_feed_filament'):
+             ack = {k:response.get(k) for k in ('id','code','_v2_command','_v2_frame_valid','_v2_payload_valid')} if isinstance(response,dict) else None
+@@ -351,21 +356,24 @@
+         """Fresh device status, not a cached or inferred standstill."""
+         deadline = self.ace.reactor.monotonic() + timeout
+         while self.ace.reactor.monotonic() < deadline:
+-            res = self._req(idx, 'get_status', {})
++            res = self._req(idx, 'get_status', {},
++                            timeout=min(REQ_TIMEOUT, deadline - self.ace.reactor.monotonic()))
+             if (not isinstance(res, dict) or res.get('code') != 0 or
+                     res.get('_v2_payload_valid') is not True or
+                     not (res.get('result') or {}).get('_status_wire_valid')):
+-                return False
++                self._pause(min(0.1, max(0, deadline - self.ace.reactor.monotonic())))
++                continue
+             lanes = (res.get('result') or {}).get('slots') or []
+             lane = next((x for x in lanes if x.get('index') == slot), None)
+             if not lane:
+-                return False
++                self._pause(min(0.1, max(0, deadline - self.ace.reactor.monotonic())))
++                continue
+             state = lane.get('slot_status')
+-            if state == 'ready':
++            if state == 'ready' and self.ace.reactor.monotonic() < deadline:
+                 return True
+             if state not in V2_ACTIVE_MOTION_STATES:
+                 return False
+-            self._pause(0.25)
++            self._pause(min(0.25, max(0, deadline - self.ace.reactor.monotonic())))
+         return False
+ 
+     def _fresh_encoder(self, idx, slot):
+@@ -472,9 +480,17 @@
+ 
+     def _manual_stable_terminal(self, idx, slot, length, first):
+         """Require two consecutive fresh matching ready samples within a bound."""
++        previous_deadline = getattr(self, '_telemetry_deadline', None)
++        self._telemetry_deadline = self.ace.reactor.monotonic() + 6.0
++        try:
++            return self._manual_stable_terminal_bounded(idx, slot, length, first)
++        finally:
++            self._telemetry_deadline = previous_deadline
++
++    def _manual_stable_terminal_bounded(self, idx, slot, length, first):
+         previous = None
+         raw = first
+-        deadline = self.ace.reactor.monotonic() + 6.0
++        deadline = self._telemetry_deadline
+         for attempt in range(12):
+             remaining = deadline - self.ace.reactor.monotonic()
+             if remaining <= 0:
+@@ -492,11 +508,11 @@
+                 raise MotionUncertain('manual move completion telemetry timeout')
+             logging.info('[multiACE] RFID manual terminal ace=%s slot=%s requested=%s attempt=%s sample=%s diag=%s ready=%s',
+                          idx, slot, length, attempt, sample, diag, ready)
+-            if not valid or not ready:
+-                raise MotionUncertain('manual move completion telemetry unconfirmed')
+-            if previous == sample and row['length'] >= max(1, length - 5):
++            if valid and ready and previous == sample and row['length'] >= max(1, length - 5):
+                 return raw, row
+-            previous = sample
++            # A missing reply is not a changed position, but breaks the proof
++            # streak. Never accept samples separated by unknown telemetry.
++            previous = sample if valid and ready else None
+             if attempt == 11:
+                 break
+             remaining = deadline - self.ace.reactor.monotonic()
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -15,7 +15,33 @@
+         self.cancel = False
+         self._eject_lease = None
+         self._eject_pending = None
++        self._prepare_command = None
+         ace.printer.lookup_object('webhooks').register_endpoint('multiace/slot_eject_cancel', self.cancel_endpoint)
++        ace.printer.lookup_object('webhooks').register_endpoint('multiace/slot_operation_cancel', self.operation_cancel_endpoint)
++
++    def operation_cancel_endpoint(self, request):
++        """Cancel only the task the screen actually observed, outside gcode's lock."""
++        kind = request.get_str('kind')
++        idx, slot, seq = (request.get_int(key) for key in ('ace', 'slot', 'seq'))
++        a = self.ace
++        if kind == 'rfid':
++            matches = (getattr(a, '_tag_read_busy', False)
++                       and getattr(a, '_tag_op_kind', None) == 'read'
++                       and (a._tag_op_ace, a._tag_op_slot, a._tag_op_seq) == (idx, slot, seq))
++        else:
++            matches = (kind == 'eject' and self.state.get('kind') == kind
++                       and self.state.get('state') in ('preparing', 'running')
++                       and (self.state.get('ace'), self.state.get('slot'), self.state.get('seq')) == (idx, slot, seq))
++        if not matches:
++            request.send({'cancelled': False, 'message': '任务已结束或已变化'})
++            return
++        self.cancel = True
++        if kind == 'eject' and self.state.get('state') == 'running':
++            self._stop_controlled_eject()
++        self.state['message'] = ('喷头卸载结束后停止，不再退出 ACE'
++                                 if self.state.get('state') == 'preparing'
++                                 else '正在停止，请等待确认')
++        request.send({'cancelled': True, 'state': 'cancelling'})
+ 
+     def cancel_endpoint(self, request):
+         if self.state['state'] != 'running' or self.state['kind'] != 'eject':
+@@ -29,9 +55,12 @@
+     def status(self):
+         return dict(self.state)
+ 
+-    def _check(self, idx, slot, transport=None, own=False, allow_tag=False, for_eject=False):
++    def _check(self, idx, slot, transport=None, own=False, allow_tag=False, for_eject=False,
++               allow_target_loaded=False):
+         a = self.ace
+         a._require_no_stop_fault()
++        if self.state.get('state') == 'preparing' and not own:
++            raise RuntimeError('正在退出喷头，请等待本次退出流程结束')
+         path = getattr(a, '_path_calibration', None)
+         if path is not None and path.task.get('active'):
+             raise RuntimeError('后台料管校准正在进行')
+@@ -91,7 +120,8 @@
+                 if (
+                     not for_eject
+                     or source is None
+-                    or (source.get('ace_index'), source.get('slot')) == (idx, slot)
++                    or ((source.get('ace_index'), source.get('slot')) == (idx, slot)
++                        and not allow_target_loaded)
+                 ):
+                     raise RuntimeError('目标喷头有料或来源未知，请先从喷头卸载')
+ 
+@@ -363,17 +393,88 @@
+                 retried = True
+             a.reactor.pause(min(deadline, a.reactor.monotonic() + 0.1))
+ 
++    def exit_slot(self, gcmd):
++        """Unload a positively identified source, then use the existing eject proof."""
++        idx = gcmd.get_int('ACE', minval=0, maxval=3)
++        slot = gcmd.get_int('SLOT', minval=0, maxval=3)
++        a = self.ace
++        if self.state.get('state') in ('preparing', 'running'):
++            raise gcmd.error('料槽操作正在进行')
++        try:
++            self._check(idx, slot, for_eject=True, allow_target_loaded=True)
++            transport = a._serials.get(idx)
++            identity = a._location_identity(idx)
++            if not identity[0] or identity[1] is None:
++                raise RuntimeError('ACE 身份尚未确认')
++            path = getattr(a, '_path_calibration', None)
++            physical = path.physical_sources() if path is not None else None
++            heads = []
++            for h, source in a._head_source.items():
++                if a.printer.lookup_object('filament_motion_sensor e%d_filament' % h).runout_buttun_state is not True:
++                    continue
++                target = source is not None and (source['ace_index'], source['slot']) == (idx, slot)
++                if not a.head_uses_ace(h):
++                    if target:
++                        raise RuntimeError('该喷头不使用 ACE，旧来源记录不可用于退料')
++                    continue
++                observed = physical.get(str(h)) if isinstance(physical, dict) else source
++                if (not isinstance(observed, dict) or source is None
++                        or (observed.get('ace_index'), observed.get('slot')) != (source['ace_index'], source['slot'])):
++                    raise RuntimeError('喷头物理来源待核，未开始退料')
++                if target:
++                    heads.append(h)
++            # One lane cannot safely be treated as feeding two toolheads.
++            if len(heads) > 1:
++                raise RuntimeError('目标耗材对应多个喷头，请先核对料路')
++            if heads:
++                self.seq += 1
++                self.cancel = False
++                self.state = {'seq': self.seq, 'state': 'preparing', 'kind': 'eject',
++                              'ace': idx, 'slot': slot, 'message': '正在退出喷头，之后退出 ACE'}
++                head = heads[0]
++                sequence = self.seq
++                command = 'ACE_UNLOAD_HEAD HEAD=%d' % head
++                self._prepare_command = a.gcode.create_gcode_command(
++                    'ACE_UNLOAD_HEAD', command, {'HEAD': str(head)})
++                try:
++                    a.cmd_ACE_UNLOAD_HEAD(self._prepare_command)
++                finally:
++                    self._prepare_command = None
++                if self.cancel:
++                    self.state.update(state='cancelled', message='已停止后续退出 ACE，请核对喷头状态')
++                    return
++                if (a._serials.get(idx) is not transport or a._location_identity(idx) != identity
++                        or not getattr(a, '_last_unload_ok', False)
++                        or a._head_source.get(head) is not None
++                        or a.printer.lookup_object('filament_motion_sensor e%d_filament' % head).runout_buttun_state is not False):
++                    raise RuntimeError('喷头卸载或原料路未确认，未开始退出 ACE')
++                return self._start(gcmd, prepared=sequence)
++            self._check(idx, slot, transport, for_eject=True)
++            return self.start(gcmd)
++        except Exception as exc:
++            if self.state.get('state') == 'preparing':
++                self.state.update(state='error', message=str(exc))
++            raise gcmd.error(str(exc))
++
+     def start(self, gcmd):
++        return self._start(gcmd)
++
++    def _start(self, gcmd, prepared=None):
+         idx = gcmd.get_int("ACE", minval=0, maxval=3)
+         slot = gcmd.get_int("SLOT", minval=0, maxval=3)
+-        if self.state["state"] == "running":
++        owned = (prepared is not None and self.state.get('state') == 'preparing'
++                 and (self.state.get('seq'), self.state.get('ace'), self.state.get('slot')) == (prepared, idx, slot))
++        if prepared is not None and (not owned or self.cancel):
++            raise gcmd.error('退出任务已停止或已变化')
++        if self.state["state"] in ('preparing', 'running') and not owned:
+             raise gcmd.error("料槽操作正在进行")
+         try:
+-            self._check(idx, slot, for_eject=True)
++            self._check(idx, slot, for_eject=True, own=owned)
+         except Exception as e:
+             raise gcmd.error(str(e))
+-        self.seq += 1
+-        self.cancel = False
++        if not owned:
++            self.seq += 1
++            self.cancel = False
+         self.state = {
+             "seq": self.seq,
+             "state": "running",
+@@ -542,6 +643,8 @@
+ 
+         try:
+             check()
++            if self.cancel:
++                raise RuntimeError('退出已取消，未开始 ACE 运动')
+             if uid is None:
+                 raise RuntimeError('ACE 硬件身份尚未确认')
+             affected = idx == 0 and slot == 3 and tuple(uid) == UID and port == PORT
+@@ -558,6 +661,8 @@
+                     marker_hash = hashlib.sha256(stream.read()).hexdigest()
+                 if operations.calibration.controller(idx, slot).snapshot()['inlet']:
+                     marker_hash = self._arm_eject_pending(marker_hash)
++            if self.cancel:
++                raise RuntimeError('退出已取消，未开始 ACE 运动')
+             operation = operations.eject(idx, slot, speed=SPEED_MM_S)
+             self.state['message'] = '正在连续高速退出 ACE'
+             while operation.phase not in ('complete', 'cancelled', 'error'):
+@@ -741,10 +846,54 @@
+     original_pause = reader._pause
+     original_move = reader._move_and_confirm
+     original_read = reader.read_slot
++    original_request = reader._req
+     handled = [False]
+     active = [False]
+     stopping = [False]
+     stopped = [False]
++    reading = [False]
++    pending_motor = [False]
++    read_deadline = [None]
++
++    def check_read():
++        if not reading[0] or stopping[0]:
++            return
++        reason = None
++        if actions.cancel:
++            reason = '用户已停止识别'
++        elif reactor.monotonic() >= read_deadline[0]:
++            reason = 'RFID 识别达到 180 秒时限'
++        elif not manual_session_guard():
++            reason = 'RFID 原设备或料路发生变化'
++        if reason:
++            # Until the read's final stationary proof returns, even a zero
++            # net displacement belongs to the original transport and identity.
++            displaced = (any(value for value in reader._encoder_ledger.values())
++                         or bool(getattr(reader, '_motion_ledger', {})))
++            if pending_motor[0] or displaced:
++                reader._motion_uncertain = reason + '，耗材位置待核，可退出 ACE 恢复'
++                raise motion_uncertain_type(reader._motion_uncertain)
++            raise RuntimeError(reason)
++
++    def guarded_request(request_idx, method, params, *args, **kwargs):
++        check_read()
++        if reading[0] and method == 'feed_or_rollback_raw':
++            # Queueing is already an ambiguous dispatch; a lost ACK must never
++            # be interpreted as no movement or cause a motor retry.
++            pending_motor[0] = True
++        response = original_request(request_idx, method, params, *args, **kwargs)
++        if (reading[0] and method == 'feed_or_rollback_raw' and isinstance(response, dict)
++                and response.get('_v2_frame_valid') is True
++                and response.get('_v2_payload_valid') is True
++                and response.get('_v2_command') == 8 and type(response.get('code')) is int
++                and (response['code'] != 0 or str(response.get('msg', '')).upper() == 'FORBIDDEN')):
++            pending_motor[0] = False
++        return response
++
++    def uncertain_after(exc):
++        return (isinstance(exc, motion_uncertain_type) or reader._motion_uncertain
++                or pending_motor[0] or any(reader._encoder_ledger.values())
++                or bool(getattr(reader, '_motion_ledger', {})))
+ 
+     def stop_and_verify():
+         if stopped[0]:
+@@ -771,33 +920,38 @@
+             stopping[0] = False
+ 
+     def guarded_pause(seconds):
+-        if not active[0] or stopping[0]:
++        if (not active[0] and not reading[0]) or stopping[0]:
+             return original_pause(seconds)
+         deadline = reactor.monotonic() + seconds
+         while reactor.monotonic() < deadline:
++            check_read()
+             try:
+-                actions._check(idx, slot, transport, allow_tag=True)
++                if active[0]:
++                    actions._check(idx, slot, transport, allow_tag=True)
+             except Exception as exc:
+                 # Set before STOP: the reader's finally must never restore a
+                 # movement whose end position can no longer be inferred.
+                 reader._motion_uncertain = 'RFID motion interrupted: %s' % exc
+                 raise motion_uncertain_type(reader._motion_uncertain)
+             original_pause(min(0.05, deadline - reactor.monotonic()))
++        check_read()
+ 
+     def guarded_move(*args, **kwargs):
+-        if (transport is None or actions.ace._serials.get(idx) is not transport
+-                or original_identity != actions.ace._location_identity(idx)
+-                or original_heads != actions.ace._rfid_route_heads(idx, slot)
+-                or not original_identity[0] or original_identity[1] is None):
+-            raise RuntimeError('RFID original route identity unavailable or changed')
+-        if (idx, slot) == (0, 3) and getattr(actions.ace, '_normal_load_speed', None) is not None:
+-            actions.ace._normal_load_speed.park = None
+         active[0] = True
+         stopped[0] = False
+         try:
+-            return original_move(*args, **kwargs)
++            if (transport is None or actions.ace._serials.get(idx) is not transport
++                    or original_identity != actions.ace._location_identity(idx)
++                    or original_heads != actions.ace._rfid_route_heads(idx, slot)
++                    or not original_identity[0] or original_identity[1] is None):
++                raise RuntimeError('RFID original route identity unavailable or changed')
++            if (idx, slot) == (0, 3) and getattr(actions.ace, '_normal_load_speed', None) is not None:
++                actions.ace._normal_load_speed.park = None
++            result = original_move(*args, **kwargs)
++            pending_motor[0] = False
++            return result
+         except Exception as exc:
+-            if isinstance(exc, motion_uncertain_type) or reader._motion_uncertain:
++            if uncertain_after(exc):
+                 if not reader._motion_uncertain:
+                     reader._motion_uncertain = 'RFID motion uncertain: %s' % exc
+                 handle_uncertain()
+@@ -827,15 +981,20 @@
+             actions.ace._latch_stop_fault(idx, slot, 'RFID position hold could not be persisted: %s' % hold_error)
+ 
+     def guarded_read(*args, **kwargs):
++        reading[0] = True
++        read_deadline[0] = reactor.monotonic() + 180.0
+         try:
+             return original_read(*args, **kwargs)
+         except Exception as exc:
+-            if isinstance(exc, motion_uncertain_type) or reader._motion_uncertain:
++            if uncertain_after(exc):
+                 if not reader._motion_uncertain:
+                     reader._motion_uncertain = 'RFID motion uncertain: %s' % exc
+                 handle_uncertain()
+             raise
++        finally:
++            reading[0] = False
+ 
+     reader._pause = guarded_pause
++    reader._req = guarded_request
+     reader._move_and_confirm = guarded_move
+     reader.read_slot = guarded_read

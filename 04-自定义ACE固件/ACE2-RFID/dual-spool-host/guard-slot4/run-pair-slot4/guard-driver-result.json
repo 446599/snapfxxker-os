@@ -1,0 +1,505 @@
+{
+  "rf_initial": {
+    "flags": [
+      1,
+      1
+    ],
+    "reader0": 0,
+    "reader1": 0
+  },
+  "before": {
+    "2": {
+      "context": {
+        "0": 3291322034,
+        "1": 3291322034,
+        "2": 2,
+        "3": 0,
+        "4": 288873,
+        "5": 1
+      },
+      "cmd13": {
+        "_code_absent": true,
+        "_code_present": false,
+        "_index_present": true,
+        "_unparsed": {
+          "11": [
+            {
+              "val": 288873,
+              "wt": 0
+            }
+          ]
+        },
+        "brand": "",
+        "code": 0,
+        "color": [
+          245,
+          90,
+          116
+        ],
+        "index": 2,
+        "rfid": 2,
+        "sku": "SME5DDA105",
+        "tag": {
+          "field2": 258,
+          "group6": [
+            1000,
+            175
+          ]
+        },
+        "type": "PLA Basic"
+      },
+      "native_uid_hint": "E5DDA105",
+      "uid_proven_physical": false
+    },
+    "3": {
+      "context": {
+        "0": 2143289344,
+        "1": 2143289344,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 1
+      },
+      "cmd13": {
+        "_code_absent": true,
+        "_code_present": false,
+        "_index_present": true,
+        "brand": "",
+        "code": 0,
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 3,
+        "rfid": 0,
+        "sku": "",
+        "type": ""
+      },
+      "native_uid_hint": null,
+      "uid_proven_physical": false
+    }
+  },
+  "temporary_holds": [
+    1,
+    2,
+    3
+  ],
+  "guard": {
+    "state": "confirmed",
+    "reason": "native completed",
+    "triggered": [],
+    "event_seq": 4,
+    "stop_count": 1,
+    "target": 3,
+    "stop_inflight": false,
+    "stop_error": null,
+    "gate": true,
+    "lane_states": [
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ],
+    "rfid_flags": [
+      0,
+      1
+    ],
+    "timer_max_gap": 0.054615166009170935,
+    "selftest_active": false,
+    "selftest_max_gap": null,
+    "selftest_count": 0,
+    "poll_timeouts": 2,
+    "poll_requests": 1118,
+    "poll_replies": 1116,
+    "last_request_id": 1644,
+    "last_reply_id": 1644,
+    "key_age": 2.028803292007069,
+    "status_age": 0.10480633300903719,
+    "writer_queue": 0,
+    "callback_count": 4,
+    "poll_events": [
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1101,
+        "id": 1622,
+        "time": 97786.223782711
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1101,
+        "id": 1622,
+        "time": 97786.233229211
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1102,
+        "id": 1623,
+        "time": 97786.324949044
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1102,
+        "id": 1623,
+        "time": 97786.336436336
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1104,
+        "id": 1625,
+        "time": 97786.426279003
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1104,
+        "id": 1625,
+        "time": 97786.436181669
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1105,
+        "id": 1626,
+        "time": 97786.527106128
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1105,
+        "id": 1626,
+        "time": 97786.538594294
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1106,
+        "id": 1627,
+        "time": 97786.629339669
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1106,
+        "id": 1627,
+        "time": 97786.639321961
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1107,
+        "id": 1628,
+        "time": 97786.729589294
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1107,
+        "id": 1628,
+        "time": 97786.740329336
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1108,
+        "id": 1629,
+        "time": 97786.83030967
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1108,
+        "id": 1629,
+        "time": 97786.840039378
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1109,
+        "id": 1631,
+        "time": 97786.930819461
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1109,
+        "id": 1631,
+        "time": 97786.942582961
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1110,
+        "id": 1632,
+        "time": 97787.031754211
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1110,
+        "id": 1632,
+        "time": 97787.041113211
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1111,
+        "id": 1633,
+        "time": 97787.133070753
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1111,
+        "id": 1633,
+        "time": 97787.144528295
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1112,
+        "id": 1634,
+        "time": 97787.234750128
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1112,
+        "id": 1634,
+        "time": 97787.244425586
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1113,
+        "id": 1635,
+        "time": 97787.33616117
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1113,
+        "id": 1635,
+        "time": 97787.348067003
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1114,
+        "id": 1636,
+        "time": 97787.437356086
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1114,
+        "id": 1636,
+        "time": 97787.447031836
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1115,
+        "id": 1637,
+        "time": 97787.538718128
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1115,
+        "id": 1637,
+        "time": 97787.550831628
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1116,
+        "id": 1638,
+        "time": 97787.64017467
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1116,
+        "id": 1638,
+        "time": 97787.650362003
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1117,
+        "id": 1639,
+        "time": 97787.74167992
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1117,
+        "id": 1639,
+        "time": 97787.752674878
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1118,
+        "id": 1640,
+        "time": 97787.84267417
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1118,
+        "id": 1640,
+        "time": 97787.852371795
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1119,
+        "id": 1642,
+        "time": 97787.944920837
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1119,
+        "id": 1642,
+        "time": 97787.95695617
+      },
+      {
+        "kind": "request",
+        "method": "get_status",
+        "token": 1120,
+        "id": 1643,
+        "time": 97788.045696045
+      },
+      {
+        "kind": "reply",
+        "method": "get_status",
+        "token": 1120,
+        "id": 1643,
+        "time": 97788.055004003
+      },
+      {
+        "kind": "request",
+        "method": "get_feed_info",
+        "token": 1121,
+        "id": 1644,
+        "time": 97788.14701667
+      },
+      {
+        "kind": "reply",
+        "method": "get_feed_info",
+        "token": 1121,
+        "id": 1644,
+        "time": 97788.158564628
+      }
+    ],
+    "telemetry_result": null
+  },
+  "after": {
+    "2": {
+      "context": {
+        "0": 3291322034,
+        "1": 3291322034,
+        "2": 2,
+        "3": 0,
+        "4": 288873,
+        "5": 1
+      },
+      "cmd13": {
+        "_code_absent": true,
+        "_code_present": false,
+        "_index_present": true,
+        "_unparsed": {
+          "11": [
+            {
+              "val": 288873,
+              "wt": 0
+            }
+          ]
+        },
+        "brand": "",
+        "code": 0,
+        "color": [
+          245,
+          90,
+          116
+        ],
+        "index": 2,
+        "rfid": 2,
+        "sku": "SME5DDA105",
+        "tag": {
+          "field2": 258,
+          "group6": [
+            1000,
+            175
+          ]
+        },
+        "type": "PLA Basic"
+      },
+      "native_uid_hint": "E5DDA105",
+      "uid_proven_physical": false
+    },
+    "3": {
+      "context": {
+        "0": 1134483518,
+        "1": 2143289344,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 1
+      },
+      "cmd13": {
+        "_code_absent": true,
+        "_code_present": false,
+        "_index_present": true,
+        "brand": "",
+        "code": 0,
+        "color": [
+          111,
+          202,
+          239
+        ],
+        "index": 3,
+        "rfid": 2,
+        "sku": "SM55F328E6",
+        "tag": {
+          "field2": 258,
+          "group6": [
+            1000,
+            175
+          ]
+        },
+        "type": "PLA Basic"
+      },
+      "native_uid_hint": "55F328E6",
+      "uid_proven_physical": false
+    }
+  },
+  "quality": "pending_attribution",
+  "guard_left_armed": true,
+  "complete": true,
+  "hold_cleanup": {
+    "1": {
+      "observed_before": true,
+      "resume_error": "<HTTPError 400: '[multiACE] ACE 2 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=1 again'>",
+      "fw_hold": false
+    },
+    "2": {
+      "observed_before": true,
+      "resume_error": "<HTTPError 400: '[multiACE] ACE 3 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=2 again'>",
+      "fw_hold": false
+    },
+    "3": {
+      "observed_before": true,
+      "resume_error": "<HTTPError 400: '[multiACE] ACE 4 did not come back after the firmware update - power-cycle the unit and run ACE_FW_RESUME ACE=3 again'>",
+      "fw_hold": false
+    }
+  }
+}

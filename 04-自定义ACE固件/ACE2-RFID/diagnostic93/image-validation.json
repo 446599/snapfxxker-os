@@ -1,0 +1,16 @@
+{
+  "sha256": "18e70aede9a1d4614a1b3ecd85fdb498a9bb42e778bcde621c9e34597a65cb52",
+  "md5": "d5d46bc683e0789b1a391c062b057464",
+  "size": 78858,
+  "ota_crc_ffff": "0x4497",
+  "trailer_equal": true,
+  "repeat_equal": true,
+  "base_differences": [
+    "0x800e22a",
+    "0x800e844",
+    "0x800fe38",
+    "0x800fe3e",
+    "0x8018c26"
+  ],
+  "tests": "300 linked Thumb cases plus epilogue return; no device evidence"
+}

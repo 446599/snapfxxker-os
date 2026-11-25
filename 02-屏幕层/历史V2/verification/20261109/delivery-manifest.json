@@ -1,0 +1,64 @@
+{
+  "created_utc": "2026-11-09T05:55:22.245618+00:00",
+  "source": {
+    "repository": "https://github.com/prestonbrown/helixscreen",
+    "base_commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+    "branch": "codex/u1-native-filament-ui",
+    "patch_sha256": "ee168dfe2dbcb2ab94b24cd1c4e3ca4809f2b10493cd2ab8d3d8eb01a4863f4d",
+    "embedded_version": "1.2.0-beta.1"
+  },
+  "binary": {
+    "path": "helixscreen/bin/helix-screen",
+    "size_bytes": 26851400,
+    "sha256": "64850f504cd90c6cad67040eb1217c2c40513ead215b20ff9c78d0fccedad490",
+    "format": "ELF 64-bit LSB executable, ARM aarch64, version 1 (GNU/Linux), statically linked, BuildID[sha1]=45920e8d79fb637e27669bf7860acf287586c035, for GNU/Linux 3.7.0, stripped",
+    "display": "DRM 480x320",
+    "input": "evdev"
+  },
+  "interface": {
+    "engine_api": 1,
+    "mode": "multi",
+    "heads": 4,
+    "ace_units_supported": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "theme": "u1-warm",
+    "language": "zh",
+    "weight_source": "engine spool_binding + spools, estimates",
+    "percent_basis": "weight_g / weight_initial_g",
+    "unbound_quantity_source": "native lane declarations"
+  },
+  "verification": {
+    "host_build": "passed",
+    "arm64_build": "passed",
+    "arm64_help_startup": "passed, network-disabled ARM64 container",
+    "native_tests": {
+      "cases": 70,
+      "assertions": 1102,
+      "passed": true
+    },
+    "ui_smoke": {
+      "two_ace_checks": 27,
+      "four_ace_checks": 47,
+      "passed": true
+    },
+    "xml_attribute_lint": "passed",
+    "cjk_coverage": "passed",
+    "staged_xml_assets": "host simulation passed"
+  },
+  "hardware_acceptance": {
+    "installed_on_printer": false,
+    "physical_display_verified": false,
+    "physical_touch_verified": false,
+    "live_printer_state_verified": false
+  },
+  "packaging": {
+    "lmd_integration": "existing 233 firmware hook",
+    "configuration": "preserve existing settings, select language zh and theme u1-warm",
+    "ca_bundle": "helixscreen/certs/ca-certificates.crt"
+  },
+  "preview_sha256": "f550a005b1ef62b079fab088bf7053e4022a34bea088301f1f991e8fb1759020"
+}

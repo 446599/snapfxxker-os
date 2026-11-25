@@ -1,0 +1,89 @@
+{
+  "samples": [
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "decoder": {
+        "_decoder_present": false,
+        "_wire_valid": true,
+        "decoder": 0,
+        "index": 2,
+        "length": 0,
+        "steps": 6
+      },
+      "flags": [
+        1,
+        1
+      ]
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "decoder": {
+        "_decoder_present": false,
+        "_wire_valid": true,
+        "decoder": 0,
+        "index": 2,
+        "length": 0,
+        "steps": 6
+      },
+      "flags": [
+        1,
+        1
+      ]
+    },
+    {
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "decoder": {
+        "_decoder_present": false,
+        "_wire_valid": true,
+        "decoder": 0,
+        "index": 2,
+        "length": 0,
+        "steps": 6
+      },
+      "flags": [
+        1,
+        1
+      ]
+    }
+  ],
+  "guard": {
+    "state": "confirmed",
+    "reason": "waiting timeout",
+    "stop_count": 1,
+    "stop_error": null
+  },
+  "gate": true
+}

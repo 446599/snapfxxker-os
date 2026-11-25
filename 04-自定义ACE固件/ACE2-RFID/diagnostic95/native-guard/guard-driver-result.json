@@ -1,0 +1,40 @@
+{
+  "rf_initial": {
+    "flags": [
+      1,
+      1
+    ],
+    "reader0": 0,
+    "reader1": 0
+  },
+  "before": {
+    "context": {
+      "0": 2143289344,
+      "1": 2143289344,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 1
+    },
+    "cmd13": {
+      "_code_absent": true,
+      "_code_present": false,
+      "_index_present": true,
+      "brand": "",
+      "code": 0,
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 2,
+      "rfid": 0,
+      "sku": "",
+      "type": ""
+    }
+  },
+  "error": "ValueError('guard fault')",
+  "guard_left_armed": true,
+  "reader_restore_pending": true,
+  "confirmed": false
+}

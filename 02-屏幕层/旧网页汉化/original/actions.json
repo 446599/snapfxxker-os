@@ -1,0 +1,112 @@
+{
+  "troubleshooting": {
+    "label": "Troubleshooting",
+    "items": [
+      {
+        "id": "show-status",
+        "label": "Show MCUs Version",
+        "description": "Display firmware version of all connected MCUs.",
+        "help_url": null,
+        "confirm": false,
+        "background": false,
+        "download_file": null,
+        "hidden": false
+      },
+      {
+        "id": "collect-logs",
+        "label": "Collect System Logs",
+        "description": "Bundle and download a system log archive for troubleshooting.",
+        "help_url": null,
+        "confirm": "Collecting system logs might take a few minutes. These logs contain sensitive information like the serial number and Wi-Fi SSID, and should not be shared publicly. Continue?",
+        "background": false,
+        "download_file": "/userdata/logs.tar.gz",
+        "hidden": false
+      },
+      {
+        "id": "tailscale-status",
+        "label": "Tailscale Status",
+        "description": "Show current Tailscale connection status and IP address.",
+        "help_url": null,
+        "confirm": false,
+        "background": false,
+        "download_file": null,
+        "hidden": false
+      }
+    ]
+  },
+  "recovery": {
+    "label": "Recovery",
+    "items": [
+      {
+        "id": "reset-extended-to-defaults",
+        "label": "Reset Extended to Defaults",
+        "description": "Clear all extended settings and reboot to a clean state.",
+        "help_url": null,
+        "confirm": "Reset all extended settings to defaults and reboot?",
+        "background": true,
+        "download_file": null,
+        "hidden": false
+      },
+      {
+        "id": "reset-to-backup-firmware",
+        "label": "Reset Extended to Backup Firmware",
+        "description": "Clear all extended settings, switch to the backup firmware slot, and reboot.",
+        "help_url": null,
+        "confirm": "Reset all extended settings to defaults, switch to backup firmware and reboot?",
+        "background": true,
+        "download_file": null,
+        "hidden": false
+      },
+      {
+        "id": "switch-to-backup-firmware",
+        "label": "Switch to Backup Firmware",
+        "description": "Boot from the backup firmware slot on next reboot.",
+        "help_url": null,
+        "confirm": "Switch to backup firmware and reboot?",
+        "background": true,
+        "download_file": null,
+        "hidden": false
+      }
+    ]
+  },
+  "services": {
+    "label": "Services",
+    "items": [
+      {
+        "id": "restart-klipper",
+        "label": "Restart Klipper",
+        "description": "Restart the Klipper firmware service.",
+        "help_url": null,
+        "confirm": true,
+        "background": false,
+        "download_file": null,
+        "hidden": false
+      },
+      {
+        "id": "restart-moonraker",
+        "label": "Restart Moonraker",
+        "description": "Restart the Moonraker API server.",
+        "help_url": null,
+        "confirm": true,
+        "background": false,
+        "download_file": null,
+        "hidden": false
+      }
+    ]
+  },
+  "system": {
+    "label": "System",
+    "items": [
+      {
+        "id": "reboot-system",
+        "label": "Reboot System",
+        "description": "Reboot the printer system.",
+        "help_url": null,
+        "confirm": true,
+        "background": true,
+        "download_file": null,
+        "hidden": false
+      }
+    ]
+  }
+}

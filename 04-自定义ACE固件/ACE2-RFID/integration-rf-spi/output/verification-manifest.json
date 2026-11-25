@@ -1,0 +1,661 @@
+{
+  "scope": "Host doubles + ARM compile/link + static byte/limited branch model only",
+  "not_run": [
+    "ARM CPU emulation",
+    "original RTOS execution",
+    "device test",
+    "physical STOP/thermal test",
+    "flash"
+  ],
+  "sanitizers": "ASan and UBSan; leak detector disabled under ptrace; no heap allocation in candidate C",
+  "checks": [
+    {
+      "name": "compile-storage",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-storage",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-storage-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-storage-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-core",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-core",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-core-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-core-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-bridge",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-bridge",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-bridge-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-bridge-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-owner",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-owner",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-owner-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-owner-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-adapter",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-adapter",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-adapter-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-adapter-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-decoder-integration",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-integration",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-integration",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-decoder-integration-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "compile-integration-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "test-integration-san",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "default-output-refused",
+      "exit_code": 2,
+      "expected_success": false,
+      "passed": true
+    },
+    {
+      "name": "normal-compile-refused-experimental_binding",
+      "exit_code": 1,
+      "expected_success": false,
+      "passed": true
+    },
+    {
+      "name": "normal-compile-refused-stock_bounded_bridge",
+      "exit_code": 1,
+      "expected_success": false,
+      "passed": true
+    },
+    {
+      "name": "normal-compile-refused-rf_stock_adapter",
+      "exit_code": 1,
+      "expected_success": false,
+      "passed": true
+    },
+    {
+      "name": "arm-link",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "arm-link-repeat",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    },
+    {
+      "name": "image-static-and-limited-model",
+      "exit_code": 0,
+      "expected_success": true,
+      "passed": true
+    }
+  ],
+  "files": {
+    "build_offline.py": {
+      "sha256": "e54f2ac77ad3a01c9d034de92bae6f1d6b7fd250191c1949b86cff1b585b88cb",
+      "bytes": 9811
+    },
+    "verify_all.py": {
+      "sha256": "a4713cb01fa226e87d65cab4a07f0367f1d39e24e4725784be840e89579221be",
+      "bytes": 4640
+    },
+    "firmware/bounded_rc522.c": {
+      "sha256": "bb1953ba49bcf0f825127423039080a59d65b4c1d7df1684b1ecb10fa852b896",
+      "bytes": 8255
+    },
+    "firmware/bounded_rc522.h": {
+      "sha256": "c51897bae8e8dc372761d5c629d6e82bf7ea185bbd7c80528cdf7d36cb5c8a9a",
+      "bytes": 2831
+    },
+    "firmware/event_storage.c": {
+      "sha256": "bfe40d4adbd0ccf5761bf1aee03212b5ed3f7ae25e6e2776439d38b132307c6b",
+      "bytes": 4264
+    },
+    "firmware/experimental_binding.c": {
+      "sha256": "f90a10450c71272d1352271d15e1772a0470123c039d536da54f453fc0e7951b",
+      "bytes": 4823
+    },
+    "firmware/experimental_binding.h": {
+      "sha256": "23e49c93bd6fdbeb28c2e325beb0e4963983d8a1abc9c9c561a0ad9346e6be6b",
+      "bytes": 1847
+    },
+    "firmware/experimental_gate.S": {
+      "sha256": "0363ad7b8eb1e47ed86811451168ba834b6df261cc450d4d1b2d8cdac5aeb5bc",
+      "bytes": 963
+    },
+    "firmware/native_tag_decoder.c": {
+      "sha256": "4ce7672426cae3b7a68271faaf7aa8632c89c6cc83c624d9094424dba1abef5b",
+      "bytes": 41094
+    },
+    "firmware/pageread_gate_stub.s": {
+      "sha256": "cf55aa4a5e1b2d035996e82131585bafe4c41adeae07c743297f248ebf47ce47",
+      "bytes": 245
+    },
+    "firmware/rawtag_cache_stub.s": {
+      "sha256": "9992b3db4c6d8f618d097b06e4a534ba50e556e7a19b7b62fb143923d43a9109",
+      "bytes": 311
+    },
+    "firmware/rawtag_extract_stub.s": {
+      "sha256": "c3474a390280e790cd00f0bf8db56ab0211fbf805e7aad183d31d34b07b242a5",
+      "bytes": 315
+    },
+    "firmware/rawtag_stub.s": {
+      "sha256": "3e22782be6d88ea6733ff2200e15cc105b5d2ae6de929a363401268747b98137",
+      "bytes": 281
+    },
+    "firmware/rf_owner.c": {
+      "sha256": "5d0c31bd2d4cefe506372e7267e6df5ccd47961377f5e652f98df415759e73f4",
+      "bytes": 6782
+    },
+    "firmware/rf_owner.h": {
+      "sha256": "ab5d46b0a90e61127acc7c02f984db59d5b5699b614e4d13a01533a85568fe3e",
+      "bytes": 3065
+    },
+    "firmware/rf_stock_adapter.c": {
+      "sha256": "db5c6170853086c19747712e92d087ef129eb1afb143e8a6f50059596c4d44a3",
+      "bytes": 4953
+    },
+    "firmware/rf_stock_adapter.h": {
+      "sha256": "afcdf337ea48f8f777ddf7e9cb568f25e21acc55a127c71f0645575aec8aa266",
+      "bytes": 1863
+    },
+    "firmware/rf_stock_trampolines.S": {
+      "sha256": "b21e2dadd4527f3a906a4bac6576bfecbe0d92d05b3cbbdfcc22efc37855eb1b",
+      "bytes": 1276
+    },
+    "firmware/stock_bounded_bridge.c": {
+      "sha256": "155e8aede19f9966090d93e1c17de79786db03c428a4dc765b86948e490daf82",
+      "bytes": 3064
+    },
+    "firmware/stock_bounded_bridge.h": {
+      "sha256": "974fbb2b2b05acd0b3b7e415a05a6762e66ed938de6874cbeec75748c98df95e",
+      "bytes": 2154
+    },
+    "firmware/stock_bounded_thunks.S": {
+      "sha256": "e7673e2ce1fecbdd22f8fa525d7d0a7ba7ebef38773a7d55593389bf845e2521",
+      "bytes": 601
+    },
+    "firmware/uid_stub.s": {
+      "sha256": "2c9bcfa7288cedb1af2afcb8af1ca8136abb6ca0593bc79dc11c1c066df34ed6",
+      "bytes": 275
+    },
+    "tests/event_mock.c": {
+      "sha256": "c36ed98d0b02049853643c73f33a02536d69f6cbb28bd59eca2b9ddfde2f0b89",
+      "bytes": 2496
+    },
+    "tests/test_bounded_rc522.c": {
+      "sha256": "388fff2ce45070876754678583c44551d4d307cf93d73913ecdeb5e9f11a1567",
+      "bytes": 9286
+    },
+    "tests/test_event_storage.c": {
+      "sha256": "3386a2c421d3e6a4363f3c0029aa83b687060a0ba6a4e82620b16b668b0cfba7",
+      "bytes": 4608
+    },
+    "tests/test_integration.c": {
+      "sha256": "4dbcb438493aa04d526ce69942a60339b2df61d034f56b57e9605735bb9ccb51",
+      "bytes": 8608
+    },
+    "tests/test_rf_owner.c": {
+      "sha256": "843eddea4081aba1a0cd4ec75e1dff371d1bbe9c043cd4b29edc911628fce405",
+      "bytes": 8786
+    },
+    "tests/test_rf_stock_adapter.c": {
+      "sha256": "97c56d404a5719e1f4155ce3b9e9be36fabee54d7cd258019d0ff6da9828fdf6",
+      "bytes": 5765
+    },
+    "tests/test_stock_bridge.c": {
+      "sha256": "5f5d56f0f4bca8849ab776780a89a58dca52b9f5d4eb9aa1f441c49038d88e77",
+      "bytes": 3159
+    },
+    "tests/event_mock.h": {
+      "sha256": "cdd9f053384ae826449b7880b7e3be299893a96f594550d6cbc47fc9b8957f72",
+      "bytes": 723
+    },
+    "tests/integration_peripherals.h": {
+      "sha256": "bb616ca35da029e5579d308b8f4794124e5e5f3a54f9b52c4a5ba2ab077ccac2",
+      "bytes": 2156
+    },
+    "tests/verify_image.py": {
+      "sha256": "625ce65c1a49963b141808d36922cb3ce1d62ba465ff4e28ea3c3306c8a84a03",
+      "bytes": 8777
+    },
+    "build/bounded_rc522.o": {
+      "sha256": "93dc9e7dbed710045f06118ffef818b3df99bd4937dcf13d0b04e0182248232a",
+      "bytes": 2600
+    },
+    "build/event_storage.o": {
+      "sha256": "168296413bc0e10cbc5312a16ea59c245a51b01df77a8392b8395e6ddeccbfe1",
+      "bytes": 1496
+    },
+    "build/experimental_binding.o": {
+      "sha256": "62236885cb0ae1e58875079c5832a15b680cd0b3dcaf166bc36c4c9475476b5f",
+      "bytes": 2512
+    },
+    "build/experimental_gate.o": {
+      "sha256": "025bde6dfdb19550a92fe236c0cf9dbe447ab9d7c337096c4a2f7460776fc50c",
+      "bytes": 1116
+    },
+    "build/host-decoder-integration-san.o": {
+      "sha256": "6b30ac2d7e33d6c29cee3baead38206b730147338e87726ce53336bd4958bca0",
+      "bytes": 339544
+    },
+    "build/host-decoder-integration.o": {
+      "sha256": "09a5f0b98dafc653b4eecf2ea8524edbe65e7707a7daed33f3fdf2849f79f7a3",
+      "bytes": 18856
+    },
+    "build/native_tag_decoder.o": {
+      "sha256": "6cc734948af4aa864ff75c600d84ad3eafebc6a339a105932e7bd497d11ecc26",
+      "bytes": 9920
+    },
+    "build/pageread_gate_stub.o": {
+      "sha256": "28236df0ebd0de57d508e80cc9473c9f19bcc7cfb4a97fd103042395361600ac",
+      "bytes": 740
+    },
+    "build/rawtag_cache_stub.o": {
+      "sha256": "2f9e55c6b03d6c309301d0485daf6b59e6b23f8903c8b758be0fd4dbbf791025",
+      "bytes": 728
+    },
+    "build/rawtag_extract_stub.o": {
+      "sha256": "79d9a11f8403d7313dcb4f23509e75496c2f34ed3ba73833aba1a07ac004f4a8",
+      "bytes": 732
+    },
+    "build/rawtag_stub.o": {
+      "sha256": "3caf2364ee85440f2f3134282ead249a49d8eb47f290ec70d193c2060e0ca98a",
+      "bytes": 688
+    },
+    "build/rf_owner.o": {
+      "sha256": "16b3f8d77e602935b9e81427decd704d8e37da1972d46cc80a1cd9401e64c70b",
+      "bytes": 2576
+    },
+    "build/rf_stock_adapter.o": {
+      "sha256": "ed729bdb241338097deee9e59b8a5a1b6049bc53a5ff007c372640a8b457a4fb",
+      "bytes": 2656
+    },
+    "build/rf_stock_trampolines.o": {
+      "sha256": "45c267ea2690d3e4407a4a96264160fdb8160414df47f7aeab53542d07668db9",
+      "bytes": 1136
+    },
+    "build/stock_bounded_bridge.o": {
+      "sha256": "2744d9e8b4a9d69fe6849e2433cfe4132beacb3f09df2a924a0c7b58363530a0",
+      "bytes": 1764
+    },
+    "build/stock_bounded_thunks.o": {
+      "sha256": "ca4df4997c88ed8982be5e0a2fe31b02c9397302ee35afe90f1ba76b35a2aa4c",
+      "bytes": 824
+    },
+    "build/uid_stub.o": {
+      "sha256": "814d50551e6c9c1253ecc4936046e226774255ac44952b1032e0a50347742800",
+      "bytes": 684
+    },
+    "build/bounded_rc522.su": {
+      "sha256": "393f09c6567141330704e1a720a591644812469f59210a310140d8d939064a62",
+      "bytes": 1196
+    },
+    "build/event_storage.su": {
+      "sha256": "a98e8617ed462db5d8bf63ba19efcde2bee85770f972da512ca28c06dc29d356",
+      "bytes": 642
+    },
+    "build/experimental_binding.su": {
+      "sha256": "f2d79f07267b0e418bb6ef16ab27c9c2d790432ead527b101ab64e1f510d62f3",
+      "bytes": 2242
+    },
+    "build/native_tag_decoder.su": {
+      "sha256": "96081e24489f7b303840b9249e5b83abb8b979f4d4bff2bee6f0b57285e5f0ff",
+      "bytes": 2866
+    },
+    "build/rf_owner.su": {
+      "sha256": "42fe77ab42fb3f0bbf44867283becb163135ca7f4692c486b9c80a7acef9e637",
+      "bytes": 1857
+    },
+    "build/rf_stock_adapter.su": {
+      "sha256": "19556dd7c4f67d59098de004711e6ea7380bf6a45920c1f998cad5a7aa159dbd",
+      "bytes": 1120
+    },
+    "build/stock_bounded_bridge.su": {
+      "sha256": "0de446377e95a11838c77792fddaed399fba39ea73dc1211ccfacc516bbc9847",
+      "bytes": 794
+    },
+    "build/arm-link-repeat.log": {
+      "sha256": "1446f01d90cfa63468a603023f4a84d601ba15dfaa3f481211eae5608483c2b7",
+      "bytes": 457
+    },
+    "build/arm-link.log": {
+      "sha256": "1446f01d90cfa63468a603023f4a84d601ba15dfaa3f481211eae5608483c2b7",
+      "bytes": 457
+    },
+    "build/bounded_rc522.c.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-adapter-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-adapter.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-bridge-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-bridge.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-core-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-core.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-decoder-integration-san.log": {
+      "sha256": "0eaa5e95ba24c094e4a138594bf7fcf237e34f460502e30e6f6ad2082805c1b4",
+      "bytes": 1479
+    },
+    "build/compile-decoder-integration.log": {
+      "sha256": "0eaa5e95ba24c094e4a138594bf7fcf237e34f460502e30e6f6ad2082805c1b4",
+      "bytes": 1479
+    },
+    "build/compile-integration-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-integration.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-owner-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-owner.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-storage-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/compile-storage.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/default-gate.log": {
+      "sha256": "897348bf5b15e95597964967808d7b253f59966767a100702894dcc9068fda8e",
+      "bytes": 124
+    },
+    "build/default-output-refused.log": {
+      "sha256": "897348bf5b15e95597964967808d7b253f59966767a100702894dcc9068fda8e",
+      "bytes": 124
+    },
+    "build/event_storage.c.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/experimental_binding.c.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/experimental_gate.S.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/image-static-and-limited-model.log": {
+      "sha256": "8dc375b3d9a0370eec4500dd1da52ee221f9c61c11024bb89dfc45c654e18968",
+      "bytes": 916
+    },
+    "build/link.log": {
+      "sha256": "1821333b04f0210e698f3de6f8f4f56abc80edfe3e18bd6d8ccf632d36649b81",
+      "bytes": 13673
+    },
+    "build/native_tag_decoder.c.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/normal-compile-refused-experimental_binding.log": {
+      "sha256": "ff94f07657021f1d70f35f4245c8c75019800e7d1ca7a8b0f306d9f718fd124f",
+      "bytes": 1292
+    },
+    "build/normal-compile-refused-rf_stock_adapter.log": {
+      "sha256": "587c05f015d5055230904a4a102f4141fdb395a28c2a8873b84dd95628f60802",
+      "bytes": 416
+    },
+    "build/normal-compile-refused-stock_bounded_bridge.log": {
+      "sha256": "6c6091c2f436d2d4943e0d844a88498531f5d2d504a2e662d550c0bcbc6f2b43",
+      "bytes": 438
+    },
+    "build/pageread_gate_stub.s.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/rawtag_cache_stub.s.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/rawtag_extract_stub.s.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/rawtag_stub.s.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/rf_owner.c.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/rf_stock_adapter.c.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/rf_stock_trampolines.S.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/stock_bounded_bridge.c.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/stock_bounded_thunks.S.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/test-adapter-san.log": {
+      "sha256": "042d6a6a3255fe2e9db29371bf8d44a8ae58b95820c2f1a030e85c0c9af07166",
+      "bytes": 291
+    },
+    "build/test-adapter.log": {
+      "sha256": "042d6a6a3255fe2e9db29371bf8d44a8ae58b95820c2f1a030e85c0c9af07166",
+      "bytes": 291
+    },
+    "build/test-bridge-san.log": {
+      "sha256": "7eeaf9f50495ac77921349f844a3dfa5d1623e46813c045688505373ebc92c5c",
+      "bytes": 214
+    },
+    "build/test-bridge.log": {
+      "sha256": "7eeaf9f50495ac77921349f844a3dfa5d1623e46813c045688505373ebc92c5c",
+      "bytes": 214
+    },
+    "build/test-core-san.log": {
+      "sha256": "49ad4a562fe678c4951ebafed6ed7e90ff58ca8889aa63bf1c7d596b9e99e1da",
+      "bytes": 102
+    },
+    "build/test-core.log": {
+      "sha256": "49ad4a562fe678c4951ebafed6ed7e90ff58ca8889aa63bf1c7d596b9e99e1da",
+      "bytes": 102
+    },
+    "build/test-integration-san.log": {
+      "sha256": "fa2060facd67896ac7743edd7d2488b7300b2d5fc8731af3c1e8b724b6c8305f",
+      "bytes": 164
+    },
+    "build/test-integration.log": {
+      "sha256": "fa2060facd67896ac7743edd7d2488b7300b2d5fc8731af3c1e8b724b6c8305f",
+      "bytes": 164
+    },
+    "build/test-owner-san.log": {
+      "sha256": "bbc9f85e71940bf9c015ede68846234498212c27f775536da0f82c67d8b486cf",
+      "bytes": 142
+    },
+    "build/test-owner.log": {
+      "sha256": "bbc9f85e71940bf9c015ede68846234498212c27f775536da0f82c67d8b486cf",
+      "bytes": 142
+    },
+    "build/test-storage-san.log": {
+      "sha256": "62f608547f3d124e2256bb53a26a5f44ba0e8fa9f638182519e59f6f51252e57",
+      "bytes": 100
+    },
+    "build/test-storage.log": {
+      "sha256": "62f608547f3d124e2256bb53a26a5f44ba0e8fa9f638182519e59f6f51252e57",
+      "bytes": 100
+    },
+    "build/uid_stub.s.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build/EXPERIMENTAL-DO-NOT-FLASH.elf": {
+      "sha256": "e4fbade558785e32b97341b6ee4c499c6f8925b73977450a79d7f717d1724286",
+      "bytes": 55884
+    },
+    "output/EXPERIMENTAL-DO-NOT-FLASH.offline-image": {
+      "sha256": "1ffba30b853ece41509c79b885180447d52c8d591be9185e2849ef341a202e6b",
+      "bytes": 82729
+    },
+    "output/analysis-manifest.json": {
+      "sha256": "365c92390c907c1b6e8765123e0ad975babd41e59a627ad169742e4b672dd901",
+      "bytes": 9493
+    },
+    "build/integration.dis": {
+      "sha256": "3819053d0d81849b4f5d3c8a2d59820beb31f5a483ced78cce23a44b35cc894f",
+      "bytes": 184532
+    },
+    "build/image.dis": {
+      "sha256": "191c6c8bb8a51e99ab580458730c65c2fff32f2af5510906a3d7a5d20479ba51",
+      "bytes": 1145263
+    },
+    "build/symbols.json": {
+      "sha256": "9e01249bf6e06517e2cc0312983391852c28663abd11dde327a7b395ea2a54c4",
+      "bytes": 4190
+    }
+  }
+}

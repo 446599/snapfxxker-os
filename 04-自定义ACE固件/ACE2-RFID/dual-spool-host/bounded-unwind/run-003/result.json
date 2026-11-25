@@ -1,0 +1,438 @@
+{
+  "commanded": 60,
+  "segments": [
+    [
+      {
+        "decoder": 18446744073709551600,
+        "gate": true,
+        "lanes": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "feed": {
+          "_feed_wire_valid": true,
+          "feed_info": [
+            {
+              "_decoder_present": false,
+              "_wire_valid": true,
+              "decoder": 0,
+              "index": 0,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551424,
+              "index": 1,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709550870,
+              "index": 2,
+              "length": 787,
+              "steps": 9725
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551600,
+              "index": 3,
+              "length": 20,
+              "steps": 248
+            }
+          ]
+        }
+      },
+      {
+        "decoder": 18446744073709551600,
+        "gate": true,
+        "lanes": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "feed": {
+          "_feed_wire_valid": true,
+          "feed_info": [
+            {
+              "_decoder_present": false,
+              "_wire_valid": true,
+              "decoder": 0,
+              "index": 0,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551424,
+              "index": 1,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709550870,
+              "index": 2,
+              "length": 787,
+              "steps": 9725
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551600,
+              "index": 3,
+              "length": 20,
+              "steps": 248
+            }
+          ]
+        }
+      },
+      {
+        "decoder": 18446744073709551600,
+        "gate": true,
+        "lanes": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "feed": {
+          "_feed_wire_valid": true,
+          "feed_info": [
+            {
+              "_decoder_present": false,
+              "_wire_valid": true,
+              "decoder": 0,
+              "index": 0,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551424,
+              "index": 1,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709550870,
+              "index": 2,
+              "length": 787,
+              "steps": 9725
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551600,
+              "index": 3,
+              "length": 20,
+              "steps": 248
+            }
+          ]
+        }
+      }
+    ],
+    [
+      {
+        "decoder": 18446744073709551600,
+        "gate": true,
+        "lanes": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "feed": {
+          "_feed_wire_valid": true,
+          "feed_info": [
+            {
+              "_decoder_present": false,
+              "_wire_valid": true,
+              "decoder": 0,
+              "index": 0,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551424,
+              "index": 1,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709550870,
+              "index": 2,
+              "length": 787,
+              "steps": 9725
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551600,
+              "index": 3,
+              "length": 20,
+              "steps": 248
+            }
+          ]
+        }
+      },
+      {
+        "decoder": 18446744073709551600,
+        "gate": true,
+        "lanes": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "feed": {
+          "_feed_wire_valid": true,
+          "feed_info": [
+            {
+              "_decoder_present": false,
+              "_wire_valid": true,
+              "decoder": 0,
+              "index": 0,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551424,
+              "index": 1,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709550870,
+              "index": 2,
+              "length": 787,
+              "steps": 9725
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551600,
+              "index": 3,
+              "length": 20,
+              "steps": 248
+            }
+          ]
+        }
+      },
+      {
+        "decoder": 18446744073709551600,
+        "gate": true,
+        "lanes": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "feed": {
+          "_feed_wire_valid": true,
+          "feed_info": [
+            {
+              "_decoder_present": false,
+              "_wire_valid": true,
+              "decoder": 0,
+              "index": 0,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551424,
+              "index": 1,
+              "length": 0,
+              "steps": 6
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709550870,
+              "index": 2,
+              "length": 787,
+              "steps": 9725
+            },
+            {
+              "_decoder_present": true,
+              "_wire_valid": true,
+              "decoder": 18446744073709551600,
+              "index": 3,
+              "length": 20,
+              "steps": 248
+            }
+          ]
+        }
+      }
+    ]
+  ],
+  "outcome": "uncertain",
+  "initial": [
+    {
+      "decoder": 18446744073709551600,
+      "gate": true,
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "feed": {
+        "_feed_wire_valid": true,
+        "feed_info": [
+          {
+            "_decoder_present": false,
+            "_wire_valid": true,
+            "decoder": 0,
+            "index": 0,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709551424,
+            "index": 1,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709550870,
+            "index": 2,
+            "length": 787,
+            "steps": 9725
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709551600,
+            "index": 3,
+            "length": 20,
+            "steps": 248
+          }
+        ]
+      }
+    },
+    {
+      "decoder": 18446744073709551600,
+      "gate": true,
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "feed": {
+        "_feed_wire_valid": true,
+        "feed_info": [
+          {
+            "_decoder_present": false,
+            "_wire_valid": true,
+            "decoder": 0,
+            "index": 0,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709551424,
+            "index": 1,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709550870,
+            "index": 2,
+            "length": 787,
+            "steps": 9725
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709551600,
+            "index": 3,
+            "length": 20,
+            "steps": 248
+          }
+        ]
+      }
+    },
+    {
+      "decoder": 18446744073709551600,
+      "gate": true,
+      "lanes": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "feed": {
+        "_feed_wire_valid": true,
+        "feed_info": [
+          {
+            "_decoder_present": false,
+            "_wire_valid": true,
+            "decoder": 0,
+            "index": 0,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709551424,
+            "index": 1,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709550870,
+            "index": 2,
+            "length": 787,
+            "steps": 9725
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709551600,
+            "index": 3,
+            "length": 20,
+            "steps": 248
+          }
+        ]
+      }
+    }
+  ],
+  "error": "RuntimeError('decoder missing')",
+  "motion_unconfirmed": false,
+  "exception_stop_ack": true
+}

@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <view name="settings_panel" extends="lv_obj" width="100%" height="100%" flex_flow="column" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+    <style name="styles.u1_page"/>
+    <lv_obj width="100%" height="#u1_menu_tile_height" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" style_bg_opa="0" style_border_width="0" scrollable="false">
+      <u1_settings_tile name="row_firmware_settings" width="0" label="高级设置" icon="tune" description="打印与设备" callback="on_firmware_settings_clicked"/>
+      <u1_settings_tile name="row_native_calibration" width="0" label="校准与诊断" icon="sine_wave" description="振动测试与调平" callback="on_native_calibration_clicked"/>
+    </lv_obj>
+    <lv_obj name="settings_row_network_display" width="100%" height="#u1_menu_tile_height" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" style_bg_opa="0" style_border_width="0" scrollable="false">
+      <u1_settings_tile name="row_connection" width="0" label="网络" icon="wifi" bind_description="settings_status_connection" callback="on_connection_clicked"/>
+      <u1_settings_tile name="row_display" width="0" label="屏幕" icon="television_classic" bind_description="settings_status_display" callback="on_display_clicked"/>
+    </lv_obj>
+    <lv_obj name="settings_row_system_about" width="100%" height="#u1_menu_tile_height" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" style_bg_opa="0" style_border_width="0" scrollable="false">
+      <u1_settings_tile name="row_system" width="0" label="系统" icon="settings" description="声音、时间与更新" callback="on_system_clicked"/>
+      <u1_settings_tile name="row_help" width="0" label="帮助与关于" icon="info_outline" description="本机说明与版本" callback="on_help_clicked"/>
+    </lv_obj>
+    <lv_obj name="settings_row_services" width="100%" height="#u1_menu_tile_height" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+      <u1_settings_tile name="row_u1_account" width="0" label="账号与配对" icon="account" description="云端账号与局域网" callback="on_u1_account_clicked"/>
+      <u1_settings_tile name="row_u1_service" width="0" label="维护与导出" icon="folder_upload" description="工具头、滤芯与 U 盘" callback="on_u1_service"/>
+    </lv_obj>
+  </view>
+</component>

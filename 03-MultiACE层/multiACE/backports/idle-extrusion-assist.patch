@@ -1,0 +1,132 @@
+Backport upstream idle extrusion assist to explicit U1 manual E moves.
+
+Applies to the managed 233 runtime. Each manual move owns only its
+native ACE lease and drains before releasing it.
+
+Upstream: https://github.com/decay71/multiACE/pull/255
+
+diff --git a/klipper/extras/ace_print_assist.py b/klipper/extras/ace_print_assist.py
+--- a/klipper/extras/ace_print_assist.py
++++ b/klipper/extras/ace_print_assist.py
+@@ -269,6 +269,120 @@
+                     and self.forward_move(gcmd, move)):
+                 self.check_move(gcmd)
++            elif not self.sd.is_cmd_from_sd() and self.manual_forward_move(gcmd, move):
++                return self.run_idle_extrusion(previous, gcmd)
+             return previous(gcmd)
+         return wrapped
++
++    @staticmethod
++    def manual_forward_move(gcmd, move):
++        params = gcmd.get_command_parameters()
++        # The U1 parser includes G, and optional line numbering / checksum.
++        if gcmd.get_command() not in ('G0', 'G1') or set(params) - {'G', 'N', '*', 'E', 'F'}:
++            return False
++        try:
++            speed = float(params['F']) if 'F' in params else move.speed
++        except ValueError:
++            return False
++        return math.isfinite(speed) and speed > 0 and PrintAssist.forward_move(gcmd, move)
++
++    def _idle_route_ready(self, head, idx, slot):
++        a = self.ace
++        if (a._ace_mode not in ('multi', 'head')
++                or self.sd.current_file is not None or not ParkMotion.idle(a)
++                or a._auto_feed_enabled or a._fa_context != 'idle'
++                or a._swap_in_progress or a._pickcheck_active
++                or a._v2_active_rev_assist or self.stock_tip is not None
++                or head != self.active_head() or not self.online(idx)
++                or not a._is_v2_idx(idx) or not a.head_uses_ace(head)
++                or any(owner.active for owner in a._feed_supervisors.values())
++                or getattr(a, '_fixed_park_motion', None) is not None):
++            return False
++        if not a.toolhead.get_extruder().get_heater().can_extrude:
++            return False
++        machine = a.printer.lookup_object('machine_state_manager', None)
++        if (machine is not None and str(machine.get_status().get('main_state'))
++                not in ('IDLE', 'MANUAL_LOAD')):
++            return False
++        bg = a.printer.lookup_object('ace_bg_swap', None)
++        if bg is not None and any(bg.is_busy(h) for h in range(4)):
++            return False
++        operations = getattr(a, '_path_operations', None)
++        if operations is not None and operations.handles(idx, slot):
++            return False
++        if a._slot_actions.state.get('state') == 'running' or self.pending_stops:
++            return False
++        return not (a._native_buffer.hold_reason(idx, slot)
++                    or a._native_reconnect_block_reason(head, idx, slot))
++
++    def run_idle_extrusion(self, previous, gcmd):
++        """Assist one explicit forward E move without taking the print gate."""
++        a = self.ace
++        head = self.active_head()
++        route = source_route(a._head_source.get(head))
++        if route is None:
++            return previous(gcmd)
++        idx, slot = route
++        if (not self._idle_route_ready(head, idx, slot)
++                or self.recent_state(idx, slot) != 'ready'):
++            return previous(gcmd)
++
++        transport = a._serials.get(idx)
++        identity = a._location_identity(idx)
++        buffer = a._native_buffer
++        if (a._feed_assist_per_ace.get(idx, -1) != -1
++                or buffer.active_slots(idx, transport, identity[1])):
++            return previous(gcmd)
++
++        def check_start():
++            if (a._serials.get(idx) is not transport or a._location_identity(idx) != identity
++                    or not self._idle_route_ready(head, idx, slot)):
++                raise ReadyWaitError('手动挤料助送的喷头或料路已变化')
++
++        a.toolhead.wait_moves()
++        request = {'method': 'start_feed_assist', 'params': {'index': slot},
++                   '_insert_stop_transport': transport, '_print_assist_monitor': check_start}
++        try:
++            check_start()
++            if (self.recent_state(idx, slot) != 'ready'
++                    or a._feed_assist_per_ace.get(idx, -1) != -1
++                    or buffer.active_slots(idx, transport, identity[1])):
++                return previous(gcmd)
++            response = a._tipform_send(idx, request, timeout=ACK_TIMEOUT)
++            check_start()
++        except (RuntimeError, ValueError) as exc:
++            logging.info('[multiACE] manual extrusion assist skipped: %s', exc)
++            response = None
++
++        token = request.get('_native_buffer_token')
++        if (a._tipform_rejected(response) or not token
++                or not buffer.recovery_current(token, transport, identity[1])
++                or not self.accepted(idx, slot)):
++            self._stop_idle_extrusion(idx, slot, transport, identity, token)
++            return previous(gcmd)
++
++        logging.info('[multiACE] manual extrusion assist on: head %d, ACE %d slot %d',
++                     head + 1, idx + 1, slot + 1)
++        try:
++            result = previous(gcmd)
++            a.toolhead.wait_moves()
++            return result
++        finally:
++            self._stop_idle_extrusion(idx, slot, transport, identity, token)
++
++    def _stop_idle_extrusion(self, idx, slot, transport, identity, token):
++        a = self.ace
++        if (not token or a._serials.get(idx) is not transport
++                or a._location_identity(idx) != identity
++                or not a._native_buffer.recovery_current(token, transport, identity[1])):
++            return
++        # The explicit move has drained. Retire only its own assist lease.
++        # A ready reply is sufficient and does not require an encoder sample.
++        try:
++            stop_and_verify(a, idx, slot, transport=transport, identity=identity,
++                            ready_without_decoder=True, ready_status_only=True)
++            logging.info('[multiACE] manual extrusion assist off: ACE %d slot %d',
++                         idx + 1, slot + 1)
++        except (RuntimeError, ValueError) as exc:
++            logging.warning('[multiACE] manual extrusion assist stop: %s', exc)
+-
++
+     @staticmethod

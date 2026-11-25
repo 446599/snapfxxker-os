@@ -1,0 +1,35 @@
+{
+  "guard": {
+    "state": "confirmed",
+    "reason": "waiting timeout",
+    "stop_count": 1,
+    "gate": false,
+    "lane_states": [
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ],
+    "rfid_flags": [
+      1,
+      1
+    ]
+  },
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "gate": false,
+  "lanes": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "flags": [
+    1,
+    1
+  ]
+}

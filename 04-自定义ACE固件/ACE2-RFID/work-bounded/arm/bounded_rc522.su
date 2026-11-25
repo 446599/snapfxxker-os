@@ -1,0 +1,8 @@
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/bounded_rc522.c:34:23:validate	8	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/bounded_rc522.c:49:23:poll	12	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/bounded_rc522.c:43:23:fault.isra	0	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/bounded_rc522.c:69:23:exchange	48	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/bounded_rc522.c:101:16:br_read	16	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/bounded_rc522.c:104:16:br_write	24	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/bounded_rc522.c:108:23:cleanup_reader	16	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/bounded_rc522.c:125:16:br_transceive	104	static

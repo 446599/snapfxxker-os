@@ -1,0 +1,14 @@
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -646,6 +646,11 @@
+     original_identity = actions.ace._location_identity(idx)
+     original_heads = actions.ace._rfid_route_heads(idx, slot)
+     original_scope = "ace" if getattr(actions.ace, "_ace_mode", None) != "multi" else "route"
++    def manual_session_guard():
++        return (transport is not None and actions.ace._serials.get(idx) is transport
++                and actions.ace._location_identity(idx) == original_identity
++                and actions.ace._rfid_route_heads(idx, slot) == original_heads)
++    reader._manual_session_guard = manual_session_guard
+     original_pause = reader._pause
+     original_move = reader._move_and_confirm
+     original_read = reader.read_slot

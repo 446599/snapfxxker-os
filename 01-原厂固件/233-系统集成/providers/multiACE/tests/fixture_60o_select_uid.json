@@ -1,0 +1,46 @@
+{
+  "source": "2026-11-06 run-02 real ACE2-Open 1.1.60O RPC capture",
+  "op": 9,
+  "reads": [
+    {
+      "offset": 13,
+      "byte": 53
+    },
+    {
+      "offset": 14,
+      "byte": 230
+    },
+    {
+      "offset": 15,
+      "byte": 101
+    },
+    {
+      "offset": 16,
+      "byte": 229
+    },
+    {
+      "offset": 17,
+      "byte": 83
+    },
+    {
+      "offset": 13,
+      "byte": 53
+    },
+    {
+      "offset": 14,
+      "byte": 230
+    },
+    {
+      "offset": 15,
+      "byte": 101
+    },
+    {
+      "offset": 16,
+      "byte": 229
+    },
+    {
+      "offset": 17,
+      "byte": 83
+    }
+  ]
+}

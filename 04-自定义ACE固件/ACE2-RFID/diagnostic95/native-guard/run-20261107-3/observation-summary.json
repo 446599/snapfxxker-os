@@ -1,0 +1,19 @@
+{
+  "span": 120.3,
+  "samples": 241,
+  "state": "waiting_empty",
+  "gate": true,
+  "lanes": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "timeouts": 7,
+  "requests": 1142,
+  "replies": 1135,
+  "gap": 0.05388425001001451,
+  "key_age": 0.02112716599367559,
+  "status_age": 0.12202429199533071,
+  "stop_count": 0
+}

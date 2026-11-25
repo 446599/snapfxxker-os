@@ -1,0 +1,7 @@
+# 双卷host边界与临时监督部署记录
+
+ACE0 同UID `808780566/17445170/942880330`，固件97O不变。CMD13 token与boot-rescan保护已部署到 host `ace.py`，最终SHA `ef04d435bb9536cf4017e4a15a3926cc687d624a3d0986ebc91acfc79495c30e`。先前CMD13补丁版本 `7e247bd1063cda7fa31b48e99ee0fd026cfbc6fa22aeaf736d387de180d48f02` 在 `/oem/apps/multiace/rfid-backups/dual-boot-rescan-20261107T140958/ace.py`；最初live版本 `fcbd0217f16009a71d253f01a73c85c5b11e9262b2db32c7f5f4a45a9ff51183` 在 `/oem/apps/multiace/rfid-backups/dual-cmd13-20261107T135619/ace.py`。第二次部署先停Klippy；第一次尝试因stop hook卸载bind而断言终止，未写文件；调整验证后完成停机写入并由原启动hook重挂载，日志见 `boot-deploy.log`。fresh日志对当前共享reader的两个占用槽均显示跳过boot主动identify；这不证明物理UID归属。
+
+为单目标slot4测试，临时extra `ace_native_guard.py` SHA `9448fbb0bd78c8a8086ae5119d98b42523e535259ae5a710cfcae4aaf19667e0` 已安装且idle、未ARM；配置include后临时cfg SHA `2e63202611bca8fe0b215c7a9d8523017d2113b183fa381aa7077d90774d4b69`。原cfg SHA `6e5686a83c178a9be3c8b66cf2da8250fda7bc835dc99e321dc15230125abb7d` 与原协议 SHA `749d1487e3a404c66a881822c1bcfbfb0cd0d6fcf7e6e231e52581a6d86e93ca` 分别保存在设备 `/tmp/dual-slot4-guard-backup/` 和本地 `guard-slot4/backup/`。受控服务重启后fresh UID/97O、四lane ready、四head false、guard idle、slot4 gate false；状态证据 `guard-slot4/installed-idle-state.json`。
+
+`guard-slot4/driver-fault-tests.log` 覆盖 ARM已生效但HTTP回复超时后STOP并记录静止未知、以及端口hold已生效但回复超时后按实际hold恢复。下一次driver会在ARM前保存两槽 `preflight.json` 并验证粉槽缓存SKU；缓存仍不是实时物理UID证明。待用户确认蓝卷移动到槽4旁但未插后，由主代理安排单次插入；尚未启动driver或运动。测试完成后需按已审恢复流程移除临时extra/include并重启服务。

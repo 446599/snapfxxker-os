@@ -1,0 +1,16 @@
+{
+  "result": {
+    "gcode_store": [
+      {
+        "message": "A_DISCOVER ACE=0",
+        "time": 1794042494.3249817,
+        "type": "command"
+      },
+      {
+        "message": "// [A discover_device] {\"_v2_command\": 0, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 16483, \"msg\": \"success\", \"result\": {\"uid1\": 808780566, \"uid2\": 17445170, \"uid3\": 942880330}}",
+        "time": 1794042494.3796086,
+        "type": "response"
+      }
+    ]
+  }
+}

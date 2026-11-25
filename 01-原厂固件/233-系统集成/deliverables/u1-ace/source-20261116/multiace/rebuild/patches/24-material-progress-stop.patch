@@ -1,0 +1,37 @@
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -1,5 +1,5 @@
+ """Bounded, fail-closed ACE2 slot ejection; no heating or head motion."""
+-import logging, os, json, stat, time, hashlib
++import logging, os, json, stat, time, hashlib, secrets
+ from .ace_location_hold import PATH, PORT, UID, LocationHold, RouteChanged
+ STEP_MM = 20
+ SPEED_MM_S = 80
+@@ -10,6 +10,7 @@
+     def __init__(self, ace):
+         self.ace = ace
+         self.seq = 0
++        self.epoch = secrets.token_hex(8)
+         self.state = {'seq': 0, 'state': 'idle', 'kind': '', 'ace': None,
+                       'slot': None, 'progress': 0, 'limit': MAX_MM, 'message': ''}
+         self.cancel = False
+@@ -21,6 +22,10 @@
+ 
+     def operation_cancel_endpoint(self, request):
+         """Cancel only the task the screen actually observed, outside gcode's lock."""
++        epoch = request.get_str('epoch', '')
++        if epoch and epoch != self.epoch:
++            request.send({'cancelled': False, 'message': '设备已重连，旧任务不能停止新任务'})
++            return
+         kind = request.get_str('kind')
+         idx, slot, seq = (request.get_int(key) for key in ('ace', 'slot', 'seq'))
+         a = self.ace
+@@ -53,7 +58,7 @@
+         request.send({'cancelled': True, 'state': 'cancelling'})
+ 
+     def status(self):
+-        return dict(self.state)
++        return dict(self.state, epoch=self.epoch)
+ 
+     def _check(self, idx, slot, transport=None, own=False, allow_tag=False, for_eject=False,
+                allow_target_loaded=False):

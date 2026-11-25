@@ -1,0 +1,26 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -20936,10 +20936,22 @@
+         '[multiACE] Unload a toolhead back to its ACE. '
+         'Usage: ACE_UNLOAD_HEAD HEAD=0 [RETRACT_LENGTH=<mm>] [KEEP_HEAT=<temp>]')
+     def cmd_ACE_UNLOAD_HEAD(self, gcmd):
++        head = gcmd.get_int('HEAD')
++        cancel = (gcmd.get('STAGE', 'all') or '').strip().lower() == 'cancel'
++        blocked = (self._stop_guard.message() is not None or
++                   self._slot_actions.state.get('state') == 'running')
++        if cancel and blocked:
++            if not 0 <= head <= 3 or self.head_uses_ace(head):
++                raise gcmd.error('仅支持手动喷头取消清理')
++            module, channel = self.EXTRUDER_MAP[head]
++            feed = self.printer.lookup_object('filament_feed %s' % module, None)
++            if feed is None:
++                raise gcmd.error('送料模块不存在，无法取消清理')
++            feed._protected_unload_cancel(channel, head, gcmd)
++            return
+         self._require_slot_eject_idle(gcmd)
+ 
+         self._require_no_stop_fault(gcmd)
+-        head = gcmd.get_int('HEAD')
+         if (gcmd.get('STAGE', 'all') or '').lower() != 'cancel':
+             _src = self._head_source.get(head) or {}
+             self._require_location_clear(gcmd,head=head,idx=_src.get('ace_index'),slot=_src.get('slot'))

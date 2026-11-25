@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component>
+  <view name="u1_device_tools" extends="overlay_panel" title="设备测试与配置">
+    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" flex_flow="column" scrollable="false" style_pad_all="0" style_pad_gap="0">
+      <text_small name="u1_device_result" width="100%" bind_text="u1_tools_status" long_mode="dots" style_pad_hor="#u1_card_pad"/>
+      <lv_obj width="100%" height="0" flex_grow="1" flex_flow="column" scrollable="true" style_pad_all="#u1_card_pad" style_pad_gap="#u1_card_gap">
+      <text_body text="打印头" width="100%" />
+      <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_compact_gap" style_bg_opa="0" style_border_width="0" scrollable="false">
+        <ui_button name="u1_device_heads" width="100%" height="#u1_touch_target" text="四喷头直径与标准 / 高流量" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="heads"/>
+        </ui_button>
+      </lv_obj>
+      <text_body width="100%" bind_text="u1_tools_ai" long_mode="wrap"/>
+      <text_body text="AI 打印监控" width="100%" />
+      <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_compact_gap" style_bg_opa="0" style_border_width="0" scrollable="false">
+        <ui_button name="u1_device_read_ai" width="48%" height="#u1_touch_target" text="读取配置" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="read_ai"/>
+        </ui_button>
+        <ui_button name="u1_device_ai_main_enable" width="48%" height="#u1_touch_target" text="切换总开关" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="ai:main_enable"/>
+        </ui_button>
+        <ui_button name="u1_device_ai_clean_bed_enable" width="48%" height="#u1_touch_target" text="切换异物检测" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="ai:clean_bed_enable"/>
+        </ui_button>
+        <ui_button name="u1_device_ai_clean_bed_sensitivity" width="48%" height="#u1_touch_target" text="切换异物灵敏度" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="ai:clean_bed_sensitivity"/>
+        </ui_button>
+        <ui_button name="u1_device_ai_noodle_enable" width="48%" height="#u1_touch_target" text="切换意面检测" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="ai:noodle_enable"/>
+        </ui_button>
+        <ui_button name="u1_device_ai_noodle_sensitivity" width="48%" height="#u1_touch_target" text="切换意面灵敏度" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="ai:noodle_sensitivity"/>
+        </ui_button>
+        <ui_button name="u1_device_ai_residue_enable" width="48%" height="#u1_touch_target" text="切换喷嘴积料检测" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="ai:residue_enable"/>
+        </ui_button>
+        <ui_button name="u1_device_ai_residue_sensitivity" width="48%" height="#u1_touch_target" text="切换喷嘴积料灵敏度" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="ai:residue_sensitivity"/>
+        </ui_button>
+      </lv_obj>
+      <text_body text="设备测试" width="100%" />
+      <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_compact_gap" style_bg_opa="0" style_border_width="0" scrollable="false">
+        <ui_button name="u1_device_wifi" width="48%" height="#u1_touch_target" text="Wi-Fi 连接" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="wifi"/>
+        </ui_button>
+        <ui_button name="u1_device_wifi_mode" width="48%" height="#u1_touch_target" text="读取兼容模式"><event_cb trigger="clicked" callback="u1_device_action" user_data="wifi_mode"/></ui_button>
+        <ui_button name="u1_device_wifi_enable" width="48%" height="#u1_touch_target" text="开启兼容模式"><event_cb trigger="clicked" callback="u1_device_action" user_data="wifi_enable"/></ui_button>
+        <ui_button name="u1_device_wifi_disable" width="48%" height="#u1_touch_target" text="关闭兼容模式"><event_cb trigger="clicked" callback="u1_device_action" user_data="wifi_disable"/></ui_button>
+        <ui_button name="u1_device_can" width="48%" height="#u1_touch_target" text="查询 CAN 节点" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="can"/>
+        </ui_button>
+        <ui_button name="u1_device_camera" width="48%" height="#u1_touch_target" text="检测摄像头" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="camera"/>
+        </ui_button>
+        <ui_button name="u1_device_photo" width="48%" height="#u1_touch_target" text="测试拍照" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="photo"/>
+        </ui_button>
+        <ui_button name="u1_device_purifier" width="48%" height="#u1_touch_target" text="净化器状态" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="purifier"/>
+        </ui_button>
+        <ui_button name="u1_device_fan_on" width="48%" height="#u1_touch_target" text="净化器 30%" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="fan_on"/>
+        </ui_button>
+        <ui_button name="u1_device_fan_off" width="48%" height="#u1_touch_target" text="关闭净化器" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="fan_off"/>
+        </ui_button>
+      </lv_obj>
+      <text_body text="原厂 RFID 自检 · 请在所选通道放置标签" width="100%" />
+      <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_compact_gap" style_bg_opa="0" style_border_width="0" scrollable="false">
+        <ui_button name="u1_device_rfid0" width="48%" height="#u1_touch_target" text="测试通道 1" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="rfid0"/>
+        </ui_button>
+        <ui_button name="u1_device_rfid1" width="48%" height="#u1_touch_target" text="测试通道 2" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="rfid1"/>
+        </ui_button>
+        <ui_button name="u1_device_rfid2" width="48%" height="#u1_touch_target" text="测试通道 3" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="rfid2"/>
+        </ui_button>
+        <ui_button name="u1_device_rfid3" width="48%" height="#u1_touch_target" text="测试通道 4" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="rfid3"/>
+        </ui_button>
+      </lv_obj>
+      <text_body text="AI 误报反馈" width="100%" />
+      <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_compact_gap" style_bg_opa="0" style_border_width="0" scrollable="false">
+        <ui_button name="u1_device_pick_noodle" width="48%" height="#u1_touch_target" text="选 / 取消意面照片" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="pick_noodle"/>
+        </ui_button>
+        <ui_button name="u1_device_pick_item" width="48%" height="#u1_touch_target" text="选 / 取消异物照片" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="pick_item"/>
+        </ui_button>
+      </lv_obj>
+      <text_small width="100%" bind_text="u1_tools_consent" long_mode="wrap"/>
+        <ui_button name="u1_device_report" width="100%" height="#u1_touch_target" text="同意并提交本次反馈" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <bind_state_if_eq subject="u1_tools_can_submit" ref_value="0" state="disabled"/><event_cb trigger="clicked" callback="u1_device_action" user_data="report"/>
+        </ui_button>
+        <ui_button name="u1_device_read_report" width="100%" height="#u1_touch_target" text="读取上传回执" variant="secondary">
+          <bind_state_if_eq subject="u1_tools_pending" ref_value="1" state="disabled"/>
+          <event_cb trigger="clicked" callback="u1_device_action" user_data="read_report"/>
+        </ui_button>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

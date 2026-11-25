@@ -1,0 +1,87 @@
+{"time": 1794045799.1962237, "pct": null, "message": "opening /dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0"}
+{"time": 1794045799.1977053, "pct": null, "message": "querying current version"}
+{"time": 1794045799.2093103, "pct": null, "message": "ACE reports version V1.1.91O (boot )"}
+{"time": 1794045807.517253, "pct": null, "message": "opening /dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0"}
+{"time": 1794045807.51863, "pct": null, "message": "querying current version"}
+{"time": 1794045807.5301924, "pct": null, "message": "ACE reports version V1.1.91O (boot )"}
+{"time": 1794045807.5308623, "pct": 0.0, "message": "announcing upgrade (size=78830 crc=0x3DD3 version=1.1.31)"}
+{"time": 1794045808.5617006, "pct": 0.08116883116883117, "message": "flashing chunk 1/1232"}
+{"time": 1794045808.7442555, "pct": 1.37987012987013, "message": "flashing chunk 17/1232"}
+{"time": 1794045808.9258268, "pct": 2.6785714285714284, "message": "flashing chunk 33/1232"}
+{"time": 1794045809.108165, "pct": 3.977272727272727, "message": "flashing chunk 49/1232"}
+{"time": 1794045809.2900646, "pct": 5.275974025974025, "message": "flashing chunk 65/1232"}
+{"time": 1794045809.473281, "pct": 6.574675324675325, "message": "flashing chunk 81/1232"}
+{"time": 1794045809.6550157, "pct": 7.873376623376624, "message": "flashing chunk 97/1232"}
+{"time": 1794045809.8370335, "pct": 9.172077922077921, "message": "flashing chunk 113/1232"}
+{"time": 1794045810.0191922, "pct": 10.470779220779221, "message": "flashing chunk 129/1232"}
+{"time": 1794045810.201823, "pct": 11.76948051948052, "message": "flashing chunk 145/1232"}
+{"time": 1794045810.3833132, "pct": 13.068181818181818, "message": "flashing chunk 161/1232"}
+{"time": 1794045810.565136, "pct": 14.366883116883116, "message": "flashing chunk 177/1232"}
+{"time": 1794045810.746675, "pct": 15.665584415584416, "message": "flashing chunk 193/1232"}
+{"time": 1794045810.9289348, "pct": 16.964285714285715, "message": "flashing chunk 209/1232"}
+{"time": 1794045811.1100917, "pct": 18.262987012987015, "message": "flashing chunk 225/1232"}
+{"time": 1794045811.292225, "pct": 19.56168831168831, "message": "flashing chunk 241/1232"}
+{"time": 1794045811.4743724, "pct": 20.86038961038961, "message": "flashing chunk 257/1232"}
+{"time": 1794045811.65624, "pct": 22.15909090909091, "message": "flashing chunk 273/1232"}
+{"time": 1794045811.8368988, "pct": 23.45779220779221, "message": "flashing chunk 289/1232"}
+{"time": 1794045812.018974, "pct": 24.756493506493506, "message": "flashing chunk 305/1232"}
+{"time": 1794045812.2001455, "pct": 26.0551948051948, "message": "flashing chunk 321/1232"}
+{"time": 1794045812.3816078, "pct": 27.3538961038961, "message": "flashing chunk 337/1232"}
+{"time": 1794045812.56518, "pct": 28.6525974025974, "message": "flashing chunk 353/1232"}
+{"time": 1794045812.7471054, "pct": 29.9512987012987, "message": "flashing chunk 369/1232"}
+{"time": 1794045812.9291131, "pct": 31.25, "message": "flashing chunk 385/1232"}
+{"time": 1794045813.1098633, "pct": 32.548701298701296, "message": "flashing chunk 401/1232"}
+{"time": 1794045813.2916725, "pct": 33.8474025974026, "message": "flashing chunk 417/1232"}
+{"time": 1794045813.4755156, "pct": 35.146103896103895, "message": "flashing chunk 433/1232"}
+{"time": 1794045813.6577423, "pct": 36.4448051948052, "message": "flashing chunk 449/1232"}
+{"time": 1794045813.8394597, "pct": 37.743506493506494, "message": "flashing chunk 465/1232"}
+{"time": 1794045814.0202632, "pct": 39.0422077922078, "message": "flashing chunk 481/1232"}
+{"time": 1794045814.2016196, "pct": 40.340909090909086, "message": "flashing chunk 497/1232"}
+{"time": 1794045814.3844125, "pct": 41.63961038961039, "message": "flashing chunk 513/1232"}
+{"time": 1794045814.5677342, "pct": 42.938311688311686, "message": "flashing chunk 529/1232"}
+{"time": 1794045814.749218, "pct": 44.23701298701299, "message": "flashing chunk 545/1232"}
+{"time": 1794045814.93062, "pct": 45.535714285714285, "message": "flashing chunk 561/1232"}
+{"time": 1794045815.112315, "pct": 46.83441558441558, "message": "flashing chunk 577/1232"}
+{"time": 1794045815.2948954, "pct": 48.133116883116884, "message": "flashing chunk 593/1232"}
+{"time": 1794045815.4780622, "pct": 49.43181818181818, "message": "flashing chunk 609/1232"}
+{"time": 1794045815.660416, "pct": 50.730519480519476, "message": "flashing chunk 625/1232"}
+{"time": 1794045815.8424623, "pct": 52.02922077922077, "message": "flashing chunk 641/1232"}
+{"time": 1794045816.0237596, "pct": 53.327922077922075, "message": "flashing chunk 657/1232"}
+{"time": 1794045816.2061327, "pct": 54.62662337662337, "message": "flashing chunk 673/1232"}
+{"time": 1794045816.3898113, "pct": 55.925324675324674, "message": "flashing chunk 689/1232"}
+{"time": 1794045816.5728655, "pct": 57.22402597402597, "message": "flashing chunk 705/1232"}
+{"time": 1794045816.7545, "pct": 58.52272727272727, "message": "flashing chunk 721/1232"}
+{"time": 1794045816.9364474, "pct": 59.82142857142857, "message": "flashing chunk 737/1232"}
+{"time": 1794045817.118784, "pct": 61.12012987012987, "message": "flashing chunk 753/1232"}
+{"time": 1794045817.3001268, "pct": 62.41883116883117, "message": "flashing chunk 769/1232"}
+{"time": 1794045817.4815876, "pct": 63.717532467532465, "message": "flashing chunk 785/1232"}
+{"time": 1794045817.6640685, "pct": 65.01623376623377, "message": "flashing chunk 801/1232"}
+{"time": 1794045817.8451946, "pct": 66.31493506493507, "message": "flashing chunk 817/1232"}
+{"time": 1794045818.026158, "pct": 67.61363636363636, "message": "flashing chunk 833/1232"}
+{"time": 1794045818.2084415, "pct": 68.91233766233766, "message": "flashing chunk 849/1232"}
+{"time": 1794045818.3895507, "pct": 70.21103896103897, "message": "flashing chunk 865/1232"}
+{"time": 1794045818.574343, "pct": 71.50974025974025, "message": "flashing chunk 881/1232"}
+{"time": 1794045818.7563944, "pct": 72.80844155844156, "message": "flashing chunk 897/1232"}
+{"time": 1794045818.9386446, "pct": 74.10714285714286, "message": "flashing chunk 913/1232"}
+{"time": 1794045819.1203258, "pct": 75.40584415584416, "message": "flashing chunk 929/1232"}
+{"time": 1794045819.3017128, "pct": 76.70454545454545, "message": "flashing chunk 945/1232"}
+{"time": 1794045819.4853306, "pct": 78.00324675324676, "message": "flashing chunk 961/1232"}
+{"time": 1794045819.6669533, "pct": 79.30194805194806, "message": "flashing chunk 977/1232"}
+{"time": 1794045819.848313, "pct": 80.60064935064936, "message": "flashing chunk 993/1232"}
+{"time": 1794045820.0302055, "pct": 81.89935064935064, "message": "flashing chunk 1009/1232"}
+{"time": 1794045820.211138, "pct": 83.19805194805194, "message": "flashing chunk 1025/1232"}
+{"time": 1794045820.3924913, "pct": 84.49675324675324, "message": "flashing chunk 1041/1232"}
+{"time": 1794045820.5757759, "pct": 85.79545454545455, "message": "flashing chunk 1057/1232"}
+{"time": 1794045820.7573225, "pct": 87.09415584415584, "message": "flashing chunk 1073/1232"}
+{"time": 1794045820.9403281, "pct": 88.39285714285714, "message": "flashing chunk 1089/1232"}
+{"time": 1794045821.1212711, "pct": 89.69155844155844, "message": "flashing chunk 1105/1232"}
+{"time": 1794045821.3020144, "pct": 90.99025974025975, "message": "flashing chunk 1121/1232"}
+{"time": 1794045821.485568, "pct": 92.28896103896103, "message": "flashing chunk 1137/1232"}
+{"time": 1794045821.6674805, "pct": 93.58766233766234, "message": "flashing chunk 1153/1232"}
+{"time": 1794045821.8493872, "pct": 94.88636363636364, "message": "flashing chunk 1169/1232"}
+{"time": 1794045822.0310624, "pct": 96.18506493506493, "message": "flashing chunk 1185/1232"}
+{"time": 1794045822.2124476, "pct": 97.48376623376623, "message": "flashing chunk 1201/1232"}
+{"time": 1794045822.3971474, "pct": 98.78246753246754, "message": "flashing chunk 1217/1232"}
+{"time": 1794045822.5685592, "pct": 100.0, "message": "flashing chunk 1232/1232"}
+{"time": 1794045822.5692, "pct": 100.0, "message": "committing (IAP_FINISH) - ACE reboots"}
+{"time": 1794045822.616605, "pct": null, "message": "waiting for the ACE to report 1.1.92O"}

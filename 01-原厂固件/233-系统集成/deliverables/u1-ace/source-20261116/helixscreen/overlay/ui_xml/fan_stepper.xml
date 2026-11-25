@@ -1,0 +1,34 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="fan_stepper_height" value="100"/>
+    <px name="fan_stepper_switch_w" value="40"/>
+  </consts>
+  <api>
+    <prop name="fan_name" type="string" default="Fan"/>
+    <prop name="fan_id" type="string" default="fan"/>
+    <prop name="initial_value" type="number" default="0"/>
+  </api>
+  <view name="fan_stepper_root" extends="ui_card" width="49%" height="#fan_stepper_height" flex_flow="column" style_pad_all="#u1_compact_gap" style_pad_gap="0" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_border_width="1" style_border_color="#border" style_min_width="49%" style_clip_corner="false">
+    <lv_obj name="fan_card_header" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_left="#u1_card_pad" style_pad_right="0" style_pad_gap="#u1_card_gap" style_flex_cross_place="center" scrollable="false" style_clip_corner="false">
+      <text_body name="name_label" width="0" flex_grow="1" text="$fan_name" long_mode="dots" style_text_font="#u1_aux_font"/>
+      <ui_switch name="onoff_switch" size="tiny" width="#fan_stepper_switch_w"/>
+      <text_body name="onoff_label" hidden="true"/>
+    </lv_obj>
+    <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" scrollable="false" style_clip_corner="false" style_bg_color="#elevated_bg" style_bg_opa="255" style_radius="#u1_card_radius">
+      <ui_button name="fan_step_down" width="#u1_touch_target" height="100%" text="-" variant="ghost" style_min_width="0" style_border_width="0" style_pad_all="0" style_text_font="#u1_title_font" style_clip_corner="false">
+        <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <event_cb trigger="clicked" callback="on_fan_step_clicked" user_data="-5"/>
+      </ui_button>
+      <text_heading name="speed_label" text="关" width="0" flex_grow="1" style_text_align="center" style_text_font="#font_display_small" clickable="false"/>
+      <ui_button name="fan_step_up" width="#u1_touch_target" height="100%" text="+" variant="ghost" style_min_width="0" style_border_width="0" style_pad_all="0" style_text_font="#u1_title_font" style_clip_corner="false">
+        <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <event_cb trigger="clicked" callback="on_fan_step_clicked" user_data="5"/>
+      </ui_button>
+    </lv_obj>
+    <!-- FanDial retains its state mirrors and animation owner for this compact view. -->
+    <icon name="fan_icon" src="fan" size="sm" hidden="true"/>
+    <lv_arc name="dial_arc" value="$initial_value" min_value="0" max_value="100" hidden="true"/>
+  </view>
+</component>

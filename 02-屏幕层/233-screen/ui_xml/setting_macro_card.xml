@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Bordered card container for macro device entries -->
+<!-- C++ adds header row, summary/edit content dynamically -->
+<component>
+  <view extends="lv_obj" width="100%" height="content" flex_flow="column" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" style_pad_all="#u1_page_pad" style_border_width="#u1_border" style_border_color="#border" style_pad_gap="#u1_card_gap" scrollable="false" style_min_height="#u1_touch_target" style_border_opa="255" style_shadow_width="0"/>
+</component>

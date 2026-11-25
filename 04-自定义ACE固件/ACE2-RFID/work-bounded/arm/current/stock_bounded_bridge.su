@@ -1,0 +1,6 @@
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/stock_bounded_bridge.c:5:31:transaction	8	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/stock_bounded_bridge.c:12:9:br_stock_read	24	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/stock_bounded_bridge.c:19:6:br_stock_write	16	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/stock_bounded_bridge.c:25:5:br_stock_select	56	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/stock_bounded_bridge.c:36:5:br_stock_transceive_sized	48	static
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/stock_bounded_bridge.c:45:5:br_stock_transceive_checked	32	static

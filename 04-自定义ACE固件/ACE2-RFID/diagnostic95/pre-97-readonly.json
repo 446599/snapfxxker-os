@@ -1,0 +1,36 @@
+{
+  "uid": {
+    "uid1": 808780566,
+    "uid2": 17445170,
+    "uid3": 942880330
+  },
+  "firmware": {
+    "boot_version": "",
+    "firmware": "V1.1.95O",
+    "model": "ACE 2 Pro"
+  },
+  "printer_state": "idle",
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "lanes": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "fw_hold": false,
+  "dry": {
+    "status": "stop",
+    "target_temp": 0,
+    "duration": 0,
+    "remain_time": 0
+  },
+  "temp": 24,
+  "gate2": true,
+  "calibration": "idle",
+  "enabled_rfid": 1
+}

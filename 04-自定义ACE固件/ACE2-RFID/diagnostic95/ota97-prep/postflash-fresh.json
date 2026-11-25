@@ -1,0 +1,40 @@
+{
+  "uid": {
+    "uid1": 808780566,
+    "uid2": 17445170,
+    "uid3": 942880330
+  },
+  "info": {
+    "boot_version": "",
+    "firmware": "V1.1.97O",
+    "model": "ACE 2 Pro"
+  },
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "lanes": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "rfid": 1,
+  "temp": {
+    "box1_temp": 0.0,
+    "box2_temp": 0.0,
+    "env_humidity": 47.585201263427734,
+    "env_temp": 24.26624298095703,
+    "ptc1_temp": 21.46265411376953,
+    "ptc2_temp": 20.199901580810547
+  },
+  "holds": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "printer": "ready"
+}

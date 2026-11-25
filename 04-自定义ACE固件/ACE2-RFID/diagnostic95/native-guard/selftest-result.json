@@ -1,0 +1,37 @@
+{
+  "before": {
+    "heads": [
+      false,
+      false,
+      false,
+      false
+    ],
+    "gate2": false,
+    "printer": "ready"
+  },
+  "after": {
+    "heads": [
+      false,
+      false,
+      false,
+      false
+    ],
+    "gate2": false,
+    "printer": "ready"
+  },
+  "elapsed": 60.85295512499579,
+  "guard": {
+    "state": "idle",
+    "reason": null,
+    "triggered": [],
+    "event_seq": 0,
+    "stop_count": 0,
+    "gate": null,
+    "lane_states": null,
+    "rfid_flags": null,
+    "timer_max_gap": 0.0,
+    "selftest_active": false,
+    "selftest_max_gap": 0.05479454199667089,
+    "selftest_count": 1189
+  }
+}

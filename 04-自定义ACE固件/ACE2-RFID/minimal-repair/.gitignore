@@ -1,0 +1,5 @@
+build/
+build-analysis/
+__pycache__/
+firmware/__pycache__/
+live/__pycache__/

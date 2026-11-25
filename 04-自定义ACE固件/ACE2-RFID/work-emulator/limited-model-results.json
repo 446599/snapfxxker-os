@@ -1,0 +1,1362 @@
+{
+  "engine": "Hand-written restricted Thumb behavior model driven by GNU objdump",
+  "base_sha256": "a468e366226e7c483d3dd96b444223e89cbf0d1b10573d42b6263843ffd6be3e",
+  "decoded_instructions": 82,
+  "test_count": 12,
+  "passed_assertions": true,
+  "results": [
+    {
+      "operation": "read",
+      "scenario": "ready",
+      "outcome": "returned",
+      "instructions": 759,
+      "instruction_budget": 10000,
+      "pc": "0x0807F000",
+      "r0": 165,
+      "sp_restored": true,
+      "callee_registers_preserved": true,
+      "cs_high": true,
+      "ctrl_high": false,
+      "tx_words": [
+        212,
+        255
+      ],
+      "rx_words": [
+        0,
+        165
+      ],
+      "polls": {
+        "tx_address": 1,
+        "rx_address": 1,
+        "tx_payload": 1,
+        "rx_payload": 1
+      },
+      "synthetic_stop_pending": false,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F580",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F582",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F584",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F586",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F588",
+          "visits": 120
+        },
+        {
+          "pc": "0x0800F58A",
+          "visits": 120
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F574"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 737,
+          "kind": "spi_write",
+          "value": 212
+        },
+        {
+          "instruction": 739,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 742,
+          "kind": "spi_read",
+          "value": 0
+        },
+        {
+          "instruction": 743,
+          "kind": "status",
+          "phase": "tx_payload",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 747,
+          "kind": "spi_write",
+          "value": 255
+        },
+        {
+          "instruction": 749,
+          "kind": "status",
+          "phase": "rx_payload",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 752,
+          "kind": "spi_read",
+          "value": 165
+        },
+        {
+          "instruction": 754,
+          "kind": "gpio_write",
+          "address": "0x40010C14",
+          "value": 128,
+          "port_output": 0
+        },
+        {
+          "instruction": 757,
+          "kind": "gpio_write",
+          "address": "0x40010810",
+          "value": 16,
+          "port_output": 16
+        },
+        {
+          "instruction": 759,
+          "kind": "return",
+          "address": "0x0807F000"
+        }
+      ]
+    },
+    {
+      "operation": "read",
+      "scenario": "delayed",
+      "outcome": "returned",
+      "instructions": 801,
+      "instruction_budget": 10000,
+      "pc": "0x0807F000",
+      "r0": 165,
+      "sp_restored": true,
+      "callee_registers_preserved": true,
+      "cs_high": true,
+      "ctrl_high": false,
+      "tx_words": [
+        212,
+        255
+      ],
+      "rx_words": [
+        0,
+        165
+      ],
+      "polls": {
+        "tx_address": 3,
+        "rx_address": 4,
+        "tx_payload": 5,
+        "rx_payload": 6
+      },
+      "synthetic_stop_pending": false,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F580",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F582",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F584",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F586",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F588",
+          "visits": 120
+        },
+        {
+          "pc": "0x0800F58A",
+          "visits": 120
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F574"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": false,
+          "value": 1
+        },
+        {
+          "instruction": 738,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 743,
+          "kind": "spi_write",
+          "value": 212
+        },
+        {
+          "instruction": 745,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": false,
+          "value": 2
+        },
+        {
+          "instruction": 754,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 757,
+          "kind": "spi_read",
+          "value": 0
+        },
+        {
+          "instruction": 758,
+          "kind": "status",
+          "phase": "tx_payload",
+          "ready": false,
+          "value": 1
+        },
+        {
+          "instruction": 770,
+          "kind": "status",
+          "phase": "tx_payload",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 774,
+          "kind": "spi_write",
+          "value": 255
+        },
+        {
+          "instruction": 776,
+          "kind": "status",
+          "phase": "rx_payload",
+          "ready": false,
+          "value": 2
+        },
+        {
+          "instruction": 791,
+          "kind": "status",
+          "phase": "rx_payload",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 794,
+          "kind": "spi_read",
+          "value": 165
+        },
+        {
+          "instruction": 796,
+          "kind": "gpio_write",
+          "address": "0x40010C14",
+          "value": 128,
+          "port_output": 0
+        },
+        {
+          "instruction": 799,
+          "kind": "gpio_write",
+          "address": "0x40010810",
+          "value": 16,
+          "port_output": 16
+        },
+        {
+          "instruction": 801,
+          "kind": "return",
+          "address": "0x0807F000"
+        }
+      ]
+    },
+    {
+      "operation": "read",
+      "scenario": "stuck_tx_address",
+      "outcome": "instruction_budget_exhausted",
+      "instructions": 10000,
+      "instruction_budget": 10000,
+      "pc": "0x0800F594",
+      "r0": 536875008,
+      "sp_restored": false,
+      "callee_registers_preserved": true,
+      "cs_high": false,
+      "ctrl_high": true,
+      "tx_words": [],
+      "rx_words": [],
+      "polls": {
+        "tx_address": 3090,
+        "rx_address": 0,
+        "tx_payload": 0,
+        "rx_payload": 0
+      },
+      "synthetic_stop_pending": true,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F590",
+          "visits": 3090
+        },
+        {
+          "pc": "0x0800F592",
+          "visits": 3090
+        },
+        {
+          "pc": "0x0800F594",
+          "visits": 3089
+        },
+        {
+          "pc": "0x0800F580",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F582",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F584",
+          "visits": 121
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F574"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": false,
+          "value": 1
+        },
+        {
+          "instruction": 2000,
+          "kind": "synthetic_stop_pending"
+        }
+      ]
+    },
+    {
+      "operation": "read",
+      "scenario": "stuck_rx_address",
+      "outcome": "instruction_budget_exhausted",
+      "instructions": 10000,
+      "instruction_budget": 10000,
+      "pc": "0x0800F5A2",
+      "r0": 536875008,
+      "sp_restored": false,
+      "callee_registers_preserved": true,
+      "cs_high": false,
+      "ctrl_high": true,
+      "tx_words": [
+        212
+      ],
+      "rx_words": [],
+      "polls": {
+        "tx_address": 1,
+        "rx_address": 3088,
+        "tx_payload": 0,
+        "rx_payload": 0
+      },
+      "synthetic_stop_pending": true,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F5A0",
+          "visits": 3088
+        },
+        {
+          "pc": "0x0800F5A2",
+          "visits": 3087
+        },
+        {
+          "pc": "0x0800F5A4",
+          "visits": 3087
+        },
+        {
+          "pc": "0x0800F580",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F582",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F584",
+          "visits": 121
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F574"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 737,
+          "kind": "spi_write",
+          "value": 212
+        },
+        {
+          "instruction": 739,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": false,
+          "value": 2
+        },
+        {
+          "instruction": 2000,
+          "kind": "synthetic_stop_pending"
+        }
+      ]
+    },
+    {
+      "operation": "read",
+      "scenario": "stuck_tx_payload",
+      "outcome": "instruction_budget_exhausted",
+      "instructions": 10000,
+      "instruction_budget": 10000,
+      "pc": "0x0800F5A8",
+      "r0": 536875008,
+      "sp_restored": false,
+      "callee_registers_preserved": true,
+      "cs_high": false,
+      "ctrl_high": true,
+      "tx_words": [
+        212
+      ],
+      "rx_words": [
+        0
+      ],
+      "polls": {
+        "tx_address": 1,
+        "rx_address": 1,
+        "tx_payload": 3086,
+        "rx_payload": 0
+      },
+      "synthetic_stop_pending": true,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F5A8",
+          "visits": 3086
+        },
+        {
+          "pc": "0x0800F5AA",
+          "visits": 3086
+        },
+        {
+          "pc": "0x0800F5AC",
+          "visits": 3086
+        },
+        {
+          "pc": "0x0800F580",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F582",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F584",
+          "visits": 121
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F574"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 737,
+          "kind": "spi_write",
+          "value": 212
+        },
+        {
+          "instruction": 739,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 742,
+          "kind": "spi_read",
+          "value": 0
+        },
+        {
+          "instruction": 743,
+          "kind": "status",
+          "phase": "tx_payload",
+          "ready": false,
+          "value": 1
+        },
+        {
+          "instruction": 2000,
+          "kind": "synthetic_stop_pending"
+        }
+      ]
+    },
+    {
+      "operation": "read",
+      "scenario": "stuck_rx_payload",
+      "outcome": "instruction_budget_exhausted",
+      "instructions": 10000,
+      "instruction_budget": 10000,
+      "pc": "0x0800F5B4",
+      "r0": 536875008,
+      "sp_restored": false,
+      "callee_registers_preserved": true,
+      "cs_high": false,
+      "ctrl_high": true,
+      "tx_words": [
+        212,
+        255
+      ],
+      "rx_words": [
+        0
+      ],
+      "polls": {
+        "tx_address": 1,
+        "rx_address": 1,
+        "tx_payload": 1,
+        "rx_payload": 3084
+      },
+      "synthetic_stop_pending": true,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F5B4",
+          "visits": 3084
+        },
+        {
+          "pc": "0x0800F5B6",
+          "visits": 3084
+        },
+        {
+          "pc": "0x0800F5B8",
+          "visits": 3084
+        },
+        {
+          "pc": "0x0800F580",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F582",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F584",
+          "visits": 121
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F574"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 737,
+          "kind": "spi_write",
+          "value": 212
+        },
+        {
+          "instruction": 739,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 742,
+          "kind": "spi_read",
+          "value": 0
+        },
+        {
+          "instruction": 743,
+          "kind": "status",
+          "phase": "tx_payload",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 747,
+          "kind": "spi_write",
+          "value": 255
+        },
+        {
+          "instruction": 749,
+          "kind": "status",
+          "phase": "rx_payload",
+          "ready": false,
+          "value": 2
+        },
+        {
+          "instruction": 2000,
+          "kind": "synthetic_stop_pending"
+        }
+      ]
+    },
+    {
+      "operation": "write",
+      "scenario": "ready",
+      "outcome": "returned",
+      "instructions": 758,
+      "instruction_budget": 10000,
+      "pc": "0x0807F000",
+      "r0": 16,
+      "sp_restored": true,
+      "callee_registers_preserved": true,
+      "cs_high": true,
+      "ctrl_high": false,
+      "tx_words": [
+        84,
+        86
+      ],
+      "rx_words": [
+        0,
+        165
+      ],
+      "polls": {
+        "tx_address": 1,
+        "rx_address": 1,
+        "tx_payload": 1,
+        "rx_payload": 1
+      },
+      "synthetic_stop_pending": false,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F5E0",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E2",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E6",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5EA",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5EC",
+          "visits": 120
+        },
+        {
+          "pc": "0x0800F5EE",
+          "visits": 120
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F5D0"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 737,
+          "kind": "spi_write",
+          "value": 84
+        },
+        {
+          "instruction": 739,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 742,
+          "kind": "spi_read",
+          "value": 0
+        },
+        {
+          "instruction": 743,
+          "kind": "status",
+          "phase": "tx_payload",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 746,
+          "kind": "spi_write",
+          "value": 86
+        },
+        {
+          "instruction": 749,
+          "kind": "status",
+          "phase": "rx_payload",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 752,
+          "kind": "spi_read",
+          "value": 165
+        },
+        {
+          "instruction": 754,
+          "kind": "gpio_write",
+          "address": "0x40010C14",
+          "value": 128,
+          "port_output": 0
+        },
+        {
+          "instruction": 756,
+          "kind": "gpio_write",
+          "address": "0x40010810",
+          "value": 16,
+          "port_output": 16
+        },
+        {
+          "instruction": 758,
+          "kind": "return",
+          "address": "0x0807F000"
+        }
+      ]
+    },
+    {
+      "operation": "write",
+      "scenario": "delayed",
+      "outcome": "returned",
+      "instructions": 800,
+      "instruction_budget": 10000,
+      "pc": "0x0807F000",
+      "r0": 16,
+      "sp_restored": true,
+      "callee_registers_preserved": true,
+      "cs_high": true,
+      "ctrl_high": false,
+      "tx_words": [
+        84,
+        86
+      ],
+      "rx_words": [
+        0,
+        165
+      ],
+      "polls": {
+        "tx_address": 3,
+        "rx_address": 4,
+        "tx_payload": 5,
+        "rx_payload": 6
+      },
+      "synthetic_stop_pending": false,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F5E0",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E2",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E6",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5EA",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5EC",
+          "visits": 120
+        },
+        {
+          "pc": "0x0800F5EE",
+          "visits": 120
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F5D0"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": false,
+          "value": 1
+        },
+        {
+          "instruction": 738,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 743,
+          "kind": "spi_write",
+          "value": 84
+        },
+        {
+          "instruction": 745,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": false,
+          "value": 2
+        },
+        {
+          "instruction": 754,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 757,
+          "kind": "spi_read",
+          "value": 0
+        },
+        {
+          "instruction": 758,
+          "kind": "status",
+          "phase": "tx_payload",
+          "ready": false,
+          "value": 1
+        },
+        {
+          "instruction": 770,
+          "kind": "status",
+          "phase": "tx_payload",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 773,
+          "kind": "spi_write",
+          "value": 86
+        },
+        {
+          "instruction": 776,
+          "kind": "status",
+          "phase": "rx_payload",
+          "ready": false,
+          "value": 2
+        },
+        {
+          "instruction": 791,
+          "kind": "status",
+          "phase": "rx_payload",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 794,
+          "kind": "spi_read",
+          "value": 165
+        },
+        {
+          "instruction": 796,
+          "kind": "gpio_write",
+          "address": "0x40010C14",
+          "value": 128,
+          "port_output": 0
+        },
+        {
+          "instruction": 798,
+          "kind": "gpio_write",
+          "address": "0x40010810",
+          "value": 16,
+          "port_output": 16
+        },
+        {
+          "instruction": 800,
+          "kind": "return",
+          "address": "0x0807F000"
+        }
+      ]
+    },
+    {
+      "operation": "write",
+      "scenario": "stuck_tx_address",
+      "outcome": "instruction_budget_exhausted",
+      "instructions": 10000,
+      "instruction_budget": 10000,
+      "pc": "0x0800F5FA",
+      "r0": 536875008,
+      "sp_restored": false,
+      "callee_registers_preserved": true,
+      "cs_high": false,
+      "ctrl_high": true,
+      "tx_words": [],
+      "rx_words": [],
+      "polls": {
+        "tx_address": 3090,
+        "rx_address": 0,
+        "tx_payload": 0,
+        "rx_payload": 0
+      },
+      "synthetic_stop_pending": true,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F5F4",
+          "visits": 3090
+        },
+        {
+          "pc": "0x0800F5F8",
+          "visits": 3090
+        },
+        {
+          "pc": "0x0800F5FA",
+          "visits": 3089
+        },
+        {
+          "pc": "0x0800F5E0",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E2",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E6",
+          "visits": 121
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F5D0"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": false,
+          "value": 1
+        },
+        {
+          "instruction": 2000,
+          "kind": "synthetic_stop_pending"
+        }
+      ]
+    },
+    {
+      "operation": "write",
+      "scenario": "stuck_rx_address",
+      "outcome": "instruction_budget_exhausted",
+      "instructions": 10000,
+      "instruction_budget": 10000,
+      "pc": "0x0800F60A",
+      "r0": 536875008,
+      "sp_restored": false,
+      "callee_registers_preserved": true,
+      "cs_high": false,
+      "ctrl_high": true,
+      "tx_words": [
+        84
+      ],
+      "rx_words": [],
+      "polls": {
+        "tx_address": 1,
+        "rx_address": 3088,
+        "tx_payload": 0,
+        "rx_payload": 0
+      },
+      "synthetic_stop_pending": true,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F608",
+          "visits": 3088
+        },
+        {
+          "pc": "0x0800F60A",
+          "visits": 3087
+        },
+        {
+          "pc": "0x0800F60C",
+          "visits": 3087
+        },
+        {
+          "pc": "0x0800F5E0",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E2",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E6",
+          "visits": 121
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F5D0"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 737,
+          "kind": "spi_write",
+          "value": 84
+        },
+        {
+          "instruction": 739,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": false,
+          "value": 2
+        },
+        {
+          "instruction": 2000,
+          "kind": "synthetic_stop_pending"
+        }
+      ]
+    },
+    {
+      "operation": "write",
+      "scenario": "stuck_tx_payload",
+      "outcome": "instruction_budget_exhausted",
+      "instructions": 10000,
+      "instruction_budget": 10000,
+      "pc": "0x0800F610",
+      "r0": 536875008,
+      "sp_restored": false,
+      "callee_registers_preserved": true,
+      "cs_high": false,
+      "ctrl_high": true,
+      "tx_words": [
+        84
+      ],
+      "rx_words": [
+        0
+      ],
+      "polls": {
+        "tx_address": 1,
+        "rx_address": 1,
+        "tx_payload": 3086,
+        "rx_payload": 0
+      },
+      "synthetic_stop_pending": true,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F610",
+          "visits": 3086
+        },
+        {
+          "pc": "0x0800F612",
+          "visits": 3086
+        },
+        {
+          "pc": "0x0800F614",
+          "visits": 3086
+        },
+        {
+          "pc": "0x0800F5E0",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E2",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E6",
+          "visits": 121
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F5D0"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 737,
+          "kind": "spi_write",
+          "value": 84
+        },
+        {
+          "instruction": 739,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 742,
+          "kind": "spi_read",
+          "value": 0
+        },
+        {
+          "instruction": 743,
+          "kind": "status",
+          "phase": "tx_payload",
+          "ready": false,
+          "value": 1
+        },
+        {
+          "instruction": 2000,
+          "kind": "synthetic_stop_pending"
+        }
+      ]
+    },
+    {
+      "operation": "write",
+      "scenario": "stuck_rx_payload",
+      "outcome": "instruction_budget_exhausted",
+      "instructions": 10000,
+      "instruction_budget": 10000,
+      "pc": "0x0800F61C",
+      "r0": 536875008,
+      "sp_restored": false,
+      "callee_registers_preserved": true,
+      "cs_high": false,
+      "ctrl_high": true,
+      "tx_words": [
+        84,
+        86
+      ],
+      "rx_words": [
+        0
+      ],
+      "polls": {
+        "tx_address": 1,
+        "rx_address": 1,
+        "tx_payload": 1,
+        "rx_payload": 3084
+      },
+      "synthetic_stop_pending": true,
+      "busy_pcs": [
+        {
+          "pc": "0x0800F61C",
+          "visits": 3084
+        },
+        {
+          "pc": "0x0800F61E",
+          "visits": 3084
+        },
+        {
+          "pc": "0x0800F620",
+          "visits": 3084
+        },
+        {
+          "pc": "0x0800F5E0",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E2",
+          "visits": 121
+        },
+        {
+          "pc": "0x0800F5E6",
+          "visits": 121
+        }
+      ],
+      "events": [
+        {
+          "instruction": 1,
+          "kind": "entry",
+          "address": "0x0800F5D0"
+        },
+        {
+          "instruction": 3,
+          "kind": "gpio_write",
+          "address": "0x40010814",
+          "value": 16,
+          "port_output": 0
+        },
+        {
+          "instruction": 732,
+          "kind": "status",
+          "phase": "tx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 737,
+          "kind": "spi_write",
+          "value": 84
+        },
+        {
+          "instruction": 739,
+          "kind": "status",
+          "phase": "rx_address",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 742,
+          "kind": "spi_read",
+          "value": 0
+        },
+        {
+          "instruction": 743,
+          "kind": "status",
+          "phase": "tx_payload",
+          "ready": true,
+          "value": 3
+        },
+        {
+          "instruction": 746,
+          "kind": "spi_write",
+          "value": 86
+        },
+        {
+          "instruction": 749,
+          "kind": "status",
+          "phase": "rx_payload",
+          "ready": false,
+          "value": 2
+        },
+        {
+          "instruction": 2000,
+          "kind": "synthetic_stop_pending"
+        }
+      ]
+    }
+  ],
+  "not_verified": [
+    "Independent ARM instruction decoding and CPU fidelity",
+    "Candidate routines outside F574/F5D0",
+    "RTOS/interrupt/STOP delivery",
+    "Thermal tasks or physical hardware",
+    "Wall-clock deadlines, peripheral timing, DMA, electrical faults"
+  ]
+}

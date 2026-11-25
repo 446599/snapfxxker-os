@@ -1,0 +1,23 @@
+{
+  "name": "U1 Warm",
+  "dark": {
+    "screen_bg": "#262522", "overlay_bg": "#2D2B27", "card_bg": "#33312C",
+    "elevated_bg": "#403D36", "border": "#575248", "text": "#F2EFE8",
+    "text_muted": "#C1B9AC", "text_subtle": "#938C80", "primary": "#E3A489",
+    "secondary": "#918A78", "tertiary": "#8EB8AF", "info": "#8EB8AF",
+    "success": "#A8BD9A", "warning": "#E5BC78", "danger": "#EE9A87", "focus": "#E3A489"
+  },
+  "light": {
+    "screen_bg": "#F5F3EE", "overlay_bg": "#F0EDE6", "card_bg": "#FFFEFA",
+    "elevated_bg": "#EAE6DD", "border": "#CEC7BA", "text": "#302D27",
+    "text_muted": "#736D62", "text_subtle": "#8B8477", "primary": "#A4593C",
+    "secondary": "#7B7667", "tertiary": "#457D72", "info": "#457D72",
+    "success": "#5A784C", "warning": "#98671C", "danger": "#B04835", "focus": "#A4593C"
+  },
+  "border_radius_size": 8,
+  "border_width": 1,
+  "border_opacity": 60,
+  "shadow_intensity": 0,
+  "shadow_opa": 0,
+  "shadow_offset_y": 0
+}

@@ -1,0 +1,2109 @@
+diff --git a/assets/config/themes/defaults/u1-warm.json b/assets/config/themes/defaults/u1-warm.json
+--- a/assets/config/themes/defaults/u1-warm.json
++++ b/assets/config/themes/defaults/u1-warm.json
+@@ -1,22 +1,44 @@
+ {
+-  "name": "U1 Warm",
++  "name": "U1 Clean",
+   "dark": {
+-    "screen_bg": "#262522", "overlay_bg": "#2D2B27", "card_bg": "#33312C",
+-    "elevated_bg": "#403D36", "border": "#575248", "text": "#F2EFE8",
+-    "text_muted": "#C1B9AC", "text_subtle": "#938C80", "primary": "#E3A489",
+-    "secondary": "#918A78", "tertiary": "#8EB8AF", "info": "#8EB8AF",
+-    "success": "#A8BD9A", "warning": "#E5BC78", "danger": "#EE9A87", "focus": "#E3A489"
++    "screen_bg": "#141C18",
++    "overlay_bg": "#1C2620",
++    "card_bg": "#202B24",
++    "elevated_bg": "#29372E",
++    "border": "#3A4B40",
++    "text": "#EEF4F0",
++    "text_muted": "#AABAAE",
++    "text_subtle": "#83958A",
++    "primary": "#8CC5A4",
++    "secondary": "#819789",
++    "tertiary": "#83ACA9",
++    "info": "#8EB4C0",
++    "success": "#8CC5A4",
++    "warning": "#D0B177",
++    "danger": "#DB8F8F",
++    "focus": "#8CC5A4"
+   },
+   "light": {
+-    "screen_bg": "#F5F3EE", "overlay_bg": "#F0EDE6", "card_bg": "#FFFEFA",
+-    "elevated_bg": "#EAE6DD", "border": "#CEC7BA", "text": "#302D27",
+-    "text_muted": "#736D62", "text_subtle": "#8B8477", "primary": "#A4593C",
+-    "secondary": "#7B7667", "tertiary": "#457D72", "info": "#457D72",
+-    "success": "#5A784C", "warning": "#98671C", "danger": "#B04835", "focus": "#A4593C"
++    "screen_bg": "#FAFCFB",
++    "overlay_bg": "#F1F4F2",
++    "card_bg": "#FFFFFF",
++    "elevated_bg": "#EEF3F0",
++    "border": "#D9E2DC",
++    "text": "#202A25",
++    "text_muted": "#68756E",
++    "text_subtle": "#8E9992",
++    "primary": "#246F52",
++    "secondary": "#62796B",
++    "tertiary": "#6D8C7A",
++    "info": "#3A7881",
++    "success": "#246F52",
++    "warning": "#AC751D",
++    "danger": "#B44E4E",
++    "focus": "#246F52"
+   },
+-  "border_radius_size": 8,
++  "border_radius_size": 4,
+   "border_width": 1,
+-  "border_opacity": 60,
++  "border_opacity": 28,
+   "shadow_intensity": 0,
+   "shadow_opa": 0,
+   "shadow_offset_y": 0
+diff --git a/include/firmware_settings_demo.h b/include/firmware_settings_demo.h
+new file mode 100644
+--- /dev/null
++++ b/include/firmware_settings_demo.h
+@@ -0,0 +1,11 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++#pragma once
++
++#include "json_fwd.h"
++
++namespace helix {
++
++// In-memory settings provider for the explicit mock-printer path only.
++nlohmann::json firmware_settings_demo(const nlohmann::json& body, bool post);
++
++} // namespace helix
+diff --git a/include/ui_firmware_settings.h b/include/ui_firmware_settings.h
+new file mode 100644
+--- /dev/null
++++ b/include/ui_firmware_settings.h
+@@ -0,0 +1,75 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++#pragma once
++
++#include "helix/xml/indexed_subject_pool.h"
++#include "overlay_base.h"
++#include "hv/json.hpp"
++
++#include <string>
++#include <vector>
++
++namespace helix::ui {
++
++// Native presentation of the settings advertised by the local firmware provider.
++// The provider owns vendor IDs, capability filtering and application semantics.
++class FirmwareSettings : public OverlayBase {
++  public:
++    HELIX_KIND_TAG(FirmwareSettings)
++    ~FirmwareSettings() override;
++    const char* get_name() const override { return "Firmware Settings"; }
++    const char* xml_component() const override { return "firmware_settings"; }
++    bool is_destination() const override { return true; }
++    void init_subjects() override;
++    void register_callbacks() override;
++    lv_obj_t* create(lv_obj_t* parent) override;
++    void open();
++    void deinit_subjects();
++
++  private:
++    void refresh(bool after_apply = false);
++    void rebuild_groups();
++    void choose_group(int index);
++    void choose_setting(int index);
++    void choose_option(int index);
++    void review();
++    void apply();
++    void back();
++    void show_output();
++    void set_page(int page, const std::string& title);
++    std::string input(const std::string& name) const;
++    std::string current_label(const nlohmann::json& setting) const;
++
++    SubjectManager subjects_;
++    nlohmann::json groups_ = nlohmann::json::array();
++    nlohmann::json settings_ = nlohmann::json::array();
++    nlohmann::json options_ = nlohmann::json::array();
++    nlohmann::json inputs_ = nlohmann::json::array();
++    nlohmann::json pending_ = nlohmann::json::object();
++    std::vector<int> visible_settings_;
++    int group_index_ = -1;
++    int setting_index_ = -1;
++    bool applying_ = false;
++    std::string output_;
++
++    lv_subject_t page_{}, busy_{}, ready_{}, group_count_{}, setting_count_{}, option_count_{},
++        input_count_{}, selected_option_{}, dirty_{}, has_output_{};
++    lv_subject_t title_{}, status_{}, description_{}, current_{}, review_{}, output_text_{};
++    char title_buf_[160]{}, status_buf_[768]{}, description_buf_[8192]{}, current_buf_[256]{},
++        review_buf_[16384]{}, output_buf_[32768]{};
++
++    helix::xml::IndexedSubjectPool group_labels_{
++        "firmware_group_label", helix::xml::IndexedSubjectPool::Type::String, 128};
++    helix::xml::IndexedSubjectPool setting_labels_{
++        "firmware_setting_label", helix::xml::IndexedSubjectPool::Type::String, 160};
++    helix::xml::IndexedSubjectPool setting_values_{
++        "firmware_setting_value", helix::xml::IndexedSubjectPool::Type::String, 160};
++    helix::xml::IndexedSubjectPool option_labels_{
++        "firmware_option_label", helix::xml::IndexedSubjectPool::Type::String, 192};
++    helix::xml::IndexedSubjectPool input_labels_{
++        "firmware_input_label", helix::xml::IndexedSubjectPool::Type::String, 256};
++    helix::xml::IndexedSubjectPool input_values_{
++        "firmware_input_value", helix::xml::IndexedSubjectPool::Type::String, 1024};
++};
++
++FirmwareSettings& get_firmware_settings();
++} // namespace helix::ui
+diff --git a/include/ui_material_workspace.h b/include/ui_material_workspace.h
+--- a/include/ui_material_workspace.h
++++ b/include/ui_material_workspace.h
+@@ -46,6 +46,7 @@
+     SubjectManager subjects_;
+     bool visible_ = false;
+     bool firmware_entry_ = false;
++    bool reading_auto_dry_ = false;
+     int head_ = 0, unit_ = 0, slot_ = -1;
+     std::string spool_id_, firmware_token_;
+     nlohmann::json spools_ = nlohmann::json::array(), files_ = nlohmann::json::array();
+@@ -56,7 +57,7 @@
+     std::optional<int> confirmed_source_;
+     nlohmann::json pending_args_;
+     lv_subject_t page_{}, busy_{}, list_count_{}, file_count_{}, confirmed_{}, progress_{},
+-        ready_{}, auto_sensor_{}, settings_ready_{};
++        ready_{}, auto_sensor_{}, auto_enabled_{}, settings_ready_{};
+     lv_subject_t title_{}, status_{}, detail_{}, form_material_{}, form_color_{}, form_weight_{},
+         form_vendor_{}, file_info_{}, version_{};
+     char title_buf_[128]{}, status_buf_[512]{}, detail_buf_[512]{}, form_material_buf_[64]{},
+@@ -66,6 +67,8 @@
+                                                 helix::xml::IndexedSubjectPool::Type::String, 32};
+     helix::xml::IndexedSubjectPool settings_labels_{
+         "workspace_setting", helix::xml::IndexedSubjectPool::Type::String, 96};
++    helix::xml::IndexedSubjectPool settings_enabled_{
++        "workspace_setting_enabled", helix::xml::IndexedSubjectPool::Type::Int};
+     helix::xml::IndexedSubjectPool labels_{"workspace_spool",
+                                            helix::xml::IndexedSubjectPool::Type::String, 160};
+     helix::xml::IndexedSubjectPool file_labels_{"workspace_file",
+diff --git a/mk/fonts.mk b/mk/fonts.mk
+--- a/mk/fonts.mk
++++ b/mk/fonts.mk
+@@ -239,6 +239,10 @@
+ 
+ # Regenerate Noto Sans text fonts with extended Unicode (Latin, Cyrillic, CJK)
+ # Use this for internationalization support
++.PHONY: regen-runtime-cjk-fonts
++regen-runtime-cjk-fonts:
++	$(Q)python3 scripts/regen_runtime_cjk.py
++
+ regen-text-fonts:
+ 	$(ECHO) "$(CYAN)Regenerating Noto Sans text fonts...$(RESET)"
+ 	$(Q)if [ -f scripts/regen_text_fonts.sh ]; then \
+diff --git a/scripts/CLAUDE.md b/scripts/CLAUDE.md
+--- a/scripts/CLAUDE.md
++++ b/scripts/CLAUDE.md
+@@ -47,6 +47,7 @@
+ |--------|---------|
+ | `regen_mdi_fonts.sh` | Regenerate MDI icon fonts from the list `mdi_icon_codepoints.py` computes. Run after adding icons |
+ | `regen_text_fonts.sh` | Regenerate Noto Sans text fonts for LVGL |
++| `regen_runtime_cjk.py` | `make regen-runtime-cjk-fonts`: rebake existing runtime CJK `.bin` faces and their manifest, validate the actual cmaps, and keep compiled Latin fonts unchanged. Uses `translations/cjk_charset.py`, including the optional sibling device-service and the settings summary arrow |
+ | `regen_images.sh` | Pre-render splash screen images to LVGL binary format |
+ | `regen_placeholder_images.sh` | Generate placeholder/fallback images |
+ | `regen_printer_images.sh` | Process printer model images for the printer database |
+diff --git a/scripts/regen_runtime_cjk.py b/scripts/regen_runtime_cjk.py
+new file mode 100644
+--- /dev/null
++++ b/scripts/regen_runtime_cjk.py
+@@ -0,0 +1,84 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: GPL-3.0-or-later
++"""Rebake the existing runtime CJK faces without changing compiled text fonts.
++
++Run through `make regen-runtime-cjk-fonts`. Requires lv_font_conv 1.5.3 and
++the two Noto CJK OTF sources in assets/fonts. LV_FONT_CONV can name a private
++converter install; otherwise use node_modules/.bin or PATH.
++
++The shared scanner includes translations, native UI text, the optional sibling
++device-service and U+2192. Validate every generated binary's real cmap before
++replacing the shipped files; only then write the matching manifest.
++"""
++
++from __future__ import annotations
++
++import os
++from pathlib import Path
++import re
++import shutil
++import subprocess
++import sys
++import tempfile
++
++from check_cjk_font_coverage import covered_codepoints
++
++
++def main() -> int:
++    root = Path(__file__).resolve().parents[1]
++    fonts = root / 'assets/fonts'
++    runtime = fonts / 'cjk'
++    converter = os.environ.get('LV_FONT_CONV')
++    if not converter:
++        local = root / 'node_modules/.bin/lv_font_conv'
++        converter = str(local) if local.is_file() else shutil.which('lv_font_conv')
++    if not converter:
++        raise RuntimeError('lv_font_conv not found; install 1.5.3 or set LV_FONT_CONV')
++
++    source_fonts = [fonts / f'NotoSansCJK{locale}-Regular.otf' for locale in ('sc', 'jp')]
++    for path in source_fonts:
++        if not path.is_file():
++            raise RuntimeError(f'Missing font source: {path}')
++    targets = sorted(runtime.glob('*.bin'))
++    scan = subprocess.check_output(
++        [sys.executable, str(root / 'scripts/translations/cjk_charset.py'), '--root', str(root)],
++        text=True)
++    codepoints = [int(line, 16) for line in scan.splitlines()]
++    if not targets or not codepoints:
++        raise RuntimeError('No runtime font targets or codepoints found; refusing an empty bake')
++    needed = set(codepoints)
++    ranges = ','.join(f'0x{cp:04x}' for cp in codepoints)
++    print(f'Rebuilding {len(targets)} runtime CJK faces with {len(codepoints)} codepoints', flush=True)
++
++    with tempfile.TemporaryDirectory(prefix='.cjk-bake-', dir=runtime) as staging:
++        for target in targets:
++            match = re.fullmatch(r'noto_sans_cjk_(?:(?:bold|light)_)?(\d+)\.bin', target.name)
++            if not match:
++                raise RuntimeError(f'Unrecognized runtime face: {target.name}')
++            size = match.group(1)
++            output = Path(staging) / target.name
++            command = [converter]
++            for source_font in source_fonts:
++                command += ['--font', str(source_font), '--size', size, '--range', ranges]
++            command += ['--bpp', '4', '--format', 'bin', '-o', str(output)]
++            subprocess.run(command, check=True)
++            missing = needed - covered_codepoints(output.read_bytes())
++            if missing:
++                codes = ', '.join(f'U+{cp:04X}' for cp in sorted(missing))
++                raise RuntimeError(f'{target.name} lacks {codes}')
++            print(f'  {target.name}: {output.stat().st_size} bytes', flush=True)
++        for target in targets:
++            (Path(staging) / target.name).replace(target)
++    (runtime / '.cjk_codepoints.manifest').write_text(
++        ''.join(f'0x{cp:04x}\n' for cp in codepoints), encoding='utf-8')
++    subprocess.run(['bash', 'scripts/check_cjk_font_staleness.sh'], cwd=root, check=True)
++    subprocess.run([sys.executable, 'scripts/check_cjk_font_coverage.py'], cwd=root, check=True)
++    return 0
++
++
++if __name__ == '__main__':
++    try:
++        sys.exit(main())
++    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
++        print(f'ERROR: {error}', file=sys.stderr)
++        sys.exit(1)
+diff --git a/scripts/translations/cjk_charset.py b/scripts/translations/cjk_charset.py
+--- a/scripts/translations/cjk_charset.py
++++ b/scripts/translations/cjk_charset.py
+@@ -9,8 +9,9 @@
+ 
+ Scans every translations/*.yml locale (any locale can carry CJK — restricting
+ to zh/ja would let a stray CJK char in another catalog render tofu) plus the
+-C++ sources, XML layouts and printer database, for hardcoded CJK strings like
+-the first-run wizard welcome text.
++C++ sources, XML layouts, printer database and optional sibling device-service
++Python files, for hardcoded strings displayed by the native UI. The runtime
++font also supplies U+2192 for the settings change summary.
+ 
+ Prints one 0xXXXX codepoint per line, sorted — the format the staleness gate
+ and the manifest both use.
+@@ -24,9 +25,10 @@
+ import sys
+ from pathlib import Path
+ 
+-# CJK Unicode ranges to scan for. Mirrors the ranges lv_font_conv is asked to
+-# bake; a codepoint outside these ranges is not this font's problem.
++# Unicode ranges supplied by the runtime CJK fallback, including the settings
++# summary arrow that is absent from the compiled Latin font range.
+ CJK_RANGES = [
++    r'[\u2192]',  # Rightwards arrow in settings change summaries
+     r'[　-〿]',   # CJK Symbols and Punctuation
+     r'[぀-ゟ]',   # Hiragana
+     r'[゠-ヿ]',   # Katakana
+@@ -38,9 +40,11 @@
+ # Hardcoded CJK can live in any compiled source, not only src/ui, and in the
+ # hand-authored runtime data the same font renders: XML layouts (the wizard's
+ # language chooser, and the generated ui_xml/translations/*.xml, which is what
+-# actually renders) and the printer database.
++# actually renders), the printer database, and the optional companion service
++# whose labels and errors are shown by the native settings UI.
+ SOURCE_GLOBS = ['src/**/*.cpp', 'src/**/*.h', 'include/**/*.h',
+-                'ui_xml/**/*.xml', 'assets/config/printer_database.json']
++                'ui_xml/**/*.xml', 'assets/config/printer_database.json',
++                '../device-service/*.py']
+ 
+ 
+ def needed_codepoints(root: Path, paths: list[str] | None = None) -> list[int]:
+diff --git a/src/printer/firmware_settings_demo.cpp b/src/printer/firmware_settings_demo.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/printer/firmware_settings_demo.cpp
+@@ -0,0 +1,316 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++#include "firmware_settings_demo.h"
++
++#include "hv/json.hpp"
++#include "json_utils.h"
++
++#include <mutex>
++#include <string>
++#include <utility>
++
++namespace helix {
++namespace {
++
++using nlohmann::json;
++
++json option(const char* value, const char* label, const char* original,
++            const char* confirmation = "", json inputs = json::array()) {
++    return {{"value", value}, {"label", label}, {"source_label", original},
++            {"confirm", confirmation}, {"hidden", false}, {"inputs", std::move(inputs)}};
++}
++
++json toggles(const char* confirmation = "", bool bool_values = false) {
++    return json::array({
++        option(bool_values ? "false" : "disabled", "关闭", "Disabled"),
++        option(bool_values ? "true" : "enabled", "启用", "Enabled", confirmation),
++    });
++}
++
++json setting(const char* id, const char* group, const char* original_group,
++             const char* label, const char* original, const char* current,
++             const char* description, json options) {
++    return {{"id", id}, {"group", group}, {"source_group", original_group},
++            {"label", label}, {"source_label", original}, {"current", current},
++            {"description", std::string("模拟设备 · ") + description},
++            {"help_url", ""}, {"hidden", false}, {"requires_idle", true},
++            {"options", std::move(options)}};
++}
++
++json make_catalog() {
++    json catalog = {
++        {"available", true}, {"source", "paxx"}, {"mock", true},
++        {"message", "模拟设备 · 这些数值仅供界面演示，不代表真实打印机"},
++        {"groups", json::array({
++            {{"id", "printing"}, {"label", "打印与调平"}},
++            {{"id", "materials"}, {"label", "耗材与识别"}},
++            {{"id", "camera"}, {"label", "摄像与录像"}},
++            {{"id", "motion"}, {"label", "运动与电机"}},
++            {{"id", "remote"}, {"label", "网络与远程"}},
++            {{"id", "interface"}, {"label", "界面与扩展"}},
++            {{"id", "maintenance"}, {"label", "维护与诊断"}},
++            {{"id", "updates"}, {"label", "固件更新"}},
++        })},
++        {"settings", json::array()},
++    };
++    auto& items = catalog["settings"];
++    items.push_back(setting("bed_leveling_force", "printing", "print_preferences",
++        "每次打印前调平", "Force Bed Mesh Calibration", "disabled",
++        "选择全床或自适应调平；自适应需要切片对象边界。", json::array({
++            option("disabled", "关闭", "Disabled"),
++            option("force", "每次全床调平", "Force Full Mesh", "每次打印前执行全床调平？"),
++            option("adaptive", "每次自适应调平", "Force Adaptive Mesh",
++                   "自适应调平需要对象边界；没有边界时回退全床调平。"),
++        })));
++    items.push_back(setting("timelapse_force", "printing", "print_preferences",
++        "强制延时摄影", "Force Timelapse", "disabled",
++        "切片仍需包含延时摄影开始、拍照和结束指令。", toggles("启用强制延时摄影？")));
++    items.push_back(setting("object_processing", "printing", "print_preferences",
++        "模型对象处理", "Object Processing for Adaptive Mesh", "disabled",
++        "优先在切片软件生成对象信息；服务端处理大文件可能较慢。",
++        toggles("开启对象处理会重启 Moonraker，并可能延长大文件处理时间。")));
++
++    items.push_back(setting("rfid", "materials", "snapmaker_components",
++        "耗材标签识别", "Filament Detection", "openrfid",
++        "选择标签识别方式；品牌标签支持取决于实际配置。", json::array({
++            option("snapmaker", "Snapmaker 原厂", "Snapmaker"),
++            option("external", "外部读卡器", "External"),
++            option("openrfid", "OpenRFID", "OpenRFID",
++                   "请阅读标签支持说明；部分品牌需要额外配置。"),
++            option("openrfid-generic", "OpenRFID（通用品牌）", "OpenRFID (force generic vendor)",
++                   "将耗材品牌映射为通用品牌，标签兼容性仍取决于配置。"),
++        })));
++    const json spoolman_input = json::array({
++        {{"name", "SPOOLMAN_URL"}, {"label", "Spoolman 服务器地址"},
++         {"source_label", "Spoolman URL"}, {"type", "text"}, {"required", true},
++         {"placeholder", "http://192.168.1.100:7912"}, {"regex", "^https?://.+"}},
++    });
++    items.push_back(setting("spoolman", "materials", "snapmaker_components",
++        "Spoolman 耗材库", "Spoolman Integration", "disabled",
++        "填写耗材库地址；演示模式不连接服务器。", json::array({
++            option("disabled", "关闭", "Disabled"),
++            option("enabled", "启用", "Enabled", "连接此 Spoolman 耗材库？", spoolman_input),
++            option("force_generic", "启用（通用品牌）", "Enabled (Force Generic Vendor)",
++                   "启用耗材库，并把非原厂品牌映射为通用品牌？", spoolman_input),
++        })));
++    items.push_back(setting("filament_feeders", "materials", "snapmaker_components",
++        "送料器配置", "Filament Feeders", "default",
++        "送料长度应匹配实际安装的送料器和料路。", json::array({
++            option("default", "默认送料器", "Default"),
++            option("popstation_mini", "BIQU PopStation mini", "BIQU PopStation mini",
++                   "仅安装对应硬件时使用，此选项会增加预送料长度。"),
++        })));
++    items.push_back(setting("afc", "materials", "snapmaker_components",
++        "AFC Lite 耗材管理", "AFC Lite via Fluidd/Mainsail", "disabled",
++        "为兼容的网页提供 AFC Lite 耗材控制。", toggles("启用 AFC Lite 兼容组件？")));
++    items.push_back(setting("ace", "materials", "snapmaker_components",
++        "multiACE 集成", "multiACE Integration", "multiace",
++        "模拟已安装组件；实际可用性由固件 profile 决定。", json::array({
++            option("none", "关闭", "Disabled", "关闭托管组件会在实际设备上重启并保留配置。"),
++            option("multiace", "启用", "Enabled", "实际设备需要匹配的固件与 ACE 硬件。"),
++        })));
++
++    items.push_back(setting("camera-internal", "camera", "camera",
++        "内置摄像头", "Internal Camera", "paxx12", "选择内置摄像头服务。", json::array({
++            option("paxx12", "Paxx12", "Paxx12"),
++            option("snapmaker", "Snapmaker 原厂", "Snapmaker"),
++            option("none", "关闭", "Disabled"),
++        })));
++    items.push_back(setting("camera-internal-resolution", "camera", "camera",
++        "内置摄像头帧率", "Internal Camera Resolution", "1080p25",
++        "内置画面固定 1080p，可调整帧率。", json::array({
++            option("1080p30", "1080p · 30 fps", "1920x1080 @ 30fps"),
++            option("1080p25", "1080p · 25 fps", "1920x1080 @ 25fps"),
++            option("1080p15", "1080p · 15 fps", "1920x1080 @ 15fps"),
++            option("1080p5", "1080p · 5 fps", "1920x1080 @ 5fps"),
++        })));
++    items.push_back(setting("camera-usb", "camera", "camera",
++        "USB 摄像头", "USB Camera", "none", "使用外接 USB 摄像头。", json::array({
++            option("none", "关闭", "Disabled"), option("paxx12", "Paxx12", "Paxx12"),
++        })));
++    items.push_back(setting("camera-usb-resolution", "camera", "camera",
++        "USB 摄像头画质", "USB Camera Resolution", "1080p25",
++        "演示 USB 摄像头画质选项。", json::array({
++            option("1080p30", "1080p · 30 fps", "1920x1080 @ 30fps"),
++            option("1080p25", "1080p · 25 fps", "1920x1080 @ 25fps"),
++            option("1080p5", "1080p · 5 fps", "1920x1080 @ 5fps"),
++            option("720p30", "720p · 30 fps", "1280x720 @ 30fps"),
++            option("720p25", "720p · 25 fps", "1280x720 @ 25fps"),
++            option("720p5", "720p · 5 fps", "1280x720 @ 5fps"),
++            option("360p30", "360p · 30 fps", "640x360 @ 30fps"),
++            option("360p25", "360p · 25 fps", "640x360 @ 25fps"),
++            option("360p5", "360p · 5 fps", "640x360 @ 5fps"),
++        })));
++    items.push_back(setting("camera-rtsp", "camera", "camera",
++        "RTSP 视频流", "RTSP Stream (paxx12 only)", "false",
++        "将摄像头画面提供给兼容的播放器。", toggles("", true)));
++
++    items.push_back(setting("max_speed", "motion", "tweaks", "运动速度上限",
++        "Max Speed", "disabled", "实验设置；不能同时启用降低 XY 电机电流。", json::array({
++            option("disabled", "关闭", "Disabled"),
++            option("balanced", "均衡（实验）", "Balanced",
++                   "此模式提高运动上限并增加磨损，只应在校准正常的机器上试用。"),
++            option("aggressive", "激进（实验）", "Aggressive",
++                   "此模式明显提高运动上限，可能增加失步、碰撞与磨损风险。"),
++        })));
++    items.push_back(setting("tmc_autotune", "motion", "tweaks",
++        "TMC 驱动调优", "TMC AutoTune", "disabled",
++        "实验性驱动参数；启用后需要观察电机温度与打印质量。",
++        toggles("启用 TMC AutoTune？首次使用应观察电机与打印状态。")));
++    items.push_back(setting("tmc_reduce_current", "motion", "tweaks",
++        "降低 XY 电机电流", "TMC Reduced Current", "disabled",
++        "降低电流可能减少发热，也可能降低大负载时的稳定性。",
++        toggles("降低 XY 电机电流？不能与提高运动速度上限同时启用。")));
++
++    items.push_back(setting("ssh", "remote", "remote_access", "SSH 访问", "SSH Access",
++        "true", "允许远程终端访问。", toggles("", true)));
++    items.push_back(setting("vpn", "remote", "remote_access", "Tailscale 远程连接",
++        "VPN Provider (Experimental)", "none", "真实设备启用后还需要完成账户登录。",
++        json::array({option("none", "关闭", "None"), option("tailscale", "Tailscale", "Tailscale")})));
++    items.push_back(setting("cloud", "remote", "remote_access", "云端远程访问",
++        "Cloud Access (Experimental)", "none", "选择远程访问服务。", json::array({
++            option("none", "关闭", "None"), option("octoeverywhere", "OctoEverywhere", "OctoEverywhere"),
++        })));
++    items.push_back(setting("remote-screen", "remote", "web", "远程屏幕", "Remote Screen",
++        "false", "从网页查看和操作触摸屏。", toggles("", true)));
++    items.push_back(setting("authorization", "remote", "remote_access", "网页登录验证",
++        "Web Authentication (Experimental)", "disabled",
++        "实际设备仅支持对应网页前端，生成的登录信息需保存。",
++        toggles("实际设备会创建登录凭据；本次仅修改演示值。")));
++
++    items.push_back(setting("web-frontend", "interface", "web", "网页界面", "Frontend",
++        "fluidd", "选择设备的网页控制界面。", json::array({
++            option("fluidd", "Fluidd", "Fluidd"), option("mainsail", "Mainsail", "Mainsail"),
++        })));
++    items.push_back(setting("gui", "interface", "snapmaker_components", "触摸屏界面",
++        "Touchscreen GUI (Experimental)", "helixscreen", "模拟切换，不会更改当前演示程序。",
++        json::array({
++            option("snapmaker", "Snapmaker 原厂", "Snapmaker", "实际设备需要重启后切换屏幕界面。"),
++            option("helixscreen", "HelixScreen", "HelixScreen", "实际设备需要下载组件并重启。"),
++        })));
++    items.push_back(setting("firmware-config", "interface", "web", "PAXX 配置服务",
++        "Firmware Config", "true", "实际设备关闭后将无法继续访问此配置服务。", json::array({
++            option("true", "启用", "Enabled"),
++            option("false", "关闭", "Disabled", "真实设备关闭后需编辑配置文件重新启用。"),
++        })));
++    items.push_back(setting("klipper-metrics", "maintenance", "monitoring_debugging",
++        "运行指标导出", "Klipper Metrics Exporter", "false",
++        "向兼容的监测服务提供运行指标。", toggles("", true)));
++    for (int index = 1; index <= 4; ++index) {
++        const std::string id = "toolhead" + std::to_string(index);
++        const std::string label = "工具头 " + std::to_string(index) + " 故障处理";
++        const std::string original = "Toolhead " + std::to_string(index);
++        items.push_back(setting(id.c_str(), "maintenance", "troubleshooting", label.c_str(),
++            original.c_str(), "enabled", "维修用途；隔离后不可使用该工具头打印。", json::array({
++                option("enabled", "正常", "Normal"),
++                option("bypass_thermistor", "隔离故障温度传感器", "Bypass Thermistor",
++                       "温度保护行为将改变；禁止加热或使用故障工具头打印。"),
++                option("bypass_mcu", "隔离断开的工具头主板", "Bypass MCU (Disconnected)",
++                       "仅用于主板故障或断开的工具头，它将不能加热、挤出或运动。"),
++            })));
++    }
++    items.push_back(setting("firmware-upgrade-channel", "updates", "snapmaker_components",
++        "固件更新通道", "Firmware Upgrade", "none", "模拟更新通道，不下载或刷写固件。",
++        json::array({
++            option("none", "关闭", "Disabled", "实际设备切换更新通道需要重启。"),
++            option("stable", "稳定版", "Stable (recommended)", "实际设备切换更新通道需要重启。"),
++            option("testing", "测试版", "Testing (pre-releases)", "测试版可能包含未稳定的功能。"),
++            option("develop", "开发版", "Develop (bleeding edge)", "开发版用于测试；实际设备切换需要重启。"),
++        })));
++    return catalog;
++}
++
++json* find_setting(json& catalog, const std::string& id) {
++    for (auto& item : catalog["settings"]) {
++        if (json_util::safe_string(item, "id") == id) {
++            return &item;
++        }
++    }
++    return nullptr;
++}
++
++json fail(const std::string& message) {
++    return {{"ok", false}, {"state", "failed"}, {"mock", true},
++            {"error", message}, {"message", message},
++            {"output", "模拟设备 · " + message + "\n未调用任何网络或设备。"}};
++}
++
++} // namespace
++
++nlohmann::json firmware_settings_demo(const nlohmann::json& body, bool post) {
++    static std::mutex mutex;
++    static json catalog = make_catalog();
++    std::lock_guard<std::mutex> lock(mutex);
++    if (!post) {
++        return catalog;
++    }
++    const std::string id = json_util::safe_string(body, "id");
++    const std::string value = json_util::safe_string(body, "value");
++    json* item = find_setting(catalog, id);
++    if (!item) {
++        return fail("演示设备不支持此设置");
++    }
++    const json* selected = nullptr;
++    for (const auto& entry : (*item)["options"]) {
++        if (json_util::safe_string(entry, "value") == value &&
++            !json_util::safe_bool(entry, "hidden")) {
++            selected = &entry;
++            break;
++        }
++    }
++    if (!selected) {
++        return fail("请选择当前设置提供的选项");
++    }
++    if (!json_util::safe_string(*selected, "confirm").empty()) {
++        const auto* confirmation = json_util::find_member(body, "confirm");
++        if (!confirmation || !confirmation->is_boolean() || !json_util::as_bool(*confirmation)) {
++            return fail("请先阅读并确认此选项的说明");
++        }
++    }
++    const auto* inputs = json_util::find_member(body, "inputs");
++    if (inputs && !inputs->is_object()) {
++        return fail("额外输入应为对象");
++    }
++    const auto* fields = json_util::find_member(*selected, "inputs");
++    if (fields && fields->is_array()) {
++        for (const auto& field : *fields) {
++            const std::string name = json_util::safe_string(field, "name");
++            const std::string text = inputs ? json_util::safe_string(*inputs, name.c_str()) : "";
++            if (text.empty()) {
++                return fail("请填写：" + json_util::safe_string(field, "label"));
++            }
++            if (name == "SPOOLMAN_URL" &&
++                !((text.rfind("http://", 0) == 0 && text.size() > 7) ||
++                  (text.rfind("https://", 0) == 0 && text.size() > 8))) {
++                return fail("服务器地址需要以 http:// 或 https:// 开头");
++            }
++        }
++    }
++    if (inputs) {
++        for (auto it = inputs->begin(); it != inputs->end(); ++it) {
++            bool known = false;
++            if (fields && fields->is_array()) {
++                for (const auto& field : *fields) {
++                    known = known || json_util::safe_string(field, "name") == it.key();
++                }
++            }
++            if (!known) {
++                return fail("此选项不接受额外字段：" + it.key());
++            }
++        }
++    }
++    const json* speed = find_setting(catalog, "max_speed");
++    const json* current = find_setting(catalog, "tmc_reduce_current");
++    if ((id == "max_speed" && value != "disabled" && current &&
++         json_util::safe_string(*current, "current") == "enabled") ||
++        (id == "tmc_reduce_current" && value == "enabled" && speed &&
++         json_util::safe_string(*speed, "current") != "disabled")) {
++        return fail("提高运动速度上限与降低 XY 电机电流不能同时启用，请先关闭另一项");
++    }
++    (*item)["current"] = value;
++    return {{"ok", true}, {"state", "applied"}, {"mock", true}, {"id", id},
++            {"current", value}, {"setting", *item},
++            {"message", "演示值已更新"},
++            {"output", "模拟设备 · 已更新内存中的演示值。\n没有连接设备、重启服务或写入固件。"}};
++}
++
++} // namespace helix
+diff --git a/src/printer/material_workspace.cpp b/src/printer/material_workspace.cpp
+--- a/src/printer/material_workspace.cpp
++++ b/src/printer/material_workspace.cpp
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ #include "material_workspace.h"
++#include "firmware_settings_demo.h"
+ 
+ #include "app_globals.h"
+ #include "core/http_executor.h"
+@@ -61,6 +62,8 @@
+                                           {"master", -1},
+                                           {"add_time", 60}}}});
+             data["spool_binding"] = {{"0_0", "demo1"}, {"1_0", "demo2"}};
++        } else if (path == "/firmware/settings") {
++            data = firmware_settings_demo(body, post);
+         } else if (path == "/firmware/files") {
+             data["files"] = {{{"name", "U1_2.1.0_upgrade.bin"},
+                               {"path", "/media/usb/U1_2.1.0_upgrade.bin"},
+@@ -78,7 +81,8 @@
+         ui::queue_update([reply = std::move(reply), data]() { reply(data, {}); });
+         return;
+     }
+-    (path == "/firmware/prepare" ? http::HttpExecutor::slow() : http::HttpExecutor::fast())
++    ((path == "/firmware/prepare" || (path == "/firmware/settings" && post))
++         ? http::HttpExecutor::slow() : http::HttpExecutor::fast())
+         .submit([path, body, post, reply = std::move(reply)]() {
+             nlohmann::json data;
+             std::string error;
+@@ -86,7 +90,8 @@
+                 auto req = std::make_shared<HttpRequest>();
+                 req->url = "http://127.0.0.1:7136" + path;
+                 req->method = post ? HTTP_POST : HTTP_GET;
+-                req->timeout = path == "/firmware/prepare" ? 180 : 30;
++                req->timeout = path == "/firmware/prepare" ? 180 :
++                    (path == "/firmware/settings" && post) ? 240 : 30;
+                 if (post) {
+                     req->content_type = APPLICATION_JSON;
+                     req->body = body.dump();
+diff --git a/src/ui/filament/ui_material_workspace.cpp b/src/ui/filament/ui_material_workspace.cpp
+--- a/src/ui/filament/ui_material_workspace.cpp
++++ b/src/ui/filament/ui_material_workspace.cpp
+@@ -41,7 +41,11 @@
+         UI_MANAGED_SUBJECT_INT(confirmed_, 0, "workspace_prepared", subjects_);
+         UI_MANAGED_SUBJECT_INT(settings_ready_, 0, "workspace_settings_ready", subjects_);
+         settings_labels_.ensure_size(5);
++        settings_enabled_.ensure_size(5);
++        for (int i = 0; i < 5; ++i)
++            settings_enabled_.set_int(i, -1);
+         UI_MANAGED_SUBJECT_INT(auto_sensor_, 1, "workspace_auto_sensor", subjects_);
++        UI_MANAGED_SUBJECT_INT(auto_enabled_, -1, "workspace_auto_enabled", subjects_);
+         auto_values_.ensure_size(5);
+         UI_MANAGED_SUBJECT_INT(progress_, 0, "workspace_progress", subjects_);
+         UI_MANAGED_SUBJECT_STRING(title_, title_buf_, "耗材操作", "workspace_title", subjects_);
+@@ -126,6 +130,10 @@
+ }
+ void MaterialWorkspace::on_deactivating(DeactivateReason) {
+     visible_ = false;
++    if (reading_auto_dry_) {
++        reading_auto_dry_ = false;
++        lv_subject_set_int(&busy_, 0);
++    }
+     revision_observer_.reset();
+     poll_.reset();
+ }
+@@ -138,6 +146,10 @@
+         poll_.reset();
+     if (value == 0)
+         refresh();
++    if (auto* scroll = overlay_root_ ? lv_obj_find_by_name(overlay_root_, "overlay_content") : nullptr) {
++        lv_obj_update_layout(scroll);
++        lv_obj_scroll_to_y(scroll, 0, LV_ANIM_OFF);
++    }
+ }
+ std::string MaterialWorkspace::input(const char* name) const {
+     auto* field = overlay_root_ ? lv_obj_find_by_name(overlay_root_, name) : nullptr;
+@@ -181,7 +193,7 @@
+ void MaterialWorkspace::run(const std::string& action, const nlohmann::json& args) {
+     lv_subject_set_int(&busy_, 1);
+     const auto token = object_lifetime_.token();
+-    material_workspace::command(action, args, [this, token](auto, std::string error) {
++    material_workspace::command(action, args, [this, token, action](auto, std::string error) {
+         if (token.expired())
+             return;
+         lv_subject_set_int(&busy_, 0);
+@@ -190,6 +202,8 @@
+         refresh();
+         if (error.empty() && lv_subject_get_int(&page_) == 8)
+             load_settings();
++        if (error.empty() && action == "auto_dry" && visible_ && lv_subject_get_int(&page_) == 7)
++            act("auto_dry");
+     });
+ }
+ void MaterialWorkspace::load_library() {
+@@ -309,6 +323,8 @@
+ }
+ void MaterialWorkspace::load_settings() {
+     lv_subject_set_int(&settings_ready_, 0);
++    for (int i = 0; i < 5; ++i)
++        settings_enabled_.set_int(i, -1);
+     auto token = lifetime_.token();
+     material_workspace::request("/state", {}, [this, token](auto data, std::string error) {
+         if (token.expired())
+@@ -325,8 +341,8 @@
+                 lv_subject_copy_string(&status_, "当前后端尚未提供完整耗材设置");
+                 return;
+             }
+-            settings_labels_.set_string(
+-                i, std::string(names[i]) + (safe_bool(data, keys[i]) ? " · 已启用" : " · 已关闭"));
++            settings_labels_.set_string(i, names[i]);
++            settings_enabled_.set_int(i, safe_bool(data, keys[i]) ? 1 : 0);
+         }
+         lv_subject_copy_string(&status_, "设置保存在设备端，与网页版共用");
+         lv_subject_set_int(&settings_ready_, 1);
+@@ -535,11 +551,15 @@
+     }
+     if (action == "auto_dry") {
+         page(7);
++        lv_subject_set_int(&settings_ready_, 0);
++        lv_subject_set_int(&auto_enabled_, -1);
++        reading_auto_dry_ = true;
+         lv_subject_set_int(&busy_, 1);
+         auto token = lifetime_.token();
+         material_workspace::request("/state", {}, [this, token](auto data, std::string error) {
+             if (token.expired())
+                 return;
++            reading_auto_dry_ = false;
+             lv_subject_set_int(&busy_, 0);
+             if (!error.empty()) {
+                 lv_subject_copy_string(&status_, error.c_str());
+@@ -558,6 +578,8 @@
+                     safe_string(unit, "protocol") == "v2" ||
+                     (unit.contains("humidity_effective") && unit["humidity_effective"].is_number());
+                 lv_subject_set_int(&auto_sensor_, sensor);
++                lv_subject_set_int(&auto_enabled_, safe_bool(cfg, "enabled") ? 1 : 0);
++                lv_subject_set_int(&settings_ready_, 1);
+                 const char* keys[] = {"temp", "rh_start", "rh_end", "master", "add_time"};
+                 for (int i = 0; i < 5; ++i) {
+                     const auto found = cfg.find(keys[i]);
+diff --git a/src/ui/settings/ui_firmware_settings.cpp b/src/ui/settings/ui_firmware_settings.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/ui/settings/ui_firmware_settings.cpp
+@@ -0,0 +1,358 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++#include "ui_firmware_settings.h"
++
++#include "ui_callback_helpers.h"
++#include "ui_nav.h"
++#include "app_globals.h"
++#include "core/data_root_resolver.h"
++#include "core/static_panel_registry.h"
++#include "core/static_subject_registry.h"
++#include "json_utils.h"
++#include "material_workspace.h"
++#include "printer_state.h"
++#include "runtime_config.h"
++
++#include <spdlog/fmt/fmt.h>
++#include <algorithm>
++#include <cstdlib>
++
++namespace helix::ui {
++using json_util::safe_bool;
++using json_util::safe_string;
++
++FirmwareSettings::~FirmwareSettings() {
++    object_lifetime_.invalidate();
++    deinit_subjects();
++}
++
++void FirmwareSettings::deinit_subjects() {
++    group_labels_.reclaim();
++    setting_labels_.reclaim();
++    setting_values_.reclaim();
++    option_labels_.reclaim();
++    input_labels_.reclaim();
++    input_values_.reclaim();
++    deinit_subjects_base(subjects_);
++}
++
++void FirmwareSettings::init_subjects() {
++    init_subjects_guarded([this] {
++        UI_MANAGED_SUBJECT_INT(page_, 0, "firmware_page", subjects_);
++        UI_MANAGED_SUBJECT_INT(busy_, 0, "firmware_busy", subjects_);
++        UI_MANAGED_SUBJECT_INT(ready_, 0, "firmware_ready", subjects_);
++        UI_MANAGED_SUBJECT_INT(group_count_, 0, "firmware_group_count", subjects_);
++        UI_MANAGED_SUBJECT_INT(setting_count_, 0, "firmware_setting_count", subjects_);
++        UI_MANAGED_SUBJECT_INT(option_count_, 0, "firmware_option_count", subjects_);
++        UI_MANAGED_SUBJECT_INT(input_count_, 0, "firmware_input_count", subjects_);
++        UI_MANAGED_SUBJECT_INT(selected_option_, -1, "firmware_selected_option", subjects_);
++        UI_MANAGED_SUBJECT_INT(dirty_, 0, "firmware_dirty", subjects_);
++        UI_MANAGED_SUBJECT_INT(has_output_, 0, "firmware_has_output", subjects_);
++        UI_MANAGED_SUBJECT_STRING(title_, title_buf_, "PAXX 设置", "firmware_title", subjects_);
++        UI_MANAGED_SUBJECT_STRING(status_, status_buf_, "正在读取设置", "firmware_status", subjects_);
++        UI_MANAGED_SUBJECT_STRING(description_, description_buf_, "", "firmware_description", subjects_);
++        UI_MANAGED_SUBJECT_STRING(current_, current_buf_, "", "firmware_current", subjects_);
++        UI_MANAGED_SUBJECT_STRING(review_, review_buf_, "", "firmware_review", subjects_);
++        UI_MANAGED_SUBJECT_STRING(output_text_, output_buf_, "", "firmware_output", subjects_);
++        StaticSubjectRegistry::instance().register_deinit("FirmwareSettings", [] {
++            if (auto* view = helix::lazy_global_if_exists<FirmwareSettings>())
++                view->deinit_subjects();
++        });
++    });
++}
++
++lv_obj_t* FirmwareSettings::create(lv_obj_t* parent) {
++    lv_xml_register_component_from_file(asset_component_uri("ui_xml/firmware_settings.xml").c_str());
++    return OverlayBase::create(parent);
++}
++
++void FirmwareSettings::register_callbacks() {
++    register_xml_callbacks({
++        {"firmware_back", [](lv_event_t* e) {
++             if (auto* self = from_event<FirmwareSettings>(e)) self->back();
++         }},
++        {"firmware_refresh", [](lv_event_t* e) {
++             if (auto* self = from_event<FirmwareSettings>(e)) self->refresh();
++         }},
++        {"firmware_group_select", [](lv_event_t* e) {
++             if (auto* self = from_event<FirmwareSettings>(e))
++                 if (auto* index = static_cast<const char*>(lv_event_get_user_data(e)))
++                     self->choose_group(std::atoi(index));
++         }},
++        {"firmware_setting_select", [](lv_event_t* e) {
++             if (auto* self = from_event<FirmwareSettings>(e))
++                 if (auto* index = static_cast<const char*>(lv_event_get_user_data(e)))
++                     self->choose_setting(std::atoi(index));
++         }},
++        {"firmware_option_select", [](lv_event_t* e) {
++             if (auto* self = from_event<FirmwareSettings>(e))
++                 if (auto* index = static_cast<const char*>(lv_event_get_user_data(e)))
++                     self->choose_option(std::atoi(index));
++         }},
++        {"firmware_review_change", [](lv_event_t* e) {
++             if (auto* self = from_event<FirmwareSettings>(e)) self->review();
++         }},
++        {"firmware_apply_change", [](lv_event_t* e) {
++             if (auto* self = from_event<FirmwareSettings>(e)) self->apply();
++         }},
++        {"firmware_show_output", [](lv_event_t* e) {
++             if (auto* self = from_event<FirmwareSettings>(e)) self->show_output();
++         }},
++    });
++}
++
++void FirmwareSettings::open() {
++    if (!are_subjects_initialized()) init_subjects();
++    if (!show(lv_screen_active())) return;
++    if (applying_) return;
++    lv_subject_set_int(&busy_, 0);
++    set_page(0, "PAXX 设置");
++    refresh();
++}
++
++void FirmwareSettings::set_page(int page, const std::string& title) {
++    lv_subject_set_int(&page_, page);
++    lv_subject_copy_string(&title_, title.c_str());
++    // Each step starts at its heading, even when an input on the prior step was scrolled into view.
++    if (auto* scroll = overlay_root_ ? lv_obj_find_by_name(overlay_root_, "firmware_scroll") : nullptr) {
++        lv_obj_update_layout(scroll);
++        lv_obj_scroll_to_y(scroll, 0, LV_ANIM_OFF);
++    }
++}
++
++std::string FirmwareSettings::current_label(const nlohmann::json& setting) const {
++    const auto value = safe_string(setting, "current");
++    const auto options = setting.find("options");
++    if (options != setting.end() && options->is_array())
++        for (const auto& option : *options)
++            if (safe_string(option, "value") == value)
++                return safe_string(option, "label", value);
++    return value.empty() ? "未知" : value;
++}
++
++void FirmwareSettings::refresh(bool after_apply) {
++    if (applying_ || lv_subject_get_int(&busy_)) return;
++    const std::string retained_group = after_apply && group_index_ >= 0 &&
++            static_cast<size_t>(group_index_) < groups_.size()
++        ? safe_string(groups_[group_index_], "id") : "";
++    lv_subject_set_int(&busy_, 1);
++    lv_subject_set_int(&ready_, 0);
++    lv_subject_copy_string(&status_, "正在读取设备设置");
++    lifetime_.invalidate();
++    auto token = lifetime_.token();
++    material_workspace::request("/firmware/settings", {}, [this, token, retained_group, after_apply](auto data, std::string error) {
++        // material_workspace delivers every callback on the LVGL thread.
++        if (token.expired()) return;
++        lv_subject_set_int(&busy_, 0);
++        if (!error.empty()) {
++            lv_subject_copy_string(&status_, error.c_str());
++            return;
++        }
++        if (!safe_bool(data, "available") || !data.contains("settings") ||
++            !data["settings"].is_array() || !data.contains("groups") || !data["groups"].is_array()) {
++            lv_subject_copy_string(&status_, "当前设备未提供扩展设置，请检查高级模式与配置服务");
++            return;
++        }
++        settings_ = nlohmann::json::array();
++        for (const auto& setting : data["settings"])
++            if (setting.is_object() && !safe_bool(setting, "hidden")) settings_.push_back(setting);
++        groups_ = nlohmann::json::array();
++        for (const auto& group : data["groups"]) {
++            const auto id = safe_string(group, "id");
++            if (std::any_of(settings_.begin(), settings_.end(), [&](const auto& setting) {
++                    return safe_string(setting, "group") == id;
++                })) groups_.push_back(group);
++        }
++        rebuild_groups();
++        lv_subject_set_int(&ready_, 1);
++        const auto* runtime = get_runtime_config();
++        const bool mock = runtime && runtime->should_mock_moonraker();
++        lv_subject_copy_string(&status_, after_apply
++            ? (mock ? "模拟已应用 · 已刷新全部设置" : "已生效 · 已刷新全部设备设置")
++            : (mock ? "模拟预览 · 未连接打印机" : "按用途分组 · 读取自当前固件"));
++        set_page(0, "PAXX 设置");
++        if (!retained_group.empty())
++            for (size_t i = 0; i < groups_.size(); ++i)
++                if (safe_string(groups_[i], "id") == retained_group) {
++                    choose_group(static_cast<int>(i));
++                    break;
++                }
++    });
++}
++
++void FirmwareSettings::rebuild_groups() {
++    group_labels_.ensure_size(groups_.size());
++    for (size_t i = 0; i < groups_.size(); ++i)
++        group_labels_.set_string(i, safe_string(groups_[i], "label"));
++    lv_subject_set_int(&group_count_, static_cast<int>(groups_.size()));
++}
++
++void FirmwareSettings::choose_group(int index) {
++    if (lv_subject_get_int(&busy_) || index < 0 || static_cast<size_t>(index) >= groups_.size()) return;
++    group_index_ = index;
++    const auto id = safe_string(groups_[index], "id");
++    visible_settings_.clear();
++    for (size_t i = 0; i < settings_.size(); ++i)
++        if (safe_string(settings_[i], "group") == id) visible_settings_.push_back(static_cast<int>(i));
++    setting_labels_.ensure_size(visible_settings_.size());
++    setting_values_.ensure_size(visible_settings_.size());
++    for (size_t i = 0; i < visible_settings_.size(); ++i) {
++        const auto& setting = settings_[visible_settings_[i]];
++        setting_labels_.set_string(i, safe_string(setting, "label"));
++        setting_values_.set_string(i, current_label(setting));
++    }
++    lv_subject_set_int(&setting_count_, static_cast<int>(visible_settings_.size()));
++    set_page(1, safe_string(groups_[index], "label"));
++}
++
++void FirmwareSettings::choose_setting(int index) {
++    if (lv_subject_get_int(&busy_) || index < 0 || static_cast<size_t>(index) >= visible_settings_.size()) return;
++    setting_index_ = visible_settings_[index];
++    const auto& setting = settings_[setting_index_];
++    options_ = nlohmann::json::array();
++    if (setting.contains("options") && setting["options"].is_array())
++        for (const auto& option : setting["options"])
++            if (option.is_object() && !safe_bool(option, "hidden")) options_.push_back(option);
++    option_labels_.ensure_size(options_.size());
++    int current_index = -1;
++    for (size_t i = 0; i < options_.size(); ++i) {
++        option_labels_.set_string(i, safe_string(options_[i], "label"));
++        if (safe_string(options_[i], "value") == safe_string(setting, "current"))
++            current_index = static_cast<int>(i);
++    }
++    lv_subject_set_int(&option_count_, static_cast<int>(options_.size()));
++    lv_subject_set_int(&selected_option_, -1);
++    lv_subject_set_int(&input_count_, 0);
++    lv_subject_set_int(&dirty_, 0);
++    lv_subject_copy_string(&description_, safe_string(setting, "description").c_str());
++    lv_subject_copy_string(&current_, ("当前：" + current_label(setting)).c_str());
++    set_page(2, safe_string(setting, "label"));
++    if (current_index >= 0) choose_option(current_index);
++}
++
++void FirmwareSettings::choose_option(int index) {
++    if (lv_subject_get_int(&busy_) || index < 0 || static_cast<size_t>(index) >= options_.size()) return;
++    const auto& option = options_[index];
++    inputs_ = nlohmann::json::array();
++    if (option.contains("inputs") && option["inputs"].is_array()) inputs_ = option["inputs"];
++    input_labels_.ensure_size(inputs_.size());
++    input_values_.ensure_size(inputs_.size());
++    for (size_t i = 0; i < inputs_.size(); ++i) {
++        input_labels_.set_string(i, safe_string(inputs_[i], "label", safe_string(inputs_[i], "name")));
++        input_values_.set_string(i, safe_string(inputs_[i], "value", safe_string(inputs_[i], "default")));
++    }
++    lv_subject_set_int(&selected_option_, index);
++    lv_subject_set_int(&input_count_, static_cast<int>(inputs_.size()));
++    const bool changed = safe_string(option, "value") != safe_string(settings_[setting_index_], "current");
++    lv_subject_set_int(&dirty_, changed || !inputs_.empty());
++}
++
++std::string FirmwareSettings::input(const std::string& name) const {
++    auto* field = overlay_root_ ? lv_obj_find_by_name(overlay_root_, name.c_str()) : nullptr;
++    return field ? lv_textarea_get_text(field) : "";
++}
++
++void FirmwareSettings::review() {
++    const int selected = lv_subject_get_int(&selected_option_);
++    if (lv_subject_get_int(&busy_) || !lv_subject_get_int(&ready_) || selected < 0 ||
++        static_cast<size_t>(selected) >= options_.size() || setting_index_ < 0) return;
++    const auto& setting = settings_[setting_index_];
++    const auto& option = options_[selected];
++    nlohmann::json values = nlohmann::json::object();
++    std::string input_summary;
++    for (size_t i = 0; i < inputs_.size(); ++i) {
++        const auto value = input(fmt::format("firmware_input_{}", i));
++        if (safe_bool(inputs_[i], "required", true) && value.empty()) {
++            lv_subject_copy_string(&status_, ("请填写：" + safe_string(inputs_[i], "label")).c_str());
++            return;
++        }
++        const auto name = safe_string(inputs_[i], "name");
++        values[name] = value;
++        const bool secret = safe_bool(inputs_[i], "sensitive") ||
++                            safe_string(inputs_[i], "type") == "password" ||
++                            name.find("PASSWORD") != std::string::npos ||
++                            name.find("TOKEN") != std::string::npos ||
++                            name.find("API_KEY") != std::string::npos;
++        input_summary += "\n" + safe_string(inputs_[i], "label", name) + "\n" +
++                         (secret ? "已填写" : value) + "\n";
++    }
++    pending_ = {{"id", safe_string(setting, "id")}, {"value", safe_string(option, "value")},
++                {"inputs", values}, {"confirm", true}};
++    const std::string warning = safe_string(option, "confirm");
++    const auto review = fmt::format("{}\n{} → {}\n{}\n{}{}", safe_string(setting, "label"),
++                                    current_label(setting), safe_string(option, "label"), input_summary,
++                                    warning.empty() ? "设置将立即应用，相关服务可能重启。" : warning,
++                                    warning.empty() ? "" : "\n\n应用后会重新读取设备状态。");
++    lv_subject_copy_string(&review_, review.c_str());
++    lv_subject_copy_string(&status_, "确认这项修改后应用");
++    set_page(3, "确认修改");
++}
++
++void FirmwareSettings::apply() {
++    if (applying_ || lv_subject_get_int(&busy_) || !lv_subject_get_int(&ready_) ||
++        lv_subject_get_int(&page_) != 3 || !pending_.contains("id")) return;
++    if (lv_subject_get_int(get_printer_state().print_state().get_job_holds_machine_subject())) {
++        lv_subject_copy_string(&status_, "请等待打印结束后再应用设置");
++        return;
++    }
++    applying_ = true;
++    lv_subject_set_int(&busy_, 1);
++    lv_subject_copy_string(&status_, "正在应用 · 请等待设备确认");
++    const auto token = object_lifetime_.token();
++    material_workspace::request("/firmware/settings", pending_, [this, token](auto data, std::string error) {
++        // Writes outlive navigation; the request helper marshals onto the UI thread.
++        if (token.expired()) return;
++        applying_ = false;
++        lv_subject_set_int(&busy_, 0);
++        output_ = safe_string(data, "output");
++        lv_subject_set_int(&has_output_, !output_.empty());
++        if (!error.empty()) {
++            if (!data.is_object()) {
++                lv_subject_copy_string(&status_, "连接中断，结果待确认。请刷新状态，不要重复应用。");
++                lv_subject_set_int(&ready_, 0);
++            } else {
++                lv_subject_copy_string(&status_, error.c_str());
++            }
++            return;
++        }
++        const auto state = safe_string(data, "state");
++        if (safe_bool(data, "ok") && state == "applied" && data.contains("setting") &&
++            data["setting"].is_object()) {
++            if (setting_index_ >= 0 && static_cast<size_t>(setting_index_) < settings_.size())
++                settings_[setting_index_] = data["setting"];
++            lv_subject_set_int(&dirty_, 0);
++            lv_subject_copy_string(&status_, "已生效 · 已重新读取设备状态");
++            pending_.clear();
++            if (is_visible()) refresh(true);
++            else lv_subject_set_int(&ready_, 0);
++        } else if (state == "unverified") {
++            lv_subject_copy_string(&status_, safe_string(data, "message", "结果待确认，请重新读取设备状态").c_str());
++            lv_subject_set_int(&ready_, 0);
++        } else {
++            lv_subject_copy_string(&status_, safe_string(data, "error", safe_string(data, "message", "设置未能应用")).c_str());
++        }
++    }, true);
++}
++
++void FirmwareSettings::show_output() {
++    if (output_.empty()) return;
++    lv_subject_copy_string(&output_text_, output_.c_str());
++    set_page(4, "执行详情");
++}
++
++void FirmwareSettings::back() {
++    if (applying_) {
++        nav::go_back();
++        return;
++    }
++    const int page = lv_subject_get_int(&page_);
++    if (page == 0) nav::go_back();
++    else if (page == 1 || page == 4) set_page(0, "PAXX 设置");
++    else if (page == 3 && setting_index_ >= 0)
++        set_page(2, safe_string(settings_[setting_index_], "label"));
++    else choose_group(group_index_);
++}
++
++FirmwareSettings& get_firmware_settings() {
++    return helix::lazy_global<FirmwareSettings>("FirmwareSettings");
++}
++} // namespace helix::ui
+diff --git a/src/ui/settings/ui_panel_settings.cpp b/src/ui/settings/ui_panel_settings.cpp
+--- a/src/ui/settings/ui_panel_settings.cpp
++++ b/src/ui/settings/ui_panel_settings.cpp
+@@ -11,6 +11,7 @@
+ #include "plugins_overlay.h"
+ #endif
+ #include "ui_material_workspace.h"
++#include "ui_firmware_settings.h"
+ #include "ui_nav.h"
+ #include "ui_panel_memory_stats.h"
+ #include "ui_printer_manager_overlay.h"
+@@ -386,6 +387,8 @@
+         {"on_connection_clicked", nav_row<get_connection_settings_overlay>()},
+         {"on_local_firmware_clicked",
+          [](lv_event_t*) { helix::ui::get_material_workspace().open_firmware(); }},
++        {"on_firmware_settings_clicked",
++         [](lv_event_t*) { helix::ui::get_firmware_settings().open(); }},
+         {"on_updates_clicked", nav_row<get_updates_settings_overlay>()},
+ #if HELIX_HAS_PLUGINS
+         {"on_plugins_clicked", nav_row<helix::plugin::get_plugins_overlay>()},
+diff --git a/ui_xml/firmware_settings.xml b/ui_xml/firmware_settings.xml
+new file mode 100644
+--- /dev/null
++++ b/ui_xml/firmware_settings.xml
+@@ -0,0 +1,118 @@
++<?xml version="1.0"?>
++<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
++<component>
++  <consts>
++    <px name="firmware_row_h_small" value="48"/>
++    <px name="firmware_row_h_medium" value="56"/>
++    <px name="firmware_row_h_large" value="64"/>
++    <px name="firmware_footer_h_small" value="52"/>
++    <px name="firmware_footer_h_medium" value="60"/>
++    <px name="firmware_footer_h_large" value="68"/>
++  </consts>
++  <styles>
++    <style name="option_idle" bg_color="#elevated_bg" bg_opa="255" border_width="0"/>
++    <style name="option_selected" bg_color="#card_bg" bg_opa="255" border_color="#primary" border_width="2"/>
++  </styles>
++  <view name="firmware_settings" extends="overlay_panel" title_subject="firmware_title"
++        title_transform="none" back_button_callback="firmware_back" bg_color="#screen_bg"
++        action_icon="refresh" action_icon_callback="firmware_refresh" hide_action_icon="false">
++    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column"
++            style_pad_all="#space_md" style_pad_gap="#space_sm" scrollable="false">
++      <text_small name="firmware_status" width="100%" bind_text="firmware_status" long_mode="wrap"/>
++      <text_small width="100%" text="打印任务进行中 · 设置只读" style_text_color="#warning">
++        <bind_flag_if cond="not job_holds_machine" flag="hidden"/>
++      </text_small>
++      <lv_obj name="firmware_scroll" width="100%" flex_grow="1" flex_flow="column"
++              style_pad_all="0" style_pad_gap="#space_sm" scroll_dir="ver">
++        <lv_obj name="firmware_groups" width="100%" height="content" flex_flow="row_wrap"
++                style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
++          <bind_flag_if cond="firmware_page ne 0" flag="hidden"/>
++          <repeat count="firmware_group_count">
++            <ui_button name="firmware_group_${i}" bind_text="firmware_group_label_${i}"
++                       width="48%" height="#firmware_row_h" variant="secondary"
++                       style_bg_color="#card_bg" style_radius="#space_sm" style_shadow_width="0">
++              <bind_state_if cond="firmware_busy" state="disabled"/>
++              <event_cb trigger="clicked" callback="firmware_group_select" user_data="${i}"/>
++            </ui_button>
++          </repeat>
++        </lv_obj>
++        <lv_obj name="firmware_setting_list" width="100%" height="content" flex_flow="column"
++                style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
++          <bind_flag_if cond="firmware_page ne 1" flag="hidden"/>
++          <repeat count="firmware_setting_count">
++            <lv_button name="firmware_setting_${i}" width="100%" height="#firmware_row_h"
++                       flex_flow="row" style_flex_cross_place="center" style_pad_all="#space_md"
++                       style_pad_gap="#space_sm" style_bg_color="#card_bg" style_bg_opa="255"
++                       style_border_width="0" style_shadow_width="0" style_radius="#space_sm" scrollable="false">
++              <bind_state_if cond="firmware_busy" state="disabled"/>
++              <text_body width="0" flex_grow="1" bind_text="firmware_setting_label_${i}"
++                         long_mode="dots" event_bubble="true"/>
++              <text_small width="40%" bind_text="firmware_setting_value_${i}" long_mode="dots"
++                          style_text_align="right" event_bubble="true"/>
++              <icon src="chevron_right" size="sm" variant="muted" event_bubble="true"/>
++              <event_cb trigger="clicked" callback="firmware_setting_select" user_data="${i}"/>
++            </lv_button>
++          </repeat>
++        </lv_obj>
++        <lv_obj name="firmware_setting_detail" width="100%" height="content" flex_flow="column"
++                style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
++          <bind_flag_if cond="firmware_page ne 2" flag="hidden"/>
++          <text_body name="firmware_current" width="100%" bind_text="firmware_current"/>
++          <repeat count="firmware_option_count">
++            <lv_button name="firmware_option_${i}" width="100%" height="#firmware_row_h"
++                       flex_flow="row" style_flex_cross_place="center" style_pad_all="#space_md"
++                       style_shadow_width="0" style_radius="#space_sm" scrollable="false">
++              <bind_style_if_eq name="option_selected" subject="firmware_selected_option" ref_value="${i}"/>
++              <bind_style_if_not_eq name="option_idle" subject="firmware_selected_option" ref_value="${i}"/>
++              <bind_state_if cond="firmware_busy or not firmware_ready" state="disabled"/>
++              <text_body width="0" flex_grow="1" bind_text="firmware_option_label_${i}" long_mode="wrap" event_bubble="true"/>
++              <icon src="check" size="sm" variant="primary" event_bubble="true">
++                <bind_flag_if_not_eq subject="firmware_selected_option" flag="hidden" ref_value="${i}"/>
++              </icon>
++              <event_cb trigger="clicked" callback="firmware_option_select" user_data="${i}"/>
++            </lv_button>
++          </repeat>
++          <repeat count="firmware_input_count">
++            <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0"
++                    style_pad_gap="#space_xs" scrollable="false">
++              <text_small width="100%" bind_text="firmware_input_label_${i}" long_mode="wrap"/>
++              <text_input name="firmware_input_${i}" width="100%" height="#firmware_row_h"
++                          one_line="true" keyboard_hint="text" max_length="1000"
++                          bind_text="firmware_input_value_${i}">
++                <bind_state_if cond="firmware_busy or not firmware_ready" state="disabled"/>
++              </text_input>
++            </lv_obj>
++          </repeat>
++          <text_small name="firmware_description" width="100%" bind_text="firmware_description" long_mode="wrap"/>
++        </lv_obj>
++        <text_body name="firmware_review" width="100%" bind_text="firmware_review" long_mode="wrap">
++          <bind_flag_if cond="firmware_page ne 3" flag="hidden"/>
++        </text_body>
++        <text_small name="firmware_output" width="100%" bind_text="firmware_output" long_mode="wrap">
++          <bind_flag_if cond="firmware_page ne 4" flag="hidden"/>
++        </text_small>
++      </lv_obj>
++      <lv_obj name="firmware_footer" width="100%" height="#firmware_footer_h" flex_flow="row"
++              style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
++        <bind_flag_if cond="firmware_page ne 2 and firmware_page ne 3 and not firmware_has_output" flag="hidden"/>
++        <ui_button name="firmware_details" text="执行详情" variant="secondary"
++                   width="0" flex_grow="1" height="#firmware_row_h" style_radius="#space_sm">
++          <bind_flag_if cond="not firmware_has_output or firmware_page eq 4" flag="hidden"/>
++          <event_cb trigger="clicked" callback="firmware_show_output"/>
++        </ui_button>
++        <ui_button name="firmware_next" text="检查修改" width="0" flex_grow="2"
++                   height="#firmware_row_h" style_radius="#space_sm">
++          <bind_flag_if cond="firmware_page ne 2" flag="hidden"/>
++          <bind_state_if cond="firmware_busy or not firmware_ready or not firmware_dirty or job_holds_machine" state="disabled"/>
++          <event_cb trigger="clicked" callback="firmware_review_change"/>
++        </ui_button>
++        <ui_button name="firmware_apply" text="确认应用" width="0" flex_grow="2"
++                   height="#firmware_row_h" style_radius="#space_sm">
++          <bind_flag_if cond="firmware_page ne 3" flag="hidden"/>
++          <bind_state_if cond="firmware_busy or not firmware_ready or job_holds_machine" state="disabled"/>
++          <event_cb trigger="clicked" callback="firmware_apply_change"/>
++        </ui_button>
++      </lv_obj>
++    </lv_obj>
++  </view>
++</component>
+diff --git a/ui_xml/head_inventory.xml b/ui_xml/head_inventory.xml
+--- a/ui_xml/head_inventory.xml
++++ b/ui_xml/head_inventory.xml
+@@ -2,76 +2,86 @@
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+ <component>
+   <consts>
+-    <px name="inventory_tab_h_small" value="38"/>
++    <px name="inventory_tab_h_small" value="44"/>
+     <px name="inventory_tab_h_medium" value="54"/>
+     <px name="inventory_tab_h_large" value="64"/>
+-    <px name="inventory_gauge_h_small" value="60"/>
+-    <px name="inventory_gauge_h_medium" value="84"/>
+-    <px name="inventory_gauge_h_large" value="110"/>
+-    <px name="inventory_route_h_small" value="12"/>
+-    <px name="inventory_route_h_medium" value="24"/>
+-    <px name="inventory_route_h_large" value="32"/>
+-    <px name="inventory_head_h_small" value="46"/>
+-    <px name="inventory_head_h_medium" value="66"/>
+-    <px name="inventory_head_h_large" value="84"/>
+-    <px name="inventory_card_w_small" value="106"/>
+-    <px name="inventory_card_w_medium" value="140"/>
+-    <px name="inventory_card_w_large" value="160"/>
++    <px name="inventory_card_h_small" value="120"/>
++    <px name="inventory_card_h_medium" value="158"/>
++    <px name="inventory_card_h_large" value="190"/>
++    <px name="inventory_gauge_h_small" value="4"/>
++    <px name="inventory_gauge_h_medium" value="5"/>
++    <px name="inventory_gauge_h_large" value="6"/>
++    <px name="inventory_swatch_small" value="14"/>
++    <px name="inventory_swatch_medium" value="18"/>
++    <px name="inventory_swatch_large" value="22"/>
++    <px name="inventory_route_h_small" value="8"/>
++    <px name="inventory_route_h_medium" value="12"/>
++    <px name="inventory_route_h_large" value="16"/>
++    <px name="inventory_head_h_small" value="32"/>
++    <px name="inventory_head_h_medium" value="48"/>
++    <px name="inventory_head_h_large" value="60"/>
+   </consts>
+   <styles>
+     <style name="tab_idle" bg_color="#elevated_bg" bg_opa="255" border_width="0"/>
+-    <style name="tab_selected" bg_color="#elevated_bg" bg_opa="255" border_color="#primary" border_width="2"/>
+-    <style name="card_idle" border_color="#text_muted" border_width="1" border_opa="40"/>
+-    <style name="card_viewed" border_color="#primary" border_width="2" border_opa="255"/>
++    <style name="tab_selected" bg_color="#primary" bg_opa="28" border_color="#primary" border_width="1"/>
++    <style name="card_idle" bg_color="#elevated_bg" bg_opa="255" border_width="0"/>
++    <style name="card_viewed" bg_color="#elevated_bg" bg_opa="255" border_color="#primary" border_width="1"/>
+   </styles>
+-  <view name="head_inventory" extends="overlay_panel" title="耗材" title_transform="none" back_button_callback="inventory_back" action_button_text="操作" hide_action_button="false" action_button_callback="inventory_manage" action_button_2_text="耗材库" hide_action_button_2="false" action_button_2_callback="inventory_library" bg_color="#screen_bg">
+-    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_pad_all="#space_xs" style_pad_gap="#space_xxs" scrollable="false">
+-      <lv_obj name="inventory_heads" width="100%" height="#inventory_tab_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
++  <view name="head_inventory" extends="overlay_panel" title="耗材" title_transform="none" back_button_callback="inventory_back" action_button_text="操作" hide_action_button="false" action_button_callback="inventory_manage" action_button_disabled_cond="inventory_selected_unit lt 0" action_button_2_text="耗材库" hide_action_button_2="false" action_button_2_callback="inventory_library" action_button_2_bg_color="#elevated_bg" bg_color="#screen_bg">
++    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_pad_all="#space_md" style_pad_gap="#space_md" scrollable="false">
++      <lv_obj name="inventory_heads" width="100%" height="#inventory_tab_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+         <repeat count="4">
+-          <lv_obj name="inventory_head_${i}" width="0" flex_grow="1" height="100%" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="#space_xxs" style_pad_gap="0" style_radius="#space_sm" clickable="true" scrollable="false">
++          <lv_obj name="inventory_head_${i}" width="0" flex_grow="1" height="100%" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="#space_xxs" style_pad_gap="0" style_radius="#border_radius" clickable="true" scrollable="false">
+             <bind_style_if name="tab_idle" cond="inventory_selected_head ne ${i}"/>
+             <bind_style_if name="tab_selected" cond="inventory_selected_head eq ${i}"/>
++            <style name="styles.press_wash" selector="pressed"/>
+             <text_body text="喷头 ${i + 1}" clickable="false" event_bubble="true"/>
+             <event_cb trigger="clicked" callback="inventory_select_head" user_data="${i}"/>
+           </lv_obj>
+         </repeat>
+       </lv_obj>
+-      <text_body name="inventory_notice" width="100%" bind_text="inventory_source" long_mode="dots" style_text_color="#text_muted"/>
+-      <lv_obj name="inventory_cards" width="100%" height="content" flex_flow="row" style_flex_main_place="center" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
++      <text_body name="inventory_notice" width="100%" bind_text="inventory_source" long_mode="dots"/>
++
++      <!-- Each column is the same-number slot on one ACE for the selected head. -->
++      <lv_obj name="inventory_cards" width="100%" height="#inventory_card_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+         <repeat count="4">
+-          <lv_obj name="inventory_card_${i}" width="24%" style_max_width="#inventory_card_w" height="content" flex_flow="column" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="#space_xxs" style_pad_gap="0" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#space_sm" clickable="true" scrollable="false">
++          <lv_obj name="inventory_card_${i}" width="0" flex_grow="1" height="100%" flex_flow="column" style_flex_main_place="space_between" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="#space_sm" style_pad_gap="#space_xxs" style_radius="#border_radius" clickable="true" scrollable="false">
+             <bind_flag_if cond="inventory_unit_count le ${i}" flag="hidden"/>
+             <bind_style_if name="card_idle" cond="inventory_selected_unit ne ${i}"/>
+             <bind_style_if name="card_viewed" cond="inventory_selected_unit eq ${i}"/>
+-            <text_small name="inventory_unit_name_${i}" width="100%" bind_text="inventory_unit_${i}_name" style_text_align="center" long_mode="dots" clickable="false" event_bubble="true"/>
+-            <text_small name="inventory_environment_${i}" width="100%" bind_text="inventory_unit_${i}_env" style_text_align="center" style_text_color="#text_muted" long_mode="dots" clickable="false" event_bubble="true"/>
+-            <lv_obj width="100%" height="#inventory_gauge_h" style_pad_all="0" style_radius="#space_xs" scrollable="false" clickable="false" event_bubble="true">
+-              <lv_bar name="inventory_gauge_${i}" width="100%" height="100%" orientation="vertical" min_value="0" max_value="100" bind_value="inventory_unit_${i}_fill" style_bg_color="#elevated_bg" style_bg_opa="255" style_radius="#space_xs" style_radius-indicator="#space_xs" clickable="false" event_bubble="true">
+-                <bind_style_prop prop="bg_color" selector="indicator" subject="inventory_unit_${i}_color"/>
+-              </lv_bar>
+-              <lv_obj width="content" height="content" align="center" flex_flow="column" style_flex_cross_place="center" style_pad_all="#space_xxs" style_pad_gap="0" style_bg_color="#card_bg" style_bg_opa="220" style_radius="#space_xs" scrollable="false" clickable="false" event_bubble="true">
+-                <text_body name="inventory_material_${i}" bind_text="inventory_unit_${i}_material" clickable="false" event_bubble="true"/>
+-                <text_small name="inventory_percent_${i}" bind_text="inventory_unit_${i}_percent" clickable="false" event_bubble="true"/>
++            <style name="styles.press_wash" selector="pressed"/>
++            <text_body name="inventory_unit_name_${i}" width="100%" bind_text="inventory_unit_${i}_name" style_text_align="center" long_mode="dots" clickable="false" event_bubble="true"/>
++            <lv_obj width="100%" height="content" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false" clickable="false" event_bubble="true">
++              <lv_obj name="inventory_color_${i}" width="#inventory_swatch" height="#inventory_swatch" style_bg_opa="255" style_border_width="1" style_border_color="#border" style_radius="#space_xs" style_pad_all="0" scrollable="false" clickable="false" event_bubble="true">
++                <bind_style_prop prop="bg_color" subject="inventory_unit_${i}_color"/>
+               </lv_obj>
+-              <text_small name="inventory_current_${i}" text="供料" align="top_right" style_bg_color="#card_bg" style_bg_opa="255" style_pad_left="#space_xxs" style_pad_right="#space_xxs" style_radius="#space_xxs" clickable="false" event_bubble="true">
+-                <bind_flag_if_eq subject="inventory_unit_${i}_current" flag="hidden" ref_value="0"/>
+-              </text_small>
++              <text_body name="inventory_material_${i}" width="0" flex_grow="1" bind_text="inventory_unit_${i}_material" long_mode="dots" clickable="false" event_bubble="true"/>
+             </lv_obj>
+-            <text_small name="inventory_weight_${i}" bind_text="inventory_unit_${i}_weight" clickable="false" event_bubble="true"/>
++            <text_small name="inventory_weight_${i}" width="100%" bind_text="inventory_unit_${i}_weight" style_text_align="center" long_mode="dots" clickable="false" event_bubble="true"/>
++            <lv_bar name="inventory_gauge_${i}" width="100%" height="#inventory_gauge_h" min_value="0" max_value="100" bind_value="inventory_unit_${i}_fill" style_bg_color="#border" style_bg_opa="100" style_bg_color-indicator="#primary" style_radius="#space_xs" style_radius-indicator="#space_xs" clickable="false" event_bubble="true"/>
++            <text_small name="inventory_percent_${i}" bind_text="inventory_unit_${i}_percent" hidden="true" clickable="false" event_bubble="true"/>
++            <text_small name="inventory_environment_${i}" width="100%" bind_text="inventory_unit_${i}_env" style_text_align="center" long_mode="dots" clickable="false" event_bubble="true"/>
++            <text_small name="inventory_current_${i}" text="供料中" style_text_color="#primary" clickable="false" event_bubble="true">
++              <bind_flag_if_eq subject="inventory_unit_${i}_current" flag="hidden" ref_value="0"/>
++            </text_small>
++            <text_small name="inventory_candidate_${i}" text="候选" style_text_color="#text_subtle" clickable="false" event_bubble="true">
++              <bind_flag_if_eq subject="inventory_unit_${i}_current" flag="hidden" ref_value="1"/>
++            </text_small>
+             <event_cb trigger="clicked" callback="inventory_select_unit" user_data="${i}"/>
+           </lv_obj>
+         </repeat>
+       </lv_obj>
+-      <lv_obj name="inventory_routes" width="100%" height="#inventory_route_h" style_pad_all="0" scrollable="false">
++      <lv_obj name="inventory_routes" width="100%" height="#inventory_route_h" style_pad_all="0" style_opa="55" scrollable="false">
++        <bind_flag_if cond="inventory_unit_count eq 0" flag="hidden"/>
+         <event_cb trigger="draw_main" callback="inventory_draw_routes"/>
+       </lv_obj>
+-      <lv_obj name="inventory_output" width="100%" flex_grow="1" height="0" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="0" style_pad_gap="0" scrollable="false">
++      <lv_obj name="inventory_output" width="100%" height="0" flex_grow="1" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+         <lv_image name="inventory_toolhead" width="#inventory_head_h" height="#inventory_head_h" inner_align="contain" bind_src="inventory_toolhead_image"/>
+-        <text_small name="inventory_source" bind_text="inventory_source" long_mode="dots">
+-          <bind_flag_if_le subject="ui_breakpoint" flag="hidden" ref_value="1"/>
++        <text_small name="inventory_source" width="100%" bind_text="inventory_selection" style_text_align="center" long_mode="dots"/>
++        <text_small name="inventory_warning" width="100%" bind_text="inventory_notice" style_text_align="center" style_text_color="#warning" long_mode="dots">
++          <bind_flag_if cond="inventory_online and not inventory_hold" flag="hidden"/>
+         </text_small>
+       </lv_obj>
+-
+     </lv_obj>
+   </view>
+ </component>
+diff --git a/ui_xml/material_workspace.xml b/ui_xml/material_workspace.xml
+--- a/ui_xml/material_workspace.xml
++++ b/ui_xml/material_workspace.xml
+@@ -2,236 +2,257 @@
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+ <component>
+   <consts>
+-    <px name="workspace_action_h" value="44"/>
+-    <px name="workspace_list_h" value="48"/>
+-    <px name="workspace_toggle_w" value="70"/>
+-    <px name="workspace_progress_h" value="20"/>
++    <px name="workspace_action_h" value="48" />
++    <px name="workspace_list_h" value="52" />
++    <px name="workspace_toggle_w" value="96" />
++    <px name="workspace_progress_h" value="8" />
+   </consts>
+   <view name="material_workspace" extends="overlay_panel" title_subject="workspace_title" title_transform="none" back_button_callback="workspace_back" bg_color="#screen_bg">
+-    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_pad_all="#space_sm" style_pad_gap="#space_xs" scroll_dir="ver">
+-      <text_body name="workspace_status" width="100%" bind_text="workspace_status" style_text_color="#primary"/>
+-      <lv_obj name="workspace_page_0" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+-        <bind_flag_if cond="workspace_page ne 0" flag="hidden"/>
+-        <text_body name="workspace_detail" width="100%" bind_text="workspace_detail"/>
+-        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+-          <ui_button name="workspace_load" text="装料 / 换料" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="load"/>
+-          </ui_button>
+-          <ui_button name="workspace_unload" text="退出当前耗材" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="unload"/>
+-          </ui_button>
+-          <ui_button name="workspace_edit" text="槽位信息" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="edit"/>
+-          </ui_button>
+-          <ui_button name="workspace_dry" text="温湿度 / 烘干" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="dry"/>
+-          </ui_button>
+-          <ui_button name="workspace_library" text="耗材库 / 余量" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="library"/>
+-          </ui_button>
+-          <ui_button name="workspace_read_tag" text="读取 RFID" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="read_tag"/>
+-          </ui_button>
+-          <ui_button name="workspace_write_tag" text="写入 RFID" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="write_tag"/>
+-          </ui_button>
+-          <ui_button name="workspace_auto_dry" text="自动烘干" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry"/>
+-          </ui_button>
+-          <ui_button name="workspace_calibrate_pa" text="PA 标定" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="calibrate_pa"/>
+-          </ui_button>
+-          <ui_button name="workspace_settings" text="自动续料 / 设置" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="settings"/>
+-          </ui_button>
+-          <ui_button name="workspace_firmware" text="本地固件升级" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="firmware"/>
+-          </ui_button>
+-        </lv_obj>
+-        </lv_obj>
+-      <lv_obj name="workspace_page_1" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+-        <bind_flag_if cond="workspace_page ne 1" flag="hidden"/>
+-        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+-          <ui_button name="workspace_new_spool" text="新增线盘" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="new_spool"/>
+-          </ui_button>
+-          <ui_button name="workspace_refresh_library" text="刷新耗材库" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="refresh_library"/>
+-          </ui_button>
+-          <ui_button name="workspace_sync" text="同步 Spoolman" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="sync"/>
++    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column" style_pad_all="#space_lg" style_pad_gap="#space_md" scroll_dir="ver">
++      <text_small name="workspace_status" width="100%" bind_text="workspace_status" style_text_color="#text_muted" />
++      <lv_obj name="workspace_page_0" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++        <bind_flag_if cond="workspace_page ne 0" flag="hidden" />
++        <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="#space_lg" style_pad_gap="#space_md" scrollable="false" style_bg_color="#elevated_bg" style_bg_opa="255" style_radius="#border_radius">
++          <text_body name="workspace_detail" width="100%" bind_text="workspace_detail" />
++        </lv_obj>
++        <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++          <ui_button name="workspace_load" text="装料 / 换料" variant="primary" width="0" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" flex_grow="1">
++            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="load" />
++          </ui_button>
++          <ui_button name="workspace_unload" text="退出耗材" variant="ghost" style_bg_color="#elevated_bg" width="0" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255" flex_grow="1">
++            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="unload" />
++          </ui_button>
++        </lv_obj>
++        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++          <ui_button name="workspace_edit" text="槽位信息" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="edit" />
++          </ui_button>
++          <ui_button name="workspace_dry" text="温湿度 / 烘干" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="dry" />
++          </ui_button>
++          <ui_button name="workspace_library" text="耗材库 / 余量" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="library" />
++          </ui_button>
++          <ui_button name="workspace_read_tag" text="读取 RFID" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="read_tag" />
++          </ui_button>
++        </lv_obj>
++        <divider_horizontal />
++        <text_small text="更多操作" />
++        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++          <ui_button name="workspace_auto_dry" text="自动烘干" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry" />
++          </ui_button>
++          <ui_button name="workspace_settings" text="自动续料 / 设置" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <event_cb trigger="clicked" callback="workspace_action" user_data="settings" />
++          </ui_button>
++          <ui_button name="workspace_calibrate_pa" text="PA 标定" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="calibrate_pa" />
++          </ui_button>
++          <ui_button name="workspace_write_tag" text="写入 RFID" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="write_tag" />
++          </ui_button>
++          <ui_button name="workspace_firmware" text="本地固件升级" variant="ghost" style_bg_color="#elevated_bg" width="100%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="firmware" />
++          </ui_button>
++        </lv_obj>
++      </lv_obj>
++      <lv_obj name="workspace_page_1" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++        <bind_flag_if cond="workspace_page ne 1" flag="hidden" />
++        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
++          <ui_button name="workspace_new_spool" text="新增线盘" variant="primary" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="new_spool" />
++          </ui_button>
++          <ui_button name="workspace_refresh_library" text="刷新耗材库" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="refresh_library" />
++          </ui_button>
++          <ui_button name="workspace_sync" text="同步 Spoolman" variant="ghost" style_bg_color="#elevated_bg" width="100%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="sync" />
+           </ui_button>
+         </lv_obj>
+         <repeat count="workspace_spool_count">
+-          <ui_button name="workspace_spool_${i}" bind_text="workspace_spool_${i}" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="100%" height="#workspace_list_h">
+-            <event_cb trigger="clicked" callback="workspace_spool_select" user_data="${i}"/>
++          <ui_button name="workspace_spool_${i}" bind_text="workspace_spool_${i}" variant="ghost" style_bg_color="#elevated_bg" width="100%" height="#workspace_list_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <event_cb trigger="clicked" callback="workspace_spool_select" user_data="${i}" />
+           </ui_button>
+         </repeat>
+-        </lv_obj>
+-      <lv_obj name="workspace_page_2" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+-        <bind_flag_if cond="workspace_page ne 2" flag="hidden"/>
+-        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+-          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+-            <text_small text="耗材类型"/>
+-            <text_input name="spool_material" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_material" keyboard_hint="text" max_length="48"/>
+-          </lv_obj>
+-          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+-            <text_small text="颜色 HEX"/>
+-            <text_input name="spool_color" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_color" keyboard_hint="text" max_length="48"/>
+-          </lv_obj>
+-          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+-            <text_small text="品牌"/>
+-            <text_input name="spool_vendor" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_vendor" keyboard_hint="text" max_length="48"/>
+-          </lv_obj>
+-          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+-            <text_small text="剩余重量 g · 留空保留原值"/>
+-            <text_input name="spool_weight" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_weight" keyboard_hint="numeric" max_length="48"/>
+-          </lv_obj>
+-        </lv_obj>
+-        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+-          <ui_button name="workspace_save_spool" text="保存线盘" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="save_spool"/>
+-          </ui_button>
+-          <ui_button name="workspace_assign_spool" text="绑定当前槽位" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="spool_assign"/>
+-          </ui_button>
+-          <ui_button name="workspace_unbind" text="解除当前槽绑定" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="unbind"/>
+-          </ui_button>
+-          <ui_button name="workspace_return_library" text="返回耗材库" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="library"/>
+-          </ui_button>
+-        </lv_obj>
+-        </lv_obj>
+-      <lv_obj name="workspace_page_3" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+-        <bind_flag_if cond="workspace_page ne 3" flag="hidden"/>
+-        <text_body text="升级本机 U1 打印机"/>
+-        <text_small text="从 U 盘或本地 firmware 目录选择完整 .bin 升级包" width="100%"/>
+-        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+-          <ui_button name="workspace_refresh_files" text="刷新本地文件" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="refresh_files"/>
+-          </ui_button>
+-          <ui_button name="workspace_upgrade_status" text="查看升级任务" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="upgrade_status"/>
++      </lv_obj>
++      <lv_obj name="workspace_page_2" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++        <bind_flag_if cond="workspace_page ne 2" flag="hidden" />
++        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
++          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
++            <text_small text="耗材类型" />
++            <text_input name="spool_material" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_material" keyboard_hint="text" max_length="48" />
++          </lv_obj>
++          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
++            <text_small text="颜色 HEX" />
++            <text_input name="spool_color" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_color" keyboard_hint="text" max_length="48" />
++          </lv_obj>
++          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
++            <text_small text="品牌" />
++            <text_input name="spool_vendor" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_vendor" keyboard_hint="text" max_length="48" />
++          </lv_obj>
++          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
++            <text_small text="剩余重量 g · 留空保留原值" />
++            <text_input name="spool_weight" width="100%" height="#workspace_action_h" one_line="true" bind_text="workspace_weight" keyboard_hint="numeric" max_length="48" />
++          </lv_obj>
++        </lv_obj>
++        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
++          <ui_button name="workspace_save_spool" text="保存线盘" variant="primary" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="save_spool" />
++          </ui_button>
++          <ui_button name="workspace_assign_spool" text="绑定当前槽位" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="spool_assign" />
++          </ui_button>
++          <ui_button name="workspace_unbind" text="解除当前槽绑定" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="unbind" />
++          </ui_button>
++          <ui_button name="workspace_return_library" text="返回耗材库" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="library" />
++          </ui_button>
++        </lv_obj>
++      </lv_obj>
++      <lv_obj name="workspace_page_3" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++        <bind_flag_if cond="workspace_page ne 3" flag="hidden" />
++        <text_body text="升级本机 U1 打印机" />
++        <text_small text="从 U 盘或本地 firmware 目录选择完整 .bin 升级包" width="100%" />
++        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
++          <ui_button name="workspace_refresh_files" text="刷新本地文件" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="refresh_files" />
++          </ui_button>
++          <ui_button name="workspace_upgrade_status" text="查看升级任务" variant="ghost" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="upgrade_status" />
+           </ui_button>
+         </lv_obj>
+         <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+-        <repeat count="workspace_file_count">
+-          <ui_button name="workspace_file_${i}" bind_text="workspace_file_${i}" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="100%" height="#workspace_list_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_file_select" user_data="${i}"/>
+-          </ui_button>
+-        </repeat>
+-        </lv_obj>
+-        <text_body name="firmware_file_info" bind_text="workspace_file_info" width="100%"/>
+-        <text_body text="固件包目标版本"/>
+-        <text_heading bind_text="workspace_version"/>
+-        <ui_button name="workspace_firmware_next" text="核对升级信息" width="100%" height="#workspace_action_h">
+-          <bind_state_if cond="not workspace_prepared or workspace_busy" state="disabled"/>
+-          <event_cb trigger="clicked" callback="workspace_action" user_data="firmware_next"/>
+-        </ui_button>
+-        </lv_obj>
+-      <lv_obj name="workspace_page_4" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+-        <bind_flag_if cond="workspace_page ne 4" flag="hidden"/>
+-        <text_body bind_text="workspace_detail" width="100%"/>
+-          <ui_button name="workspace_firmware_start" text="确认开始升级" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="100%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="firmware_start"/>
+-          </ui_button>
+-        </lv_obj>
+-      <lv_obj name="workspace_page_5" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+-        <bind_flag_if cond="workspace_page ne 5" flag="hidden"/>
+-        <text_heading text="本地升级任务"/>
+-        <lv_bar width="100%" height="#workspace_progress_h" min_value="0" max_value="100" bind_value="workspace_progress"/>
+-        <text_body text="重启后请核对当前版本。升级日志保存在本机 firmware 目录。" width="100%"/>
+-          <ui_button name="workspace_poll_status" text="刷新进度" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="100%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="upgrade_status"/>
+-          </ui_button>
+-        </lv_obj>
+-      <lv_obj name="workspace_page_6" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+-        <bind_flag_if cond="workspace_page ne 6" flag="hidden"/>
+-        <text_body bind_text="workspace_detail" width="100%"/>
+-          <ui_button name="workspace_confirm" text="确认操作" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="100%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="confirm"/>
+-          </ui_button>
+-        </lv_obj>
+-      <lv_obj name="workspace_page_7" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+-        <bind_flag_if cond="workspace_page ne 7" flag="hidden"/>
+-        <text_body text="湿度控制与跟随策略保存在设备中。主设备编号使用 0-3，-1 表示无跟随。" width="100%"/>
+-        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+-          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+-            <text_small text="温度 °C"/>
+-            <text_input name="auto_value_0" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_0" max_length="8"/>
+-          </lv_obj>
+-          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+-            <bind_flag_if cond="workspace_auto_sensor eq 0" flag="hidden"/>
+-            <text_small text="启动湿度 %"/>
+-            <text_input name="auto_value_1" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_1" max_length="8"/>
+-          </lv_obj>
+-          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+-            <bind_flag_if cond="workspace_auto_sensor eq 0" flag="hidden"/>
+-            <text_small text="停止湿度 %"/>
+-            <text_input name="auto_value_2" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_2" max_length="8"/>
+-          </lv_obj>
+-          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+-            <bind_flag_if cond="workspace_auto_sensor eq 1" flag="hidden"/>
+-            <text_small text="跟随主设备 0-3"/>
+-            <text_input name="auto_value_3" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_3" max_length="8"/>
+-          </lv_obj>
+-          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
+-            <bind_flag_if cond="workspace_auto_sensor eq 1" flag="hidden"/>
+-            <text_small text="追加烘干 分钟"/>
+-            <text_input name="auto_value_4" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_4" max_length="8"/>
+-          </lv_obj>
+-        </lv_obj>
+-        <ui_button name="workspace_auto_dry_save" text="保存烘干参数" width="100%" height="#workspace_action_h">
+-          <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-          <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_save"/>
+-        </ui_button>
+-        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+-          <ui_button name="workspace_auto_dry_on" text="启用自动烘干" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_on"/>
+-          </ui_button>
+-          <ui_button name="workspace_auto_dry_off" text="关闭自动烘干" variant="secondary" style_radius="#space_sm" style_bg_color="#elevated_bg" width="48%" height="#workspace_action_h">
+-            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled"/>
+-            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_off"/>
+-          </ui_button>
+-        </lv_obj>
+-        </lv_obj>
+-      <lv_obj name="workspace_page_8" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_sm" scrollable="false">
+-        <bind_flag_if cond="workspace_page ne 8" flag="hidden"/>
++          <repeat count="workspace_file_count">
++            <ui_button name="workspace_file_${i}" bind_text="workspace_file_${i}" variant="ghost" style_bg_color="#elevated_bg" width="100%" height="#workspace_list_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++              <bind_state_if cond="workspace_busy" state="disabled" />
++              <event_cb trigger="clicked" callback="workspace_file_select" user_data="${i}" />
++            </ui_button>
++          </repeat>
++        </lv_obj>
++        <text_body name="firmware_file_info" bind_text="workspace_file_info" width="100%" />
++        <text_body text="固件包目标版本" />
++        <text_heading bind_text="workspace_version" />
++        <ui_button name="workspace_firmware_next" text="核对升级信息" width="100%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" variant="primary">
++          <bind_state_if cond="not workspace_prepared or workspace_busy" state="disabled" />
++          <event_cb trigger="clicked" callback="workspace_action" user_data="firmware_next" />
++        </ui_button>
++      </lv_obj>
++      <lv_obj name="workspace_page_4" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++        <bind_flag_if cond="workspace_page ne 4" flag="hidden" />
++        <text_body bind_text="workspace_detail" width="100%" />
++        <ui_button name="workspace_firmware_start" text="确认开始升级" variant="primary" width="100%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0">
++          <bind_state_if cond="workspace_busy" state="disabled" />
++          <event_cb trigger="clicked" callback="workspace_action" user_data="firmware_start" />
++        </ui_button>
++      </lv_obj>
++      <lv_obj name="workspace_page_5" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++        <bind_flag_if cond="workspace_page ne 5" flag="hidden" />
++        <text_heading text="本地升级任务" />
++        <lv_bar width="100%" height="#workspace_progress_h" min_value="0" max_value="100" bind_value="workspace_progress" />
++        <text_body text="重启后请核对当前版本。升级日志保存在本机 firmware 目录。" width="100%" />
++        <ui_button name="workspace_poll_status" text="刷新进度" variant="ghost" style_bg_color="#elevated_bg" width="100%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++          <bind_state_if cond="workspace_busy" state="disabled" />
++          <event_cb trigger="clicked" callback="workspace_action" user_data="upgrade_status" />
++        </ui_button>
++      </lv_obj>
++      <lv_obj name="workspace_page_6" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++        <bind_flag_if cond="workspace_page ne 6" flag="hidden" />
++        <text_body bind_text="workspace_detail" width="100%" />
++        <ui_button name="workspace_confirm" text="确认操作" variant="primary" width="100%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0">
++          <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++          <event_cb trigger="clicked" callback="workspace_action" user_data="confirm" />
++        </ui_button>
++      </lv_obj>
++      <lv_obj name="workspace_page_7" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++        <bind_flag_if cond="workspace_page ne 7" flag="hidden" />
++        <lv_obj width="100%" height="#workspace_list_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_md" scrollable="false" style_flex_cross_place="center">
++          <text_body text="自动烘干" width="0" flex_grow="1" />
++          <ui_button name="workspace_auto_dry_on" text="已关闭" variant="ghost" style_bg_color="#elevated_bg" width="#workspace_toggle_w" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_opa="255">
++            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_on" />
++            <bind_flag_if cond="workspace_auto_enabled ne 0" flag="hidden" />
++          </ui_button>
++          <ui_button name="workspace_auto_dry_off" text="已启用" variant="primary" width="#workspace_toggle_w" height="#workspace_action_h" style_shadow_width="0" style_border_width="0">
++            <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++            <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_off" />
++            <bind_flag_if cond="workspace_auto_enabled ne 1" flag="hidden" />
++          </ui_button>
++          <ui_button name="workspace_auto_dry_pending" text="未读取" variant="ghost" width="#workspace_toggle_w" height="#workspace_action_h" style_border_width="0" style_shadow_width="0">
++            <bind_flag_if cond="workspace_auto_enabled ge 0" flag="hidden" />
++            <bind_state_if cond="1" state="disabled" />
++          </ui_button>
++        </lv_obj>
++        <lv_obj width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
++          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
++            <text_small text="温度 °C" />
++            <text_input name="auto_value_0" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_0" max_length="8" />
++          </lv_obj>
++          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
++            <bind_flag_if cond="workspace_auto_sensor eq 0" flag="hidden" />
++            <text_small text="启动湿度 %" />
++            <text_input name="auto_value_1" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_1" max_length="8" />
++          </lv_obj>
++          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
++            <bind_flag_if cond="workspace_auto_sensor eq 0" flag="hidden" />
++            <text_small text="停止湿度 %" />
++            <text_input name="auto_value_2" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_2" max_length="8" />
++          </lv_obj>
++          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
++            <bind_flag_if cond="workspace_auto_sensor eq 1" flag="hidden" />
++            <text_small text="跟随主设备 0-3" />
++            <text_input name="auto_value_3" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_3" max_length="8" />
++          </lv_obj>
++          <lv_obj width="48%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_xxs" scrollable="false">
++            <bind_flag_if cond="workspace_auto_sensor eq 1" flag="hidden" />
++            <text_small text="追加烘干 分钟" />
++            <text_input name="auto_value_4" width="100%" height="#workspace_action_h" one_line="true" keyboard_hint="numeric" bind_text="workspace_auto_4" max_length="8" />
++          </lv_obj>
++        </lv_obj>
++        <ui_button name="workspace_auto_dry_save" text="保存烘干参数" width="100%" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" variant="primary">
++          <bind_state_if cond="workspace_busy or not workspace_ready" state="disabled" />
++          <event_cb trigger="clicked" callback="workspace_action" user_data="auto_dry_save" />
++        </ui_button>
++        <text_small text="湿度控制与跟随策略保存在设备中。主设备编号使用 0-3，-1 表示无跟随。" width="100%" style_text_color="#text_muted" />
++      </lv_obj>
++      <lv_obj name="workspace_page_8" width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
++        <bind_flag_if cond="workspace_page ne 8" flag="hidden" />
+         <repeat count="5">
+-          <lv_obj width="100%" height="#workspace_list_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" style_flex_cross_place="center" scrollable="false">
+-            <text_body bind_text="workspace_setting_${i}" width="0" flex_grow="1"/>
+-            <ui_button name="setting_${i}_on" text="启用" variant="secondary" width="#workspace_toggle_w" height="#workspace_action_h">
+-              <bind_state_if cond="workspace_busy or not workspace_settings_ready" state="disabled"/>
+-              <event_cb trigger="clicked" callback="workspace_action" user_data="setting_${i}_on"/>
+-            </ui_button>
+-            <ui_button name="setting_${i}_no" text="关闭" variant="secondary" width="#workspace_toggle_w" height="#workspace_action_h">
+-              <bind_state_if cond="workspace_busy or not workspace_settings_ready" state="disabled"/>
+-              <event_cb trigger="clicked" callback="workspace_action" user_data="setting_${i}_no"/>
++          <lv_obj width="100%" height="#workspace_list_h" flex_flow="row" style_pad_all="0" style_pad_gap="#space_lg" style_flex_cross_place="center" scrollable="false">
++            <text_body bind_text="workspace_setting_${i}" width="0" flex_grow="1" />
++            <ui_button name="setting_${i}_on" text="已关闭" variant="ghost" width="#workspace_toggle_w" height="#workspace_action_h" style_shadow_width="0" style_border_width="0" style_bg_color="#elevated_bg" style_bg_opa="255">
++              <bind_state_if cond="workspace_busy or not workspace_settings_ready" state="disabled" />
++              <event_cb trigger="clicked" callback="workspace_action" user_data="setting_${i}_on" />
++              <bind_flag_if cond="workspace_setting_enabled_${i} ne 0" flag="hidden" />
++            </ui_button>
++            <ui_button name="setting_${i}_no" text="已启用" variant="primary" width="#workspace_toggle_w" height="#workspace_action_h" style_shadow_width="0" style_border_width="0">
++              <bind_state_if cond="workspace_busy or not workspace_settings_ready" state="disabled" />
++              <event_cb trigger="clicked" callback="workspace_action" user_data="setting_${i}_no" />
++              <bind_flag_if cond="workspace_setting_enabled_${i} ne 1" flag="hidden" />
++            </ui_button>
++            <ui_button name="setting_${i}_pending" text="未读取" variant="ghost" width="#workspace_toggle_w" height="#workspace_action_h" style_border_width="0" style_shadow_width="0">
++              <bind_flag_if cond="workspace_setting_enabled_${i} ge 0" flag="hidden" />
++              <bind_state_if cond="1" state="disabled" />
+             </ui_button>
+           </lv_obj>
+         </repeat>
+diff --git a/ui_xml/navigation_bar.xml b/ui_xml/navigation_bar.xml
+--- a/ui_xml/navigation_bar.xml
++++ b/ui_xml/navigation_bar.xml
+@@ -3,6 +3,7 @@
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+ <component>
+   <consts>
++    <px name="nav_label_icon_offset" value="-8"/>
+     <!-- Nav bar width per breakpoint (selected by horizontal resolution in C++) -->
+     <px name="nav_width_micro" value="42"/>
+     <px name="nav_width_tiny" value="54"/>
+@@ -45,6 +46,9 @@
+     <px name="nav_estop_reach_xxlarge" value="0"/>
+   </consts>
+   <styles>
++    <style name="nav_icon_with_label" translate_y="#nav_label_icon_offset"/>
++    <style name="nav_label_idle" text_color="#text_muted"/>
++    <style name="nav_label_active" text_color="#primary"/>
+     <!-- One bar, two axes. Each pair is bound complementarily on ui_is_portrait
+          so exactly one is ever live, and the attributes they carry must NOT
+          also appear inline on the element: an inline width/height/pad is a
+@@ -128,13 +132,14 @@
+     <!-- Home Button (Panel 0) -->
+     <ui_button name="nav_btn_home"
+                width="100%" height="100%" flex_grow="1" variant="ghost" flex_flow="column"
+-               style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0">
++               style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0" style_pad_all="0">
+       <!-- Disabled and hidden during grid edit mode, leaving the bar to the edit buttons -->
+       <bind_state_if_eq subject="home_edit_mode" state="disabled" ref_value="1"/>
+       <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+       <!-- Active icon (accent color) - full opacity/scale when active_panel == 0 -->
+       <icon name="nav_icon_home_active" src="home" size="#icon_size" variant="primary" floating="true" align="center">
+         <style name="nav_icon_fade"/>
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <style name="nav_icon_fade_on" selector="checked"/>
+         <bind_state_if_eq subject="active_panel" state="checked" ref_value="0"/>
+       </icon>
+@@ -142,9 +147,16 @@
+       <icon name="nav_icon_home_inactive"
+             src="home_outline" size="#icon_size_nav_inactive" variant="secondary" floating="true" align="center">
+         <style name="nav_icon_fade"/>
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <style name="nav_icon_fade_on" selector="checked"/>
+         <bind_state_if_not_eq subject="active_panel" state="checked" ref_value="0"/>
+       </icon>
++      <text_small name="nav_label_home" text="首页" floating="true" align="bottom_mid"
++                  style_pad_bottom="#space_xxs" clickable="false" event_bubble="true">
++        <bind_flag_if cond="ui_is_portrait or ui_breakpoint lt 1" flag="hidden"/>
++        <bind_style_if name="nav_label_active" cond="active_panel eq 0"/>
++        <bind_style_if name="nav_label_idle" cond="active_panel ne 0"/>
++      </text_small>
+     </ui_button>
+     <!-- Controls Button (Panel 2) - CONNECTION + KLIPPY READY REQUIRED -->
+     <!-- Uses combined nav_buttons_enabled subject (1=enabled when connected AND klippy ready) -->
+@@ -163,6 +175,7 @@
+         <icon name="nav_icon_controls_active"
+               src="fine_tune" size="#icon_size" variant="primary" floating="true" align="center">
+           <style name="nav_icon_fade"/>
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+           <style name="nav_icon_fade_on" selector="checked"/>
+           <bind_state_if_eq subject="active_panel" state="checked" ref_value="2"/>
+         </icon>
+@@ -170,14 +183,22 @@
+         <icon name="nav_icon_controls_inactive"
+               src="fine_tune" size="#icon_size_nav_inactive" variant="secondary" floating="true" align="center">
+           <style name="nav_icon_fade"/>
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+           <style name="nav_icon_fade_on" selector="checked"/>
+           <bind_state_if_not_eq subject="active_panel" state="checked" ref_value="2"/>
+         </icon>
+       </lv_obj>
+       <!-- Disabled icon - visible only when disabled (disconnected OR klippy not ready) -->
+       <icon name="nav_icon_controls_disabled" src="fine_tune" size="#icon_size" variant="disabled">
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+       </icon>
++      <text_small name="nav_label_controls" text="控制" floating="true" align="bottom_mid"
++                  style_pad_bottom="#space_xxs" clickable="false" event_bubble="true">
++        <bind_flag_if cond="ui_is_portrait or ui_breakpoint lt 1" flag="hidden"/>
++        <bind_style_if name="nav_label_active" cond="active_panel eq 2"/>
++        <bind_style_if name="nav_label_idle" cond="active_panel ne 2"/>
++      </text_small>
+     </ui_button>
+     <!-- Filament Button (Panel 3) - CONNECTION + KLIPPY READY REQUIRED -->
+     <!-- Uses combined nav_buttons_enabled subject (1=enabled when connected AND klippy ready) -->
+@@ -196,6 +217,7 @@
+         <icon name="nav_icon_filament_active"
+               src="filament" size="#icon_size" variant="primary" floating="true" align="center">
+           <style name="nav_icon_fade"/>
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+           <style name="nav_icon_fade_on" selector="checked"/>
+           <bind_state_if_eq subject="active_panel" state="checked" ref_value="3"/>
+         </icon>
+@@ -203,54 +225,78 @@
+         <icon name="nav_icon_filament_inactive"
+               src="filament_outline" size="#icon_size_nav_inactive" variant="secondary" floating="true" align="center">
+           <style name="nav_icon_fade"/>
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+           <style name="nav_icon_fade_on" selector="checked"/>
+           <bind_state_if_not_eq subject="active_panel" state="checked" ref_value="3"/>
+         </icon>
+       </lv_obj>
+       <!-- Disabled icon - visible only when disabled (disconnected OR klippy not ready) -->
+       <icon name="nav_icon_filament_disabled" src="filament" size="#icon_size" variant="disabled">
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <bind_flag_if_eq subject="nav_buttons_enabled" flag="hidden" ref_value="1"/>
+       </icon>
++      <text_small name="nav_label_filament" text="耗材" floating="true" align="bottom_mid"
++                  style_pad_bottom="#space_xxs" clickable="false" event_bubble="true">
++        <bind_flag_if cond="ui_is_portrait or ui_breakpoint lt 1" flag="hidden"/>
++        <bind_style_if name="nav_label_active" cond="active_panel eq 3"/>
++        <bind_style_if name="nav_label_idle" cond="active_panel ne 3"/>
++      </text_small>
+     </ui_button>
+     <!-- Settings Button (Panel 4) -->
+     <ui_button name="nav_btn_settings"
+                width="100%" height="100%" flex_grow="1" variant="ghost" flex_flow="column"
+-               style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0">
++               style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0" style_pad_all="0">
+       <!-- Disabled and hidden during grid edit mode, leaving the bar to the edit buttons -->
+       <bind_state_if_eq subject="home_edit_mode" state="disabled" ref_value="1"/>
+       <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+       <icon name="nav_icon_settings_active"
+             src="settings" size="#icon_size" variant="primary" floating="true" align="center">
+         <style name="nav_icon_fade"/>
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <style name="nav_icon_fade_on" selector="checked"/>
+         <bind_state_if_eq subject="active_panel" state="checked" ref_value="4"/>
+       </icon>
+       <icon name="nav_icon_settings_inactive"
+             src="settings_outline" size="#icon_size_nav_inactive" variant="secondary" floating="true" align="center">
+         <style name="nav_icon_fade"/>
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <style name="nav_icon_fade_on" selector="checked"/>
+         <bind_state_if_not_eq subject="active_panel" state="checked" ref_value="4"/>
+       </icon>
++      <text_small name="nav_label_settings" text="设置" floating="true" align="bottom_mid"
++                  style_pad_bottom="#space_xxs" clickable="false" event_bubble="true">
++        <bind_flag_if cond="ui_is_portrait or ui_breakpoint lt 1" flag="hidden"/>
++        <bind_style_if name="nav_label_active" cond="active_panel eq 4"/>
++        <bind_style_if name="nav_label_idle" cond="active_panel ne 4"/>
++      </text_small>
+     </ui_button>
+     <!-- Advanced Button (Panel 5) -->
+     <ui_button name="nav_btn_advanced"
+                width="100%" height="100%" flex_grow="1" variant="ghost" flex_flow="column"
+-               style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0">
++               style_flex_main_place="center" style_flex_cross_place="center" style_border_width="0" style_pad_all="0">
+       <!-- Disabled and hidden during grid edit mode, leaving the bar to the edit buttons -->
+       <bind_state_if_eq subject="home_edit_mode" state="disabled" ref_value="1"/>
+       <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+       <icon name="nav_icon_advanced_active"
+             src="dots_vertical" size="#icon_size" variant="primary" floating="true" align="center">
+         <style name="nav_icon_fade"/>
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <style name="nav_icon_fade_on" selector="checked"/>
+         <bind_state_if_eq subject="active_panel" state="checked" ref_value="5"/>
+       </icon>
+       <icon name="nav_icon_advanced_inactive"
+             src="dots_vertical" size="#icon_size_nav_inactive" variant="secondary" floating="true" align="center">
+         <style name="nav_icon_fade"/>
++        <bind_style_if name="nav_icon_with_label" cond="ui_breakpoint ge 1 and not ui_is_portrait"/>
+         <style name="nav_icon_fade_on" selector="checked"/>
+         <bind_state_if_not_eq subject="active_panel" state="checked" ref_value="5"/>
+       </icon>
++      <text_small name="nav_label_advanced" text="更多" floating="true" align="bottom_mid"
++                  style_pad_bottom="#space_xxs" clickable="false" event_bubble="true">
++        <bind_flag_if cond="ui_is_portrait or ui_breakpoint lt 1" flag="hidden"/>
++        <bind_style_if name="nav_label_active" cond="active_panel eq 5"/>
++        <bind_style_if name="nav_label_idle" cond="active_panel ne 5"/>
++      </text_small>
+     </ui_button>
+     <!-- Printer switcher button — visible only when setting enabled -->
+     <ui_button name="nav_printer_badge"
+diff --git a/ui_xml/settings_panel.xml b/ui_xml/settings_panel.xml
+--- a/ui_xml/settings_panel.xml
++++ b/ui_xml/settings_panel.xml
+@@ -15,6 +15,12 @@
+         style_pad_gap="0" flex_flow="column" scrollable="true" style_bg_color="#screen_bg">
+     <!-- Panel Title (plain heading, not carded — this is the top-level menu) -->
+     <setting_section_header title="SETTINGS" icon="settings"/>
++    <setting_group name="group_extended_firmware">
++      <bind_flag_if cond="not local_upgrade_available" flag="hidden"/>
++      <setting_action_row name="row_firmware_settings" label="PAXX 设置" icon="tune"
++                          callback="on_firmware_settings_clicked"
++                          description="打印、耗材、摄像与远程" description_min_bp="0"/>
++    </setting_group>
+     <setting_group name="group_screen">
+       <setting_group_header title="SCREEN"/>
+       <setting_action_row name="row_display"

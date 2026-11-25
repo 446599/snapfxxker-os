@@ -1,0 +1,63 @@
+{
+  "uid": {
+    "uid1": 808780566,
+    "uid2": 17445170,
+    "uid3": 942880330
+  },
+  "info": {
+    "boot_version": "",
+    "firmware": "V1.1.95O",
+    "model": "ACE 2 Pro"
+  },
+  "state": {
+    "printer": "idle",
+    "calibration": "idle",
+    "tag_busy": false,
+    "swap": false,
+    "unload": false,
+    "ace": {
+      "connected": true,
+      "status": "busy",
+      "fw_hold": false,
+      "dryer": {
+        "status": "stop",
+        "target_temp": 0,
+        "duration": 0,
+        "remain_time": 0
+      },
+      "temp": 24,
+      "auto_dry_running": false,
+      "feed_assist": -1
+    }
+  },
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "lanes": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "feedinfo": [
+    {
+      "_decoder_present": true,
+      "_wire_valid": true,
+      "decoder": 18446744073709550872,
+      "index": 2,
+      "length": 784,
+      "steps": 9686
+    },
+    {
+      "_decoder_present": true,
+      "_wire_valid": true,
+      "decoder": 18446744073709550872,
+      "index": 2,
+      "length": 784,
+      "steps": 9686
+    }
+  ]
+}

@@ -1,0 +1,239 @@
+diff --git a/include/ui_overlay_temp_graph.h b/include/ui_overlay_temp_graph.h
+index bc6a3151bca640e4194d0eed0f575bcaeab98d2f..d6180995d0b7185e171e00b6ec5d0a351412cba7 100644
+--- a/include/ui_overlay_temp_graph.h
++++ b/include/ui_overlay_temp_graph.h
+@@ -80,6 +80,10 @@ class TempGraphOverlay : public OverlayBase {
+     static void on_temp_graph_preset_clicked(lv_event_t* e);
+     static void on_temp_graph_custom_clicked(lv_event_t* e);
+ 
++    void stage_bed_target(int target_deci);
++    void apply_bed_target();
++    bool bed_controls_allowed() const;
++
+     friend class TempGraphOverlayTestAccess;
+ 
+     /**
+@@ -180,6 +184,10 @@ class TempGraphOverlay : public OverlayBase {
+     // temp_graph_overlay.xml's <subjects> block. Seeded with mode_ by
+     // init_subjects(); synced on every open() call.
+     lv_subject_t mode_subject_{};
++    lv_subject_t title_subject_{};
++    char title_buffer_[48]{};
++    lv_subject_t bed_draft_subject_{};
++    lv_subject_t bed_advanced_subject_{};
+     std::unique_ptr<helix::TempGraphController> controller_;
+     lv_obj_t* chip_row_ = nullptr;
+     lv_obj_t* graph_container_ = nullptr;
+diff --git a/src/ui/controls/ui_overlay_temp_graph.cpp b/src/ui/controls/ui_overlay_temp_graph.cpp
+index b61db2e351a0573c12e53e64c4e014c19477bf9c..01e04022169c511fd494fd087728f05826b921f4 100644
+--- a/src/ui/controls/ui_overlay_temp_graph.cpp
++++ b/src/ui/controls/ui_overlay_temp_graph.cpp
+@@ -144,6 +144,10 @@ void TempGraphOverlay::init_subjects() {
+         // XML create and the first lv_subject_set_int in open().
+         UI_MANAGED_SUBJECT_INT(mode_subject_, static_cast<int>(mode_), "temp_graph_mode",
+                                subjects_);
++        UI_MANAGED_SUBJECT_STRING(title_subject_, title_buffer_, "温度控制", "temp_graph_title",
++                                  subjects_);
++        UI_MANAGED_SUBJECT_INT(bed_draft_subject_, 0, "temp_bed_draft", subjects_);
++        UI_MANAGED_SUBJECT_INT(bed_advanced_subject_, 0, "temp_bed_advanced", subjects_);
+         // The nozzle digit, kept in step with the extruder the card
+         // displays (picked tool while a pick is held, machine tool otherwise).
+         UI_MANAGED_SUBJECT_STRING(nozzle_badge_subject_, nozzle_badge_buffer_, "",
+@@ -168,6 +172,27 @@ void TempGraphOverlay::register_callbacks() {
+     register_xml_callbacks({
+         {"on_temp_graph_preset_clicked", on_temp_graph_preset_clicked},
+         {"on_temp_graph_custom_clicked", on_temp_graph_custom_clicked},
++        {"on_u1_bed_adjust", [](lv_event_t* e) {
++             auto& self = get_global_temp_graph_overlay();
++             if (auto delta = helix::ui::event_user_int(e); delta && self.bed_controls_allowed())
++                 self.stage_bed_target(lv_subject_get_int(&self.bed_draft_subject_) + *delta * 10);
++         }},
++        {"on_u1_bed_apply", [](lv_event_t*) { get_global_temp_graph_overlay().apply_bed_target(); }},
++        {"on_u1_bed_off", [](lv_event_t*) {
++             auto& self = get_global_temp_graph_overlay();
++             if (self.bed_controls_allowed()) {
++                 self.stage_bed_target(0);
++                 self.apply_bed_target();
++             }
++         }},
++        {"on_u1_bed_more", [](lv_event_t*) {
++             auto& self = get_global_temp_graph_overlay();
++             lv_subject_set_int(&self.bed_advanced_subject_, 1);
++         }},
++        {"on_u1_bed_back", [](lv_event_t*) {
++             auto& self = get_global_temp_graph_overlay();
++             lv_subject_set_int(&self.bed_advanced_subject_, 0);
++         }},
+     });
+ }
+ 
+@@ -384,6 +409,45 @@ void TempGraphOverlay::before_show() {
+     // bind_flag_if_not_eq, graph_outer width via temp_graph_full_width
+     // subject_expr) refire and reflow the overlay.
+     lv_subject_set_int(&mode_subject_, static_cast<int>(mode_));
++    const char* title = mode_ == Mode::Bed       ? "热床"
++                        : mode_ == Mode::Nozzle ? "喷嘴温度"
++                        : mode_ == Mode::Chamber ? "腔室温度"
++                                                 : "温度曲线";
++    lv_subject_copy_string(&title_subject_, title);
++    lv_subject_set_int(&bed_advanced_subject_, 0);
++    if (mode_ == Mode::Bed) {
++        lv_subject_set_int(&bed_draft_subject_,
++                           lv_subject_get_int(get_printer_state().temperature_state()
++                                                  .get_bed_target_subject()));
++    }
++}
++
++bool TempGraphOverlay::bed_controls_allowed() const {
++    return mode_ == Mode::Bed && temp_control_panel_ && printer_state_ &&
++           lv_subject_get_int(printer_state_->network_state().get_nav_buttons_enabled_subject()) == 1;
++}
++
++void TempGraphOverlay::stage_bed_target(int target_deci) {
++    if (!bed_controls_allowed())
++        return;
++    const auto& heater = temp_control_panel_->heater(helix::HeaterType::Bed);
++    const float max_value = temp_control_panel_->custom_keypad_max(
++        helix::HeaterType::Bed, heater.config.keypad_range.max);
++    lv_subject_set_int(&bed_draft_subject_,
++                       std::clamp(target_deci, 0, helix::ui::temperature::degrees_to_deci(max_value)));
++    // Presets and keypad edits return to the same explicit Apply action.
++    lv_subject_set_int(&bed_advanced_subject_, 0);
++}
++
++void TempGraphOverlay::apply_bed_target() {
++    if (!bed_controls_allowed())
++        return;
++    if (auto* controller = temp_control_panel_->controller()) {
++        controller->set_target(helix::HeaterType::Bed,
++                               helix::ui::temperature::deci_to_degrees(
++                                   lv_subject_get_int(&bed_draft_subject_)),
++                               {.toast = true});
++    }
+ }
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+@@ -799,6 +863,11 @@ void TempGraphOverlay::on_temp_graph_preset_clicked(lv_event_t* e) {
+     spdlog::debug("[TempGraphOverlay] Preset clicked: {}°C for heater {}", data.preset_value,
+                   static_cast<int>(type));
+ 
++    if (type == helix::HeaterType::Bed) {
++        self->stage_bed_target(helix::ui::temperature::degrees_to_deci(data.preset_value));
++        return;
++    }
++
+     // A nozzle preset goes to the extruder the card is displaying - the picked
+     // tool when one is held, the machine's active tool otherwise. The service's
+     // nozzle mirror feeds every OTHER surface's card and tracks the machine's
+@@ -864,6 +933,8 @@ void TempGraphOverlay::on_temp_graph_custom_clicked(lv_event_t* e) {
+     int seed_deci = heater.target;
+     if (type == helix::HeaterType::Nozzle && overlay.are_subjects_initialized()) {
+         seed_deci = lv_subject_get_int(&overlay.nozzle_card_target_subject_);
++    } else if (type == helix::HeaterType::Bed && overlay.are_subjects_initialized()) {
++        seed_deci = lv_subject_get_int(&overlay.bed_draft_subject_);
+     } else if (type == helix::HeaterType::Chamber && overlay.printer_state_) {
+         if (auto* subj = overlay.printer_state_->temperature_state()
+                              .get_chamber_effective_target_subject()) {
+@@ -906,6 +977,11 @@ void TempGraphOverlay::keypad_value_cb(float value, void* user_data) {
+     spdlog::debug("[TempGraphOverlay] Custom temperature: {}°C for heater {}", temp,
+                   static_cast<int>(ctx->type));
+ 
++    if (ctx->type == helix::HeaterType::Bed) {
++        ctx->overlay->stage_bed_target(helix::ui::temperature::degrees_to_deci(temp));
++        return;
++    }
++
+     // Send via the controller — resolves the klipper name internally and shows
+     // the standard error toast on failure. A nozzle sends by the klipper name
+     // captured when the keypad opened, which is the picked tool whenever the
+diff --git a/ui_xml/temp_graph_overlay.xml b/ui_xml/temp_graph_overlay.xml
+index a481192ea75644b254014786a98be273ef2eaff0..19850089859771c64ba3b50589fb722a009a38ee 100644
+--- a/ui_xml/temp_graph_overlay.xml
++++ b/ui_xml/temp_graph_overlay.xml
+@@ -5,6 +5,7 @@
+   <!-- Unified Temperature Graph Overlay -->
+   <!-- Shows all temperature sensors with toggle chips and optional heater controls -->
+   <consts>
++    <px name="u1_bed_card_height" value="108"/>
+     <!-- Chamber readout label ("Element"): ONE line of
+          font_body, so long_mode="dots" ellipsizes rather than wrapping the
+          readout row taller (which steals height the 480x272 column does not
+@@ -110,9 +111,49 @@
+          layout. -->
+     <style name="tg_chamber_strip_portrait" width="100%" height="content" layout="flex" flex_flow="column" flex_main_place="start" flex_cross_place="center"/>
+   </styles>
+-  <view name="temp_graph_overlay" extends="overlay_panel" title="温度控制" bg_color="#screen_bg">
++  <view name="temp_graph_overlay" extends="overlay_panel" title="温度控制" title_subject="temp_graph_title" bg_color="#screen_bg">
++    <lv_obj name="bed_quick_content" width="100%" flex_grow="1" flex_flow="column" style_pad_hor="#u1_page_pad" style_pad_ver="#u1_card_gap" style_pad_gap="#u1_card_gap" scrollable="false">
++      <bind_flag_if cond="temp_graph_mode ne 2 or temp_bed_advanced eq 1" flag="hidden"/>
++      <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
++      <lv_obj name="bed_quick_card" width="100%" height="#u1_bed_card_height" flex_flow="row" style_flex_cross_place="center" style_pad_all="#u1_page_pad" style_pad_gap="#u1_page_pad" scrollable="false">
++        <style name="styles.u1_flat_card"/>
++        <lv_obj width="35%" height="100%" flex_flow="column" style_flex_main_place="center" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++          <text_body text="当前温度" style_text_color="#text_muted"/>
++          <temp_display name="bed_quick_current" size="lg" bind_current="bed_temp"/>
++        </lv_obj>
++        <lv_obj width="0" flex_grow="1" height="100%" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="0" scrollable="false">
++          <text_body text="目标温度" style_text_color="#text_muted" height="#u1_text_line"/>
++          <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++            <ui_button name="bed_target_minus" width="#u1_touch_target" height="#u1_touch_target" icon="minus" variant="secondary">
++              <event_cb trigger="clicked" callback="on_u1_bed_adjust" user_data="-5"/>
++            </ui_button>
++            <lv_obj name="bed_target_keypad" width="0" flex_grow="1" height="100%" style_pad_all="0" scrollable="false" clickable="true">
++              <event_cb trigger="clicked" callback="on_temp_graph_custom_clicked"/>
++              <temp_display name="bed_target_draft" size="lg" bind_current="temp_bed_draft" align="center" clickable="false" event_bubble="true"/>
++            </lv_obj>
++            <ui_button name="bed_target_plus" width="#u1_touch_target" height="#u1_touch_target" icon="plus" variant="secondary">
++              <event_cb trigger="clicked" callback="on_u1_bed_adjust" user_data="5"/>
++            </ui_button>
++          </lv_obj>
++        </lv_obj>
++      </lv_obj>
++      <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++        <ui_button name="bed_quick_off" width="0" flex_grow="1" height="100%" text="关闭加热" variant="secondary">
++          <event_cb trigger="clicked" callback="on_u1_bed_off"/>
++        </ui_button>
++        <ui_button name="bed_quick_apply" width="0" flex_grow="1" height="100%" text="应用" variant="primary">
++          <event_cb trigger="clicked" callback="on_u1_bed_apply"/>
++        </ui_button>
++      </lv_obj>
++      <lv_obj name="bed_quick_more" width="100%" height="#u1_touch_target" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#u1_nav_icon_gap" scrollable="false" clickable="true">
++        <event_cb trigger="clicked" callback="on_u1_bed_more"/>
++        <icon src="chart_line" size="sm" clickable="false" event_bubble="true"/>
++        <text_body text="温度曲线与预设" clickable="false" event_bubble="true"/>
++      </lv_obj>
++    </lv_obj>
+     <!-- Content area: graph+chips left, controls right (side-by-side) -->
+     <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" style_pad_top="#u1_page_pad" scrollable="false" style_border_opa="0" style_flex_main_place="space_between" style_pad_gap="#u1_card_gap">
++      <bind_flag_if cond="temp_graph_mode eq 2 and temp_bed_advanced eq 0" flag="hidden"/>
+       <bind_style_if name="tg_content_column" cond="ui_is_portrait"/>
+       <bind_style_if name="tg_content_row" cond="ui_is_portrait" invert="true"/>
+       <!-- Disable content when printer not connected or klippy not ready -->
+@@ -275,6 +316,9 @@
+       <!-- ════════════════════════════════════════════════════════════════ -->
+       <lv_obj name="bed_control_strip" style_pad_all="0" scrollable="true" style_border_opa="0" style_pad_gap="#u1_card_gap" hidden="true" scroll_dir="ver">
+         <bind_flag_if_not_eq subject="temp_graph_mode" flag="hidden" ref_value="2"/>
++        <ui_button name="bed_back_to_draft" width="100%" height="#u1_touch_target" text="返回热床" icon="chevron_left" variant="secondary">
++          <event_cb trigger="clicked" callback="on_u1_bed_back"/>
++        </ui_button>
+         <bind_style_if name="tg_strip_portrait" cond="ui_is_portrait"/>
+         <bind_style_if name="tg_strip_landscape" cond="ui_is_portrait or ui_breakpoint lt 2" invert="true"/>
+         <bind_style_if name="tg_strip_landscape_tiny" cond="ui_is_portrait or ui_breakpoint ge 2" invert="true"/>
+@@ -288,7 +332,7 @@
+               <icon src="pencil" size="xs" variant="secondary" clickable="false" event_bubble="true"/>
+             </lv_obj>
+             <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xxs" style_flex_cross_place="center" style_flex_main_place="space_between" scrollable="false" clickable="false" event_bubble="true">
+-              <temp_display name="bed_temp_display" size="lg" show_target="true" bind_current="bed_temp" bind_target="bed_target" clickable="false" event_bubble="true"/>
++              <temp_display name="bed_temp_display" size="lg" show_target="true" bind_current="bed_temp" bind_target="temp_bed_draft" clickable="false" event_bubble="true"/>
+               <heater_status name="bed_status_msg" state_subject="bed_status_state" duty_subject="bed_status"/>
+             </lv_obj>
+           </ui_card>
+@@ -348,7 +392,7 @@
+           <lv_obj width="content" height="100%" flex_flow="column" style_flex_main_place="center" style_pad_all="0" scrollable="false" style_border_opa="0">
+             <ui_card name="bed_display_card" width="content" height="content" style_radius="#u1_card_radius" flex_flow="column" style_flex_main_place="center" style_flex_cross_place="center" style_pad_gap="#space_xs" style_pad_all="#u1_page_pad" style_bg_color="#card_bg" style_bg_opa="255" style_border_width="1" style_border_color="#border">
+               <heater_icon src="radiator" glyph_name="bed_icon_glyph" size="md"/>
+-              <temp_display name="bed_temp_display" size="md" show_target="true" bind_current="bed_temp" bind_target="bed_target" event_cb="on_temp_graph_custom_clicked"/>
++              <temp_display name="bed_temp_display" size="md" show_target="true" bind_current="bed_temp" bind_target="temp_bed_draft" event_cb="on_temp_graph_custom_clicked"/>
+               <heater_status name="bed_status_msg" state_subject="bed_status_state" duty_subject="bed_status"/>
+               <ui_button name="bed_dry_button" height="#button_height_sm" text="Dry Filament" icon="heat_wave" variant="outline" style_pad_left="#space_sm" style_pad_right="#space_sm" moves_machine="true" hidden="true">
+                 <bind_flag_if_eq subject="printer_can_bed_dry" flag="hidden" ref_value="0"/>

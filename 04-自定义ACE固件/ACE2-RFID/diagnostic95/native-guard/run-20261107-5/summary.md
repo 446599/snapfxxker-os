@@ -1,0 +1,7 @@
+# Run 5 — native preload intermediate evidence
+
+Device ACE0 UID 808780566/17445170/942880330, firmware 95O. Target internal slot2, reader1; reader0 disabled during the test then restored. Baseline context count0 and remaining0; after native preload sample insertion count2, context +12 and CMD13 field11 both 330000 mm; CMD13 SKU SME5DDA105. Raw records in guard-driver-result.json. The reported length may be capped at the label total and is not verified remaining mass or inventory.
+
+Native guard saw preloading then fresh ready/encoder quiet; STOP was acknowledged and state confirmed. An additional fresh STOP succeeded; three samples all lanes ready, four heads false, target last-operation decoder uint64 18446744073709550872 (= −744 signed mm), identical across samples. This is a rollback-phase value, not net feed or total travel. Flags [1,1]; temporary ACE1/2/3 holds all false after cleanup. No extra feed, heating, or tag write was issued.
+
+Source logs include the earlier 120s 1142 requests/7 recovered timeouts, run3 encoder 852 and context reference 438.64/count0, and STOP-reentrancy fix. Run4 reached waiting timeout before insertion and was safely stopped. Single-spool native identification is observed; remaining quantity, same-reader multi-spool attribution and concurrent/cancel scenarios remain unverified. Historic additional-fault markers were retained in the controlled-exploration archive, 120445 and 123310.

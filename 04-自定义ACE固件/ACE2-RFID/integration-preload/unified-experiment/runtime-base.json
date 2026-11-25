@@ -1,0 +1,5 @@
+{
+  "base_image": "8c7286fd64e53c561599ddc4dbbd80fa60a4f9414abbb8451e25f6425947231c",
+  "base_elf": "8194768d78090c1770d7c36f75fa5c2e92b4fbb6ddb8572a6bc1e858c6568f8d",
+  "scope": "Resume unified RF/queue experiment; live lease checks and artifact-bound verification; NOFLASH"
+}

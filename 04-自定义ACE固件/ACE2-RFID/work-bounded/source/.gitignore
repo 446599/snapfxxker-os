@@ -1,0 +1,10 @@
+.build/
+*.bin
+*.swu
+*.elf
+*.o
+__pycache__/
+.*-draft.md
+reference/
+test_decoder
+*.exe

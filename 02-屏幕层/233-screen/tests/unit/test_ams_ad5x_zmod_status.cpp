@@ -1,0 +1,303 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Native ZMOD publishes the IFS state as Klipper objects from ghzserg/z_ad5x#12
+// onward, so `zmod_ifs` / `zmod_color` frames arrive by subscription instead of
+// being scraped out of IFS_STATUS and GET_ZCOLOR output. These tests pin that
+// the pushed frames land through the SAME apply path the macro responses use,
+// including Moonraker's diff frames, which carry only what changed.
+
+#include "../lvgl_test_fixture.h"
+#include "ams_backend_ad5x_ifs.h"
+#include "ams_types.h"
+#include "printer_discovery.h"
+#include "test_helpers/ad5x_ifs_test_access.h"
+#include "test_helpers/backend_harness.h"
+#include "test_helpers/toolchanger_test_helper.h"
+
+#include <string>
+#include <vector>
+
+#include "../catch_amalgamated.hpp"
+
+using helix::Ad5xIfsTestAccess;
+using helix::AmsAction;
+using helix::AmsBackendAd5xIfs;
+
+using json = nlohmann::json;
+
+namespace {
+
+json ifs_frame(int chan, std::vector<bool> ports) {
+    json obj = json::object();
+    obj["Chan"] = chan;
+    obj["State"] = 5;
+    obj["Ports"] = ports;
+    return json{{"zmod_ifs", obj}};
+}
+
+json color_frame() {
+    return json{
+        {"zmod_color",
+         {{"ifs", true},
+          {"channel", 1},
+          {"color_limit", 4},
+          {"slots", json::array({json{{"ID", "1"}, {"Material", "PLA"}, {"HEX", "FF0000"}},
+                                 json{{"ID", "2"}, {"Material", "PETG"}, {"HEX", "00FF00"}},
+                                 json{{"ID", "3"}, {"Material", "ABS"}, {"HEX", "0000FF"}},
+                                 json{{"ID", "4"}, {"Material", "TPU"}, {"HEX", "FFFFFF"}}})}}}};
+}
+
+/// A verbatim frame off an AD5X running 1.7.2-37 with the get_status patch:
+/// lanes 1 and 4 loaded, 2 and 3 empty. The empty lanes are the point - the
+/// firmware fills them with the "?" sentinel and an empty HEX, not with nulls
+/// or omitted keys.
+json live_color_frame() {
+    return json{{"zmod_color",
+                 {{"ifs", true},
+                  {"display", false},
+                  {"channel", 1},
+                  {"color_limit", 4},
+                  {"extruder_sensor", false},
+                  {"slots", json::array({json{{"ID", "1"},
+                                              {"Material", "PLA"},
+                                              {"Color", "bright purple"},
+                                              {"HEX", "A03CF7"},
+                                              {"hasFilament", true}},
+                                         json{{"ID", "2"},
+                                              {"Material", "?"},
+                                              {"Color", ""},
+                                              {"HEX", ""},
+                                              {"hasFilament", false}},
+                                         json{{"ID", "3"},
+                                              {"Material", "?"},
+                                              {"Color", ""},
+                                              {"HEX", ""},
+                                              {"hasFilament", false}},
+                                         json{{"ID", "4"},
+                                              {"Material", "PLA"},
+                                              {"Color", "white"},
+                                              {"HEX", "FFFFFF"},
+                                              {"hasFilament", true}}})}}}};
+}
+
+} // namespace
+
+TEST_CASE("AD5X IFS subscribes to the zmod objects only where they exist",
+          "[ams][ad5x_ifs][zmod_status]") {
+    helix::PrinterDiscovery hw;
+
+    // Stock 1.7.2 and older: neither object implements get_status(), so neither
+    // appears in objects/list and nothing beyond save_variables is asked for.
+    hw.set_printer_objects({"toolhead", "extruder", "save_variables"});
+    auto stock = AmsBackendAd5xIfs::required_status_objects(hw);
+    CHECK(stock == std::vector<std::string>{"save_variables"});
+
+    hw.set_printer_objects({"toolhead", "save_variables", "zmod_ifs", "zmod_color"});
+    auto patched = AmsBackendAd5xIfs::required_status_objects(hw);
+    REQUIRE(patched.size() == 3);
+    CHECK(std::find(patched.begin(), patched.end(), "zmod_ifs") != patched.end());
+    CHECK(std::find(patched.begin(), patched.end(), "zmod_color") != patched.end());
+
+    // Z-Mod's change macro, only where its config defines it.
+    hw.set_printer_objects({"toolhead", "save_variables", "gcode_macro END_CHANGE_FILAMENT"});
+    auto with_macro = AmsBackendAd5xIfs::required_status_objects(hw);
+    CHECK(std::find(with_macro.begin(), with_macro.end(), "gcode_macro END_CHANGE_FILAMENT") !=
+          with_macro.end());
+}
+
+TEST_CASE("AD5X IFS applies a pushed zmod_ifs frame", "[ams][ad5x_ifs][zmod_status]") {
+    helix::test::StartedBackend<AmsBackendAd5xIfs> backend;
+
+    backend.fire_status(ifs_frame(2, {true, true, false, false}));
+
+    CHECK(Ad5xIfsTestAccess::port_presence(backend, 0));
+    CHECK(Ad5xIfsTestAccess::port_presence(backend, 1));
+    CHECK_FALSE(Ad5xIfsTestAccess::port_presence(backend, 2));
+    CHECK_FALSE(Ad5xIfsTestAccess::port_presence(backend, 3));
+
+    // Chan is 1-based and is the seated-channel authority on native ZMOD, where
+    // no tool map exists to launder it through (#1065).
+    CHECK(backend.get_current_slot() == 1);
+}
+
+TEST_CASE("AD5X IFS honors a Ports-only diff frame", "[ams][ad5x_ifs][zmod_status]") {
+    helix::test::StartedBackend<AmsBackendAd5xIfs> backend;
+    backend.fire_status(ifs_frame(1, {true, false, false, false}));
+    REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 3));
+
+    // THE GATE. Moonraker sends only what changed, so a spool going into lane 4
+    // arrives as Ports alone with no Chan. The gcode path only ever saw this
+    // object on a line that already matched "Chan"; requiring it here would
+    // silently drop every presence-only update.
+    backend.fire_status(json{{"zmod_ifs", {{"Ports", json::array({true, false, false, true})}}}});
+
+    CHECK(Ad5xIfsTestAccess::port_presence(backend, 0));
+    CHECK(Ad5xIfsTestAccess::port_presence(backend, 3));
+}
+
+TEST_CASE("AD5X IFS applies pushed zmod_color slots", "[ams][ad5x_ifs][zmod_status]") {
+    helix::test::StartedBackend<AmsBackendAd5xIfs> backend;
+
+    // Presence first: colors are only trusted for lanes the silk sensors see.
+    backend.fire_status(ifs_frame(1, {true, true, true, true}));
+    backend.fire_status(color_frame());
+
+    CHECK(backend.get_slot_info(0).material == "PLA");
+    CHECK(backend.get_slot_info(0).color_rgb == 0xFF0000);
+    CHECK(backend.get_slot_info(1).material == "PETG");
+    CHECK(backend.get_slot_info(1).color_rgb == 0x00FF00);
+    CHECK(backend.get_slot_info(3).material == "TPU");
+    CHECK(backend.get_slot_info(3).color_rgb == 0xFFFFFF);
+}
+
+TEST_CASE("AD5X IFS does not surface the firmware's unset-material sentinel",
+          "[ams][ad5x_ifs][zmod_status]") {
+    helix::test::StartedBackend<AmsBackendAd5xIfs> backend;
+
+    backend.fire_status(ifs_frame(1, {true, false, false, true}));
+    backend.fire_status(live_color_frame());
+
+    CHECK(backend.get_slot_info(0).material == "PLA");
+    CHECK(backend.get_slot_info(0).color_rgb == 0xA03CF7);
+    CHECK(backend.get_slot_info(3).material == "PLA");
+
+    // THE GATE. "?" is the firmware's own "nothing assigned" marker, and the
+    // Adventurer5M.json path already maps it to empty so the UI renders "--".
+    // Passed through, it prints a literal "?" on every empty lane.
+    CHECK(backend.get_slot_info(1).material.empty());
+    CHECK(backend.get_slot_info(2).material.empty());
+}
+
+TEST_CASE("AD5X IFS survives malformed zmod frames", "[ams][ad5x_ifs][zmod_status]") {
+    helix::test::StartedBackend<AmsBackendAd5xIfs> backend;
+    backend.fire_status(ifs_frame(3, {false, false, true, false}));
+    REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 2));
+
+    // get_status() is exception-free by construction upstream, but a truncated
+    // or type-shifted frame must not take the presence view with it.
+    backend.fire_status(json{{"zmod_ifs", "not an object"}});
+    backend.fire_status(json{{"zmod_ifs", {{"Ports", "nope"}}}});
+    backend.fire_status(json{{"zmod_ifs", {{"Ports", json::array({true, false, 7, false})}}}});
+    backend.fire_status(json{{"zmod_color", {{"slots", 42}}}});
+    backend.fire_status(json{{"zmod_color", {{"slots", json::array({json{{"ID", "9"}}})}}}});
+
+    CHECK(Ad5xIfsTestAccess::port_presence(backend, 2));
+    CHECK_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+}
+
+namespace {
+json change_macro_frame(int channel) {
+    return json{{"gcode_macro END_CHANGE_FILAMENT",
+                 {{"last_data",
+                   {{"restore_position", 0},
+                    {"restore_temp", 1},
+                    {"temp", 220},
+                    {"fan_speed", 0.0},
+                    {"channel", channel}}}}}};
+}
+} // namespace
+
+TEST_CASE("AD5X IFS reports a Z-Mod filament change it did not start",
+          "[ams][ad5x_ifs][zmod_status][1714]") {
+    helix::test::StartedBackend<AmsBackendAd5xIfs> backend;
+    backend.fire_status(change_macro_frame(99));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE(backend.can_cancel_operation());
+
+    // The runout auto-swap starts: last_data carries the target tool.
+    backend.fire_status(change_macro_frame(2));
+    CHECK(Ad5xIfsTestAccess::action(backend) == AmsAction::SELECTING);
+    // Its macro holds the G-code queue; Abort would only land after it.
+    CHECK_FALSE(backend.can_cancel_operation());
+
+    // A diff frame that carries the macro without last_data changes nothing.
+    backend.fire_status(json{{"gcode_macro END_CHANGE_FILAMENT", json::object()}});
+    CHECK(Ad5xIfsTestAccess::action(backend) == AmsAction::SELECTING);
+
+    // END_CHANGE_FILAMENT resets it to 99: the change is over.
+    backend.fire_status(change_macro_frame(99));
+    CHECK(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    CHECK(backend.can_cancel_operation());
+}
+
+TEST_CASE("AD5X IFS leaves an action it did not set to its owner",
+          "[ams][ad5x_ifs][zmod_status][1714]") {
+    helix::test::StartedBackend<AmsBackendAd5xIfs> backend;
+
+    // Something else already holds the action: the macro does not overwrite
+    // it, and its return to 99 does not clear it.
+    Ad5xIfsTestAccess::set_action(backend, AmsAction::LOADING);
+    backend.fire_status(change_macro_frame(1));
+    CHECK(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
+    backend.fire_status(change_macro_frame(99));
+    CHECK(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
+}
+
+// Z-Mod takes the print's tool map as printer.print.start's `tools`, each
+// slot as its 1-based IFS port (prestonbrown/helixscreen#2033).
+TEST_CASE("AD5X IFS on Z-Mod starts the print with the tool map",
+          "[ams][ad5x_ifs][print_start_params][2033]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    helix::PrinterDiscovery hw;
+    hw.parse_objects(json::array(
+        {"zmod", "zmod_color", "zmod_ifs", "AFC", "AFC_IFS IFS", "AFC_lane lane1", "extruder"}));
+    backend.set_discovery(hw);
+
+    CHECK(backend.print_start_params({{0, 2}}) == helix::PrintStartParams{{"tools", "3"}});
+    CHECK(backend.print_start_params({{0, 1}, {1, 0}}) ==
+          helix::PrintStartParams{{"tools", "2,1"}});
+    // A slot past the four ports is left to the firmware.
+    CHECK(backend.print_start_params({{0, 4}}).empty());
+    // Where the start carries the map, a pick lands without a plugin table.
+    CHECK(backend.remap_ready());
+}
+
+TEST_CASE("AD5X IFS on Z-Mod without the built-in AFC keeps today's routing",
+          "[ams][ad5x_ifs][print_start_params][2033]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    helix::PrinterDiscovery hw;
+    hw.parse_objects(json::array({"zmod", "zmod_color", "zmod_ifs", "extruder"}));
+    backend.set_discovery(hw);
+
+    // No map at the start, and no picker whose pick nothing would carry.
+    CHECK(backend.print_start_params({{0, 2}}).empty());
+    CHECK_FALSE(backend.remap_ready());
+}
+
+TEST_CASE("AD5X IFS off Z-Mod starts the print with its filename alone",
+          "[ams][ad5x_ifs][print_start_params][2033]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    helix::PrinterDiscovery hw;
+    // The Forge-X standalone IFS module: no zmod_color.
+    hw.parse_objects(json::array({"ifs", "ifs_materials", "extruder"}));
+    backend.set_discovery(hw);
+
+    CHECK(backend.print_start_params({{0, 2}}).empty());
+    CHECK_FALSE(backend.remap_ready());
+}
+
+TEST_CASE("AD5X IFS keeps Z-Mod's AFC lane map in step with a pick",
+          "[ams][ad5x_ifs][tool_mapping][2033]") {
+    helix::test::GcodeCaptureBackend<AmsBackendAd5xIfs> backend;
+    helix::PrinterDiscovery hw;
+    auto objects = json::array({"zmod", "zmod_color", "zmod_ifs", "extruder"});
+
+    SECTION("built-in AFC: SET_MAP names the port's lane") {
+        for (const char* o : {"AFC", "AFC_IFS IFS", "AFC_lane lane3"}) {
+            objects.push_back(o);
+        }
+        hw.parse_objects(objects);
+        backend.set_discovery(hw);
+        REQUIRE(backend.set_tool_mapping(0, 2).success());
+        CHECK(backend.sent() == std::vector<std::string>{"SET_MAP LANE=lane3 MAP=T0"});
+    }
+
+    SECTION("AFC=0: there is no lane map to write") {
+        hw.parse_objects(objects);
+        backend.set_discovery(hw);
+        backend.set_tool_mapping(0, 2);
+        CHECK(backend.sent().empty());
+    }
+}

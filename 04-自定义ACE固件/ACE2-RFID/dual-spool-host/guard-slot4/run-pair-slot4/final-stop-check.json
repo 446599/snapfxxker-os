@@ -1,0 +1,2067 @@
+{
+  "stop": {},
+  "samples": [
+    {
+      "status": {
+        "_status_wire_valid": true,
+        "cont_assist_time": 0.0,
+        "dryer_status": {
+          "duration": 0,
+          "remain_time": 0,
+          "status": "stop",
+          "target_temp": 0
+        },
+        "enable_rfid": 1,
+        "fan_speed": 0,
+        "feed_assist_count": 0,
+        "humidity": 48,
+        "rfid1_enable_raw": 1,
+        "rfid2_enable_raw": 1,
+        "slots": [
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 0,
+            "rfid": 0,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "unknown",
+            "type": ""
+          },
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 1,
+            "rfid": 0,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "empty",
+            "type": ""
+          },
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 2,
+            "rfid": 2,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "ready",
+            "type": ""
+          },
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 3,
+            "rfid": 2,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "ready",
+            "type": ""
+          }
+        ],
+        "status": "ready",
+        "temp": 24
+      },
+      "feed": {
+        "_feed_wire_valid": true,
+        "feed_info": [
+          {
+            "_decoder_present": false,
+            "_wire_valid": true,
+            "decoder": 0,
+            "index": 0,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709551424,
+            "index": 1,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709550870,
+            "index": 2,
+            "length": 787,
+            "steps": 9725
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 351,
+            "index": 3,
+            "length": 1698,
+            "steps": 20975
+          }
+        ]
+      },
+      "key": {
+        "fields": {
+          "1": 21829
+        }
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "guard": {
+        "state": "confirmed",
+        "reason": "native completed",
+        "triggered": [],
+        "event_seq": 4,
+        "stop_count": 1,
+        "target": 3,
+        "stop_inflight": false,
+        "stop_error": null,
+        "gate": true,
+        "lane_states": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "rfid_flags": [
+          1,
+          1
+        ],
+        "timer_max_gap": 0.054615166009170935,
+        "selftest_active": false,
+        "selftest_max_gap": null,
+        "selftest_count": 0,
+        "poll_timeouts": 3,
+        "poll_requests": 1527,
+        "poll_replies": 1523,
+        "last_request_id": 2116,
+        "last_reply_id": 2115,
+        "key_age": 0.09852937499817926,
+        "status_age": 0.1969097089895513,
+        "writer_queue": 0,
+        "callback_count": 7,
+        "poll_events": [
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1510,
+            "id": 2090,
+            "time": 97828.249976148
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1511,
+            "id": 2091,
+            "time": 97828.340376773
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1511,
+            "id": 2091,
+            "time": 97828.348537898
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1512,
+            "id": 2092,
+            "time": 97828.441311523
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1512,
+            "id": 2092,
+            "time": 97828.450886648
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1513,
+            "id": 2093,
+            "time": 97828.543077231
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1513,
+            "id": 2093,
+            "time": 97828.551612273
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1514,
+            "id": 2094,
+            "time": 97828.644067398
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1514,
+            "id": 2094,
+            "time": 97828.653917273
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1515,
+            "id": 2095,
+            "time": 97828.74516169
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1515,
+            "id": 2095,
+            "time": 97828.753680981
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1516,
+            "id": 2096,
+            "time": 97828.84672119
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1516,
+            "id": 2096,
+            "time": 97828.857058731
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1517,
+            "id": 2098,
+            "time": 97828.948339606
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1517,
+            "id": 2098,
+            "time": 97828.956795898
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1518,
+            "id": 2099,
+            "time": 97829.049752106
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1518,
+            "id": 2099,
+            "time": 97829.059755398
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1519,
+            "id": 2100,
+            "time": 97829.150872065
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1519,
+            "id": 2100,
+            "time": 97829.15975244
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1520,
+            "id": 2102,
+            "time": 97829.25130369
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1520,
+            "id": 2102,
+            "time": 97829.261004523
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1521,
+            "id": 2103,
+            "time": 97829.352226773
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1521,
+            "id": 2103,
+            "time": 97829.36097794
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1522,
+            "id": 2105,
+            "time": 97829.453639565
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1522,
+            "id": 2105,
+            "time": 97829.463985273
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1523,
+            "id": 2107,
+            "time": 97829.555764607
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1523,
+            "id": 2107,
+            "time": 97829.564710607
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1524,
+            "id": 2108,
+            "time": 97829.65723544
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1524,
+            "id": 2108,
+            "time": 97829.667145398
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1525,
+            "id": 2110,
+            "time": 97829.759045773
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1525,
+            "id": 2110,
+            "time": 97829.772043607
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1526,
+            "id": 2111,
+            "time": 97829.860155815
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1526,
+            "id": 2111,
+            "time": 97829.870122648
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1527,
+            "id": 2113,
+            "time": 97829.961039815
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1527,
+            "id": 2113,
+            "time": 97829.969671398
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1528,
+            "id": 2114,
+            "time": 97830.061537357
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1528,
+            "id": 2114,
+            "time": 97830.072252023
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1529,
+            "id": 2115,
+            "time": 97830.16260394
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1529,
+            "id": 2115,
+            "time": 97830.170647232
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1530,
+            "id": 2116,
+            "time": 97830.263856899
+          }
+        ],
+        "telemetry_result": null
+      }
+    },
+    {
+      "status": {
+        "_status_wire_valid": true,
+        "cont_assist_time": 0.0,
+        "dryer_status": {
+          "duration": 0,
+          "remain_time": 0,
+          "status": "stop",
+          "target_temp": 0
+        },
+        "enable_rfid": 1,
+        "fan_speed": 0,
+        "feed_assist_count": 0,
+        "humidity": 48,
+        "rfid1_enable_raw": 1,
+        "rfid2_enable_raw": 1,
+        "slots": [
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 0,
+            "rfid": 0,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "unknown",
+            "type": ""
+          },
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 1,
+            "rfid": 0,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "empty",
+            "type": ""
+          },
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 2,
+            "rfid": 2,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "ready",
+            "type": ""
+          },
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 3,
+            "rfid": 2,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "ready",
+            "type": ""
+          }
+        ],
+        "status": "ready",
+        "temp": 24
+      },
+      "feed": {
+        "_feed_wire_valid": true,
+        "feed_info": [
+          {
+            "_decoder_present": false,
+            "_wire_valid": true,
+            "decoder": 0,
+            "index": 0,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709551424,
+            "index": 1,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709550870,
+            "index": 2,
+            "length": 787,
+            "steps": 9725
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 351,
+            "index": 3,
+            "length": 1698,
+            "steps": 20975
+          }
+        ]
+      },
+      "key": {
+        "fields": {
+          "1": 21829
+        }
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "guard": {
+        "state": "confirmed",
+        "reason": "native completed",
+        "triggered": [],
+        "event_seq": 4,
+        "stop_count": 1,
+        "target": 3,
+        "stop_inflight": false,
+        "stop_error": null,
+        "gate": true,
+        "lane_states": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "rfid_flags": [
+          1,
+          1
+        ],
+        "timer_max_gap": 0.054615166009170935,
+        "selftest_active": false,
+        "selftest_max_gap": null,
+        "selftest_count": 0,
+        "poll_timeouts": 3,
+        "poll_requests": 1539,
+        "poll_replies": 1536,
+        "last_request_id": 2132,
+        "last_reply_id": 2132,
+        "key_age": 0.13535316700290423,
+        "status_age": 0.032177834000322036,
+        "writer_queue": 0,
+        "callback_count": 6,
+        "poll_events": [
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1523,
+            "id": 2107,
+            "time": 97829.555764607
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1523,
+            "id": 2107,
+            "time": 97829.564710607
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1524,
+            "id": 2108,
+            "time": 97829.65723544
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1524,
+            "id": 2108,
+            "time": 97829.667145398
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1525,
+            "id": 2110,
+            "time": 97829.759045773
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1525,
+            "id": 2110,
+            "time": 97829.772043607
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1526,
+            "id": 2111,
+            "time": 97829.860155815
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1526,
+            "id": 2111,
+            "time": 97829.870122648
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1527,
+            "id": 2113,
+            "time": 97829.961039815
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1527,
+            "id": 2113,
+            "time": 97829.969671398
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1528,
+            "id": 2114,
+            "time": 97830.061537357
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1528,
+            "id": 2114,
+            "time": 97830.072252023
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1529,
+            "id": 2115,
+            "time": 97830.16260394
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1529,
+            "id": 2115,
+            "time": 97830.170647232
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1530,
+            "id": 2116,
+            "time": 97830.263856899
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1530,
+            "id": 2116,
+            "time": 97830.275407482
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1531,
+            "id": 2117,
+            "time": 97830.364656315
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1531,
+            "id": 2117,
+            "time": 97830.37403369
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1532,
+            "id": 2118,
+            "time": 97830.46602769
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1532,
+            "id": 2118,
+            "time": 97830.47593444
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1533,
+            "id": 2119,
+            "time": 97830.567183232
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1533,
+            "id": 2119,
+            "time": 97830.575680649
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1534,
+            "id": 2120,
+            "time": 97830.668872524
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1534,
+            "id": 2120,
+            "time": 97830.678778399
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1535,
+            "id": 2121,
+            "time": 97830.774572815
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1535,
+            "id": 2121,
+            "time": 97830.783649774
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1536,
+            "id": 2123,
+            "time": 97830.871101941
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1536,
+            "id": 2123,
+            "time": 97830.881728816
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1537,
+            "id": 2126,
+            "time": 97830.972905566
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1537,
+            "id": 2126,
+            "time": 97830.981648857
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1538,
+            "id": 2127,
+            "time": 97831.075824524
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1538,
+            "id": 2127,
+            "time": 97831.086379066
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1539,
+            "id": 2129,
+            "time": 97831.176359691
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1539,
+            "id": 2129,
+            "time": 97831.184674524
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1540,
+            "id": 2130,
+            "time": 97831.277890899
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1540,
+            "id": 2130,
+            "time": 97831.287882524
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1541,
+            "id": 2131,
+            "time": 97831.379070941
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1541,
+            "id": 2131,
+            "time": 97831.387645649
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1542,
+            "id": 2132,
+            "time": 97831.480603607
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1542,
+            "id": 2132,
+            "time": 97831.490820399
+          }
+        ],
+        "telemetry_result": null
+      }
+    },
+    {
+      "status": {
+        "_status_wire_valid": true,
+        "cont_assist_time": 0.0,
+        "dryer_status": {
+          "duration": 0,
+          "remain_time": 0,
+          "status": "stop",
+          "target_temp": 0
+        },
+        "enable_rfid": 1,
+        "fan_speed": 0,
+        "feed_assist_count": 0,
+        "humidity": 48,
+        "rfid1_enable_raw": 1,
+        "rfid2_enable_raw": 1,
+        "slots": [
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 0,
+            "rfid": 0,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "unknown",
+            "type": ""
+          },
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 1,
+            "rfid": 0,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "empty",
+            "type": ""
+          },
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 2,
+            "rfid": 2,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "ready",
+            "type": ""
+          },
+          {
+            "_wire_valid": true,
+            "brand": "",
+            "color": [
+              0,
+              0,
+              0
+            ],
+            "index": 3,
+            "rfid": 2,
+            "sku": "",
+            "slot_status": "ready",
+            "status": "ready",
+            "type": ""
+          }
+        ],
+        "status": "ready",
+        "temp": 24
+      },
+      "feed": {
+        "_feed_wire_valid": true,
+        "feed_info": [
+          {
+            "_decoder_present": false,
+            "_wire_valid": true,
+            "decoder": 0,
+            "index": 0,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709551424,
+            "index": 1,
+            "length": 0,
+            "steps": 6
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 18446744073709550870,
+            "index": 2,
+            "length": 787,
+            "steps": 9725
+          },
+          {
+            "_decoder_present": true,
+            "_wire_valid": true,
+            "decoder": 351,
+            "index": 3,
+            "length": 1698,
+            "steps": 20975
+          }
+        ]
+      },
+      "key": {
+        "fields": {
+          "1": 21829
+        }
+      },
+      "heads": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "guard": {
+        "state": "confirmed",
+        "reason": "native completed",
+        "triggered": [],
+        "event_seq": 4,
+        "stop_count": 1,
+        "target": 3,
+        "stop_inflight": false,
+        "stop_error": null,
+        "gate": true,
+        "lane_states": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ],
+        "rfid_flags": [
+          1,
+          1
+        ],
+        "timer_max_gap": 0.054615166009170935,
+        "selftest_active": false,
+        "selftest_max_gap": null,
+        "selftest_count": 0,
+        "poll_timeouts": 3,
+        "poll_requests": 1551,
+        "poll_replies": 1548,
+        "last_request_id": 2148,
+        "last_reply_id": 2148,
+        "key_age": 0.1731747500016354,
+        "status_age": 0.07095783299882896,
+        "writer_queue": 0,
+        "callback_count": 6,
+        "poll_events": [
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1535,
+            "id": 2121,
+            "time": 97830.774572815
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1535,
+            "id": 2121,
+            "time": 97830.783649774
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1536,
+            "id": 2123,
+            "time": 97830.871101941
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1536,
+            "id": 2123,
+            "time": 97830.881728816
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1537,
+            "id": 2126,
+            "time": 97830.972905566
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1537,
+            "id": 2126,
+            "time": 97830.981648857
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1538,
+            "id": 2127,
+            "time": 97831.075824524
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1538,
+            "id": 2127,
+            "time": 97831.086379066
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1539,
+            "id": 2129,
+            "time": 97831.176359691
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1539,
+            "id": 2129,
+            "time": 97831.184674524
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1540,
+            "id": 2130,
+            "time": 97831.277890899
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1540,
+            "id": 2130,
+            "time": 97831.287882524
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1541,
+            "id": 2131,
+            "time": 97831.379070941
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1541,
+            "id": 2131,
+            "time": 97831.387645649
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1542,
+            "id": 2132,
+            "time": 97831.480603607
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1542,
+            "id": 2132,
+            "time": 97831.490820399
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1543,
+            "id": 2133,
+            "time": 97831.582279774
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1543,
+            "id": 2133,
+            "time": 97831.590678899
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1544,
+            "id": 2134,
+            "time": 97831.683025233
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1544,
+            "id": 2134,
+            "time": 97831.692896983
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1545,
+            "id": 2135,
+            "time": 97831.784734649
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1545,
+            "id": 2135,
+            "time": 97831.793535983
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1546,
+            "id": 2136,
+            "time": 97831.885481566
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1546,
+            "id": 2136,
+            "time": 97831.894782816
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1547,
+            "id": 2138,
+            "time": 97831.987091524
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1547,
+            "id": 2138,
+            "time": 97831.996635149
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1548,
+            "id": 2140,
+            "time": 97832.088479524
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1548,
+            "id": 2140,
+            "time": 97832.099086858
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1549,
+            "id": 2142,
+            "time": 97832.189699524
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1549,
+            "id": 2142,
+            "time": 97832.198716108
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1550,
+            "id": 2143,
+            "time": 97832.290901441
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1550,
+            "id": 2143,
+            "time": 97832.300977358
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1551,
+            "id": 2145,
+            "time": 97832.3920459
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1551,
+            "id": 2145,
+            "time": 97832.4005334
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1552,
+            "id": 2146,
+            "time": 97832.492642025
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1552,
+            "id": 2146,
+            "time": 97832.502920358
+          },
+          {
+            "kind": "request",
+            "method": "get_key_state",
+            "token": 1553,
+            "id": 2147,
+            "time": 97832.593618775
+          },
+          {
+            "kind": "reply",
+            "method": "get_key_state",
+            "token": 1553,
+            "id": 2147,
+            "time": 97832.602648775
+          },
+          {
+            "kind": "request",
+            "method": "get_status",
+            "token": 1554,
+            "id": 2148,
+            "time": 97832.694561983
+          },
+          {
+            "kind": "reply",
+            "method": "get_status",
+            "token": 1554,
+            "id": 2148,
+            "time": 97832.704855775
+          }
+        ],
+        "telemetry_result": null
+      }
+    }
+  ],
+  "state": {
+    "calibration": {
+      "state": "idle",
+      "session_id": 0,
+      "ace": null,
+      "slot": null,
+      "head": null,
+      "scope": "ace",
+      "protocol": "",
+      "commanded_feed_mm": 0,
+      "commanded_retract_mm": 0,
+      "load_length_mm": null,
+      "swap_retract_length_mm": null,
+      "retract_length_mm": null,
+      "decoder_span": null,
+      "feed_decoder_span": null,
+      "return_decoder_span": null,
+      "decoder_return_delta": null,
+      "park_reference": "ace_preload",
+      "tip_position_mm": null,
+      "verify_phase": "unavailable",
+      "verify_position_mm": null,
+      "verify_paused_from": null,
+      "verify_feed_actual_mm": null,
+      "verify_feed_delta_mm": null,
+      "verify_fine_offset_mm": 0,
+      "verify_fine_limit_mm": 50,
+      "verify_decoder_span": null,
+      "verify_move_seq": 0,
+      "toolhead_sensor": null,
+      "max_feed_mm": 0,
+      "speed_mm_s": 0,
+      "previous_load_length": null,
+      "previous_swap_retract_length": null,
+      "previous_retract_length": null,
+      "error": null
+    },
+    "unload_all_active": false,
+    "ace_status": "busy",
+    "ace_temp": 24,
+    "printer_state": "ready",
+    "active_device": 0,
+    "device_count": 4,
+    "mode": "multi",
+    "pickup_cleaning": false,
+    "confirm_commands": false,
+    "airprint_detection": false,
+    "quad_replenish": false,
+    "purge_matrix": true,
+    "preflight_max_copies": 1,
+    "preflight_copies_strict": false,
+    "pa_sync": true,
+    "rc522": true,
+    "tag_write_format": "openspool",
+    "tag_write_uid_sku": true,
+    "tag_op": {
+      "busy": false,
+      "kind": "",
+      "seq": 0,
+      "result": {}
+    },
+    "nozzle_keys": [
+      "0.4_standard"
+    ],
+    "quad_first": true,
+    "auto_dry_masters": [
+      0
+    ],
+    "spools": {},
+    "spool_binding": {},
+    "head_tag_seen": {},
+    "spoolman_url": "",
+    "spoolman_auto": false,
+    "spool_mode": "local",
+    "spoollink": false,
+    "spoollink_agent": false,
+    "ace_head": 3,
+    "ace_heads": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "head_feeder": {
+      "0": false,
+      "1": false,
+      "2": false,
+      "3": false
+    },
+    "head_ace": {
+      "0": 0,
+      "1": 1,
+      "2": 2,
+      "3": 3
+    },
+    "language": "en",
+    "display_index_base": 1,
+    "dryer": {
+      "status": "stop",
+      "target_temp": 0,
+      "duration": 0,
+      "remain_time": 0
+    },
+    "swap_in_progress": false,
+    "aces": [
+      {
+        "idx": 0,
+        "connected": true,
+        "connect_error": "",
+        "protocol": "v2",
+        "model": "ACE 2 Pro",
+        "firmware": "V1.1.97O",
+        "open_fw": true,
+        "tag_read": true,
+        "community_fw": "ace2_open",
+        "status": "busy",
+        "temp": 24,
+        "humidity": 48,
+        "external_humidity": null,
+        "external_humidity_age": null,
+        "external_humidity_fresh": false,
+        "external_humidity_cycle": false,
+        "humidity_source": "internal",
+        "humidity_effective": 48.0,
+        "auto_dry": {
+          "enabled": false,
+          "rh_start": 35.0,
+          "rh_end": 25.0,
+          "temp": 60,
+          "master": -1,
+          "add_time": 60
+        },
+        "auto_dry_running": false,
+        "dryer": {
+          "status": "stop",
+          "target_temp": 0,
+          "duration": 0,
+          "remain_time": 0
+        },
+        "feed_assist": -1,
+        "serial_path": "/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0",
+        "fw_hold": false,
+        "slots": [
+          {
+            "idx": 0,
+            "state": "ready",
+            "raw": 1,
+            "status": "unknown",
+            "rfid": 0,
+            "material": "PETG",
+            "brand": "Generic",
+            "sku": "",
+            "subtype": "Basic",
+            "color": "#ffffff",
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "override"
+          },
+          {
+            "idx": 1,
+            "state": "empty",
+            "raw": 0,
+            "status": "empty",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          },
+          {
+            "idx": 2,
+            "state": "ready",
+            "raw": 1,
+            "status": "ready",
+            "rfid": 1,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": [
+              0,
+              0,
+              0
+            ],
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": null
+          },
+          {
+            "idx": 3,
+            "state": "ready",
+            "raw": 1,
+            "status": "ready",
+            "rfid": 1,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": [
+              0,
+              0,
+              0
+            ],
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": null
+          }
+        ]
+      },
+      {
+        "idx": 1,
+        "connected": false,
+        "connect_error": "no ACE GET_INFO response behind serial endpoint",
+        "protocol": "v2",
+        "model": "",
+        "firmware": "",
+        "open_fw": false,
+        "tag_read": false,
+        "community_fw": "",
+        "status": "unknown",
+        "temp": 0,
+        "humidity": null,
+        "external_humidity": null,
+        "external_humidity_age": null,
+        "external_humidity_fresh": false,
+        "external_humidity_cycle": false,
+        "humidity_source": null,
+        "humidity_effective": null,
+        "auto_dry": {
+          "enabled": false,
+          "rh_start": 45.0,
+          "rh_end": 35.0,
+          "temp": 50,
+          "master": -1,
+          "add_time": 60
+        },
+        "auto_dry_running": false,
+        "dryer": {},
+        "feed_assist": -1,
+        "serial_path": "/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.2",
+        "fw_hold": false,
+        "slots": [
+          {
+            "idx": 0,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          },
+          {
+            "idx": 1,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          },
+          {
+            "idx": 2,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          },
+          {
+            "idx": 3,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          }
+        ]
+      },
+      {
+        "idx": 2,
+        "connected": false,
+        "connect_error": "no ACE GET_INFO response behind serial endpoint",
+        "protocol": "v2",
+        "model": "",
+        "firmware": "",
+        "open_fw": false,
+        "tag_read": false,
+        "community_fw": "",
+        "status": "unknown",
+        "temp": 0,
+        "humidity": null,
+        "external_humidity": null,
+        "external_humidity_age": null,
+        "external_humidity_fresh": false,
+        "external_humidity_cycle": false,
+        "humidity_source": null,
+        "humidity_effective": null,
+        "auto_dry": {
+          "enabled": false,
+          "rh_start": 45.0,
+          "rh_end": 35.0,
+          "temp": 50,
+          "master": -1,
+          "add_time": 60
+        },
+        "auto_dry_running": false,
+        "dryer": {},
+        "feed_assist": -1,
+        "serial_path": "/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.4",
+        "fw_hold": false,
+        "slots": [
+          {
+            "idx": 0,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          },
+          {
+            "idx": 1,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          },
+          {
+            "idx": 2,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          },
+          {
+            "idx": 3,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          }
+        ]
+      },
+      {
+        "idx": 3,
+        "connected": false,
+        "connect_error": "no ACE GET_INFO response behind serial endpoint",
+        "protocol": "v2",
+        "model": "",
+        "firmware": "",
+        "open_fw": false,
+        "tag_read": false,
+        "community_fw": "",
+        "status": "unknown",
+        "temp": 0,
+        "humidity": null,
+        "external_humidity": null,
+        "external_humidity_age": null,
+        "external_humidity_fresh": false,
+        "external_humidity_cycle": false,
+        "humidity_source": null,
+        "humidity_effective": null,
+        "auto_dry": {
+          "enabled": true,
+          "rh_start": 45.0,
+          "rh_end": 35.0,
+          "temp": 50,
+          "master": -1,
+          "add_time": 60
+        },
+        "auto_dry_running": false,
+        "dryer": {},
+        "feed_assist": -1,
+        "serial_path": "/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.6",
+        "fw_hold": false,
+        "slots": [
+          {
+            "idx": 0,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          },
+          {
+            "idx": 1,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          },
+          {
+            "idx": 2,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          },
+          {
+            "idx": 3,
+            "state": "empty",
+            "raw": null,
+            "status": "",
+            "rfid": 0,
+            "material": "",
+            "brand": "",
+            "sku": "",
+            "subtype": "",
+            "color": null,
+            "color_rgb": null,
+            "uid": "",
+            "tag_format": "",
+            "ident_src": "",
+            "rfid_data": null,
+            "source": "empty"
+          }
+        ]
+      }
+    ],
+    "toolheads": [
+      {
+        "idx": 0,
+        "name": "T0",
+        "ace": null,
+        "slot": null,
+        "filament_detected": true,
+        "filament_in_ace": true,
+        "filament_in_toolhead": false,
+        "filament_at_extruder": false,
+        "channel_state": "wait_insert",
+        "channel_error": "ok",
+        "module_exist": true,
+        "color": null,
+        "material": "",
+        "subtype": "",
+        "sku": "",
+        "brand": "",
+        "head_source_known": false,
+        "load_failed": false,
+        "manual": false,
+        "feeder": false,
+        "reader_spool_id": 0,
+        "source": null
+      },
+      {
+        "idx": 1,
+        "name": "T1",
+        "ace": null,
+        "slot": null,
+        "filament_detected": false,
+        "filament_in_ace": false,
+        "filament_in_toolhead": false,
+        "filament_at_extruder": false,
+        "channel_state": "wait_insert",
+        "channel_error": "ok",
+        "module_exist": true,
+        "color": null,
+        "material": "",
+        "subtype": "",
+        "sku": "",
+        "brand": "",
+        "head_source_known": false,
+        "load_failed": false,
+        "manual": false,
+        "feeder": false,
+        "reader_spool_id": 0,
+        "source": null
+      },
+      {
+        "idx": 2,
+        "name": "T2",
+        "ace": null,
+        "slot": null,
+        "filament_detected": true,
+        "filament_in_ace": true,
+        "filament_in_toolhead": false,
+        "filament_at_extruder": false,
+        "channel_state": "wait_insert",
+        "channel_error": "ok",
+        "module_exist": true,
+        "color": null,
+        "material": "",
+        "subtype": "",
+        "sku": "",
+        "brand": "",
+        "head_source_known": false,
+        "load_failed": false,
+        "manual": false,
+        "feeder": false,
+        "reader_spool_id": 0,
+        "source": null
+      },
+      {
+        "idx": 3,
+        "name": "T3",
+        "ace": null,
+        "slot": null,
+        "filament_detected": true,
+        "filament_in_ace": true,
+        "filament_in_toolhead": false,
+        "filament_at_extruder": false,
+        "channel_state": "wait_insert",
+        "channel_error": "ok",
+        "module_exist": true,
+        "color": null,
+        "material": "",
+        "subtype": "",
+        "sku": "",
+        "brand": "",
+        "head_source_known": false,
+        "load_failed": false,
+        "manual": false,
+        "feeder": false,
+        "reader_spool_id": 0,
+        "source": null
+      }
+    ],
+    "wiring": [],
+    "save_variables": {
+      "ace__ace_models": {
+        "/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0-port0": [
+          "ACE 2 Pro",
+          "V1.1.27ht"
+        ],
+        "/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.6": [
+          "ACE 2 Pro",
+          "V1.1.60O"
+        ],
+        "/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0": [
+          "ACE 2 Pro",
+          "V1.1.97O"
+        ]
+      },
+      "ace__active_device": "/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0",
+      "ace__auto_dry": {
+        "0": {
+          "enabled": false,
+          "temp": 60,
+          "rh_end": 25.0,
+          "rh_start": 35.0
+        },
+        "3": {
+          "enabled": true
+        }
+      },
+      "ace__auto_dry_running": [],
+      "ace__head_source": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null
+      },
+      "ace__mode": "multi",
+      "ace__revision": 156,
+      "ace__tag_reads": {
+        "3_3": {
+          "uid": "35E665E5",
+          "fmt": "mifare"
+        },
+        "3_2": {
+          "uid": "E5DDA105",
+          "fmt": "mifare"
+        },
+        "3_1": {
+          "uid": "55F328E6",
+          "fmt": "mifare"
+        }
+      }
+    },
+    "bg_swap": {
+      "available": true,
+      "version": "v0.9",
+      "enabled_heads": [],
+      "busy": []
+    },
+    "tipform": {
+      "available": true,
+      "mode": "custom",
+      "tables": [
+        "asa",
+        "petg",
+        "petg-cf",
+        "petg-hf",
+        "pla"
+      ]
+    },
+    "preflight_inbox": {
+      "pending": false,
+      "name": null,
+      "size": 0,
+      "ts": 0
+    }
+  }
+}

@@ -1,0 +1,92 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- CFS Purge Chute Calibration Overlay (K1 stock dialect) -->
+<!-- Guided flow: home, prepare, XY jog, save. Choreography per issue 1282. -->
+<component>
+  <view name="cfs_chute_calibration_overlay" extends="overlay_panel" title="Purge Chute Calibration" bg_color="#screen_bg">
+    <!-- Content Area -->
+    <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" scrollable="false" flex_flow="column" style_pad_gap="#u1_card_gap">
+      <!-- ================================================================== -->
+      <!-- STATE: IDLE (0) - Instructions and Start Button -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_idle" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start" style_pad_gap="#space_sm" scrollable="true" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius" scroll_dir="ver">
+        <bind_flag_if_not_eq subject="cfs_chute_state" flag="hidden" ref_value="0"/>
+        <text_small width="100%" text="Line the nozzle up with the purge chute so purged filament drops straight in." style_text_align="left" long_mode="wrap"/>
+        <lv_obj width="90%" height="content" style_bg_color="#section_bg_color" style_radius="#border_radius" style_pad_all="#space_lg" flex_flow="column" style_pad_gap="#space_xs">
+          <text_small width="100%" text="1. Printer homes all axes (~1 minute)"/>
+          <text_small width="100%" text="2. Jog X and Y until the nozzle is centered over the chute opening"/>
+          <text_small width="100%" text="3. Save the position"/>
+          <text_small width="100%" text="Keep hands clear. The printer moves on its own." style_text_color="#text_muted"/>
+        </lv_obj>
+        <ui_button name="btn_chute_start" width="60%" text="Start Calibration" moves_machine="true" style_min_height="#u1_touch_target">
+          <event_cb trigger="clicked" callback="on_chute_start_clicked"/>
+        </ui_button>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- STATE: HOMING (1) - XYZ_ZERO then PREPARE in flight -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_homing" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start" style_pad_gap="#space_sm" scrollable="true" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius" scroll_dir="ver">
+        <bind_flag_if_not_eq subject="cfs_chute_state" flag="hidden" ref_value="1"/>
+        <spinner size="lg"/>
+        <text_heading width="100%" text="Homing..." style_text_align="left" long_mode="wrap"/>
+        <text_small width="100%" text="Please wait while the printer homes and moves to the start position." style_text_align="left" long_mode="wrap"/>
+        <ui_button name="btn_chute_cancel_homing" width="40%" text="Cancel" variant="danger" style_min_height="#u1_touch_target">
+          <event_cb trigger="clicked" callback="on_chute_cancel_clicked"/>
+        </ui_button>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- STATE: ADJUSTING (2) - the Motion panel's jog pad and mode row -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_adjusting" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" flex_flow="row" style_pad_gap="#space_md" scrollable="false" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius">
+        <bind_flag_if_not_eq subject="cfs_chute_state" flag="hidden" ref_value="2"/>
+        <!-- CfsChuteCalibrationOverlay::create() adds the jog pad here and keeps it square -->
+        <lv_obj name="chute_jog_wrapper" width="0" height="100%" flex_grow="1" style_pad_all="0" style_border_opa="0" style_bg_opa="0" scrollable="false">
+          <event_cb trigger="size_changed" callback="on_chute_jog_resized"/>
+        </lv_obj>
+        <lv_obj name="chute_controls" width="40%" height="100%" style_pad_all="0" flex_flow="column" style_pad_gap="#space_sm" scrollable="false">
+          <!-- Live toolhead position: the values Save writes -->
+          <lv_obj width="100%" height="content" style_bg_color="#section_bg_color" style_radius="#border_radius" style_pad_hor="#space_md" style_pad_ver="#space_xs" flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center" scrollable="false">
+            <text_small text="Toolhead X" style_text_color="#text_muted"/>
+            <text_body name="chute_x_display" bind_text="cfs_chute_x_display"/>
+          </lv_obj>
+          <lv_obj width="100%" height="content" style_bg_color="#section_bg_color" style_radius="#border_radius" style_pad_hor="#space_md" style_pad_ver="#space_xs" flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center" scrollable="false">
+            <text_small text="Toolhead Y" style_text_color="#text_muted"/>
+            <text_body name="chute_y_display" bind_text="cfs_chute_y_display"/>
+          </lv_obj>
+          <motion_jog_modes name="chute_jog_modes" fine_active="cfs_chute_mode_fine_active" coarse_active="cfs_chute_mode_coarse_active" fine_callback="on_chute_mode_fine" coarse_callback="on_chute_mode_coarse" turbo_hidden="true"/>
+          <lv_obj width="100%" height="0" flex_grow="1" style_pad_all="0" style_border_opa="0" style_bg_opa="0" scrollable="false" clickable="false"/>
+          <lv_obj width="100%" height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#space_sm" scrollable="false">
+            <ui_button name="btn_chute_cancel_adjust" width="0" flex_grow="1" text="Cancel" variant="danger" style_min_height="#u1_touch_target">
+              <event_cb trigger="clicked" callback="on_chute_cancel_clicked"/>
+            </ui_button>
+            <ui_button name="btn_chute_save" width="0" flex_grow="1" text="Save" variant="primary" moves_machine="true" style_min_height="#u1_touch_target">
+              <event_cb trigger="clicked" callback="on_chute_save_clicked"/>
+            </ui_button>
+          </lv_obj>
+        </lv_obj>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- STATE: SAVING (3) - SAVE_POS + Y_SAFE in flight -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_saving" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start" style_pad_gap="#space_sm" scrollable="true" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius" scroll_dir="ver">
+        <bind_flag_if_not_eq subject="cfs_chute_state" flag="hidden" ref_value="3"/>
+        <spinner size="lg"/>
+        <text_heading width="100%" text="Saving..." style_text_align="left" long_mode="wrap"/>
+        <text_small width="100%" text="Saving the position and parking the toolhead." style_text_align="left" long_mode="wrap"/>
+      </lv_obj>
+      <!-- ================================================================== -->
+      <!-- STATE: DONE (4) -->
+      <!-- ================================================================== -->
+      <lv_obj name="state_done" width="100%" flex_grow="1" style_pad_all="#u1_page_pad" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start" style_pad_gap="#space_sm" scrollable="true" style_bg_color="#card_bg" style_bg_opa="255" style_border_color="#border" style_border_width="1" style_radius="#u1_card_radius" scroll_dir="ver">
+        <bind_flag_if_not_eq subject="cfs_chute_state" flag="hidden" ref_value="4"/>
+        <icon src="check_circle" size="lg" variant="success"/>
+        <text_heading width="100%" text="Calibration Saved" style_text_align="left" long_mode="wrap"/>
+        <text_small name="chute_saved_result" width="100%" bind_text="cfs_chute_saved_pos" style_text_align="left" long_mode="wrap"/>
+        <ui_button name="btn_chute_done" width="40%" text="Done" style_min_height="#u1_touch_target">
+          <event_cb trigger="clicked" callback="on_chute_done_clicked"/>
+        </ui_button>
+      </lv_obj>
+    </lv_obj>
+  </view>
+</component>

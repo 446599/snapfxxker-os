@@ -1,0 +1,50 @@
+compile-core: 
+host-core: PASS 31540 assertions; full transfer 222 status polls; exhaustive SPI-fault prefix and budget cutoffs
+compile-core-san: 
+host-core-san: PASS 31540 assertions; full transfer 222 status polls; exhaustive SPI-fault prefix and budget cutoffs
+compile-bridge: 
+host-bridge: PASS 31540 assertions; full transfer 222 status polls; exhaustive SPI-fault prefix and budget cutoffs
+PASS 34624 total core+bridge assertions; stock originals are explicit host doubles, no firmware hooks installed
+compile-bridge-san: 
+host-bridge-san: PASS 31540 assertions; full transfer 222 status polls; exhaustive SPI-fault prefix and budget cutoffs
+PASS 34624 total core+bridge assertions; stock originals are explicit host doubles, no firmware hooks installed
+arm-version: arm-none-eabi-gcc (15:14.2.rel1-1) 14.2.1 20241119
+Copyright (C) 2024 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+arm-bounded_rc522: 
+arm-stock_bounded_bridge: 
+production-compile-refused: In file included from /workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/stock_bounded_bridge.c:1:
+/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/source/firmware/stock_bounded_bridge.h:7:2: error: #error "Stock bounded bridge lacks verified SRAM/owner/STOP binding. Offline tests only."
+    7 | #error "Stock bounded bridge lacks verified SRAM/owner/STOP binding. Offline tests only."
+      |  ^~~~~
+arm-thunks: 
+arm-relocatable-only: 
+arm-unresolved: U br_platform_commit_valid
+         U br_platform_denied
+         U br_platform_enter
+         U br_platform_leave
+         U br_platform_transaction
+         U memset
+         U stock_select_resume
+arm-size: text	   data	    bss	    dec	    hex	filename
+   1688	      0	      0	   1688	    698	/workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/arm/current/OFFLINE-UNLINKED-INTEGRATION.o
+arm-disassembly: :
+ 678:	b510      	push	{r4, lr}
+ 67a:	b084      	sub	sp, #16
+ 67c:	9c06      	ldr	r4, [sp, #24]
+ 67e:	9400      	str	r4, [sp, #0]
+ 680:	9c07      	ldr	r4, [sp, #28]
+ 682:	9401      	str	r4, [sp, #4]
+ 684:	f8cd e008 	str.w	lr, [sp, #8]
+ 688:	f7ff fffe 	bl	614 <br_stock_transceive_checked>
+			688: R_ARM_THM_CALL	br_stock_transceive_checked
+ 68c:	b004      	add	sp, #16
+ 68e:	bd10      	pop	{r4, pc}
+
+00000690 <br_stock_select_original>:
+ 690:	b5f0      	push	{r4, r5, r6, r7, lr}
+ 692:	b085      	sub	sp, #20
+ 694:	f7ff bffe 	b.w	0 <stock_select_resume>
+			694: R_ARM_THM_JUMP24	stock_select_resume
+Current source/object/log manifest: /workspace/scratch/f283fdd55202/ace2-open-build/work-bounded/output/current/manifest.json

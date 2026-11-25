@@ -1,0 +1,12 @@
+{
+  "baseline": "3cf7eff27fb640781ef0bbccf03742e54a9e2117",
+  "branch": "codex/ui5-review-20261110",
+  "commit": "171ec32ec623414c9929ac0359f4d475964e68ba",
+  "patch_path": "/workspace/scratch/4ec47d1a106a/snapfxxker-os/bundles/native-ui/patches/0007-u1-ui5-review.patch",
+  "patch_bytes": 398563,
+  "patch_sha256": "76b13794ec269adddaa672e445d5c1ecfc86c2f87b953db88c326416da1c90f9",
+  "worktree_status": "",
+  "remote_publish_performed": false,
+  "firmware_release_performed": false,
+  "similarity_acceptance": "not certified; reference pixel baseline unavailable"
+}

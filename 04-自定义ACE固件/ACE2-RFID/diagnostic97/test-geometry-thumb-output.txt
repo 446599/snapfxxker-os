@@ -1,0 +1,10 @@
+C=280 native=10000 expected=10000.00 count=1
+C=285 native=10000 expected=10000.00 count=1
+C=300 native=16888 expected=16888.26 count=1
+C=400 native=109050 expected=109050.57 count=1
+C=500 native=227664 expected=227664.94 count=1
+C=550 native=304991 expected=304991.71 count=1
+C=599 native=330000 expected=330000.00 count=1
+PASS: 650+ actual Thumb calls; callee-saved registers/stack, context write bounds, threshold and cap preserved
+PASS: float32 values bracketing every 1.75 mm layer transition
+PASS: three native visits preserve insertion sort, count, first result and reference update

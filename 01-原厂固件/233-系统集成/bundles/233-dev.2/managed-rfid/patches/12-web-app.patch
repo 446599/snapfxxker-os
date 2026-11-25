@@ -1,0 +1,319 @@
+--- a/web/frontend/app.js
++++ b/web/frontend/app.js
+@@ -207,6 +207,7 @@
+       tag_write_format: "openspool",
+       tag_write_uid_sku: true,
+       tag_op: {busy: false, kind: "", seq: 0, result: null},
++      location_hold: {rfid_routes: [], rfid_routes_valid: true},
+       slot_action: {state: "idle", seq: 0},
+       nozzle_keys: [],
+       quad_replenish: false,
+@@ -384,6 +385,8 @@
+       state.tag_write_uid_sku = (s.tag_write_uid_sku === undefined)
+         ? true : !!s.tag_write_uid_sku;
+       state.slot_action = s.slot_action || {state: "idle", seq: 0};
++      state.location_hold = s.location_hold && typeof s.location_hold === "object"
++        ? s.location_hold : {rfid_routes: [], rfid_routes_valid: true};
+       state.tag_op = (s.tag_op && typeof s.tag_op === "object")
+         ? {busy: !!s.tag_op.busy, kind: String(s.tag_op.kind || ""),
+            ace: s.tag_op.ace, slot: s.tag_op.slot,
+@@ -446,25 +449,29 @@
+       }
+       if (!s.error && s.klippy !== 'disconnected' && Array.isArray(s.aces) && Array.isArray(s.toolheads)) window.dispatchEvent(new CustomEvent('multiace-state-received'));
+     }
+-    async function reloadState() {
++    async function reloadState(signal) {
+       try {
+-        const r = await fetch(`${API}/state`);
++        const r = await fetch(`${API}/state`, signal ? {signal} : undefined);
+         if (!r.ok) throw new Error(`HTTP ${r.status}`);
+         const j = await r.json();
+-        loadError.value = j.error || "";
+-        applyState(j);
++        if (!signal?.aborted) {
++          loadError.value = j.error || "";
++          applyState(j);
++        }
+       } catch (e) {
+-        loadError.value = String(e);
++        if (!signal?.aborted) loadError.value = String(e);
+       } finally {
+         hideSplash();
+       }
+     }
+     const macroLog = ref("");
+     let _macroLogTimer = null;
+-    function setMacroLog(msg) {
++    let _tagReadUnknown = null;
++    function setMacroLog(msg, persistent = false) {
++      _tagReadUnknown = null;
+       macroLog.value = msg || "";
+       if (_macroLogTimer) { clearTimeout(_macroLogTimer); _macroLogTimer = null; }
+-      if (msg) {
++      if (msg && !persistent) {
+         _macroLogTimer = setTimeout(() => {
+           macroLog.value = "";
+           _macroLogTimer = null;
+@@ -1654,6 +1661,7 @@
+       return window.confirm(t(key, params || {}));
+     }
+     function loadAll(idx) {
++      if (rfidAnyHold()) { setMacroLog("有耗材位置待核，请先退出对应 ACE 后重新插入", true); return; }
+       if (_blockIfPrinting()) return;
+       if (!_confirmCmd("ui.confirm.load_all", {ace: dispIdx(idx)})) return;
+       run("ACE_SWITCH", {TARGET: idx, AUTOLOAD: 1});
+@@ -2194,7 +2202,7 @@
+       if (!key || key.startsWith("h")) return null;
+       const [a, sl] = key.split("_").map(Number);
+       if (!Number.isFinite(a) || !Number.isFinite(sl)) return null;
+-      if (slotIsEmpty(a, sl)) return null;
++      if (slotIsEmpty(a, sl) || rfidHoldForRoute(a, sl)) return null;
+       const h = (state.mode === "head") ? aceHeadForAce(a) : sl;
+       if (h === null || h === undefined) return null;
+       const th = (state.toolheads || []).find(tt => tt.idx === h);
+@@ -3136,7 +3144,7 @@
+       await spoolMacro("ACE_SET_SPOOLMAN", {MODE: v});
+     }
+     const spoolAddBusy = ref(false);
+-    async function spoolMacro(name, args) {
++    async function spoolMacro(name, args, detailed = false, signal) {
+       // One ACE_SPOOL_ADD at a time: /api/macro blocks while the printer
+       // runs long gcode (a swap holds the script queue ~150s), so every
+       // extra + click would pile up behind it and each create a fresh spool
+@@ -3150,24 +3158,27 @@
+         }
+         spoolAddBusy.value = true;
+       }
+-      let ok = false;
++      let ok = false, outcome = "unknown";
+       try {
+         const r = await fetch(`${API}/macro`, {
+           method: "POST",
+           headers: {"Content-Type": "application/json"},
+           body: JSON.stringify({name, args}),
++          ...(signal ? {signal} : {}),
+         });
++        if (signal?.aborted) return detailed ? {ok: false, outcome: "unknown"} : false;
+         ok = r.ok;
++        outcome = ok ? "accepted" : (r.status >= 400 && r.status < 500 && r.status !== 408 ? "rejected" : "unknown");
+         if (!ok) {
+           const body = await r.json().catch(() => ({}));
+           const detail = String(body.detail || `HTTP ${r.status}`);
+           // Klipper's error text carries the reason; strip the wrapper so
+           // the banner shows the sentence, not a JSON envelope.
+           const m = detail.match(/[Ee]rror on '[^']*':\s*(.*)/);
+-          setMacroLog(`${name}: ${(m ? m[1] : detail).slice(0, 200)}`);
++          if (!signal?.aborted) setMacroLog(`${name}: ${(m ? m[1] : detail).slice(0, 200)}`);
+         }
+       } catch (e) {
+-        setMacroLog(`${name}: ${e}`);
++        if (!signal?.aborted) setMacroLog(`${name}: ${e}`);
+       }
+       // AWAITED on purpose. Fire-and-forget here is what made edited fields
+       // flip: the caller released its edit buffer as soon as this returned,
+@@ -3175,11 +3186,11 @@
+       // value for a moment and only then the accepted one. Callers may rely
+       // on the state being current when this resolves.
+       try {
+-        await reloadState();
++        await reloadState(signal);
+       } finally {
+         if (name === "ACE_SPOOL_ADD") spoolAddBusy.value = false;
+       }
+-      return ok;
++      return detailed ? {ok, outcome} : ok;
+     }
+     // Edit mode: the same form edits an existing entry (spoolEditId set).
+     const spoolEditId = ref("");
+@@ -3495,7 +3506,7 @@
+     // refusal, verify) are the real safety; this only gates the obvious.
+     async function tagWrite() {
+       const isHead = picker.head !== null && picker.head !== undefined;
+-      if (isHead || picker.ace === null || picker.ace === undefined) return;
++      if (isHead || picker.ace === null || picker.ace === undefined || rfidHoldForRoute(picker.ace, picker.slot)) return;
+       const material = (picker.material || "").trim();
+       if (!material) return;
+       if (!window.confirm(t("ui.dialog.write_tag_confirm",
+@@ -3519,6 +3530,50 @@
+     // missed insert read can be retried from the web).
+     // Same command the console uses; outcome lands in the picker bar.
+     const slotActionPending = ref(false);
++    function rfidSlotState(ace, slot) {
++      const device = (state.aces || []).find(a => a.idx === ace);
++      return device && (device.slots || []).find(s => s.idx === slot);
++    }
++    function rfidHoldForRoute(ace, slot) {
++      const hold = state.location_hold;
++      if (hold && hold.rfid_routes_valid === false) return true;
++      const entry = rfidSlotState(ace, slot);
++      if (!entry) return !!(hold && Array.isArray(hold.rfid_routes) && hold.rfid_routes.length);
++      const a = entry.position_unconfirmed, b = entry.eject_recovery_allowed;
++      if (a === undefined && b === undefined) return false; // older backend
++      if (typeof a !== "boolean" || typeof b !== "boolean" || (b && !a)) return true;
++      return a;
++    }
++    function rfidHoldForHead(head) {
++      if (state.location_hold?.rfid_routes_valid === false) return true;
++      const item = (state.toolheads || []).find(t => t.idx === head);
++      if (!item) return rfidAnyHold();
++      if (item.position_unconfirmed === undefined) return false; // older backend
++      return typeof item.position_unconfirmed !== "boolean" || item.position_unconfirmed;
++    }
++    function rfidRecoveryAllowed(ace, slot) {
++      const device = (state.aces || []).find(a => a.idx === ace);
++      const entry = rfidSlotState(ace, slot);
++      return !!device && device.connected === true && !!entry &&
++        entry.position_unconfirmed === true && entry.eject_recovery_allowed === true &&
++        state.location_hold?.rfid_routes_valid !== false;
++    }
++    function rfidHoldMessage(ace, slot) {
++      const h = state.location_hold;
++      if (!h || h.rfid_routes_valid === false)
++        return "耗材位置状态无法确认，请检查设备后重试";
++      const routes = Array.isArray(h.rfid_routes) ? h.rfid_routes : [];
++      const names = routes.map(r => Number.isInteger(r.ace_index)
++        ? `ACE ${dispIdx(r.ace_index)} 槽 ${dispIdx(r.slot)}` : `原 ACE 的槽 ${dispIdx(r.slot)}`);
++      return names.length ? `共用料路位置待核：请将 ${names.join("、")} 退出 ACE 后重新插入；如喷头有料或来源未知，请先确认喷头状态和来源`
++        : "耗材位置待核，请检查原 ACE 后退出并重新插入";
++    }
++    function rfidAnyHold() {
++      const h = state.location_hold;
++      return (!!h && (h.rfid_routes_valid === false || (Array.isArray(h.rfid_routes) && h.rfid_routes.length > 0))) ||
++        (state.aces || []).some(a => (a.slots || []).some(slot => rfidHoldForRoute(a.idx, slot.idx))) ||
++        (state.toolheads || []).some(head => rfidHoldForHead(head.idx));
++    }
+     function slotActionHeadBlocked(ace, slot, kind) {
+       const heads = state.toolheads || [];
+       if (heads.length !== 4) return true;
+@@ -3530,13 +3585,17 @@
+       });
+     }
+     function slotActionDisabled(ace, slot, kind = "rfid") {
+-      return slotActionPending.value || cmdQueue.value.length > 0 || cmdQueueRunning || ace.connected !== true || slot.state !== "ready" ||
++      const held = rfidHoldForRoute(ace.idx, slot.idx);
++      const recovery = kind === "eject" && rfidRecoveryAllowed(ace.idx, slot.idx);
++      return (held && !recovery) || slotActionPending.value || cmdQueue.value.length > 0 || cmdQueueRunning || ace.connected !== true ||
++        (slot.state !== "ready" && !(recovery && slot.state === "empty")) ||
+         !["v2", "V2"].includes(ace.protocol) || slotActionHeadBlocked(ace, slot, kind) ||
+         !["idle", "ready", "standby", "complete", "cancelled"].includes(state.printer_state) ||
+         state.swap_in_progress || !!state.tag_op?.busy || state.slot_action?.state === "running" ||
+         !["idle", "complete", "completed", "cancelled", "error"].includes(state.calibration?.state);
+     }
+     function slotBlockReason(ace, slot) {
++      if (rfidHoldForRoute(ace.idx, slot.idx)) return rfidHoldMessage(ace.idx, slot.idx);
+       if (ace.connected !== true) return "设备离线";
+       if (!["v2", "V2"].includes(ace.protocol)) return "目前仅支持 ACE 2";
+       if (slot.state !== "ready") return slot.state === "empty" ? "料槽为空" : "料槽状态未知";
+@@ -3549,7 +3608,7 @@
+     async function slotAction(ace, slot, kind) {
+       if (slotActionDisabled(ace, slot, kind)) return;
+       const text = kind === "eject"
+-        ? "将耗材退到 ACE 入口传感器为空，最多退 2000 mm。请先确保目标耗材已从喷头卸载。继续？"
++        ? "将耗材退出 ACE，入口传感器确认退空后停止。请先确保目标耗材已从喷头卸载。继续？"
+         : "识别会转动目标料槽并尝试回退，以估算余量，不会写入标签。继续？";
+       if (!window.confirm(text)) return;
+       slotActionPending.value = true;
+@@ -3575,10 +3634,61 @@
+       if (r && r.kind === "read" && r.ace === ace.idx && r.slot === slot.idx) return r.msg || (r.ok ? "识别完成" : "识别失败");
+       return "";
+     }
++    function markTagReadUnknown(ace, slot, seq) {
++      const message = `ACE ${dispIdx(ace)} 槽 ${dispIdx(slot)} 的读取结果尚未确认，请查看当前状态后再决定是否重试。`;
++      setMacroLog(message, true);
++      _tagReadUnknown = {ace, slot, seq, message};
++    }
++    function pickerTagReadDisabled() {
++      const ace = (state.aces || []).find(a => a.idx === picker.ace);
++      const slot = ace && (ace.slots || []).find(s => s.idx === picker.slot);
++      return picker.head !== null && picker.head !== undefined ||
++        !ace || !slot || !aceTagRead(picker.ace) || ace.connected !== true ||
++        !slotOccupied(picker.ace, picker.slot) || rfidHoldForRoute(picker.ace, picker.slot) || slotActionPending.value ||
++        cmdQueue.value.length > 0 || cmdQueueRunning ||
++        slotActionHeadBlocked(ace, slot, "rfid") ||
++        !["idle", "ready", "standby", "complete", "cancelled"].includes(state.printer_state) ||
++        state.swap_in_progress || !!state.tag_op?.busy || state.slot_action?.state === "running" ||
++        !["idle", "complete", "completed", "cancelled", "error"].includes(state.calibration?.state);
++    }
+     async function tagRead() {
+-      const isHead = picker.head !== null && picker.head !== undefined;
+-      if (isHead || picker.ace === null || picker.ace === undefined) return;
+-      await spoolMacro("ACE_TAG_READ", {ACE: picker.ace, SLOT: picker.slot});
++      if (pickerTagReadDisabled()) return;
++      const ace = picker.ace, slot = picker.slot;
++      if (!window.confirm("识别会转动目标料槽并尝试回退。继续？")) return;
++      const seq = Number(state.tag_op?.seq || 0);
++      slotActionPending.value = true;
++      const bounded = async (task, ms, fallback) => {
++        const controller = new AbortController();
++        let timer;
++        try {
++          return await Promise.race([
++            task(controller.signal),
++            new Promise(resolve => { timer = setTimeout(() => {
++              controller.abort(); resolve(fallback);
++            }, ms); })
++          ]);
++        } finally { clearTimeout(timer); }
++      };
++      try {
++        // An aborted client request does not cancel or undo server work.
++        // Never resend it automatically; refresh for a short, bounded window.
++        const result = await bounded(
++          signal => spoolMacro("ACE_TAG_READ", {ACE: ace, SLOT: slot}, true, signal),
++          8000, {ok: false, outcome: "unknown"});
++        if (result.outcome === "rejected") return;
++        for (let attempt = 0; attempt < 3; attempt++) {
++          await bounded(signal => reloadState(signal), 1500, null);
++          if (Number(state.tag_op?.seq || 0) > seq) break;
++          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500));
++        }
++        // A later task can replace this one's state. Any newer sequence ends
++        // the local wait; the live busy guards govern subsequent actions.
++        if (!(Number(state.tag_op?.seq || 0) > seq && state.tag_op?.kind === "read" &&
++              state.tag_op?.ace === ace && state.tag_op?.slot === slot))
++          markTagReadUnknown(ace, slot, seq);
++      } finally {
++        slotActionPending.value = false;
++      }
+     }
+     // Outcome of the last tag WRITE or READ, shown in the picker bar for a
+     // while after the op (success in the bar, not as an
+@@ -3592,6 +3702,12 @@
+       return r;
+     });
+     watch(() => tagWriteOutcome.value && tagWriteOutcome.value.seq, (seq) => {
++      const result = tagWriteOutcome.value, pending = _tagReadUnknown;
++      if (result && pending && result.kind === "read" && result.ace === pending.ace &&
++          result.slot === pending.slot && result.seq > pending.seq) {
++        if (macroLog.value === pending.message) setMacroLog("");
++        else _tagReadUnknown = null;
++      }
+       if (!seq) return;
+       setTimeout(() => { if (_tagWriteSeen.value < seq) _tagWriteSeen.value = seq; },
+                  12000);
+@@ -3862,6 +3978,7 @@
+       return out;
+     });
+     function loadSlot(aceIdx, slotIdx) {
++      if (rfidHoldForRoute(aceIdx, slotIdx)) { setMacroLog(rfidHoldMessage(aceIdx, slotIdx), true); return; }
+       if (state.slot_action?.state === "running") { setMacroLog("料槽退出正在进行，请等待停止确认"); return; }
+       if (_blockIfPrinting()) return;
+       // Before anything is enqueued: an empty source slot cannot load, and
+@@ -3918,6 +4035,7 @@
+     // Load a head without ACE (feeder, or manual in multi) via its native
+     // stock side feeder.
+     function loadFeederHead(h) {
++      if (rfidHoldForHead(h)) { setMacroLog(rfidHoldMessage(null, null), true); return; }
+       if (_blockIfPrinting()) return;
+       if (!_confirmCmd("ui.confirm.load_head", {head: dispIdx(h)})) return;
+       enqueue("ACE_LOAD_HEAD", {HEAD: h});
+@@ -7449,7 +7567,8 @@
+       smRowTaken, smRowWhere, spoolWeightDialog, spoolSort, spoolNewTitle,
+       tagWrite,      tagWriteFormat, tagWriteUidSku, setTagWrite, slotOccupied,
+       slotAction, stopSlotAction, stopSlotRfid, slotActionDisabled, slotActionText, slotBlockReason,
+-      tagWriteOutcome, dismissTagWriteOutcome, tagRead, aceOpenFw, aceTagRead,
++      rfidHoldForRoute, rfidHoldForHead, rfidRecoveryAllowed, rfidHoldMessage, rfidAnyHold,
++      tagWriteOutcome, dismissTagWriteOutcome, tagRead, pickerTagReadDisabled, aceOpenFw, aceTagRead,
+       paDlg, paClip, spoolPaDialog, paRowDel, paAddRow, paCopy, paPaste,
+       paCalibrate, paCanCalibrate, paCalibrating, paLoading, paSpoolHead, paSpoolLoadPlan,
+       paSave, paDirty, paKeyValid, paValueValid, paKeyOptions, pickerPaDialog,

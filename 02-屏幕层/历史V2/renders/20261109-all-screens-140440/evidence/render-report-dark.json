@@ -1,0 +1,198 @@
+[
+  {
+    "key": "home",
+    "title": "首页",
+    "group": "深色主界面",
+    "mode": "dark",
+    "recipe": "navigate home",
+    "current": {
+      "overlays": [],
+      "panel": "home",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/dark-home.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/dark-home.png",
+    "status": "ok"
+  },
+  {
+    "key": "print-select",
+    "title": "文件与打印任务",
+    "group": "深色主界面",
+    "mode": "dark",
+    "recipe": "navigate print-select",
+    "current": {
+      "overlays": [],
+      "panel": "print-select",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/dark-print-select.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/dark-print-select.png",
+    "status": "ok"
+  },
+  {
+    "key": "controls",
+    "title": "机器控制",
+    "group": "深色主界面",
+    "mode": "dark",
+    "recipe": "navigate controls",
+    "current": {
+      "overlays": [],
+      "panel": "controls",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/dark-controls.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/dark-controls.png",
+    "status": "ok"
+  },
+  {
+    "key": "filament",
+    "title": "喷头与耗材操作",
+    "group": "深色主界面",
+    "mode": "dark",
+    "recipe": "navigate filament",
+    "current": {
+      "overlays": [],
+      "panel": "filament",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/dark-filament.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/dark-filament.png",
+    "status": "ok"
+  },
+  {
+    "key": "inventory-head-1",
+    "title": "耗材料路 · 喷头 1",
+    "group": "深色主界面",
+    "mode": "dark",
+    "recipe": "demo ams; click inventory_head_0",
+    "current": {
+      "overlays": [
+        "head_inventory"
+      ],
+      "panel": "home",
+      "root_path": "s/head_inventory"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/dark-inventory-head-1.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/dark-inventory-head-1.png",
+    "status": "ok"
+  },
+  {
+    "key": "ace-management",
+    "title": "ACE 单机管理",
+    "group": "深色主界面",
+    "mode": "dark",
+    "recipe": "demo ams; click inventory_manage",
+    "current": {
+      "overlays": [
+        "head_inventory",
+        "ams_overview_panel"
+      ],
+      "panel": "home",
+      "root_path": "s/ams_overview_panel"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/dark-ace-management.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/dark-ace-management.png",
+    "status": "ok"
+  },
+  {
+    "key": "settings",
+    "title": "设置首页",
+    "group": "深色主界面",
+    "mode": "dark",
+    "recipe": "navigate settings",
+    "current": {
+      "overlays": [],
+      "panel": "settings",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/dark-settings.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/dark-settings.png",
+    "status": "ok"
+  },
+  {
+    "key": "advanced",
+    "title": "高级功能",
+    "group": "深色主界面",
+    "mode": "dark",
+    "recipe": "navigate advanced",
+    "current": {
+      "overlays": [],
+      "panel": "advanced",
+      "root_path": "s/app_layout_0"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/dark-advanced.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/dark-advanced.png",
+    "status": "ok"
+  },
+  {
+    "key": "print-status-running",
+    "title": "打印进度 · 进行中",
+    "group": "深色主界面",
+    "mode": "dark",
+    "recipe": "scenario printing; demo print-status",
+    "current": {
+      "overlays": [
+        "print_status_panel"
+      ],
+      "panel": "home",
+      "root_path": "s/nav_btn_estop"
+    },
+    "capture": {
+      "h": 320,
+      "path": "/Users/henry/Documents/ChatGPT/u1多色/u1-interface/native/renders/20261109-all-screens-140440/screens/dark-print-status-running.png",
+      "saved": true,
+      "stable_frames": 3,
+      "w": 480
+    },
+    "file": "screens/dark-print-status-running.png",
+    "status": "ok"
+  }
+]

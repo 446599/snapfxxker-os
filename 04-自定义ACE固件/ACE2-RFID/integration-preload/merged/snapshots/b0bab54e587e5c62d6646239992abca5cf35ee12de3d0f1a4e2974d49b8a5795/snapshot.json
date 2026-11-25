@@ -1,0 +1,102 @@
+{
+  "rf-manifest.json": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/output/analysis-manifest.json",
+    "sha256": "365c92390c907c1b6e8765123e0ad975babd41e59a627ad169742e4b672dd901",
+    "bytes": 9493
+  },
+  "rf-map.txt": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/integration.map",
+    "sha256": "51557634ca499a72f7c1232e4c3e5254dcad4131555510e4a8e6b1233e1307d0",
+    "bytes": 18944
+  },
+  "rf-original.ld": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/integration.ld",
+    "sha256": "3774d68e0fe80f8add4aa42a8422462d7211cf9ecd5504df603fb1ac64093463",
+    "bytes": 957
+  },
+  "rf-original.elf": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/EXPERIMENTAL-DO-NOT-FLASH.elf",
+    "sha256": "e4fbade558785e32b97341b6ee4c499c6f8925b73977450a79d7f717d1724286",
+    "bytes": 55884
+  },
+  "rf-original.offline-image": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/output/EXPERIMENTAL-DO-NOT-FLASH.offline-image",
+    "sha256": "1ffba30b853ece41509c79b885180447d52c8d591be9185e2849ef341a202e6b",
+    "bytes": 82729
+  },
+  "rf-00-experimental_gate.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/experimental_gate.o",
+    "sha256": "025bde6dfdb19550a92fe236c0cf9dbe447ab9d7c337096c4a2f7460776fc50c",
+    "bytes": 1116
+  },
+  "rf-01-event_storage.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/event_storage.o",
+    "sha256": "168296413bc0e10cbc5312a16ea59c245a51b01df77a8392b8395e6ddeccbfe1",
+    "bytes": 1496
+  },
+  "rf-02-experimental_binding.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/experimental_binding.o",
+    "sha256": "62236885cb0ae1e58875079c5832a15b680cd0b3dcaf166bc36c4c9475476b5f",
+    "bytes": 2512
+  },
+  "rf-03-bounded_rc522.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/bounded_rc522.o",
+    "sha256": "93dc9e7dbed710045f06118ffef818b3df99bd4937dcf13d0b04e0182248232a",
+    "bytes": 2600
+  },
+  "rf-04-stock_bounded_bridge.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/stock_bounded_bridge.o",
+    "sha256": "2744d9e8b4a9d69fe6849e2433cfe4132beacb3f09df2a924a0c7b58363530a0",
+    "bytes": 1764
+  },
+  "rf-05-stock_bounded_thunks.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/stock_bounded_thunks.o",
+    "sha256": "ca4df4997c88ed8982be5e0a2fe31b02c9397302ee35afe90f1ba76b35a2aa4c",
+    "bytes": 824
+  },
+  "rf-06-rf_owner.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/rf_owner.o",
+    "sha256": "16b3f8d77e602935b9e81427decd704d8e37da1972d46cc80a1cd9401e64c70b",
+    "bytes": 2576
+  },
+  "rf-07-rf_stock_adapter.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/rf_stock_adapter.o",
+    "sha256": "ed729bdb241338097deee9e59b8a5a1b6049bc53a5ff007c372640a8b457a4fb",
+    "bytes": 2656
+  },
+  "rf-08-rf_stock_trampolines.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/rf_stock_trampolines.o",
+    "sha256": "45c267ea2690d3e4407a4a96264160fdb8160414df47f7aeab53542d07668db9",
+    "bytes": 1136
+  },
+  "rf-09-native_tag_decoder.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/native_tag_decoder.o",
+    "sha256": "6cc734948af4aa864ff75c600d84ad3eafebc6a339a105932e7bd497d11ecc26",
+    "bytes": 9920
+  },
+  "rf-10-uid_stub.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/uid_stub.o",
+    "sha256": "814d50551e6c9c1253ecc4936046e226774255ac44952b1032e0a50347742800",
+    "bytes": 684
+  },
+  "rf-11-rawtag_stub.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/rawtag_stub.o",
+    "sha256": "3caf2364ee85440f2f3134282ead249a49d8eb47f290ec70d193c2060e0ca98a",
+    "bytes": 688
+  },
+  "rf-12-rawtag_cache_stub.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/rawtag_cache_stub.o",
+    "sha256": "2f9e55c6b03d6c309301d0485daf6b59e6b23f8903c8b758be0fd4dbbf791025",
+    "bytes": 728
+  },
+  "rf-13-rawtag_extract_stub.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/rawtag_extract_stub.o",
+    "sha256": "79d9a11f8403d7313dcb4f23509e75496c2f34ed3ba73833aba1a07ac004f4a8",
+    "bytes": 732
+  },
+  "rf-14-pageread_gate_stub.o": {
+    "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/pageread_gate_stub.o",
+    "sha256": "28236df0ebd0de57d508e80cc9473c9f19bcc7cfb4a97fd103042395361600ac",
+    "bytes": 740
+  }
+}

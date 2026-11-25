@@ -1,0 +1,35 @@
+{
+  "stop": {},
+  "heads": [
+    [
+      false,
+      false,
+      true,
+      false
+    ],
+    [
+      false,
+      false,
+      true,
+      false
+    ]
+  ],
+  "lanes": [
+    [
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ],
+    [
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ]
+  ],
+  "flags": [
+    0,
+    1
+  ]
+}

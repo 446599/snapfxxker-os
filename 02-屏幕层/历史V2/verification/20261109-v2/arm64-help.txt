@@ -1,0 +1,98 @@
+Usage: ./build/snapmaker-u1/bin/helix-screen [options]
+Options:
+  -s, --size <size>    Screen size: micro, tiny, small, medium, large, xlarge (or WxH)
+  -w, --wizard         Force first-run configuration wizard (overrides the
+                       --skip-wizard that --test implies)
+  --wizard-step <step> Jump to specific wizard step for testing
+  --skip-wizard        Suppress the first-run wizard (implied by --test)
+  --calibrate-touch    Force touch calibration on startup
+  -d, --display <n>    Display number for window placement (0, 1, 2...)
+  -x, --x-pos <n>      X coordinate for window position
+  -y, --y-pos <n>      Y coordinate for window position
+  --dpi <n>            Display DPI (50-500, default: 160)
+  --screenshot [sec]   Take screenshot after delay (default: 2 seconds)
+  -t, --timeout <sec>  Auto-quit after specified seconds (1-3600)
+  --dark               Use dark theme (default)
+  --light              Use light theme
+  --skip-splash        Skip splash screen on startup
+  -v, --verbose        Increase verbosity (-v=info, -vv=debug, -vvv=trace)
+  --log-dest <dest>    Log destination: auto, journal, syslog, file, console
+  --log-level <level>  Log level: trace, debug, info, warn, error, critical, off
+  --log-file <path>    Log file path (when --log-dest=file)
+  -M, --memory-report  Log memory usage every 30 seconds (development)
+  --show-memory        Show memory stats overlay (press M to toggle)
+  --release-notes      Fetch latest release notes and show in update modal
+  --debug-subjects     Enable verbose subject debugging with stack traces
+  --debug-touches      Draw ripple effects at each touch point for debugging
+  --no-sound           Disable all sound output (prevents audio backend init)
+  --moonraker <url>    Override Moonraker URL (e.g., ws://192.168.1.100:7125)
+  --detect-printer     Detect printer via Moonraker REST, print JSON, exit
+                       (use with --host/--port; default 127.0.0.1:7125)
+  --probe-egl          Report whether EGL comes up on a GPU here, then exit
+                       (exit 0 = hardware GPU; the launcher gates on this)
+  --remote             Enable remote control server (auto in --test mode)
+  --remote-socket <p>  Override remote control socket path
+  --remote-transport <t>  Transport: socket (default) or http
+  --remote-http-bind <h>  HTTP bind host (default 127.0.0.1; implies http)
+  --remote-http-port <n>  HTTP port (default 7130; implies http)
+  --rotate <degrees>   Display rotation: 0, 90, 180, 270
+  --render-2d          Force the G-code viewer to the 2D layer renderer
+  --render-3d          Force the G-code viewer to the 3D GLES renderer
+  --layout <type>      Override auto-detected layout (auto, standard, ultrawide, portrait, micro, micro-portrait, tiny, tiny-portrait)
+  -h, --help           Show this help message
+  -V, --version        Show version information
+
+Test Mode Options:
+  --test               Enable test mode (uses all mocks by default)
+    --real-wifi        Use real WiFi hardware (requires --test)
+    --real-ethernet    Use real Ethernet hardware (requires --test)
+    --real-moonraker   Connect to real printer (requires --test, implies --real-ams)
+    --real-files       Use real files from printer (requires --test)
+    --real-ams         Use real AMS backend (requires --test)
+    --real-sensors     Use real sensor data (requires --test)
+    --disconnected     Simulate disconnected state (requires --test)
+    --no-ams           Don't create mock AMS (enables runout modal testing)
+    --test-history     Enable test history API data
+    --sim-speed <n>    Simulation speedup factor (1.0-1000.0, requires --test)
+    --mock-crash       Write synthetic crash.txt to test crash reporter UI
+    --select-file <name>  Auto-select file in print-select panel
+
+G-code Viewer Options (require --test):
+  --gcode-file <path>  Preload a G-code file for the 3D print viewer (--test)
+  --camera <params>    Set camera params: "az:90.5,el:4.0,zoom:15.5"
+  --gcode-az <deg>     Set camera azimuth angle (degrees)
+  --gcode-el <deg>     Set camera elevation angle (degrees)
+  --gcode-zoom <n>     Set camera zoom level (positive number)
+  --gcode-debug-colors Enable per-face debug coloring
+
+Screen sizes:
+  micro    = 480x272
+  tiny     = 480x320
+  small    = 480x400
+  medium   = 800x480 (default)
+  large    = 1024x600
+  xlarge   = 1280x720
+  WxH      = arbitrary resolution (e.g., -s 1920x1080)
+
+Wizard steps:
+  wifi, connection, printer-identify, bed, hotend, fan, led, summary
+
+Window placement:
+  Use -d to center window on specific display
+  Use -x/-y for exact pixel coordinates (both required)
+  Examples:
+    ./build/snapmaker-u1/bin/helix-screen --display 1        # Center on display 1
+    ./build/snapmaker-u1/bin/helix-screen -x 100 -y 200      # Position at (100, 200)
+
+Test Mode Examples:
+  ./build/snapmaker-u1/bin/helix-screen --test                           # Full mock mode
+  ./build/snapmaker-u1/bin/helix-screen --test --real-moonraker          # Test UI with real printer
+  ./build/snapmaker-u1/bin/helix-screen --test --real-wifi --real-files  # Real WiFi and files, mock rest
+[07:54:46.586] [+00000.035] [warning] [1] [Config] df() called with no active printer, using 'default'
+[07:54:46.587] [+00000.035] [warning] [1] [Config] df() called with no active printer, using 'default'
+[07:54:46.587] [+00000.035] [warning] [1] [Config] df() called with no active printer, using 'default'
+[07:54:46.587] [+00000.035] [warning] [1] [Config] df() called with no active printer, using 'default'
+[07:54:46.587] [+00000.035] [warning] [1] [Config] df() called with no active printer, using 'default'
+[07:54:46.587] [+00000.035] [warning] [1] [Config] df() called with no active printer, using 'default'
+[07:54:46.587] [+00000.035] [warning] [1] [Config] df() called with no active printer, using 'default'
+[07:54:46.587] [+00000.035] [warning] [1] [Config] df() called with no active printer, using 'default'

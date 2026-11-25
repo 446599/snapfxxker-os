@@ -1,0 +1,228 @@
+--- a/klipper/extras/ace_rc522.py
++++ b/klipper/extras/ace_rc522.py
+@@ -283,6 +283,11 @@
+         if length <= 0 or length > MOVE_MAX_MM:
+             respond('rc522: refusing unsafe move length %d' % length)
+             return False
++        if getattr(self, '_manual_proof', False):
++            remaining = getattr(self, '_manual_motor_budget', 0)
++            if length > remaining:
++                raise MotionUncertain('manual scan motor budget exhausted')
++            self._manual_motor_budget = remaining - length
+         for attempt in range(MOVE_RETRIES):
+             self._insert_guard()
+             if getattr(self,'_single_auto',False):
+@@ -454,6 +459,17 @@
+         except Exception:
+             logging.exception("[multiACE] RFID encoder direction cache")
+ 
++    def _manual_guard(self):
++        guard = getattr(self, '_manual_session_guard', None)
++        if guard is not None and not guard():
++            raise MotionUncertain('manual original transport or route changed')
++
++    def _manual_sample(self, idx, slot):
++        self._manual_guard()
++        result = self._fresh_encoder(idx, slot)
++        self._manual_guard()
++        return result
++
+     def _move_and_confirm(self, idx, slot, length, mode, respond):
+         """Manual scan move with fresh completion and encoder feedback."""
+         if not self._target_motion_allowed(idx, slot):
+@@ -462,8 +478,12 @@
+                 "printer state is unavailable"
+             )
+             return False
+-        checked = getattr(self, "_insert_checked_guard", None) is not None
+-        baseline = self._fresh_encoder(idx, slot) if checked else None
++        manual = bool(getattr(self, '_manual_proof', False))
++        checked = getattr(self, "_insert_checked_guard", None) is not None or manual
++        baseline = (self._manual_sample(idx, slot) if manual else self._fresh_encoder(idx, slot)) if checked else None
++        if manual and baseline is None:
++            respond('rc522: read failed - fresh baseline unavailable; nothing moved')
++            return False
+         baseline_row = (
+             dict((getattr(self, "_encoder_diagnostic", {}) or {}).get("row") or {})
+             if baseline is not None
+@@ -475,12 +495,24 @@
+                 return False
+         finally:
+             self._relative_measured = False
+-        initial = self._fresh_encoder(idx, slot) if checked else None
++        initial = (self._manual_sample(idx, slot) if manual else self._fresh_encoder(idx, slot)) if checked else None
+         initial_row = (
+             dict((getattr(self, "_encoder_diagnostic", {}) or {}).get("row") or {})
+             if initial is not None
+             else {}
+         )
++        if manual:
++            # ACK may precede motor start and per-command counter reset. Poll
++            # a bounded window while the preceding terminal frame persists.
++            for _ in range(6):
++                if initial is None or initial_row != baseline_row or initial != baseline:
++                    break
++                if (baseline == 0 and baseline_row.get('length') == 0
++                        and type(baseline_row.get('steps')) is int and baseline_row['steps'] <= 7):
++                    break
++                self._pause(0.1)
++                initial = self._manual_sample(idx, slot)
++                initial_row = dict((getattr(self, '_encoder_diagnostic', {}) or {}).get('row') or {})
+         # An ACK can precede the motion; do not treat an immediate READY as
+         # completion. Then use a fresh status and this move's reset counter.
+         self._pause(length / float(PARK_SPEED) + 0.6)
+@@ -491,7 +523,7 @@
+             )
+             respond("rc522: WARNING - " + self._motion_uncertain)
+             raise MotionUncertain(self._motion_uncertain)
+-        raw = self._fresh_encoder(idx, slot)
++        raw = self._manual_sample(idx, slot) if manual else self._fresh_encoder(idx, slot)
+         if raw is None or not (length * 0.5 <= abs(raw) <= length * 1.5 + 2):
+             logging.warning(
+                 "[multiACE] RFID encoder diagnostic ACE=%s slot=%s requested=%s mode=%s value=%s detail=%s",
+@@ -522,6 +554,17 @@
+                     or (initial == 0 and baseline != 0)
+                 )
+             )
++        if manual and not reset:
++            # A command beginning at a validated zero counter need not exhibit
++            # a downward transition, provided its first sample is also zero.
++            reset = (baseline == 0 and baseline_row.get('length') == 0 and
++                     type(baseline_row.get('steps')) is int and 0 <= baseline_row['steps'] <= 7 and
++                     type(initial_row.get('steps')) is int and type(initial_row.get('length')) is int and
++                     0 <= initial_row['length'] <= length and initial_row['steps'] >= 0 and
++                     initial is not None and (initial == 0 or initial * raw > 0))
++        if manual and not reset:
++            self._motion_uncertain = 'manual move counter reset unconfirmed'
++            raise MotionUncertain(self._motion_uncertain)
+         if old is None:
+             if not reset and checked:
+                 self._motion_uncertain = (
+@@ -536,6 +579,20 @@
+             )
+             respond("rc522: WARNING - " + self._motion_uncertain)
+             raise MotionUncertain(self._motion_uncertain)
++        if manual:
++            final_row = dict((getattr(self, '_encoder_diagnostic', {}) or {}).get('row') or {})
++            self._pause(0.3)
++            confirm = self._manual_sample(idx, slot)
++            confirm_row = dict((getattr(self, '_encoder_diagnostic', {}) or {}).get('row') or {})
++            if (raw != confirm or final_row.get('_decoder_present') is not True
++                    or confirm_row.get('_decoder_present') is not True
++                    or any(type(final_row.get(k)) is not int or final_row.get(k) != confirm_row.get(k)
++                           for k in ('steps', 'length'))
++                    or final_row['length'] < max(1, length - 5)
++                    or not self._wait_motion_ready(idx, slot)):
++                self._motion_uncertain = 'manual move completion telemetry unconfirmed'
++                raise MotionUncertain(self._motion_uncertain)
++            self._manual_guard()
+         context = getattr(self,'_insert_checked_context',None)
+         if getattr(self,'_scan_measured',False) and context is not None and (idx,slot)==context[:2]:
+             final_row = dict((getattr(self,'_encoder_diagnostic',{}) or {}).get('row') or {})
+@@ -549,9 +606,13 @@
+                 raise MotionUncertain('scan motor completion telemetry unconfirmed')
+             self._commit_scan_motor(idx,slot,mode,length,final_row['length'],reset)
+         self._encoder_direction[key] = direction
+-        if checked and (old is not None or reset):
++        if not manual and checked and (old is not None or reset):
+             self._remember_encoder_direction(idx, slot, direction)
+         self._encoder_ledger[key] = self._encoder_ledger.get(key, 0) + raw
++        if manual:
++            if not hasattr(self, '_manual_last_terminal'):
++                self._manual_last_terminal = {}
++            self._manual_last_terminal[key] = (raw, final_row['steps'], final_row['length'])
+         logging.info('[multiACE] RFID measured move ace=%s slot=%s mode=%s command=%s raw=%s normalized=%s baseline=%s initial=%s final=%s ledger=%s',
+                      idx, slot, mode, length, raw, raw*direction, baseline_row, initial_row,
+                      getattr(self,'_encoder_diagnostic',None), self._encoder_ledger[key])
+@@ -695,45 +756,37 @@
+         return first * direction
+ 
+     def _restore_recorded_motion(self, respond):
+-        """Reverse only acknowledged manual-read net moves, never a guess."""
++        """Return the measured relative encoder displacement, never command distance."""
+         if self._motion_uncertain:
+             respond('rc522: WARNING - movement outcome unknown; automatic '
+                     'restore skipped; inspect the affected lane')
+             return
+         for (idx, slot), delta in reversed(list(self._motion_ledger.items())):
+-            if not delta:
+-                residual = self._encoder_ledger.get((idx, slot), 0)
+-                if abs(residual) > MAX_ENCODER_RESIDUAL_MM:
+-                    self._motion_uncertain = ('ACE %d slot %d: aggregate '
+-                        'encoder residual %+d mm; inspect lane'
+-                        % (idx, slot, residual))
+-                    respond('rc522: WARNING - ' + self._motion_uncertain)
+-                    raise MotionUncertain(self._motion_uncertain)
+-                continue
+-            if abs(delta) > MOVE_MAX_MM or not self._wait_motion_ready(idx, slot):
+-                self._motion_uncertain = ('ACE %d slot %d: cannot verify '
+-                    'standstill before restoring %d mm; inspect lane'
+-                    % (idx, slot, delta))
+-                respond('rc522: WARNING - ' + self._motion_uncertain)
+-                raise MotionUncertain(self._motion_uncertain)
+-            if not self._move_and_confirm(idx, slot, abs(delta),
+-                              RESTORE_MODE if delta > 0 else SEARCH_MODE,
+-                              respond):
+-                self._motion_uncertain = ('ACE %d slot %d: restore rejected; '
+-                    'known net displacement %d mm remains; inspect lane'
+-                    % (idx, slot, delta))
+-                respond('rc522: WARNING - ' + self._motion_uncertain)
+-                raise MotionUncertain(self._motion_uncertain)
+-            residual = self._encoder_ledger.get((idx, slot), 0)
+-            if abs(residual) > MAX_ENCODER_RESIDUAL_MM:
+-                self._motion_uncertain = ('ACE %d slot %d: restore encoder '
+-                    'residual %+d mm; inspect lane' % (idx, slot, residual))
+-                respond('rc522: WARNING - ' + self._motion_uncertain)
+-                raise MotionUncertain(self._motion_uncertain)
+-            respond('rc522: ACE %d slot %d commanded displacement reversed '
+-                    '(%d mm); encoder net %+d mm'
+-                    % (idx, slot, abs(delta), self._encoder_ledger.get((idx, slot), 0)))
++            if delta or self._encoder_ledger.get((idx, slot), 0):
++                self._rewind_scan_origin(idx, slot, respond)
++            self._manual_verify_stationary(idx, slot)
++            respond('rc522: ACE %d slot %d relative encoder return confirmed'
++                    % (idx, slot))
+ 
++    def _manual_verify_stationary(self, idx, slot):
++        self._manual_guard()
++        if not self._wait_motion_ready(idx, slot):
++            raise MotionUncertain('manual return standstill unconfirmed')
++        self._manual_guard()
++        first = self._manual_sample(idx, slot)
++        row = dict((getattr(self, '_encoder_diagnostic', {}) or {}).get('row') or {})
++        self._pause(0.3)
++        second = self._manual_sample(idx, slot)
++        row2 = dict((getattr(self, '_encoder_diagnostic', {}) or {}).get('row') or {})
++        terminal = (getattr(self, '_manual_last_terminal', {}) or {}).get((idx, slot))
++        if (first is None or first != second or row.get('_decoder_present') is not True
++                or row2.get('_decoder_present') is not True
++                or any(type(row.get(k)) is not int or row.get(k) != row2.get(k) for k in ('steps', 'length'))
++                or (first, row.get('steps'), row.get('length')) != terminal
++                or not self._wait_motion_ready(idx, slot)):
++            raise MotionUncertain('manual return stability unconfirmed')
++        self._manual_guard()
++
+     def _identify(self, idx, slot):
+         """One FILAMENT_IDENTIFY probe. Returns the result dict or None.
+         'code' 0 = a tag answered (needs the protocol's field-12 decode);
+@@ -1467,6 +1520,8 @@
+         uncertain motion acknowledgement prevents any guessed restore.
+         """
+         searched = 0
++        self._manual_proof = True
++        self._manual_motor_budget = 4 * int(max_mm) + 4 * START_PROBE_MM + 100
+         try:
+             # Reject mixed reader/protocol deployments before ANY motion.
+             if (not self._target_motion_allowed(idx, slot) or
+@@ -1512,7 +1567,10 @@
+                     return
+                 searched += step
+         finally:
+-            self._restore_recorded_motion(respond)
++            try:
++                self._restore_recorded_motion(respond)
++            finally:
++                self._manual_proof = False
+ 
+     def read_slot_single_checked(self, idx, slot, respond, guard, **kwargs):
+         """One bounded scan and one UID/content read, without attribution guesses."""

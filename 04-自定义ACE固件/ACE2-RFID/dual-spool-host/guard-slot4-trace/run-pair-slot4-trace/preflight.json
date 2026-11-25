@@ -1,0 +1,158 @@
+{
+  "uid": {
+    "uid1": 808780566,
+    "uid2": 17445170,
+    "uid3": 942880330
+  },
+  "firmware": "V1.1.97O",
+  "lanes": [
+    {
+      "_wire_valid": true,
+      "brand": "",
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 0,
+      "rfid": 0,
+      "sku": "",
+      "slot_status": "ready",
+      "status": "unknown",
+      "type": ""
+    },
+    {
+      "_wire_valid": true,
+      "brand": "",
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 1,
+      "rfid": 0,
+      "sku": "",
+      "slot_status": "ready",
+      "status": "empty",
+      "type": ""
+    },
+    {
+      "_wire_valid": true,
+      "brand": "",
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 2,
+      "rfid": 2,
+      "sku": "",
+      "slot_status": "ready",
+      "status": "ready",
+      "type": ""
+    },
+    {
+      "_wire_valid": true,
+      "brand": "",
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 3,
+      "rfid": 0,
+      "sku": "",
+      "slot_status": "ready",
+      "status": "empty",
+      "type": ""
+    }
+  ],
+  "rf_initial": {
+    "flags": [
+      1,
+      1
+    ],
+    "reader0": 0,
+    "reader1": 0
+  },
+  "before": {
+    "2": {
+      "context": {
+        "0": 3291322034,
+        "1": 3291322034,
+        "2": 2,
+        "3": 0,
+        "4": 288873,
+        "5": 1
+      },
+      "cmd13": {
+        "_code_absent": true,
+        "_code_present": false,
+        "_index_present": true,
+        "_unparsed": {
+          "11": [
+            {
+              "val": 288873,
+              "wt": 0
+            }
+          ]
+        },
+        "brand": "",
+        "code": 0,
+        "color": [
+          245,
+          90,
+          116
+        ],
+        "index": 2,
+        "rfid": 2,
+        "sku": "SME5DDA105",
+        "tag": {
+          "field2": 258,
+          "group6": [
+            1000,
+            175
+          ]
+        },
+        "type": "PLA Basic"
+      },
+      "native_uid_hint": "E5DDA105",
+      "uid_proven_physical": false
+    },
+    "3": {
+      "context": {
+        "0": 1134483518,
+        "1": 2143289344,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 1
+      },
+      "cmd13": {
+        "_code_absent": true,
+        "_code_present": false,
+        "_index_present": true,
+        "brand": "",
+        "code": 0,
+        "color": [
+          111,
+          202,
+          239
+        ],
+        "index": 3,
+        "rfid": 2,
+        "sku": "SM55F328E6",
+        "tag": {
+          "field2": 258,
+          "group6": [
+            1000,
+            175
+          ]
+        },
+        "type": "PLA Basic"
+      },
+      "native_uid_hint": "55F328E6",
+      "uid_proven_physical": false
+    }
+  }
+}

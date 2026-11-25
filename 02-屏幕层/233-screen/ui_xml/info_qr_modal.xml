@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <api>
+    <prop name="icon_name" type="string" default="info"/>
+    <prop name="title" type="string" default=""/>
+    <prop name="message" type="string" default=""/>
+    <prop name="url_text" type="string" default=""/>
+  </api>
+  <!-- Reusable info modal with QR code — backdrop created by Modal system -->
+  <view name="info_qr_modal" extends="ui_dialog" width="90%" height="94%" align="center" flex_flow="column" style_flex_main_place="start" style_pad_gap="0" style_max_height="94%" style_radius="#u1_card_radius" style_border_width="#u1_border" style_border_color="#border">
+    <!-- Content area -->
+    <lv_obj width="100%" height="#u1_touch_target" style_pad_all="0" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_gap="#space_sm" scrollable="false" style_flex_track_place="center">
+      <icon src="$icon_name" size="md" variant="primary"/>
+      <text_heading text="$title" style_text_color="#text"/>
+    </lv_obj>
+    <lv_obj width="100%" height="0" style_pad_left="#space_md" style_pad_right="#space_md" style_pad_top="#space_sm" style_pad_bottom="#space_sm" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#u1_card_gap" scrollable="true" scroll_dir="ver" scrollbar_mode="auto" flex_grow="1" style_pad_all="#space_sm" style_flex_track_place="center">
+      <lv_obj width="0" height="content" flex_grow="1" flex_flow="column" style_pad_all="0" style_pad_gap="#space_md" scrollable="false">
+        <text_body width="100%" text="$message" long_mode="wrap" style_text_align="left"/>
+        <text_small text="$url_text" style_text_color="#text_muted" width="100%" long_mode="wrap"/>
+      </lv_obj>
+      <!-- Title row: icon + heading on same line to save vertical space -->
+      <!-- QR code inserted programmatically for adaptive sizing -->
+      <lv_obj name="qr_container" width="content" height="content" style_pad_all="0" style_border_width="0"/>
+    </lv_obj>
+    <modal_button_row hide_secondary="true" primary_name="btn_ok" primary_text="OK" primary_callback="on_modal_ok_clicked"/>
+  </view>
+</component>

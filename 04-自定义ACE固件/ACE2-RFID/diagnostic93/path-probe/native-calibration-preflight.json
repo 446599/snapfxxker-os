@@ -1,0 +1,79 @@
+{
+  "identity": [
+    808780566,
+    17445170,
+    942880330
+  ],
+  "firmware": "V1.1.93O",
+  "connected": true,
+  "ace_status": "ready",
+  "fw_hold": false,
+  "dryer": {
+    "status": "stop",
+    "target_temp": 0,
+    "duration": 0,
+    "remain_time": 0
+  },
+  "auto_dry_running": false,
+  "auto_dry_enabled": false,
+  "printer_state": "idle",
+  "mode": "multi",
+  "active_device": 0,
+  "tag_op": {
+    "busy": false,
+    "kind": "",
+    "seq": 0,
+    "result": {}
+  },
+  "swap": false,
+  "unload": false,
+  "calibration": {
+    "state": "idle",
+    "session_id": 0,
+    "ace": null,
+    "slot": null,
+    "head": null,
+    "scope": "ace",
+    "protocol": "",
+    "commanded_feed_mm": 0,
+    "commanded_retract_mm": 0,
+    "load_length_mm": null,
+    "swap_retract_length_mm": null,
+    "retract_length_mm": null,
+    "decoder_span": null,
+    "feed_decoder_span": null,
+    "return_decoder_span": null,
+    "decoder_return_delta": null,
+    "park_reference": "ace_preload",
+    "tip_position_mm": null,
+    "verify_phase": "unavailable",
+    "verify_position_mm": null,
+    "verify_paused_from": null,
+    "verify_feed_actual_mm": null,
+    "verify_feed_delta_mm": null,
+    "verify_fine_offset_mm": 0,
+    "verify_fine_limit_mm": 50,
+    "verify_decoder_span": null,
+    "verify_move_seq": 0,
+    "toolhead_sensor": null,
+    "max_feed_mm": 0,
+    "speed_mm_s": 0,
+    "previous_load_length": null,
+    "previous_swap_retract_length": null,
+    "previous_retract_length": null,
+    "error": null
+  },
+  "lanes": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "gate": true
+}

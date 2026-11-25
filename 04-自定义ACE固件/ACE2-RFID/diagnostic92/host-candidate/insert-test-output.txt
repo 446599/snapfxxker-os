@@ -1,0 +1,13 @@
+...ERROR:root:[multiACE] [insert-read]
+Traceback (most recent call last):
+  File "/Users/henry/Documents/ChatGPT/u1多色/ace2-rfid-dev-20261107/diagnostic92/host-candidate/ace.py", line 3662, in _insert_read_then_preload
+    ready_to_preload = self._insert_uid_read(idx, slot, depth)
+  File "/Users/henry/Documents/ChatGPT/u1多色/ace2-rfid-dev-20261107/diagnostic92/host-candidate/test_insert_guard.py", line 22, in fail
+    def fail(*args):raise RuntimeError('fail')
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: fail
+.....
+----------------------------------------------------------------------
+Ran 8 tests in 0.014s
+
+OK

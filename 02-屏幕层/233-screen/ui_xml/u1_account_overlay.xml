@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component>
+  <view name="u1_account_overlay" extends="overlay_panel" title="账号与配对" bg_color="#screen_bg" title_transform="none" title_color="#text">
+    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" scrollable="true" flex_flow="column" scrollbar_mode="auto" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" scroll_dir="ver">
+      <lv_obj width="100%" height="content" flex_flow="column" scrollable="false">
+        <style name="styles.u1_card"/>
+        <text_heading name="account_identity" text="正在读取账号" width="100%" long_mode="wrap"/>
+        <text_body name="account_summary" text="" width="100%" long_mode="wrap"/>
+        <text_body name="account_message" text="" width="100%" long_mode="wrap"/>
+      </lv_obj>
+      <lv_obj name="account_pairing" width="100%" height="content" flex_flow="column" style_flex_cross_place="center" scrollable="false" hidden="true">
+        <style name="styles.u1_card"/>
+        <lv_obj name="account_qr" width="190" height="190" style_pad_all="0" style_border_width="0" scrollable="false" hidden="true"/>
+        <text_heading name="account_code" text="" width="100%" style_text_align="center" long_mode="wrap"/>
+        <text_body name="account_code_hint" text="" width="100%" style_text_align="center" long_mode="wrap"/>
+      </lv_obj>
+      <setting_action_row name="account_pin" label="获取绑定码" icon="cellphone" description="用 Snapmaker App 扫码或输入 PIN" callback="u1_account_pin"/>
+      <setting_action_row name="account_access" label="读取局域网访问码" icon="lan" description="用于同一网络内的切片软件或 App 配对" callback="u1_account_access"/>
+      <setting_action_row name="account_mode" label="切换连接模式" icon="lan" description="在云端与局域网之间切换" callback="u1_account_mode"/>
+      <setting_action_row name="account_disconnect" label="断开全部局域网客户端" icon="lan" callback="u1_account_disconnect"/>
+      <setting_action_row name="account_cn" label="选择中国大陆服务区" icon="web" callback="u1_account_cn"/>
+      <setting_action_row name="account_int" label="选择国际服务区" icon="web" callback="u1_account_int"/>
+      <setting_action_row name="account_region" label="更改服务地区" icon="web" description="中国大陆或国际服务区" callback="u1_account_region"/>
+      <setting_action_row name="account_logout" label="退出本机账号" icon="account" callback="u1_account_logout"/>
+      <setting_action_row name="account_refresh" label="刷新状态" icon="refresh" callback="u1_account_refresh"/>
+    </lv_obj>
+  </view>
+</component>

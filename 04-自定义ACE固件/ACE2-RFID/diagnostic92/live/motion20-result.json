@@ -1,0 +1,43 @@
+{
+  "ace": 0,
+  "slot": 2,
+  "length_limit": 20,
+  "speed": 5,
+  "stops": 2,
+  "commands": [
+    {
+      "mode": 0,
+      "mm": 20,
+      "speed": 5
+    },
+    {
+      "mode": 1,
+      "mm": 20,
+      "speed": 5
+    }
+  ],
+  "initial_checks": true,
+  "discover": {
+    "uid1": 808780566,
+    "uid2": 17445170,
+    "uid3": 942880330
+  },
+  "before": [
+    2143289344,
+    2143289344,
+    0
+  ],
+  "forward_decoder": 17,
+  "after_forward": [
+    2143289344,
+    2143289344,
+    0
+  ],
+  "reverse_decoder": -15,
+  "after_reverse": [
+    2143289344,
+    2143289344,
+    0
+  ],
+  "done": true
+}

@@ -1,0 +1,430 @@
+{
+  "classification": "QUEUE ASSOCIATION EXPERIMENT NOFLASH; normal reset absolutely blocked",
+  "frozen_input_set": "758335cb4071f5392d389ea21af560f2f577912d9959b78f2916285971fa08a3",
+  "rf_baseline_image": "1ffba30b853ece41509c79b885180447d52c8d591be9185e2849ef341a202e6b",
+  "sources_sha256": {
+    "preload_queue.c": "2bdaa4a4ffc06eb4084df29052b62abf9a8fe174af076d8337c1ca9ec3b951c3",
+    "uid_stub.s": "2c9bcfa7288cedb1af2afcb8af1ca8136abb6ca0593bc79dc11c1c066df34ed6",
+    "experimental_binding.c": "f90a10450c71272d1352271d15e1772a0470123c039d536da54f453fc0e7951b",
+    "rawtag_extract_stub.s": "c3474a390280e790cd00f0bf8db56ab0211fbf805e7aad183d31d34b07b242a5",
+    "event_storage.c": "9fe5c89288c8303c51fec93b310753a42a3eb22f5187cc738e7b798fc56cd316",
+    "native_tag_decoder.c": "4ce7672426cae3b7a68271faaf7aa8632c89c6cc83c624d9094424dba1abef5b",
+    "rawtag_stub.s": "3e22782be6d88ea6733ff2200e15cc105b5d2ae6de929a363401268747b98137",
+    "rf_stock_adapter.h": "afcdf337ea48f8f777ddf7e9cb568f25e21acc55a127c71f0645575aec8aa266",
+    "stock_bounded_bridge.h": "974fbb2b2b05acd0b3b7e415a05a6762e66ed938de6874cbeec75748c98df95e",
+    "experimental_gate.S": "0363ad7b8eb1e47ed86811451168ba834b6df261cc450d4d1b2d8cdac5aeb5bc",
+    "preload_queue.S": "54cd795ea90882bd9dbc46015fa16cb8e3e73008e3aa061155e14e3a569ed76a",
+    "preload_hooks.c": "529d86dc574fd89ce214a000ff606c85dd1901d0786cd22f8032ac3970636ed9",
+    "bounded_rc522.h": "c51897bae8e8dc372761d5c629d6e82bf7ea185bbd7c80528cdf7d36cb5c8a9a",
+    "pageread_gate_stub.s": "cf55aa4a5e1b2d035996e82131585bafe4c41adeae07c743297f248ebf47ce47",
+    "stock_bounded_thunks.S": "e7673e2ce1fecbdd22f8fa525d7d0a7ba7ebef38773a7d55593389bf845e2521",
+    "stock_bounded_bridge.c": "155e8aede19f9966090d93e1c17de79786db03c428a4dc765b86948e490daf82",
+    "preload_hooks.S": "b1143afce3166028355c948c00873942f755dcafa89f7e860d29722ab6be86df",
+    "rf_stock_adapter.c": "db5c6170853086c19747712e92d087ef129eb1afb143e8a6f50059596c4d44a3",
+    "preload_hooks.h": "5d18bddf88e04209c63fbcd78e0320d3d560a192921693a85e52e4f1c222ae3e",
+    "rf_owner.c": "5d0c31bd2d4cefe506372e7267e6df5ccd47961377f5e652f98df415759e73f4",
+    "rf_owner.h": "ab5d46b0a90e61127acc7c02f984db59d5b5699b614e4d13a01533a85568fe3e",
+    "experimental_binding.h": "f319d0358d35054e3e38c28a92b5f5b3bf44788d32534aa87d8683bc5fafe8d6",
+    "bounded_rc522.c": "bb1953ba49bcf0f825127423039080a59d65b4c1d7df1684b1ecb10fa852b896",
+    "rf_stock_trampolines.S": "b21e2dadd4527f3a906a4bac6576bfecbe0d92d05b3cbbdfcc22efc37855eb1b",
+    "preload_queue.h": "53ad61e75c7984143cad655bb56888126d3b57f7daf2440a52194d76eafca305",
+    "rawtag_cache_stub.s": "9992b3db4c6d8f618d097b06e4a534ba50e556e7a19b7b62fb143923d43a9109"
+  },
+  "stock_sha256": "a468e366226e7c483d3dd96b444223e89cbf0d1b10573d42b6263843ffd6be3e",
+  "image_sha256": "e568a39514a405c185995bdd8cf5cbcb90ad3fdc9bafa01f71e41333254d8114",
+  "elf_sha256": "0decbfb4887b811ecb6c032b3206eddffc115dc5a1bbcc94b4ef94feb55ab6cd",
+  "hooks": [
+    {
+      "address": "0x80116a8",
+      "expected_bytes": "04f049fd",
+      "replacement_bytes": "08f084f8",
+      "symbol": "ex_event_factory_entry",
+      "target": "0x80197b4",
+      "branch_kind": "BL",
+      "component": "RF"
+    },
+    {
+      "address": "0x8008244",
+      "expected_bytes": "09488047",
+      "replacement_bytes": "11f0acba",
+      "symbol": "experiment_reset_gate",
+      "target": "0x80197a0",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f574",
+      "expected_bytes": "81b0d0e90123",
+      "replacement_bytes": "0af090bd00bf",
+      "symbol": "br_stock_read",
+      "target": "0x801a098",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f5d0",
+      "expected_bytes": "81b0d0e901c3",
+      "replacement_bytes": "0af07bbd00bf",
+      "symbol": "br_stock_write",
+      "target": "0x801a0ca",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f32c",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0af074bf",
+      "symbol": "br_stock_transceive_entry",
+      "target": "0x801a218",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800deb6",
+      "expected_bytes": "f0b585b0",
+      "replacement_bytes": "0bf057be",
+      "symbol": "ex_reject_select",
+      "target": "0x8019b68",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e108",
+      "expected_bytes": "b0b584b0",
+      "replacement_bytes": "0bf035bd",
+      "symbol": "ex_reject_halt",
+      "target": "0x8019b76",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e244",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0cf0beba",
+      "symbol": "rf_background_entry",
+      "target": "0x801a7c4",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e7a8",
+      "expected_bytes": "2de9f047",
+      "replacement_bytes": "0cf026b8",
+      "symbol": "rf_cmd68_entry",
+      "target": "0x801a7f8",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e910",
+      "expected_bytes": "2de9f043",
+      "replacement_bytes": "0bf09dbf",
+      "symbol": "rf_cmd13_entry",
+      "target": "0x801a84e",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e74c",
+      "expected_bytes": "10b582b0",
+      "replacement_bytes": "0cf0aab8",
+      "symbol": "rf_cmd14_entry",
+      "target": "0x801a8a4",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e70c",
+      "expected_bytes": "80b582b0",
+      "replacement_bytes": "0cf0f7b8",
+      "symbol": "rf_requeue_entry",
+      "target": "0x801a8fe",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800ea14",
+      "expected_bytes": "82b041f2f056",
+      "replacement_bytes": "0bf0b6b800bf",
+      "symbol": "ex_reject_worker",
+      "target": "0x8019b84",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e7da",
+      "expected_bytes": "012092e0",
+      "replacement_bytes": "0af0e6bf",
+      "symbol": "ex_raw_reject_stub",
+      "target": "0x80197aa",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e836",
+      "expected_bytes": "062064e0",
+      "replacement_bytes": "0df0f9bb",
+      "symbol": "uid_stub",
+      "target": "0x801c02c",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e842",
+      "expected_bytes": "0df18c0e",
+      "replacement_bytes": "0df0f5bb",
+      "symbol": "rawtag_stub",
+      "target": "0x801c030",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800fe3c",
+      "expected_bytes": "05f1880e",
+      "replacement_bytes": "0cf0fab8",
+      "symbol": "rawtag_cache_stub",
+      "target": "0x801c034",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800fe36",
+      "expected_bytes": "06468c28",
+      "replacement_bytes": "0cf002b9",
+      "symbol": "rawtag_extract_stub",
+      "target": "0x801c03e",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e228",
+      "expected_bytes": "40f20471",
+      "replacement_bytes": "0df00ebf",
+      "symbol": "pageread_gate_stub",
+      "target": "0x801c048",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f726",
+      "expected_bytes": "47f6a460",
+      "replacement_bytes": "0cf01bbd",
+      "symbol": "ph_insert_hook",
+      "target": "0x801c160",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ece8",
+      "expected_bytes": "2de9f047",
+      "replacement_bytes": "0df06eba",
+      "symbol": "ph_start_hook",
+      "target": "0x801c1c8",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ed38",
+      "expected_bytes": "c4e90700",
+      "replacement_bytes": "0df07bba",
+      "symbol": "ph_after_wait_hook",
+      "target": "0x801c232",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ed46",
+      "expected_bytes": "84f83400",
+      "replacement_bytes": "0df0a9ba",
+      "symbol": "ph_active_hook",
+      "target": "0x801c29c",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ed76",
+      "expected_bytes": "11612179",
+      "replacement_bytes": "0df0c8ba",
+      "symbol": "ph_enable_gpio_hook",
+      "target": "0x801c30a",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ee98",
+      "expected_bytes": "08433060",
+      "replacement_bytes": "0df063ba",
+      "symbol": "ph_enable_timer_hook",
+      "target": "0x801c362",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800eeca",
+      "expected_bytes": "cff6ff72",
+      "replacement_bytes": "0df0e2ba",
+      "symbol": "ph_start_pwm_hook",
+      "target": "0x801c492",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800f012",
+      "expected_bytes": "cff6ff72",
+      "replacement_bytes": "0df06cba",
+      "symbol": "ph_control_pwm_hook",
+      "target": "0x801c4ee",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x8009d62",
+      "expected_bytes": "d0600120",
+      "replacement_bytes": "12f055bb",
+      "symbol": "ph_encoder_enable_hook",
+      "target": "0x801c410",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800efa4",
+      "expected_bytes": "22ea0000",
+      "replacement_bytes": "0df017ba",
+      "symbol": "ph_disable_timer_hook",
+      "target": "0x801c3d6",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800abec",
+      "expected_bytes": "03f08efd",
+      "replacement_bytes": "12f0d1f9",
+      "symbol": "pq_preload_requeue_hook",
+      "target": "0x801cf92",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x800acfa",
+      "expected_bytes": "03f007fd",
+      "replacement_bytes": "12f04af9",
+      "symbol": "pq_preload_requeue_hook",
+      "target": "0x801cf92",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x800f76a",
+      "expected_bytes": "80f800c0",
+      "replacement_bytes": "0df0afbb",
+      "symbol": "pq_job_link_hook",
+      "target": "0x801cecc",
+      "branch_kind": "B.W",
+      "component": "queue"
+    },
+    {
+      "address": "0x800b030",
+      "expected_bytes": "1970bef1050f",
+      "replacement_bytes": "11f067bf00bf",
+      "symbol": "pq_job_unlink_hook",
+      "target": "0x801cf02",
+      "branch_kind": "B.W",
+      "component": "queue"
+    },
+    {
+      "address": "0x800aa82",
+      "expected_bytes": "0bf0d5fd",
+      "replacement_bytes": "12f05bfa",
+      "symbol": "pq_send_preload",
+      "target": "0x801cf3c",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x800b0de",
+      "expected_bytes": "0bf0a7fa",
+      "replacement_bytes": "11f037ff",
+      "symbol": "pq_send_cleanup",
+      "target": "0x801cf50",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x800e744",
+      "expected_bytes": "07f074ff",
+      "replacement_bytes": "0ef00ffc",
+      "symbol": "pq_send_requeue",
+      "target": "0x801cf66",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x800e79a",
+      "expected_bytes": "07f049ff",
+      "replacement_bytes": "0ef0effb",
+      "symbol": "pq_send_control",
+      "target": "0x801cf7c",
+      "branch_kind": "BL",
+      "component": "queue"
+    },
+    {
+      "address": "0x8012a50",
+      "expected_bytes": "2de9f041",
+      "replacement_bytes": "0af0a6ba",
+      "symbol": "pq_enqueue_hook",
+      "target": "0x801cfa0",
+      "branch_kind": "B.W",
+      "component": "queue"
+    },
+    {
+      "address": "0x8016b38",
+      "expected_bytes": "f1f771ff",
+      "replacement_bytes": "06f040fa",
+      "symbol": "pq_receive_hook",
+      "target": "0x801cfbc",
+      "branch_kind": "BL",
+      "component": "queue"
+    }
+  ],
+  "total_hooks": 39,
+  "payload_origin": "0x80197a0",
+  "payload_bytes": 15172,
+  "image_end_exclusive": "0x801d2ec",
+  "application_end_exclusive": "0x8024000",
+  "flash_capacity_proven": false,
+  "within_documented_application_range": true,
+  "ph_storage_static_address": null,
+  "ph_accessor": "ph_platform_state -> ex_storage_current",
+  "arm_tail_bytes": 608,
+  "arm_payload_bytes": 640,
+  "arm_minimum_allocator_block": 648,
+  "arm_ph_offset": 144,
+  "arm_queue_offset": 184,
+  "arm_queue_bytes": 424,
+  "queue_candidate_is_ownership": false,
+  "queue_proofs_unbound": [
+    "pq_verified_queue_lifetime",
+    "pq_verified_all_queue_sources"
+  ],
+  "normal_insert_preserved": true,
+  "reset_blocked": true,
+  "valid_iap_trailer": false,
+  "unresolved_production_proofs": [
+    "ph_verified_reserved_ram",
+    "ph_verified_exclusive_startup",
+    "ph_verified_owned_failure_source",
+    "ph_verified_all_motion_writers",
+    "ph_verified_controller_quiescence",
+    "pq_verified_queue_lifetime",
+    "pq_verified_all_queue_sources"
+  ],
+  "rf_ready": false,
+  "auth_failure_source_connected": false,
+  "rf_stop_request_connected_to_preload": false,
+  "missing_state_known_lane_stop_effects": true,
+  "missing_state_publisher_ownership_unresolved": true,
+  "physical_stop_proven": false,
+  "boot_aba_lifetime_proven": false,
+  "heap_margin_proven": false,
+  "device_tests_run": false
+}

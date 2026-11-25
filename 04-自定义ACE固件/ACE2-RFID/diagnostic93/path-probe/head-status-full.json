@@ -1,0 +1,23 @@
+{
+  "result": {
+    "eventtime": 84681.15399942,
+    "status": {
+      "filament_motion_sensor e0_filament": {
+        "filament_detected": false,
+        "enabled": true
+      },
+      "filament_motion_sensor e1_filament": {
+        "filament_detected": false,
+        "enabled": true
+      },
+      "filament_motion_sensor e2_filament": {
+        "filament_detected": false,
+        "enabled": true
+      },
+      "filament_motion_sensor e3_filament": {
+        "filament_detected": false,
+        "enabled": true
+      }
+    }
+  }
+}

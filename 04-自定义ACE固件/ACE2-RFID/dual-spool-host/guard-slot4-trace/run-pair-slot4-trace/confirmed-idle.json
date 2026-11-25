@@ -1,0 +1,25 @@
+{
+  "guard_state": "confirmed",
+  "lanes": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "rf": [
+    1,
+    1
+  ],
+  "holds": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ]
+}

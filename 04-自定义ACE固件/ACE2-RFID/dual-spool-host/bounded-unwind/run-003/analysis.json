@@ -1,0 +1,12 @@
+{
+  "outcome": "verified_gate_empty_and_ready",
+  "samples": 3,
+  "all_lanes_ready": true,
+  "heads_clear": true,
+  "gate_empty": true,
+  "stop_ack_evidence": "normal stop returned before motion_unconfirmed=false; exception stop ack true",
+  "encoder_displacement_unavailable": true,
+  "original_result_preserved": true,
+  "original_error": "RuntimeError('decoder missing')",
+  "commanded_three_runs_budget_mm": 400
+}

@@ -1,0 +1,85 @@
+--- a/web/backend/main.py
++++ b/web/backend/main.py
+@@ -315,8 +315,58 @@
+     if fw.startswith("CV"):
+         return "gen1_cfw"
+     return ""
++
++
++def _rfid_hold_state(ace: dict) -> dict:
++    """Expose route holds without changing gate, material or identity state."""
++    if "location_hold" not in ace:
++        return {"rfid_routes": [], "rfid_routes_valid": True}
++    raw = ace.get("location_hold")
++    if not isinstance(raw, dict):
++        return {"rfid_routes": [], "rfid_routes_valid": False}
++    if "rfid_routes" not in raw and "rfid_routes_valid" not in raw:
++        return {"rfid_routes": [], "rfid_routes_valid": True}
++    if "rfid_routes" not in raw or "rfid_routes_valid" not in raw:
++        return {"rfid_routes": [], "rfid_routes_valid": False}
++    routes = raw.get("rfid_routes")
++    if raw.get("rfid_routes_valid") is not True or not isinstance(routes, list):
++        return {"rfid_routes": [], "rfid_routes_valid": False}
++    out = []
++    for r in routes:
++        if (not isinstance(r, dict) or type(r.get("slot")) is not int
++                or not 0 <= r["slot"] < 4):
++            return {"rfid_routes": [], "rfid_routes_valid": False}
++        idx = r.get("ace_index")
++        if idx is not None and (type(idx) is not int or not 0 <= idx < 4):
++            return {"rfid_routes": [], "rfid_routes_valid": False}
++        out.append({"slot": r["slot"], "ace_index": idx})
++    return {"rfid_routes": out, "rfid_routes_valid": True}
+ 
+ 
++
++def _rfid_position_flags(slot: dict) -> dict:
++    """Old firmware omits both; incomplete or invalid pairs fail closed."""
++    names = ("position_unconfirmed", "eject_recovery_allowed")
++    if all(name not in slot for name in names):
++        return {"position_unconfirmed": False, "eject_recovery_allowed": False}
++    held, recovery = (slot.get(name) for name in names)
++    if type(held) is not bool or type(recovery) is not bool or (recovery and not held):
++        return {"position_unconfirmed": True, "eject_recovery_allowed": False}
++    return {"position_unconfirmed": held, "eject_recovery_allowed": recovery}
++
++
++def _rfid_head_position_flag(ace: dict, head: int) -> bool:
++    if "head_position_unconfirmed" not in ace:
++        return False
++    flags = ace.get("head_position_unconfirmed")
++    if not isinstance(flags, dict):
++        return True
++    values = [flags[key] for key in (str(head), head) if key in flags]
++    if not values or any(type(value) is not bool for value in values) or len(set(values)) != 1:
++        return True
++    return values[0]
++
++
+ def _parse_state(status: dict) -> dict:
+     """
+     Translate the raw multi-object status block into the dashboard schema.
+@@ -599,6 +649,7 @@
+                         "rfid_data": rfid_data,
+                         "source":    source,
+                     })
++            slots_out[-1].update(_rfid_position_flags(sd))
+         aces_out.append({
+             "idx":          i,
+             "connected":    a.get("connected"),
+@@ -721,6 +772,7 @@
+                 brand = ptc_id.get("brand", "") or ""
+         toolheads.append({
+             "idx":                t,
++            "position_unconfirmed": _rfid_head_position_flag(ace, t),
+             "name":               f"T{t}",
+             "ace":                ace_field,
+             "slot":               slot_field,
+@@ -797,6 +849,7 @@
+         # Running tag op {busy, kind} - drives the "writing..." bar.
+         "tag_op": dict(ace.get("tag_op") or {}),
+         "slot_action": dict(ace.get("slot_action") or {}),
++        "location_hold": _rfid_hold_state(ace),
+         # '{dia}_{volume_type}' per head (list, unset heads dropped) - the
+         # PA dialog's selectable keys. Cheap engine-side lookups.
+         "nozzle_keys": ace.get("nozzle_keys", []) or [],

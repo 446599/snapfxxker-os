@@ -1,0 +1,328 @@
+{
+  "classification": "ACCESSOR EXPERIMENT NOFLASH; normal reset absolutely blocked",
+  "frozen_input_set": "758335cb4071f5392d389ea21af560f2f577912d9959b78f2916285971fa08a3",
+  "rf_baseline_image": "1ffba30b853ece41509c79b885180447d52c8d591be9185e2849ef341a202e6b",
+  "sources_sha256": {
+    "uid_stub.s": "2c9bcfa7288cedb1af2afcb8af1ca8136abb6ca0593bc79dc11c1c066df34ed6",
+    "experimental_binding.c": "f90a10450c71272d1352271d15e1772a0470123c039d536da54f453fc0e7951b",
+    "rawtag_extract_stub.s": "c3474a390280e790cd00f0bf8db56ab0211fbf805e7aad183d31d34b07b242a5",
+    "event_storage.c": "fc251b411227cda401cc248153a252209048accac31b2259e60cc89f1dff7959",
+    "native_tag_decoder.c": "4ce7672426cae3b7a68271faaf7aa8632c89c6cc83c624d9094424dba1abef5b",
+    "rawtag_stub.s": "3e22782be6d88ea6733ff2200e15cc105b5d2ae6de929a363401268747b98137",
+    "rf_stock_adapter.h": "afcdf337ea48f8f777ddf7e9cb568f25e21acc55a127c71f0645575aec8aa266",
+    "stock_bounded_bridge.h": "974fbb2b2b05acd0b3b7e415a05a6762e66ed938de6874cbeec75748c98df95e",
+    "experimental_gate.S": "0363ad7b8eb1e47ed86811451168ba834b6df261cc450d4d1b2d8cdac5aeb5bc",
+    "preload_hooks.c": "529d86dc574fd89ce214a000ff606c85dd1901d0786cd22f8032ac3970636ed9",
+    "bounded_rc522.h": "c51897bae8e8dc372761d5c629d6e82bf7ea185bbd7c80528cdf7d36cb5c8a9a",
+    "pageread_gate_stub.s": "cf55aa4a5e1b2d035996e82131585bafe4c41adeae07c743297f248ebf47ce47",
+    "stock_bounded_thunks.S": "e7673e2ce1fecbdd22f8fa525d7d0a7ba7ebef38773a7d55593389bf845e2521",
+    "stock_bounded_bridge.c": "155e8aede19f9966090d93e1c17de79786db03c428a4dc765b86948e490daf82",
+    "preload_hooks.S": "b1143afce3166028355c948c00873942f755dcafa89f7e860d29722ab6be86df",
+    "rf_stock_adapter.c": "db5c6170853086c19747712e92d087ef129eb1afb143e8a6f50059596c4d44a3",
+    "preload_hooks.h": "5d18bddf88e04209c63fbcd78e0320d3d560a192921693a85e52e4f1c222ae3e",
+    "rf_owner.c": "5d0c31bd2d4cefe506372e7267e6df5ccd47961377f5e652f98df415759e73f4",
+    "rf_owner.h": "ab5d46b0a90e61127acc7c02f984db59d5b5699b614e4d13a01533a85568fe3e",
+    "experimental_binding.h": "fe570a1c9a21303d39b046c0706c0b8bcd7af0754ca6fdde5c10a58100475c6e",
+    "bounded_rc522.c": "bb1953ba49bcf0f825127423039080a59d65b4c1d7df1684b1ecb10fa852b896",
+    "rf_stock_trampolines.S": "b21e2dadd4527f3a906a4bac6576bfecbe0d92d05b3cbbdfcc22efc37855eb1b",
+    "rawtag_cache_stub.s": "9992b3db4c6d8f618d097b06e4a534ba50e556e7a19b7b62fb143923d43a9109"
+  },
+  "stock_sha256": "a468e366226e7c483d3dd96b444223e89cbf0d1b10573d42b6263843ffd6be3e",
+  "image_sha256": "c132f10a9a91f4bf7a5a5917772a61ea123e74d4d7a8e9b7fb8cb65161a89750",
+  "elf_sha256": "c17e3689ab1313a0e14ab4024f621e4d316f5c11aafab9c4e0df989ba10e0d8f",
+  "hooks": [
+    {
+      "address": "0x80116a8",
+      "expected_bytes": "04f049fd",
+      "replacement_bytes": "08f084f8",
+      "symbol": "ex_event_factory_entry",
+      "target": "0x80197b4",
+      "branch_kind": "BL",
+      "component": "RF"
+    },
+    {
+      "address": "0x8008244",
+      "expected_bytes": "09488047",
+      "replacement_bytes": "11f0acba",
+      "symbol": "experiment_reset_gate",
+      "target": "0x80197a0",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f574",
+      "expected_bytes": "81b0d0e90123",
+      "replacement_bytes": "0af08cbd00bf",
+      "symbol": "br_stock_read",
+      "target": "0x801a090",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f5d0",
+      "expected_bytes": "81b0d0e901c3",
+      "replacement_bytes": "0af077bd00bf",
+      "symbol": "br_stock_write",
+      "target": "0x801a0c2",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f32c",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0af070bf",
+      "symbol": "br_stock_transceive_entry",
+      "target": "0x801a210",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800deb6",
+      "expected_bytes": "f0b585b0",
+      "replacement_bytes": "0bf053be",
+      "symbol": "ex_reject_select",
+      "target": "0x8019b60",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e108",
+      "expected_bytes": "b0b584b0",
+      "replacement_bytes": "0bf031bd",
+      "symbol": "ex_reject_halt",
+      "target": "0x8019b6e",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e244",
+      "expected_bytes": "2de9f04f",
+      "replacement_bytes": "0cf0baba",
+      "symbol": "rf_background_entry",
+      "target": "0x801a7bc",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e7a8",
+      "expected_bytes": "2de9f047",
+      "replacement_bytes": "0cf022b8",
+      "symbol": "rf_cmd68_entry",
+      "target": "0x801a7f0",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e910",
+      "expected_bytes": "2de9f043",
+      "replacement_bytes": "0bf099bf",
+      "symbol": "rf_cmd13_entry",
+      "target": "0x801a846",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e74c",
+      "expected_bytes": "10b582b0",
+      "replacement_bytes": "0cf0a6b8",
+      "symbol": "rf_cmd14_entry",
+      "target": "0x801a89c",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e70c",
+      "expected_bytes": "80b582b0",
+      "replacement_bytes": "0cf0f3b8",
+      "symbol": "rf_requeue_entry",
+      "target": "0x801a8f6",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800ea14",
+      "expected_bytes": "82b041f2f056",
+      "replacement_bytes": "0bf0b2b800bf",
+      "symbol": "ex_reject_worker",
+      "target": "0x8019b7c",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e7da",
+      "expected_bytes": "012092e0",
+      "replacement_bytes": "0af0e6bf",
+      "symbol": "ex_raw_reject_stub",
+      "target": "0x80197aa",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e836",
+      "expected_bytes": "062064e0",
+      "replacement_bytes": "0df0f5bb",
+      "symbol": "uid_stub",
+      "target": "0x801c024",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e842",
+      "expected_bytes": "0df18c0e",
+      "replacement_bytes": "0df0f1bb",
+      "symbol": "rawtag_stub",
+      "target": "0x801c028",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800fe3c",
+      "expected_bytes": "05f1880e",
+      "replacement_bytes": "0cf0f6b8",
+      "symbol": "rawtag_cache_stub",
+      "target": "0x801c02c",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800fe36",
+      "expected_bytes": "06468c28",
+      "replacement_bytes": "0cf0feb8",
+      "symbol": "rawtag_extract_stub",
+      "target": "0x801c036",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800e228",
+      "expected_bytes": "40f20471",
+      "replacement_bytes": "0df00abf",
+      "symbol": "pageread_gate_stub",
+      "target": "0x801c040",
+      "branch_kind": "B.W",
+      "component": "RF"
+    },
+    {
+      "address": "0x800f726",
+      "expected_bytes": "47f6a460",
+      "replacement_bytes": "0cf017bd",
+      "symbol": "ph_insert_hook",
+      "target": "0x801c158",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ece8",
+      "expected_bytes": "2de9f047",
+      "replacement_bytes": "0df06aba",
+      "symbol": "ph_start_hook",
+      "target": "0x801c1c0",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ed38",
+      "expected_bytes": "c4e90700",
+      "replacement_bytes": "0df077ba",
+      "symbol": "ph_after_wait_hook",
+      "target": "0x801c22a",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ed46",
+      "expected_bytes": "84f83400",
+      "replacement_bytes": "0df0a5ba",
+      "symbol": "ph_active_hook",
+      "target": "0x801c294",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ed76",
+      "expected_bytes": "11612179",
+      "replacement_bytes": "0df0c4ba",
+      "symbol": "ph_enable_gpio_hook",
+      "target": "0x801c302",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800ee98",
+      "expected_bytes": "08433060",
+      "replacement_bytes": "0df05fba",
+      "symbol": "ph_enable_timer_hook",
+      "target": "0x801c35a",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800eeca",
+      "expected_bytes": "cff6ff72",
+      "replacement_bytes": "0df0deba",
+      "symbol": "ph_start_pwm_hook",
+      "target": "0x801c48a",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800f012",
+      "expected_bytes": "cff6ff72",
+      "replacement_bytes": "0df068ba",
+      "symbol": "ph_control_pwm_hook",
+      "target": "0x801c4e6",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x8009d62",
+      "expected_bytes": "d0600120",
+      "replacement_bytes": "12f051bb",
+      "symbol": "ph_encoder_enable_hook",
+      "target": "0x801c408",
+      "branch_kind": "B.W",
+      "component": "preload"
+    },
+    {
+      "address": "0x800efa4",
+      "expected_bytes": "22ea0000",
+      "replacement_bytes": "0df013ba",
+      "symbol": "ph_disable_timer_hook",
+      "target": "0x801c3ce",
+      "branch_kind": "B.W",
+      "component": "preload"
+    }
+  ],
+  "total_hooks": 29,
+  "payload_origin": "0x80197a0",
+  "payload_bytes": 12649,
+  "image_end_exclusive": "0x801c911",
+  "application_end_exclusive": "0x8024000",
+  "flash_capacity_proven": false,
+  "within_documented_application_range": true,
+  "ph_storage_static_address": null,
+  "ph_accessor": "ph_platform_state -> ex_storage_current",
+  "arm_tail_bytes": 184,
+  "arm_payload_bytes": 216,
+  "arm_minimum_allocator_block": 224,
+  "arm_ph_offset": 144,
+  "normal_insert_preserved": true,
+  "reset_blocked": true,
+  "valid_iap_trailer": false,
+  "unresolved_production_proofs": [
+    "ph_verified_reserved_ram",
+    "ph_verified_exclusive_startup",
+    "ph_verified_owned_failure_source",
+    "ph_verified_all_motion_writers",
+    "ph_verified_controller_quiescence"
+  ],
+  "rf_ready": false,
+  "auth_failure_source_connected": false,
+  "rf_stop_request_connected_to_preload": false,
+  "missing_state_known_lane_stop_effects": true,
+  "missing_state_publisher_ownership_unresolved": true,
+  "physical_stop_proven": false,
+  "boot_aba_lifetime_proven": false,
+  "heap_margin_proven": false,
+  "device_tests_run": false
+}

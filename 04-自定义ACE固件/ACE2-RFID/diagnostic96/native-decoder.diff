@@ -1,0 +1,13 @@
+--- ace2-rfid-dev-20261107/diagnostic95/firmware/native_tag_decoder.c	2026-11-07 19:32:27
++++ ace2-rfid-dev-20261107/diagnostic96/firmware/native_tag_decoder.c	2026-11-07 20:43:40
+@@ -947,7 +947,9 @@
+  */
+ int decode_native_tag(uint8_t *slot_record, const uint8_t *page_buf, int bytes_read, void *ctx) {
+ #if defined(__arm__) || defined(__thumb__)
+-    if ((uintptr_t)slot_record >= 0x20001748) {
++    uintptr_t record = (uintptr_t)slot_record;
++    if (record != 0x2000160c && record != 0x200016b0 &&
++        record != 0x20001754 && record != 0x200017f8) {
+         return -1;
+     }
+ #endif

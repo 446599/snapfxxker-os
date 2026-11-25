@@ -1,0 +1,11 @@
+--- diagnostic92/live/ace_protocol_v2.py	2026-11-07 18:17:42
++++ diagnostic95/native-guard/ace_protocol_v2.py	2026-11-07 19:50:19
+@@ -737,6 +737,8 @@
+             'temp': _fval(fields, 3, 0),
+             'humidity': _fval(fields, 4, 0),
+             'enable_rfid': 1 if _fval(fields, 5, 0) else 0,
++            'rfid1_enable_raw': _fval(fields, 5, 0),
++            'rfid2_enable_raw': _fval(fields, 6, 0),
+             'fan_speed': 0,
+             'feed_assist_count': _fval(fields, 7, 0),
+             'cont_assist_time': float(_fval(fields, 8, 0)),

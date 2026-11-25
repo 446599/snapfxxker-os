@@ -1,0 +1,21 @@
+{
+  "identity": "ACE 808780566 / 17445170 / 942880330, V1.1.93O",
+  "confirmed_forward_commanded_mm": 365,
+  "confirmed_forward_encoder_mm": 341,
+  "unconfirmed_extra_command_mm": 5,
+  "unconfirmed_reason": "A_FEED response timeout; last observed encoder equals previous operation",
+  "stop_after_missing_ack": "CMD9 valid code 0",
+  "post_stop": "two fresh statuses ready; decoder 5 twice, not attributable to new operation",
+  "head_sensors": "four false when observed, including post-stop; brief triggers between polls cannot be excluded",
+  "gate": "INSERT bit8 true on final check",
+  "reverse_commanded_mm": 0,
+  "state": "stopped; filament not restored; do not reissue uncertain move",
+  "paths": [
+    "result.json",
+    "recheck.json",
+    "resume-result.json",
+    "recheck2.json",
+    "events.jsonl",
+    "gcode-store-after-second-failure.json"
+  ]
+}

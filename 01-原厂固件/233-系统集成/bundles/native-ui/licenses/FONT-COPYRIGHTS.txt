@@ -1,0 +1,70 @@
+FONT AND ICON COPYRIGHT NOTICES
+Recorded: 2026-11-09
+
+These notices identify the original font assets used by the native UI. Converted/subset LVGL font data retains the applicable font/icon license; the application GPL does not replace these licenses.
+
+NotoSans-Regular.ttf
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+Version: Version 2.015
+License: OFL-1.1
+Source: https://github.com/prestonbrown/helixscreen/blob/cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1/assets/fonts/NotoSans-Regular.ttf
+SHA256: fe8c022f48d8dd29f17b744d16f9346f4357e16f7d4f7be58b000ae7c291b614
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+NotoSans-Bold.ttf
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+Version: Version 2.015
+License: OFL-1.1
+Source: https://github.com/prestonbrown/helixscreen/blob/cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1/assets/fonts/NotoSans-Bold.ttf
+SHA256: 13a813c49624ae3ba3c5c6e72c5ebffc4b9e1e6ea32f421c04069b037c6ad431
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+NotoSans-Light.ttf
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+Version: Version 2.015; ttfautohint (v1.8.4.7-5d5b)
+License: OFL-1.1
+Source: https://github.com/prestonbrown/helixscreen/blob/cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1/assets/fonts/NotoSans-Light.ttf
+SHA256: 8bf10e8d399c5b70554eb76fe2629899a1098f1a8acb599804b76c619845ce0c
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL
+
+NotoSansCJKsc-Regular.otf
+© 2014-2021 Adobe (http://www.adobe.com/).
+Version: Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603
+License: OFL-1.1
+Source: https://github.com/notofonts/noto-cjk/blob/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf
+SHA256: 2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.
+
+NotoSansCJKjp-Regular.otf
+© 2014-2021 Adobe (http://www.adobe.com/).
+Version: Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603
+License: OFL-1.1
+Source: https://github.com/notofonts/noto-cjk/blob/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf
+SHA256: 68a3fc98800b2a27b371f2fb79991daf3633bd89309d4ffaa6946fd587f375b5
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.
+
+SourceCodePro-Regular.ttf
+© 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’
+Version: Version 2.042;hotconv 1.1.0;makeotfexe 2.6.0
+License: OFL-1.1
+Source: https://github.com/prestonbrown/helixscreen/blob/cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1/assets/fonts/SourceCodePro-Regular.ttf
+SHA256: 74bd80d3e42a08517cd7e1108ba3d86f2da29ac0f3065be95e0357956ab9db37
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL. This Font Software is distributed on an ‘AS IS’ BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.
+
+materialdesignicons-webfont.ttf
+(The source font metadata contains no copyright string; see the component notices below.)
+Version: Version 1.0
+License: Apache-2.0
+Source: https://github.com/Templarian/MaterialDesign-Webfont/blob/57b567a448bd579892174cd47c47f9e187ea56c6/fonts/materialdesignicons-webfont.ttf
+SHA256: 61e8aba5a4e981fe22cf7c8e8bcdbea00476e75c62c37f01bf7ee33361d68428
+Confirmed upstream release: Material Design Icons v7.4.47.
+Pictogrammers fonts are under Apache License 2.0. Preserve MDI-LICENSE.txt and Apache-2.0.txt.
+
+helix-custom-icons.ttf
+(The source font metadata contains no copyright string; see the component notices below.)
+Version: None
+License: Mixed project assets; Spoolman-derived glyph under MIT
+Source: https://github.com/prestonbrown/helixscreen/blob/cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1/assets/fonts/helix-custom-icons.ttf
+SHA256: cc59adbc19e6024b4906fc73a5cc9f8ce587519d3fbd1d94ad85c28eb1fa38f8
+The Spoolman glyph is derived from Donkie/Spoolman; Copyright (c) 2023 Daniel Hultgren, MIT License. See Spoolman-MIT.txt and the project COPYRIGHT.
+

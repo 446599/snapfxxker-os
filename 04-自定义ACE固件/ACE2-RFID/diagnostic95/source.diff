@@ -1,0 +1,33 @@
+--- diagnostic93/firmware/rc522_stub.s	2026-11-07 18:16:56
++++ diagnostic95/firmware/rc522_stub.s	2026-11-07 19:32:27
+@@ -193,7 +193,7 @@
+         cmp     r1, #4
+         bhs     diag_reject
+         ubfx    r2, r5, #0, #8
+-        cmp     r2, #4
++        cmp     r2, #5
+         bhi     diag_reject
+         mrs     r6, PRIMASK
+         cpsid   i
+@@ -207,6 +207,8 @@
+         ldr     r8, [r0, #12]
+         orrs    r3, r3, r8
+         bne     diag_locked_reject
++        cmp     r2, #5
++        beq     diag_printer_status
+         cmp     r2, #3
+         beq     diag_reader_state
+         movw    r0, #0x18a4
+@@ -222,6 +224,12 @@
+         ldr     r0, [r0, r2, lsl #2]
+         msr     PRIMASK, r6
+         b       done
++diag_printer_status:
++        movw    r0, #0x0098
++        movt    r0, #0x2000
++        ldrb    r0, [r0]
++        msr     PRIMASK, r6
++        b       done
+ diag_reader_state:
+         movw    r0, #0x1600
+         movt    r0, #0x2000

@@ -1,0 +1,135 @@
+#!/bin/sh
+#
+# Start/stop klipper
+#
+
+# Common cgroup definitions
+# Source this file in init scripts to reference cgroup definitions
+. /usr/sbin/cgroup_helper.sh
+
+PYTHON=/usr/bin/python3
+KLIPPER=/home/lava/klipper/klippy/klippy.py
+KLIPPER_ARGS_V1="/home/lava/printer_data/config/printer.cfg -I /home/lava/printer_data/comms/klippy.serial -l /oem/klippylogs/klippy.log -a /home/lava/printer_data/comms/klippy.sock"
+KLIPPER_ARGS_V2="/home/lava/printer_data/config/printer_v2.cfg -I /home/lava/printer_data/comms/klippy.serial -l /oem/klippylogs/klippy.log -a /home/lava/printer_data/comms/klippy.sock"
+KLIPPER_ARGS=""
+KLIPPER_ARGS_FACTORY="/home/lava/printer_data/config/factory.cfg -I /home/lava/printer_data/comms/klippy.serial -l /oem/klippylogs/klippy.log -a /home/lava/printer_data/comms/klippy.sock"
+KLIPPER_ARGS_FACTORY1="/home/lava/printer_data/config/factory1.cfg -I /home/lava/printer_data/comms/klippy.serial -l /oem/klippylogs/klippy.log -a /home/lava/printer_data/comms/klippy.sock"
+KLIPPER_ARGS_FACTORY2="/home/lava/printer_data/config/factory2.cfg -I /home/lava/printer_data/comms/klippy.serial -l /oem/klippylogs/klippy.log -a /home/lava/printer_data/comms/klippy.sock"
+KLIPPER_ARGS_FACTORY_V2="/home/lava/printer_data/config/factory_v2.cfg -I /home/lava/printer_data/comms/klippy.serial -l /oem/klippylogs/klippy.log -a /home/lava/printer_data/comms/klippy.sock"
+KLIPPER_ARGS_FACTORY1_V2="/home/lava/printer_data/config/factory1_v2.cfg -I /home/lava/printer_data/comms/klippy.serial -l /oem/klippylogs/klippy.log -a /home/lava/printer_data/comms/klippy.sock"
+KLIPPER_ARGS_FACTORY2_V2="/home/lava/printer_data/config/factory2_v2.cfg -I /home/lava/printer_data/comms/klippy.serial -l /oem/klippylogs/klippy.log -a /home/lava/printer_data/comms/klippy.sock"
+PIDFILE=/var/run/klipper.pid
+KLIPPER_NICE="-20"
+
+SYSTEM_UPGRADE=/home/lava/bin/systemUpgrade.sh
+LAVA_IO=/usr/bin/lava_io
+# Source optional extensions in lexical order before handling the action.
+for hook in /etc/hooks/klipper.d/*.sh; do
+	[ -r "$hook" ] || continue
+	. "$hook"
+done
+unset hook
+
+log()
+{
+	logger -p user.info -t "klipper[$$]" -- "$1"
+	echo "$1"
+}
+
+case "$1" in
+  start)
+	log "Starting klipper..."
+
+	"$LAVA_IO" set MAIN_MCU_POWER=1 HEAD_MCU_POWER=1
+	sleep 2
+	for i in $(seq 1 20) ; do
+		mcu0_online=$("$SYSTEM_UPGRADE" show-status | grep "Main MCU" | grep "online")
+		if [ x"$mcu0_online" != x"" ] ; then
+			break
+		fi
+		log "Main MCU offline, wait 1s."
+		sleep 1
+	done
+	ulimit -c 102400
+	# Raise memlock limit so klippy can mlock its file-backed code
+	# pages (interpreter + shared libs + C extensions, ~26 MiB).
+	# Heap/anonymous pages are NOT locked - zram still applies to them.
+	ulimit -l 65536
+
+	# Migrate this shell (and all children) to rt cgroup
+	# for IO priority over apps group
+	if [ -d "$RT_CGROUP" ]; then
+		echo $$ > "$RT_CGROUP/cgroup.procs" 2>/dev/null || \
+			log "WARNING: Failed to migrate to rt cgroup"
+	else
+		log "WARNING: rt cgroup not found, klipper runs in root cgroup"
+	fi
+
+	if [ -f "/oem/.skip_checking_mcu" -o -f "/udisk/.skip_checking_mcu" ]; then
+		log "Skip checking MCU version..."
+	else
+		log "Check MCU version and restore..."
+		"$SYSTEM_UPGRADE" check-restore
+		sleep 1
+		"$SYSTEM_UPGRADE" check
+		if [ $? -ne 0 ] ; then
+			log "MCU version check failed."
+			"$SYSTEM_UPGRADE" show-status | while IFS= read -r line; do
+				log "$line"
+			done
+		fi
+	fi
+
+	mcu0_model=$("$SYSTEM_UPGRADE" show-model mcu0)
+	case "$mcu0_model" in
+		*gd32h757*)
+			KLIPPER_ARGS="$KLIPPER_ARGS_V2"
+			KLIPPER_ARGS_FACTORY="$KLIPPER_ARGS_FACTORY_V2"
+			KLIPPER_ARGS_FACTORY1="$KLIPPER_ARGS_FACTORY1_V2"
+			KLIPPER_ARGS_FACTORY2="$KLIPPER_ARGS_FACTORY2_V2"
+			;;
+		*)
+			KLIPPER_ARGS="$KLIPPER_ARGS_V1"
+			;;
+	esac
+	log "Main MCU model: $mcu0_model, config: $(basename $(echo $KLIPPER_ARGS | awk '{print $1}'))"
+
+	# if /oem/.factory exists, add -f to klippy args
+	if [ -e "/oem/.factory" ]; then
+		KLIPPER_ARGS="$KLIPPER_ARGS -f"
+		KLIPPER_ARGS_FACTORY="$KLIPPER_ARGS_FACTORY -f"
+		KLIPPER_ARGS_FACTORY1="$KLIPPER_ARGS_FACTORY1 -f"
+		KLIPPER_ARGS_FACTORY2="$KLIPPER_ARGS_FACTORY2 -f"
+	fi
+
+	if { [ -f "/oem/.mptsignature" ] && cmp -s "/oem/.mptsignature" "/etc/.mptsignature"; } || \
+		{ [ -f "/mnt/udisk/.mptsignature" ] && cmp -s "/mnt/udisk/.mptsignature" "/etc/.mptsignature"; }; then
+		if [ -f "/mnt/udisk/.mpt_machine_modify_coor_auto" ]; then
+			log "Starting klipper with factory1 config..."
+			start-stop-daemon -S -b -c lava -N ${KLIPPER_NICE} -x "$PYTHON" -m -p "$PIDFILE" -- $KLIPPER $KLIPPER_ARGS_FACTORY1
+		elif [ -f "/mnt/udisk/.mpt_factory2" ]; then
+			log "Starting klipper with factory2 config..."
+			start-stop-daemon -S -b -c lava -N ${KLIPPER_NICE} -x "$PYTHON" -m -p "$PIDFILE" -- $KLIPPER $KLIPPER_ARGS_FACTORY2
+		else
+			log "Starting klipper with factory config..."
+			start-stop-daemon -S -b -c lava -N ${KLIPPER_NICE} -x "$PYTHON" -m -p "$PIDFILE" -- $KLIPPER $KLIPPER_ARGS_FACTORY
+		fi
+	else
+		log "Starting klipper with normal config..."
+		start-stop-daemon -S -b -c lava -N ${KLIPPER_NICE} -x "$PYTHON" -m -p "$PIDFILE" -- $KLIPPER $KLIPPER_ARGS
+	fi
+	;;
+  stop)
+	log "Stopping klipper..."
+	start-stop-daemon -K -q -p "$PIDFILE" -o
+	"$LAVA_IO" set MAIN_MCU_POWER=0 HEAD_MCU_POWER=0
+	;;
+  restart)
+	"$0" stop
+	sleep 1 # Prevent race condition: ensure nginx stops before start.
+	"$0" start
+	;;
+  *)
+	echo "Usage: $0 {start|stop|restart}"
+	exit 1
+esac

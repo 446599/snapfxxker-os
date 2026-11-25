@@ -1,0 +1,131 @@
+name: Code Quality
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+      # Report branches carry a worker's STATUS.md over a full tree. Nothing
+      # in them is code, and each push otherwise queues a whole build.
+      - "!claude/report-*"
+      - "release/**"
+  pull_request:
+    branches: [ main, "release/**" ]
+
+# A push to a claude/** work branch is superseded within minutes on a busy day,
+# and this workflow can hold a runner for hours. Keying the group on the ref
+# lets a newer push cancel the older run there. release/** keys on the SHA, so
+# every commit that lands there keeps its own run. main queues instead of
+# cancelling: a run cancelled on main leaves that commit with no verdict, and a
+# release is cut from the newest commit whose CI is fully green
+# (scripts/latest-green-sha.sh). fromJSON makes it a boolean, as in build.yml.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (startsWith(github.ref, 'refs/heads/release/') && github.sha || github.ref) }}
+  cancel-in-progress: ${{ fromJSON(github.ref != 'refs/heads/main') }}
+
+# Every patch is judged from clean here (see build.yml for why the flag is
+# environment-wide rather than per-step).
+env:
+  HELIX_PATCHES_FROM_CLEAN: "1"
+
+jobs:
+  quality-checks:
+    name: Code Quality Checks
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+
+    steps:
+    # The branch gates (qc_test_budget, qc_growth_ratchets) measure from the
+    # fork point and refuse when none resolves, so each event needs one. A pull
+    # request's merge commit has the base it was merged onto as its first
+    # parent: depth 2 holds it, and the next step names it origin/<base>. A push
+    # to claude/** has no base in the clone at all, so it takes full history
+    # (every branch, origin/main included) to find its merge-base. main and
+    # release/** pushes measure against their own remote ref, which every
+    # checkout sets.
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        submodules: false
+        fetch-depth: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/claude/')) && '0' || '2' }}
+
+    - name: Name the pull request's base for the branch gates
+      if: github.event_name == 'pull_request'
+      run: |
+        git update-ref "refs/remotes/origin/${{ github.base_ref }}" HEAD^1
+        git log --oneline -1 "origin/${{ github.base_ref }}"
+
+    # lib/helix-xml is a submodule, and quality-checks.sh regenerates the XML
+    # linter schema from lib/helix-xml/src/xml on its failing-lint path. An
+    # uninitialized submodule yields a schema with no widgets rather than an
+    # error, so every ui_xml reference then looks unknown.
+    - name: Initialize submodules
+      uses: ./.github/actions/init-submodules
+
+    # Gates that read submodule SOURCE must see the tree the app actually
+    # ships, not upstream's. lvgl_display_sync_cb.patch inserts four values
+    # into lv_event_code_t (LV_EVENT_SYNC_{,WAIT_}{START,FINISH}), renumbering
+    # everything after them by four. qc_lvgl_event_codes derives the crash
+    # worker's table from that enum, and crash reports come from patched
+    # builds, so checking against a pristine checkout made the gate disagree
+    # with a correct table on every run. qc_patch_drift also does a real
+    # comparison here rather than reporting "patches not applied yet".
+    - name: Apply submodule patches
+      run: make apply-patches
+
+    - name: Install pinned tooling (clang-format) into .venv
+      uses: nick-fields/retry@v4
+      with:
+        timeout_minutes: 3
+        max_attempts: 3
+        command: |
+          # Install the EXACT pinned clang-format (and other tools) from
+          # requirements.txt into .venv — the same single source of truth the
+          # pre-commit hook uses (scripts/quality-checks.sh prefers
+          # .venv/bin/clang-format). This guarantees CI formats byte-identically
+          # to every dev machine, independent of the runner's system clang-format.
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/clang-format --version
+
+    # devel/** is reported, never blocked. An integration branch that goes red
+    # should be something to walk over and fix, not a wall in front of the next
+    # merge, so the run stays green and says so loudly instead. main and
+    # claude/** keep failing hard. The trigger matters more than the tolerance:
+    # with no devel/** entry at all, devel/1.1 had no quality CI whatsoever, and
+    # a branch whose own CI was red merged into it unnoticed - every sync merge
+    # then inherits those gates, because they are tree-wide.
+    # tests/python/ covers the script-side tooling: the doc-anchor resolver, the
+    # translation extractor and YAML manager, the ESP32 asset packer. It runs here
+    # rather than only in nightly because nightly is schedule-triggered and so only
+    # ever sees the default branch, which left a release branch's copy of these
+    # scripts with no coverage at all.
+    - name: Run Python script tests
+      run: .venv/bin/pytest tests/python/ -v --tb=short
+
+    - name: Run quality checks
+      id: quality
+      timeout-minutes: 5
+      continue-on-error: ${{ startsWith(github.ref, 'refs/heads/devel/') || startsWith(github.base_ref, 'devel/') }}
+      run: |
+        # Use shared script - single source of truth for pre-commit and CI
+        chmod +x scripts/quality-checks.sh
+        ./scripts/quality-checks.sh
+
+    # outcome vs conclusion is the whole trick: both are 'failure' on a hard
+    # gate, but a tolerated one reports outcome=failure, conclusion=success. So
+    # this fires only where the failure was actually swallowed, and stays quiet
+    # on main where the job is already red on its own.
+    - name: Announce a tolerated failure
+      if: always() && steps.quality.outcome == 'failure' && steps.quality.conclusion == 'success'
+      run: |
+        echo "::warning title=Quality gates FAILED on ${{ github.ref_name }}::Tolerated because this is an integration branch. Fix it here - a sync merge inherits every red gate."
+        {
+          echo "## Quality checks FAILED (tolerated on this branch)"
+          echo
+          echo "This run is green so it blocks nothing, but the gates below are red on"
+          echo "\`${{ github.ref_name }}\` and every merge out of it carries them forward."
+          echo
+          echo "Reproduce locally: \`./scripts/quality-checks.sh\`"
+        } >> "$GITHUB_STEP_SUMMARY"

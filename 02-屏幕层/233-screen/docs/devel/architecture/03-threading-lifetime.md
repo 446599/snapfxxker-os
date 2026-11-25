@@ -1,0 +1,236 @@
+# 03 - Threading & Lifetime
+
+Chapter 02 followed one temperature reading from WebSocket JSON to a repainted label; this chapter is about the boundary that reading crossed. HelixScreen runs one LVGL main thread that owns every widget, subject, and observer, plus a fixed set of background threads - the libhv WebSocket loop, two HTTP worker pools, a DBus thread, and a handful of long-lived workers. Background code never touches LVGL directly; it schedules main-thread work through a single queue. The other half of the title is the mirror problem: panels close and state objects die while their async work is still in flight, so two small guards - a generation counter for callbacks, a shared death flag for subjects - turn late work into silent no-ops instead of use-after-frees.
+
+Every rule below is summarized, not invented: [`../THREADING.md`](../THREADING.md) is the single source of truth, and each section points at the chapter of it that holds the full argument. What this chapter adds is the map - which thread you are on, which guard you need, and which lint gate fires if you guess wrong.
+
+```mermaid
+flowchart LR
+    subgraph kBg["Background threads"]
+        WS["libhv event loop<br/>MoonrakerClient (hv::WebSocketClient)<br/>WebSocket frames, JSON-RPC"]
+        FAST["HttpExecutor fast pool<br/>4 workers - REST, thumbnails"]
+        kSlow["HttpExecutor slow pool<br/>1 worker - large transfers"]
+        BUS["BusThread<br/>BlueZ sd-bus calls"]
+        WORK["Long-lived owned workers<br/>UpdateChecker, telemetry batches,<br/>camera stream, hot-reload poll"]
+    end
+
+    subgraph MAIN["Main thread - owns every lv_obj and lv_subject"]
+        LOOP["Application main_loop<br/>process_notifications"]
+        TH["lv_timer_handler<br/>UpdateQueue drain timer (refresh period),<br/>LVGL timers, render"]
+        LOOP --> TH
+    end
+
+    UQ["UpdateQueue<br/>mutex-protected queue<br/>of tagged lambdas"]
+    WS -->|"queue_update / tok.defer / bg_cb"| UQ
+    FAST --> UQ
+    kSlow --> UQ
+    BUS --> UQ
+    WORK --> UQ
+    UQ -->|"process_pending drains on main"| TH
+    WS -->|"raw JSON via mutex queue<br/>(ch. 02)"| LOOP
+
+    ALG["AsyncLifetimeGuard<br/>generation counter<br/>owner died? skip"]
+    SL["SubjectLifetime<br/>shared_ptr bool<br/>subject died? skip removal"]
+    UQ -.-> ALG
+    ALG -.-> TH
+    SL -.-> TH
+```
+
+## Key files
+
+| File | Role |
+|------|------|
+| [`docs/devel/THREADING.md`](../THREADING.md) | Single source of truth: every rule here in full, plus enforcement layers, shutdown ordering, symptom index |
+| [`include/core/update_queue.h`](../../../include/core/update_queue.h) | `UpdateQueue` and `queue_update()` - the only sanctioned thread crossing |
+| [`include/async_lifetime_guard.h`](../../../include/async_lifetime_guard.h) | `AsyncLifetimeGuard`, `LifetimeToken`, `bg_cb()` - the callback-lifetime guard |
+| [`include/ui_observer_guard.h`](../../../include/ui_observer_guard.h) | `ObserverGuard`, `SubjectLifetime` - observer cleanup and subject-death tracking |
+| [`include/core/observer_factory.h`](../../../include/core/observer_factory.h) | `observe<int>()` and friends; the factories whose 4th parameter carries the lifetime |
+| [`include/ui_utils.h`](../../../include/ui_utils.h) | `safe_delete_deferred()`, `safe_clean_children()`, `safe_delete_subtree()` - deferred deletion |
+| [`include/ui_timer_guard.h`](../../../include/ui_timer_guard.h) | `LvglTimerGuard` RAII and `lv_timer_cancel_safe()` |
+| [`include/core/http_executor.h`](../../../include/core/http_executor.h) | `HttpExecutor::fast()` (4 workers) / `slow()` (1 worker) process-wide pools |
+| [`src/bluetooth/bt_bus_thread.h`](../../../src/bluetooth/bt_bus_thread.h) | `BusThread` - single-threaded owner of the BlueZ sd-bus connection |
+| [`src/printer/printer_state.cpp`](../../../src/printer/printer_state.cpp) | The `set_*()` → `set_*_internal()` marshalling exemplar |
+| [`src/network/wifi_manager.cpp`](../../../src/network/wifi_manager.cpp) | Reference integration: parse on the background thread, marshal to main |
+| [`scripts/check_l081_anti_pattern.py`](../../../scripts/check_l081_anti_pattern.py) | Gate: bare `tok.expired()` followed by `this` access on a background thread |
+| [`scripts/check_timer_destructor_cancel.py`](../../../scripts/check_timer_destructor_cancel.py) | Gate: raw `lv_timer_t*` cancelled in `cleanup()` must also be cancelled in the destructor |
+
+## How it works
+
+Four mechanics, one per subsection: know which thread you are on, cross back through one queue, and carry a guard when your work might outlive its owner (`AsyncLifetimeGuard`) or its subject (`SubjectLifetime`).
+
+Everything else - deletion rules, timers, shutdown ordering - follows from those four.
+
+### The thread inventory
+
+There is exactly one thread that may call `lv_*` anything: the main thread, which enters `Application::main_loop()` ([`src/application/application.cpp#main_loop`](../../../src/application/application.cpp)) and never leaves it until shutdown. Everything else is background:
+
+- **The libhv event loop.** `MoonrakerClient` extends `hv::WebSocketClient` ([`include/moonraker_client.h#MoonrakerClient`](../../../include/moonraker_client.h)), and libhv runs the socket's event loop on its own thread. Every WebSocket frame, JSON-RPC reply, and connection-state callback arrives there. This is the thread that produces almost all printer data.
+- **`HttpExecutor` pools.** Two process-wide executors ([`include/core/http_executor.h#fast`](../../../include/core/http_executor.h)): `fast()` with 4 workers for status/REST/thumbnail traffic that deserves burst parallelism, `slow()` with 1 worker so a multi-minute upload cannot head-of-line-block a quick request. `submit()` from any thread, `run_sync()` when a result is needed now (never from inside a worker on a single-worker lane - self-deadlock).
+- **`BusThread`.** BlueZ DBus is not thread-safe either; [`src/bluetooth/bt_bus_thread.h`](../../../src/bluetooth/bt_bus_thread.h) is a single worker thread that exclusively owns the `sd_bus*` connection. All sd-bus calls go through `submit()`/`run_sync()`.
+- **Long-lived owned workers.** `UpdateChecker` runs `worker_thread_` ([`src/system/update_checker.cpp#check_for_updates`](../../../src/system/update_checker.cpp), joined in the destructor at `src/system/update_checker.cpp#~UpdateChecker`) and `download_thread_` (`src/system/update_checker.cpp#start_download`); `TelemetryManager` spawns a per-batch `send_thread_` ([`src/system/telemetry_manager.cpp#try_send`](../../../src/system/telemetry_manager.cpp), joined at `src/system/telemetry_manager.cpp#shutdown`); the camera stream and the XML hot-reload poller each own one. Every `std::thread` spawn is either joined in its owner's destructor, bounded-then-detached as described below, or wrapped in the try/catch form described next.
+- **One worker is deliberately not joined: `UpdateChecker::download_thread_`.** It can be parked inside libhv's synchronous `requests::downloadFile()`, whose `req->timeout` is 3600 seconds and which exposes no abort hook - its progress callback returns `void`. Joining it on the LVGL thread would freeze the touchscreen, and joining it at teardown could hang shutdown for that same hour. `reap_download_thread()` ([`src/system/update_checker.cpp#reap_download_thread`](../../../src/system/update_checker.cpp)) waits a bounded time for the worker to finish - 1s from `shutdown()` (`src/system/update_checker.cpp#shutdown`), 250ms from the destructor (`src/system/update_checker.cpp#~UpdateChecker`) - then **detaches** and lets it die with the process, the same escape hatch `HttpExecutor::stop()` takes for the same reason. `shutting_down_` is set first, so the detached worker bails at its next check (`src/system/update_checker.cpp#do_download/"shutting_down_"`) without touching a subject, the mutex, or the UpdateQueue.
+
+- **The WiFi control lane.** `WiFiManager` sends every backend control call on one serial lane over `HttpExecutor::fast()`, never from the LVGL thread. Detailed below.
+
+#### WiFi control: one lane, a circuit breaker, one answer per action
+
+A wedged WiFi driver leaves the control daemon unable to reply, and a wpa_supplicant request then waits out wpa_ctrl's 10 s reply deadline plus up to 5 s of send retries. Made from the LVGL thread, any such call would freeze the screen for that long, so none is made there.
+
+**Threading.** Scan triggers, connect, disconnect, forget, the radio toggle and status reads all go through `submit_control()` ([`src/network/wifi_manager.cpp#submit_control`](../../../src/network/wifi_manager.cpp)). It appends to `control_queue_` and, when no drain is running, submits one `run_control_ops()` drain (`src/network/wifi_manager.cpp#run_control_ops`) to `HttpExecutor::fast()`. The drain runs the ops one at a time, in the order the user made them, so a wedged daemon holds at most one of the pool's four workers. Results come back to the LVGL thread through the manager's `LifetimeToken` (`tok.defer`), and the caller's own token gates its callback. With the pool never started (ESP32, whose backend answers from memory) the call runs inline; once the pool has run this manager's calls and then stopped (app exit), calls are dropped and their `on_dropped` answers instead, so nothing falls back onto the LVGL thread. A backend swap to wpa_supplicant (`src/network/wifi_manager.cpp#swap_to_wpa_supplicant`) sets `control_paused_`, waits at most 200 ms for the lane to empty, and retries 100 ms later rather than blocking.
+
+**Single owner.** The running drain holds a radio op (`begin_radio_op()`), and `~WiFiManager` waits for it **unbounded**: the worker dereferences the manager for the whole backend call, so a bounded wait would free it under the worker. That wait is safe only because nothing in the app destroys a `WiFiManager`. `get_wifi_manager()` (`src/network/wifi_manager.cpp#get_wifi_manager`) builds the one instance and never frees it, and a lint gate (`scripts/code_lint.sh#lint_wifi_manager_owner`) fails any other construction in `src/`, `include/` or `firmware/`. Escape hatch: `// WIFI_MANAGER_OWNER_OK: <reason>`. Test fixtures build their own and are unaffected.
+
+**The circuit breaker.** `ControlBreaker` ([`include/wifi_control_breaker.h#"class ControlBreaker {"`](../../../include/wifi_control_breaker.h)) is a pure policy with no timer or clock; `WiFiManager` feeds it under `breaker_mutex_`. Only **health calls** (a scan trigger or a status read, one short request on a healthy daemon) are timed into it, by `record_health_call()` (`src/network/wifi_manager.cpp#record_health_call`). Values from `ControlBreaker::Config`:
+
+| Setting | Value | Meaning |
+|---|---|---|
+| `slow_call_ms` | 5000 ms | A health call this slow is a strike, whatever it returned |
+| `trip_after` | 3 | Consecutive strikes that open the breaker (within about 30 s of a wedge) |
+| `first_probe_ms` | 15000 ms | Once open, the first probe is admitted this long after the trip |
+| `max_probe_ms` | 120000 ms | Each probe that is also slow doubles the wait, capped here |
+
+While open, `allow_call()` admits one health call per backoff window and no other until that probe is recorded; a probe dropped unrun is released with `abandon_probe()`. The probes ride the polls that already exist (the link monitor's status poll, the scan timer), so no extra timer runs. Any health call that answers in under 5 s resets the strikes and closes the breaker at once. Tripping and recovering both call `notify_state_observers()`, so the network overlay, the home network widget and the wizard re-read status. Tests: `[wifi_breaker]` in `tests/unit/test_wifi_control_breaker.cpp`.
+
+**Calls queued behind a hung call.** The breaker only hears about calls that finish, and a send blocked on a daemon that stopped reading never does. `control_stalled()` (`src/network/wifi_manager.cpp#control_stalled`) covers that gap: it is true once the call now running has outlived its kind's limit, 5000 ms (`slow_call_ms`) for a health call and `UserOpTimeouts::stall_ms` (60000 ms) for a user op.
+
+- **Status polls.** `get_status_async()` (`src/network/wifi_manager.cpp#get_status_async`) answers at once, without asking the backend, with the cached status marked `unresponsive` while the lane is stalled or the breaker refuses the call. `cached_status_` is the last status a read returned in time, adjusted by CONNECTED/DISCONNECTED events. A read that ran out the reply deadline is not trusted either: it parsed an empty reply that says "disconnected", so its waiters get the cached status instead. `WifiLinkMonitor::poll()` records no sample from an `unresponsive` status.
+- **Scans.** `request_scan()` (`src/network/wifi_manager.cpp#request_scan`) sends nothing while the lane is stalled or the breaker refuses, and reuses a trigger already queued or running rather than sending a second. `start_scan()`'s caller is always answered: a refused scan, a failed trigger, and a trigger `watch_scan_waiter()` finds stuck behind a stalled lane (checked every 1000 ms) all hand the callback `last_scan_results_`, the last list a scan delivered, so the visible network list is kept instead of wiped.
+
+**Slow join vs wedge.** Connect, disconnect, forget and the radio toggle are **user ops**, sent by `submit_user_op()` (`src/network/wifi_manager.cpp#submit_user_op`). They can legitimately take tens of seconds (NetworkManager joins its previous nmcli worker), so they never feed the breaker and count as a stall only after 60000 ms. A 30 s join therefore never marks WiFi unresponsive. Each has its own deadline from `UserOpTimeouts` (`include/wifi_manager.h#UserOpTimeouts`): 45000 ms for connect (the connect watchdog's window, which `apply_connect_result()` re-arms for the CONNECTED/AUTH_FAILED events once the backend accepts the join) and 40000 ms for disconnect, forget and radio (two wpa_ctrl round trips at their 15 s worst, plus margin). Exactly one of the result, the deadline or a drop answers the caller, decided by an atomic phase; an op whose deadline passes while it is still queued is never sent. While `control_unresponsive()` (stalled lane or open breaker) is true, a user op is not sent at all, and its caller hears back on the next UpdateQueue drain.
+
+**One toast per action.** Every unanswered user op gets the same `unresponsive_error()` (`src/network/wifi_manager.cpp#unresponsive_error`): `WiFiResult::TIMEOUT` with a fixed technical message that `is_unresponsive_error()` recognises. Each action's result path checks it first and shows the single warning toast "WiFi isn't responding" (`notify_unresponsive()`) in place of its own failure toast, so the user never sees "Failed to enable WiFi: WiFi isn't responding". The radio toggle shows it even over a live link, where its other failures stay quiet. A periodic scan that fails while the breaker is open toasts nothing: the network overlay's WiFi card already shows the "WiFi isn't responding" row, bound to the `wifi_unresponsive` subject that `NetworkSettingsOverlay::apply_wifi_status()` sets from `ConnectionStatus::unresponsive`. Tests: `[wifi_control_lane]` in `tests/unit/test_wifi_control_lane.cpp`.
+
+**Regulatory country.** A radio with no country runs in the world domain, where 5 GHz is passive-only: scans find no 5 GHz network until an access point's country element unlocks the band, which in practice means only after a first 2.4 GHz join. The country is a backend capability (`WifiBackend::supports_country()`, `get_country()`, `set_country()`): wpa_supplicant uses `GET country` / `SET country XX` plus a best-effort `SAVE_CONFIG`, NetworkManager has no setting of its own so it goes to the kernel through `iw reg get` / `iw reg set` and reads the change back, and netd, macOS and ESP32 answer unsupported, which hides the control. `get_country_async()` and `set_country_async()` run as user ops on the lane. The saved choice lives in `SystemSettingsManager` (`/wifi_country`, "" when never chosen) and the policy is one pure function, `helix::wifi::country::plan()` ([`include/wifi_country.h#plan`](../../../include/wifi_country.h)): on READY, `apply_stored_country()` sends a saved country only when the radio reports a different one, and with nothing saved it sends nothing, so a country the device's own configuration set is shown and kept. Clearing the choice clears the setting and leaves the radio alone. A `CTRL-EVENT-REGDOM-CHANGE` reaches the manager as the `REGDOM_CHANGE` event (NetworkManager dispatches it after a set it read back): `handle_regdom_change()` logs it, notifies state observers and, while a scan session is open, sends a scan, since the new domain can enable channels the last scan could not use. Network Settings shows the country under the WiFi toggle; the closed dropdown reads the country code, and "2.4 GHz only" while a 5 GHz-capable radio reports the world domain. Micro screens hide the MAC lines to make room, and portrait stacks the label above the dropdown. Tests: `[wifi_country]` in `tests/unit/test_wifi_country.cpp` and `tests/unit/test_wifi_backend_wpa.cpp`.
+
+`CrashReporter` owns no thread: [`src/system/crash_reporter.cpp`](../../../src/system/crash_reporter.cpp) spawns nothing, and its uploads go through `helix::ingest::post` on the calling thread ([`src/system/ingest_client.cpp#post`](../../../src/system/ingest_client.cpp)).
+
+The rule that keeps the inventory from growing recklessly: **no `std::thread(...).detach()` for one-shot work.** On the 32-bit targets (AD5M, CC1, MIPS32) `pthread_create` returns `EAGAIN` under thread exhaustion, the `std::thread` constructor throws, and propagation through an LVGL C frame aborts the process (#724, #837). Before adding any thread, grep for an existing pool covering the domain - [`THREADING.md`](../THREADING.md) §8 has the workload-to-executor table. Detached *spawns* remain legitimate in exactly one shape: wrapped in `try/catch (std::system_error)` with a toast and error callback, the pattern used for RFCOMM/USB/QR work that has no pool. Detaching an *already-running* thread as a teardown escape hatch is a different operation - no `pthread_create` is involved - and is what `reap_download_thread()` and `HttpExecutor::stop()` do above.
+
+The heuristic for everything else: if you are in a callback from libhv, an `HttpExecutor`, `BusThread`, or any `std::thread`, you are on a background thread, and the rest of this chapter applies. The codebase itself makes the same distinction at runtime: `main()` records the main thread's id once (`internal::set_main_thread_id()`, [`include/async_lifetime_guard.h#internal`](../../../include/async_lifetime_guard.h)) and `internal::on_main_thread()` (`src/system/async_lifetime_guard.cpp#on_main_thread`) answers the question conservatively (it returns true during early init, before any thread exists to be wrong about) - that is the predicate behind the anti-pattern detector below.
+
+### One bridge: the `UpdateQueue` contract
+
+Chapter 02 covered the data-flow view: the notification queue that hands raw JSON to `process_notifications()` ([`src/application/application.cpp#main_loop`](../../../src/application/application.cpp)) before `lv_timer_handler()` (`src/application/application.cpp#main_loop/"time_till_next = lv_timer_handler()"`) runs. The `UpdateQueue` is the general-purpose sibling: any thread enqueues a tagged lambda with `helix::ui::queue_update()`; an LVGL timer created in `init()` ([`include/core/update_queue.h#init`](../../../include/core/update_queue.h)) drains `process_pending()` (`include/core/update_queue.h#process_pending`) on the main thread once per display refresh period, inside `lv_timer_handler()`.
+
+The safety property is same-thread serialization: because the drain runs inside LVGL's timer walk, a queued `lv_subject_set_*()` can never interleave with an in-progress render - that is what prevents LVGL's "invalidate during rendering" assertion, which on embedded targets is an infinite loop rather than a crash. The drain has no priority over other timers: LVGL 9 timers have no priority field; the real guarantee is the refresh period (work lands within a frame). Which of the drain and the display refresh runs first in a pass depends on timer creation history, because `lv_timer_create()` inserts each new timer at the head of the list the walk starts from. Trust the serialization, not per-tick ordering claims.
+
+The queue earns trust in the details: tags register with the crash handler so a crash names the guilty callback; exceptions in one callback are swallowed and logged so a batch cannot be lost to a single bad lambda; widget-guarded overloads drop work whose widget died; `ScopedFreeze` (`include/core/update_queue.h#"class ScopedFreeze {"`) buffers enqueues across a drain-and-destroy window and splices them back on thaw. Canonical producer pattern: `PrinterState`'s public setters marshal themselves -
+
+```cpp
+void PrinterState::set_printer_connection_state(int state, const char* message) {
+    // Thread-safe wrapper: defer LVGL subject updates to main thread
+    std::string msg = message ? message : "";
+    async_lifetime_.defer("PrinterState::set_printer_connection_state", [this, state, msg]() {
+        network_state_.set_printer_connection_state_internal(state, msg.c_str());
+    });
+}
+```
+
+(verbatim from [`src/printer/printer_state.cpp#set_printer_connection_state`](../../../src/printer/printer_state.cpp)). `set_klippy_state()` (`src/printer/printer_state.cpp#set_klippy_state`) is the same shape. Chapter 02 dissects both.
+
+### Guard one: `AsyncLifetimeGuard` - callbacks that outlive their owner
+
+A modal fires an HTTP request; the user dismisses the modal; the reply arrives on an executor thread and the callback touches freed memory. `AsyncLifetimeGuard` ([`include/async_lifetime_guard.h#"class AsyncLifetimeGuard {"`](../../../include/async_lifetime_guard.h)) makes that a no-op. The guard owns a `shared_ptr<atomic<uint64_t>>` generation counter; `token()` (`include/async_lifetime_guard.h#token`) snapshots it into a copyable `LifetimeToken`; `invalidate()` - called on dismissal and again by the destructor - bumps the counter, expiring every outstanding token. Tokens hold their own `shared_ptr` to the counter, never a pointer to the owner, so they stay safe to use while the owner is being destroyed.
+
+Two sanctioned forms, from THREADING.md §2:
+
+- **Short: `lifetime_.bg_cb(tag, fn)`** (`include/async_lifetime_guard.h#bg_cb`) returns a callable to hand straight to HTTP/WebSocket APIs; the body always runs on the main thread after a generation re-check. It is the common form, and the whole shape is two lines ([`src/printer/detection_manager.cpp#init`](../../../src/printer/detection_manager.cpp)):
+
+  ```cpp
+  client_->add_connected_observer("DetectionManager::refresh_capabilities",
+                                  lifetime_.bg_cb("DetectionManager::on_connected",
+                                                  [this]() { refresh_capabilities(); }));
+  ```
+
+- **Long: `tok.defer(tag, fn)`** (`include/async_lifetime_guard.h#"defer(const char* tag, F&& fn) const"`) when there is real background-side work - parse into locals on the executor thread, defer only the mutation.
+
+What is banned is the form between them: a bare `if (tok.expired()) return;` on a background thread followed by touching `this`. The owner can die between check and access - the L081 TOCTOU race (#707). Defense is layered: the lint gate [`scripts/check_l081_anti_pattern.py`](../../../scripts/check_l081_anti_pattern.py) fails the commit; a runtime detector inside `LifetimeToken::expired()` (`include/async_lifetime_guard.h#expired`) reports the callsite once per thread; strict mode (`HELIX_STRICT_BG_THREAD_CHECK=1`, on by default in `HelixTestFixture`) aborts so tests fail. Release builds compile the abort out - a detector hit on a user device is telemetry, not a crash.
+
+Details that matter in review: `lifetime_.defer()` reads `this->lifetime_`, so it is main-thread-only - from a background thread it is exactly the #707 race, use `tok.defer()`. All defer paths check the generation *before* enqueueing, so a callback whose owner already died never even occupies a queue slot. And every skip increments a per-tag counter drained by telemetry as `async_lifetime_skips` - a hot tag there is the early signal that an owner is repeatedly dying with pending work (#1165).
+
+Who has a guard already: `Modal` ([`include/ui_modal.h#"class Modal {"`](../../../include/ui_modal.h)) invalidates its `lifetime_` in `hide()`. Every panel and overlay inherits two from `ViewLifecycleBase` ([`include/panel_lifecycle.h#ViewLifecycleBase`](../../../include/panel_lifecycle.h)), the base of `PanelBase` and `OverlayBase`: `lifetime_` is the screen's, dropped on every deactivation, and `object_lifetime_` is the object's, surviving navigation for work the view owes the machine (an abort acknowledgement, a settings write) and dying in `cleanup()`. Pick by what the callback is for, not by whether you want it cancelled. Standalone classes declare `helix::AsyncLifetimeGuard lifetime_;`.
+
+### Guard two: `SubjectLifetime` - observers that outlive their subject
+
+The mirrored problem: dynamic subjects (per-fan, per-sensor, per-extruder) are destroyed and recreated when hardware is rediscovered, and an `ObserverGuard` still holding an observer pointer into the dead subject's list would call `lv_observer_remove()` on freed memory in its `reset()` (#705).
+
+`SubjectLifetime` ([`include/ui_observer_guard.h#SubjectLifetime`](../../../include/ui_observer_guard.h)) is deliberately dumber than the generation counter: a `shared_ptr<bool>` whose *value*, not its refcount, signals death. Before destroying a subject, the owner writes `*lifetime = false` and only then deinits; `ObserverGuard::reset()` (`include/ui_observer_guard.h#reset`) treats an expired pointer *or* a false value as "observer already freed, skip removal":
+
+```cpp
+bool subject_dead = false;
+if (has_alive_token_) {
+    auto locked = alive_token_.lock();
+    subject_dead = !locked || !*locked;
+}
+```
+
+(excerpted from [`src/ui/ui_observer_guard.cpp#subject_dead`](../../../src/ui/ui_observer_guard.cpp)). The value check is what makes it work with multiple token holders - the refcount can stay above zero while every holder learns the subject died.
+
+The trap is the API shape: the `observe<V>` factory takes the lifetime as a required 4th parameter, but `{}` and `subject_never_freed()` satisfy it, so fetching a token from an accessor and handing over something else compiles silently - the guard never learns the subject died. The rule: if you fetch a `SubjectLifetime`, you pass it to the `observe_*` call. Chapter 02's "Observing subjects from C++" section walks the full `FanStackWidget` example, including the paired `(name, lifetime)` accessor overloads that assign the owner's own token into your copy.
+
+`ObserverGuard` also carries a second safety: the invalidation epoch (`include/ui_observer_guard.h#invalidate_all`). Observers created before a soft-restart teardown had their subjects freed by `StaticSubjectRegistry::deinit_all()`; each guard compares its creation epoch against the current one (`src/ui/ui_observer_guard.cpp#reset/"freed_by_deinit ="`) to decide whether removal is safe. The shutdown ordering that makes all of this hold - panels destroyed, then subjects deinitialized, then `lv_deinit()` - is `Application::shutdown()` territory and THREADING.md §7 owns it.
+
+## Patterns & gotchas
+
+The five invariants below are the whole chapter compressed. Each fails silently at compile time and crashes later, usually on a customer's printer; each row links the deep dive.
+
+| # | Rule | Crash family | Gate | Deep dive |
+|---|------|--------------|------|-----------|
+| 1 | Never touch LVGL from a background thread - `lv_subject_set_*()` counts, it fires observers | Assertion loop mid-render, app hangs | review | §1 |
+| 2 | Never bare `if (tok.expired()) return;` then touch `this` on a background thread - use `bg_cb` / `tok.defer` | TOCTOU use-after-free (#707) | [`check_l081_anti_pattern.py`](../../../scripts/check_l081_anti_pattern.py) + runtime detector | §2 |
+| 3 | Never delete widgets synchronously inside a queued callback | SIGSEGV in `lv_event_mark_deleted` (#776, #190, #80) | review | §3 |
+| 4 | A fetched `SubjectLifetime` must reach the `observe_*` factory | Use-after-free on reconnect (#705) | review | §5 |
+| 5 | A raw `lv_timer_t*` cancelled in `cleanup()` must also be cancelled in the destructor | Armed timer on a freed `this` (#1173) | [`check_timer_destructor_cancel.py`](../../../scripts/check_timer_destructor_cancel.py) | §10 |
+
+Supporting rules that trip contributors:
+
+- **Sync deletion inside any queued callback is banned**: and "queued callback" includes `defer`, `bg_cb`, and the observer factories, since they all route through `UpdateQueue`. Replace the inner deletion: `safe_delete_deferred()` ([`include/ui_utils.h#"safe_delete_deferred(lv_obj_t*& obj)"`](../../../include/ui_utils.h)), `lv_obj_delete_async()`, `safe_clean_children()` (`include/ui_utils.h#safe_clean_children`), `safe_delete_subtree()` (`include/ui_utils.h#safe_delete_subtree`). The replacements ride LVGL's own async list, which genuinely runs outside our drain.
+- **`lifetime_.defer` does not escape the batch.** It queues through `queue_update()` like everything else; the generation guard protects `this`, not the batch contents. Comments claiming otherwise are wrong - fix them.
+- **Timers: prefer `LvglTimerGuard`** ([`include/ui_timer_guard.h#helix::ui`](../../../include/ui_timer_guard.h)) for new code. For a raw `lv_timer_t*`, share one `cancel_*_timer()` helper between `cleanup()` and the destructor and cancel with `lv_timer_cancel_safe()` (`include/ui_timer_guard.h#lv_timer_cancel_safe`) - it neuters the timer instead of unlinking it, safe from a destructor and from inside `lv_timer_handler` (#750, #751). The exemplar is the screensaver frame timer, whose destructor and `SaverBase::stop()` both route through one `cancel()` ([`src/ui/screensaver/screensaver_frame_timer.cpp#~SaverFrameTimer`](../../../src/ui/screensaver/screensaver_frame_timer.cpp)):
+
+  ```cpp
+  SaverFrameTimer::~SaverFrameTimer() {
+      cancel();
+  }
+  void SaverFrameTimer::cancel() {
+      if (timer_) {
+          // Neuters instead of unlinking and guards on lv_is_initialized(), which is what makes it
+          // safe from the destructor, from inside lv_timer_handler and after lv_deinit (#750, #1173).
+          lv_timer_cancel_safe(timer_);
+          timer_ = nullptr;
+      }
+  }
+  ```
+
+  (verbatim from [`src/ui/screensaver/screensaver_frame_timer.cpp#cancel`](../../../src/ui/screensaver/screensaver_frame_timer.cpp); the comment names every context cancellation must survive - the destructor, a callback already inside `lv_timer_handler`, and teardown after `lv_deinit()`). The gate accepts a `// TIMER_DTOR_OK: <reason>` annotation for `LifetimeToken`-guarded timer callbacks.
+- **`ObserverGuard::reset()`, never `release()`**, in normal cleanup - `release()` leaks the observer context and corrupts rendering; it exists only for pre-deinit registry callbacks (#579).
+- **Custom-widget state memory is RAII-wrapped, never raw `lv_malloc`/`lv_free`.** Build state with `lvgl_make_unique<T>()` ([`include/ui_widget_memory.h`](../../../include/ui_widget_memory.h)) and hand ownership to the widget via `release()` into `user_data`; the `LV_EVENT_DELETE` callback re-wraps the raw pointer in an `lvgl_unique_ptr<T>` on entry so an early return or exception cannot leak it. Nested buffers use `lvgl_make_unique_array<T>(n)` (`include/ui_widget_memory.h#lvgl_make_unique_array`). Reference shapes: [`src/ui/controls/ui_jog_pad.cpp`](../../../src/ui/controls/ui_jog_pad.cpp) (flat struct on `user_data`), [`src/ui/components/ui_step_progress.cpp`](../../../src/ui/components/ui_step_progress.cpp) (nested per-item arrays).
+- **Process-wide panels and overlays live in `lazy_global<T>(name, args...)`** ([`include/core/static_panel_registry.h#"T& lazy_global(const char* name"`](../../../include/core/static_panel_registry.h)), the body of every `get_global_*()` accessor. It builds the instance on first use and registers its destruction with `StaticPanelRegistry`, so `destroy_all()` frees it at shutdown and on a printer switch, and the next call builds a fresh one. `lazy_global_with_teardown()` runs a teardown first for an instance that owns state outside itself; a `StaticSubjectRegistry` deinit callback reaches the instance through `lazy_global_if_exists<T>()`, because calling `lazy_global()` there would build a replacement during static destruction. Never hold a reference to one of these across a printer switch.
+- **No new detached `std::thread` spawns.** Grep for an existing pool first (`HttpExecutor::fast()/slow()`, `BusThread`); a fresh detached spawn reintroduces the `EAGAIN` abort on the smallest device you ship to. The one sanctioned shape is the try/catch spawn with a toast, and only for domains with no pool.
+- **Background-thread heuristics have teeth:** `HelixTestFixture` opts into strict mode, so a new L081 instance fails the test suite, not the field.
+- **When something crashes, do not guess -** [`THREADING.md`](../THREADING.md) §12 is a symptom→cause→fix index for exactly these families ("SIGSEGV in `lv_event_mark_deleted`", "app hangs, stops answering pings", ...). Check it before debugging from scratch.
+
+## Going deeper
+
+- [`../THREADING.md`](../THREADING.md) - the single source of truth this chapter summarizes: the L081 TOCTOU mechanisms and their three enforcement layers, `ScopedFreeze` drain-and-destroy semantics, shutdown registry ordering, the dynamic-subject source table, Klippy-volatile membership rules, and the full symptom index.
+- [`02-subjects-dataflow.md`](02-subjects-dataflow.md) - the same boundary from the data side: the notification queue, the marshalling setter pattern, and the observer-factory worked examples.
+- [`../MOONRAKER_ARCHITECTURE.md`](../MOONRAKER_ARCHITECTURE.md) - § "HTTP Work Execution (HttpExecutor)": lane discipline and the submit/run_sync contract in full.
+- Plugins run their Lua on the main thread only, under these same rules; see the plugins section of `12-system-services.md` and the author-facing `../PLUGIN_DEVELOPMENT.md`.
+- [`../REVIEW_RUBRIC.md`](../REVIEW_RUBRIC.md) - which crash families the automated gates already cover, so review effort goes where the gates are blind.
+
+## Guided code tour
+
+Read in this order; about 25 minutes total.
+
+1. [`include/core/update_queue.h#helix::ui`](../../../include/core/update_queue.h) - the `UpdateQueue` class: timer creation in `init()` (`include/core/update_queue.h#init`), the tagged drain `process_pending()` (`include/core/update_queue.h#process_pending`), `ScopedFreeze` (`include/core/update_queue.h#"class ScopedFreeze {"`). The comments on "why not `lv_async_call`" are the design argument in three lines.
+2. [`include/async_lifetime_guard.h#expired`](../../../include/async_lifetime_guard.h) - `LifetimeToken::expired()` with the background-thread detector inline; then `include/async_lifetime_guard.h#"defer(const char* tag, F&& fn) const"` `defer()` and its pre-enqueue generation check (the doomed-callback drop), and `include/async_lifetime_guard.h#bg_cb` `bg_cb()` - read the doc comment for the short-form/long-form tradeoff.
+3. [`src/printer/detection_manager.cpp#init`](../../../src/printer/detection_manager.cpp) - the two-line `bg_cb` in the wild: an observer registered with a marshalled callback, nothing else to it.
+4. [`src/printer/printer_state.cpp#set_printer_connection_state`](../../../src/printer/printer_state.cpp) - `set_printer_connection_state()` (defer through the guard), then `src/printer/printer_state.cpp#set_klippy_state` `set_klippy_state()`. The whole marshalling-setter pattern in twenty lines.
+5. [`include/ui_observer_guard.h#SubjectLifetime`](../../../include/ui_observer_guard.h) - the `SubjectLifetime` contract in the doc comment; then `reset()` (`src/ui/ui_observer_guard.cpp#reset`) with its two death checks: token value (`src/ui/ui_observer_guard.cpp#reset/"if (has_alive_token_)"`) and invalidation epoch (`src/ui/ui_observer_guard.cpp#reset/"freed_by_deinit ="`).
+6. [`src/network/wifi_manager.cpp#handle_scan_complete`](../../../src/network/wifi_manager.cpp) - `handle_scan_complete`: parse on the backend thread, `queue_update` the mutation. THREADING.md's other reference integration.
+7. [`include/core/http_executor.h#HttpExecutor`](../../../include/core/http_executor.h) - the class comment: why the pools exist (EAGAIN history), the stop-timeout-detach semantics, and the self-wait deadlock warning on `run_sync`.
+8. [`src/bluetooth/bt_bus_thread.h#helix::bluetooth`](../../../src/bluetooth/bt_bus_thread.h) - `BusWork` and the single-thread sd-bus ownership contract, including the null-bus idle-worker defense.
+9. [`include/ui_utils.h#helix::ui`](../../../include/ui_utils.h): the comment explaining why `safe_delete` (`include/ui_utils.h#safe_delete`) is unsafe inside queued callbacks, then the deferred family at `include/ui_utils.h#"safe_delete_deferred(lv_obj_t*& obj)"`, `include/ui_utils.h#safe_clean_children`, `include/ui_utils.h#safe_delete_subtree`.
+10. [`include/ui_timer_guard.h#helix::ui`](../../../include/ui_timer_guard.h) - `lv_timer_cancel_safe()`: five lines that neuter instead of unlink; then `LvglTimerGuard` (`include/ui_timer_guard.h#"class LvglTimerGuard {"`).
+11. [`src/ui/screensaver/screensaver_frame_timer.cpp#~SaverFrameTimer`](../../../src/ui/screensaver/screensaver_frame_timer.cpp) - a real shared-cancel helper called from both teardown paths (`SaverBase::stop()` and the destructor), with the #750/#1173 rationale written out in the comment.
+12. [`scripts/check_l081_anti_pattern.py`](../../../scripts/check_l081_anti_pattern.py) and [`scripts/check_timer_destructor_cancel.py`](../../../scripts/check_timer_destructor_cancel.py) - read only the header comments: exactly what each gate flags and the approved shapes. Five minutes that will save a review round-trip.

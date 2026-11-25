@@ -1,0 +1,508 @@
+{
+  "checks": [
+    {
+      "name": "arm-queue-build",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "arm-queue-repeat",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "default-build-refused",
+      "exit_code": 2,
+      "passed": true
+    },
+    {
+      "name": "compile-storage",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-storage",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-storage-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-storage-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-arm-queue-storage",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-arm-queue-storage",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-arm-queue-storage-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-arm-queue-storage-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-preload-accessor",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-preload-accessor",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-preload-accessor-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-preload-accessor-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-preload-queue",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-preload-queue",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-preload-queue-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-preload-queue-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-core",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-core",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-core-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-core-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-bridge",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-bridge",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-bridge-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-bridge-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-owner",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-owner",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-owner-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-owner-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-adapter",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-adapter",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-adapter-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-adapter-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-decoder-integration",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-integration",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-integration",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-decoder-integration-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "compile-integration-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "test-integration-san",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "normal-compile-refused-preload_queue.c",
+      "exit_code": 1,
+      "passed": true
+    },
+    {
+      "name": "normal-compile-refused-preload_queue.S",
+      "exit_code": 1,
+      "passed": true
+    },
+    {
+      "name": "dynamic_instruction_checks",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "queue_instruction_checks",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "queue_commit_checks",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "queue_cost_profile",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "name": "verify_image",
+      "exit_code": 0,
+      "passed": true
+    }
+  ],
+  "files": {
+    "build_accessor.py": {
+      "sha256": "7eb2caa60fc23b6273621ba46e5b813389d984a5138874377fdb9e208cc35bc2",
+      "bytes": 9653
+    },
+    "verify_queue.py": {
+      "sha256": "38d76d2bf3bda13e986041b96e132c13c88fa75554652b9e3f0d12fa90a1e0b3",
+      "bytes": 4372
+    },
+    "README.md": {
+      "sha256": "56f28043a696ffd83ab7816dae95154d045f64f13e6c7b96036761adf991e01b",
+      "bytes": 6374
+    },
+    "output/merge-contract.json": {
+      "sha256": "da5dc125e575b771463c21670c73dd18bca51e66c04776cce33ae334a05c5ce6",
+      "bytes": 5953
+    },
+    "firmware/bounded_rc522.c": {
+      "sha256": "bb1953ba49bcf0f825127423039080a59d65b4c1d7df1684b1ecb10fa852b896",
+      "bytes": 8255
+    },
+    "firmware/bounded_rc522.h": {
+      "sha256": "c51897bae8e8dc372761d5c629d6e82bf7ea185bbd7c80528cdf7d36cb5c8a9a",
+      "bytes": 2831
+    },
+    "firmware/event_storage.c": {
+      "sha256": "9fe5c89288c8303c51fec93b310753a42a3eb22f5187cc738e7b798fc56cd316",
+      "bytes": 4794
+    },
+    "firmware/experimental_binding.c": {
+      "sha256": "f90a10450c71272d1352271d15e1772a0470123c039d536da54f453fc0e7951b",
+      "bytes": 4823
+    },
+    "firmware/experimental_binding.h": {
+      "sha256": "f319d0358d35054e3e38c28a92b5f5b3bf44788d32534aa87d8683bc5fafe8d6",
+      "bytes": 2489
+    },
+    "firmware/experimental_gate.S": {
+      "sha256": "0363ad7b8eb1e47ed86811451168ba834b6df261cc450d4d1b2d8cdac5aeb5bc",
+      "bytes": 963
+    },
+    "firmware/native_tag_decoder.c": {
+      "sha256": "4ce7672426cae3b7a68271faaf7aa8632c89c6cc83c624d9094424dba1abef5b",
+      "bytes": 41094
+    },
+    "firmware/pageread_gate_stub.s": {
+      "sha256": "cf55aa4a5e1b2d035996e82131585bafe4c41adeae07c743297f248ebf47ce47",
+      "bytes": 245
+    },
+    "firmware/preload_hooks.S": {
+      "sha256": "b1143afce3166028355c948c00873942f755dcafa89f7e860d29722ab6be86df",
+      "bytes": 8241
+    },
+    "firmware/preload_hooks.c": {
+      "sha256": "529d86dc574fd89ce214a000ff606c85dd1901d0786cd22f8032ac3970636ed9",
+      "bytes": 1804
+    },
+    "firmware/preload_hooks.h": {
+      "sha256": "5d18bddf88e04209c63fbcd78e0320d3d560a192921693a85e52e4f1c222ae3e",
+      "bytes": 1616
+    },
+    "firmware/preload_queue.S": {
+      "sha256": "54cd795ea90882bd9dbc46015fa16cb8e3e73008e3aa061155e14e3a569ed76a",
+      "bytes": 2116
+    },
+    "firmware/preload_queue.c": {
+      "sha256": "2bdaa4a4ffc06eb4084df29052b62abf9a8fe174af076d8337c1ca9ec3b951c3",
+      "bytes": 10468
+    },
+    "firmware/preload_queue.h": {
+      "sha256": "53ad61e75c7984143cad655bb56888126d3b57f7daf2440a52194d76eafca305",
+      "bytes": 1590
+    },
+    "firmware/rawtag_cache_stub.s": {
+      "sha256": "9992b3db4c6d8f618d097b06e4a534ba50e556e7a19b7b62fb143923d43a9109",
+      "bytes": 311
+    },
+    "firmware/rawtag_extract_stub.s": {
+      "sha256": "c3474a390280e790cd00f0bf8db56ab0211fbf805e7aad183d31d34b07b242a5",
+      "bytes": 315
+    },
+    "firmware/rawtag_stub.s": {
+      "sha256": "3e22782be6d88ea6733ff2200e15cc105b5d2ae6de929a363401268747b98137",
+      "bytes": 281
+    },
+    "firmware/rf_owner.c": {
+      "sha256": "5d0c31bd2d4cefe506372e7267e6df5ccd47961377f5e652f98df415759e73f4",
+      "bytes": 6782
+    },
+    "firmware/rf_owner.h": {
+      "sha256": "ab5d46b0a90e61127acc7c02f984db59d5b5699b614e4d13a01533a85568fe3e",
+      "bytes": 3065
+    },
+    "firmware/rf_stock_adapter.c": {
+      "sha256": "db5c6170853086c19747712e92d087ef129eb1afb143e8a6f50059596c4d44a3",
+      "bytes": 4953
+    },
+    "firmware/rf_stock_adapter.h": {
+      "sha256": "afcdf337ea48f8f777ddf7e9cb568f25e21acc55a127c71f0645575aec8aa266",
+      "bytes": 1863
+    },
+    "firmware/rf_stock_trampolines.S": {
+      "sha256": "b21e2dadd4527f3a906a4bac6576bfecbe0d92d05b3cbbdfcc22efc37855eb1b",
+      "bytes": 1276
+    },
+    "firmware/stock_bounded_bridge.c": {
+      "sha256": "155e8aede19f9966090d93e1c17de79786db03c428a4dc765b86948e490daf82",
+      "bytes": 3064
+    },
+    "firmware/stock_bounded_bridge.h": {
+      "sha256": "974fbb2b2b05acd0b3b7e415a05a6762e66ed938de6874cbeec75748c98df95e",
+      "bytes": 2154
+    },
+    "firmware/stock_bounded_thunks.S": {
+      "sha256": "e7673e2ce1fecbdd22f8fa525d7d0a7ba7ebef38773a7d55593389bf845e2521",
+      "bytes": 601
+    },
+    "firmware/uid_stub.s": {
+      "sha256": "2c9bcfa7288cedb1af2afcb8af1ca8136abb6ca0593bc79dc11c1c066df34ed6",
+      "bytes": 275
+    },
+    "tests/event_mock.c": {
+      "sha256": "c36ed98d0b02049853643c73f33a02536d69f6cbb28bd59eca2b9ddfde2f0b89",
+      "bytes": 2496
+    },
+    "tests/test_arm_queue_storage.c": {
+      "sha256": "06f402311e5c4591943f583db77f161aac31710341aafbf721b5fac7429c1cfd",
+      "bytes": 2058
+    },
+    "tests/test_bounded_rc522.c": {
+      "sha256": "388fff2ce45070876754678583c44551d4d307cf93d73913ecdeb5e9f11a1567",
+      "bytes": 9286
+    },
+    "tests/test_event_storage.c": {
+      "sha256": "3386a2c421d3e6a4363f3c0029aa83b687060a0ba6a4e82620b16b668b0cfba7",
+      "bytes": 4608
+    },
+    "tests/test_integration.c": {
+      "sha256": "4dbcb438493aa04d526ce69942a60339b2df61d034f56b57e9605735bb9ccb51",
+      "bytes": 8608
+    },
+    "tests/test_preload_accessor.c": {
+      "sha256": "30a6d7b4677ec73ddbc60985b6c69ed269755ad73b34bea9dc03973da43407b8",
+      "bytes": 3154
+    },
+    "tests/test_preload_queue.c": {
+      "sha256": "56c3cad0f9b95c8269866314730dcd399c4f8633875edff42920539757e9cc69",
+      "bytes": 8330
+    },
+    "tests/test_rf_owner.c": {
+      "sha256": "843eddea4081aba1a0cd4ec75e1dff371d1bbe9c043cd4b29edc911628fce405",
+      "bytes": 8786
+    },
+    "tests/test_rf_stock_adapter.c": {
+      "sha256": "97c56d404a5719e1f4155ce3b9e9be36fabee54d7cd258019d0ff6da9828fdf6",
+      "bytes": 5765
+    },
+    "tests/test_stock_bridge.c": {
+      "sha256": "5f5d56f0f4bca8849ab776780a89a58dca52b9f5d4eb9aa1f441c49038d88e77",
+      "bytes": 3159
+    },
+    "tests/event_mock.h": {
+      "sha256": "cdd9f053384ae826449b7880b7e3be299893a96f594550d6cbc47fc9b8957f72",
+      "bytes": 723
+    },
+    "tests/integration_peripherals.h": {
+      "sha256": "bb616ca35da029e5579d308b8f4794124e5e5f3a54f9b52c4a5ba2ab077ccac2",
+      "bytes": 2156
+    },
+    "tests/dynamic_instruction_checks.py": {
+      "sha256": "e70a9e919a86daa9839e68fb8516229fe17e95105aaac9bfd50496e901fbb43d",
+      "bytes": 19819
+    },
+    "tests/queue_commit_checks.py": {
+      "sha256": "84fccb6d7ecca152dd3d8afca641e8ed88ef7af017405ef0acc3695b8c652053",
+      "bytes": 7424
+    },
+    "tests/queue_cost_profile.py": {
+      "sha256": "ae805814497f5deb055b3132a0b1de8f0829471f7605b27fbc04bf05b01a81ae",
+      "bytes": 3239
+    },
+    "tests/queue_instruction_checks.py": {
+      "sha256": "b05f44125143725fb1f9b520e979e603bf84c1bd746a976d10b85a049fcec074",
+      "bytes": 3855
+    },
+    "tests/verify_image.py": {
+      "sha256": "b5c93f3d59e46fe268f56a1310f5b4f3dd3231d5ddb6b7f00175243f22ac3982",
+      "bytes": 4955
+    },
+    "build/01-event_storage-c.su": {
+      "sha256": "815b67d262d84b203733753d1bcc1e795bb2254d4e782a8c0bb8e1a06fa83bf9",
+      "bytes": 875
+    },
+    "build/02-experimental_binding-c.su": {
+      "sha256": "1af26a96420115351f498b9f60a91803cf6997a2168c87b56402b443b68d6b14",
+      "bytes": 2548
+    },
+    "build/03-bounded_rc522-c.su": {
+      "sha256": "0257ac5c283c219004d460b04b3e91daecee2597ba517c1e26318776b608a464",
+      "bytes": 1376
+    },
+    "build/04-stock_bounded_bridge-c.su": {
+      "sha256": "d8b6e3fe6e975b104e68f6495a7ffc0ed5300bd8b6f3a566fe810a47bf434bd1",
+      "bytes": 902
+    },
+    "build/06-rf_owner-c.su": {
+      "sha256": "5f6357bee15c43b59fac8c55206ddb82ddec2d462540e69c4b6646098d5e710d",
+      "bytes": 2145
+    },
+    "build/07-rf_stock_adapter-c.su": {
+      "sha256": "34afef38383b1c0d9a6d95be4decffedd483afd29c6260e987d1b386f91aa125",
+      "bytes": 1282
+    },
+    "build/09-native_tag_decoder-c.su": {
+      "sha256": "0762b85e3bee8c0411e68f7d078ffb74a889a30b15e32c0454e41025b2233db5",
+      "bytes": 3262
+    },
+    "build/15-preload_hooks-c.su": {
+      "sha256": "750c7ae2550d8733c7a810f53c815c397b56124d8246bfbc2c2b4bd8b58773b5",
+      "bytes": 427
+    },
+    "build/17-preload_queue-c.su": {
+      "sha256": "58f88c6897245049f92305b47f45599599f8fbc64b82f1df8be472223bbe8abc",
+      "bytes": 1530
+    },
+    "build/ACCESSOR-NOFLASH.elf": {
+      "sha256": "0decbfb4887b811ecb6c032b3206eddffc115dc5a1bbcc94b4ef94feb55ab6cd",
+      "bytes": 62792
+    },
+    "output/ACCESSOR-NOFLASH.offline-image": {
+      "sha256": "e568a39514a405c185995bdd8cf5cbcb90ad3fdc9bafa01f71e41333254d8114",
+      "bytes": 86764
+    },
+    "output/manifest.json": {
+      "sha256": "ec32887c34257dc11d168416330dadbaecef77da7d32ae6b9166e25c2e407502",
+      "bytes": 13686
+    },
+    "build/dynamic-instruction-results.json": {
+      "sha256": "a898002341905a78443732fb90d7bcb193413b4a83aac7d0d7cf0c42db7cf244",
+      "bytes": 792
+    },
+    "build/queue-commit-results.json": {
+      "sha256": "7a1e72b7e2e82b4373b25766da3034c9e7c2d9840a52afc12592029b65b011b4",
+      "bytes": 810
+    },
+    "build/queue-instruction-results.json": {
+      "sha256": "c6b51aaa369dbd9c08b669176f80b11fa7537c8f4a314cf3aac961530c7b499f",
+      "bytes": 470
+    },
+    "build/queue-cost-results.json": {
+      "sha256": "f98f16e54157113e7db98683db116326a9e78a3ef7eb5c6414ddaad5f6d92314",
+      "bytes": 84957
+    }
+  },
+  "scope": "Host doubles + ASan/UBSan + compiled ARM/Thumb finite instruction windows, not full RTOS",
+  "not_proven": [
+    "hardware/IRQ timing",
+    "heap/stack margin",
+    "queue/TCB/boot lifetime ABA",
+    "physical tag identity",
+    "actual terminal AUTH failure/normal retry classification",
+    "safe motor stop",
+    "deployability"
+  ]
+}

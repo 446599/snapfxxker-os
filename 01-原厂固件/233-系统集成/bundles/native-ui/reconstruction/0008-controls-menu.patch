@@ -1,0 +1,741 @@
+diff --git a/include/ui_panel_controls.h b/include/ui_panel_controls.h
+index f036537f2f1a3b5766ede47851cc674912aa155f..3ce140e1a04e3d3f18fc58830d6d8db2a8d58d3a 100644
+--- a/include/ui_panel_controls.h
++++ b/include/ui_panel_controls.h
+@@ -126,6 +126,11 @@ class ControlsPanel : public PanelBase {
+     void on_activate() override;
+     void on_deactivating(DeactivateReason reason) override;
+ 
++    /// Return to the four everyday controls when the bottom tab is selected.
++    void show_main_controls();
++    /// Open the complete native dashboard from the System settings entry.
++    void show_all_controls();
++
+   private:
+     // Test-only access to private secondary-fan lifetime/observer internals.
+     friend struct helix::ui::ControlsPanelTestAccess;
+@@ -156,6 +161,8 @@ class ControlsPanel : public PanelBase {
+ 
+     SubjectManager subjects_; ///< RAII subject manager - auto-deinits all subjects
+ 
++    lv_subject_t show_all_controls_subject_{};
++
+     //
+     // === V2 Dashboard Subjects (for XML bind_text/bind_value) ===
+     //
+diff --git a/src/ui/controls/ui_panel_controls.cpp b/src/ui/controls/ui_panel_controls.cpp
+index f881eb5fc425ed77fbc7a246cfcde66e3da6301c..1671332a27b878c47b80f50bf0073e1668722a4c 100644
+--- a/src/ui/controls/ui_panel_controls.cpp
++++ b/src/ui/controls/ui_panel_controls.cpp
+@@ -7,8 +7,10 @@
+ #include "ui_error_reporting.h"
+ #include "ui_event_safety.h"
+ #include "ui_fan_control_overlay.h"
++#include "ui_material_workspace.h"
+ #include "ui_modal.h"
+ #include "ui_motors_off.h"
++#include "ui_nav_manager.h"
+ #include "ui_notification.h"
+ #include "ui_overlay_temp_graph.h"
+ #include "ui_panel_bed_mesh.h"
+@@ -126,6 +128,8 @@ void ControlsPanel::init_subjects() {
+     // Initialize dashboard display subjects for card live data
+     // Using UI_MANAGED_SUBJECT_* macros for automatic RAII cleanup via SubjectManager
+ 
++    UI_MANAGED_SUBJECT_INT(show_all_controls_subject_, 0, "u1_controls_show_all", subjects_);
++
+     // Nozzle label (dynamic for multi-tool)
+     UI_MANAGED_SUBJECT_STRING(nozzle_label_subject_, nozzle_label_buf_, lv_tr("Nozzle"),
+                               "controls_nozzle_label", subjects_);
+@@ -250,6 +254,14 @@ void ControlsPanel::init_subjects() {
+ 
+     // on_controls_macro parses its slot from user_data, so it stays a named handler.
+     register_xml_callbacks({
++        {"on_u1_controls_main",
++         [](lv_event_t*) { get_global_controls_panel().show_main_controls(); }},
++        {"on_u1_controls_all",
++         [](lv_event_t*) { get_global_controls_panel().show_all_controls(); }},
++        {"on_u1_controls_temperature",
++         [](lv_event_t*) { helix::ui::get_material_workspace().open_temperature(); }},
++        {"on_u1_controls_speed",
++         [](lv_event_t*) { get_global_controls_panel().handle_zoffset_tune(); }},
+         {"on_calibration_bed_mesh",
+          [](lv_event_t*) { get_global_controls_panel().handle_calibration_bed_mesh(); }},
+         {"on_calibration_zoffset",
+@@ -385,6 +397,16 @@ void ControlsPanel::on_deactivating(DeactivateReason) {
+     spdlog::trace("[{}] Panel deactivated, observer callbacks will skip UI updates", get_name());
+ }
+ 
++void ControlsPanel::show_main_controls() {
++    lv_subject_set_int(&show_all_controls_subject_, 0);
++}
++
++void ControlsPanel::show_all_controls() {
++    lv_subject_set_int(&show_all_controls_subject_, 1);
++    NavigationManager::instance().request_panel(PanelId::Controls,
++                                                 NavigationManager::SwitchDispatch::Queued);
++}
++
+ void ControlsPanel::refresh_all_displays() {
+     // Re-read cached values from subjects and update all formatted displays
+     if (auto* subj = printer_state_.temperature_state().get_active_extruder_temp_subject()) {
+diff --git a/src/ui/settings/ui_panel_settings.cpp b/src/ui/settings/ui_panel_settings.cpp
+index 40100f86268d9752cfe3b19e91ef23a672e5297c..626f5ce714f7c363fb8152c11753873aa2572afe 100644
+--- a/src/ui/settings/ui_panel_settings.cpp
++++ b/src/ui/settings/ui_panel_settings.cpp
+@@ -13,6 +13,7 @@
+ #include "ui_material_workspace.h"
+ #include "ui_firmware_settings.h"
+ #include "ui_nav.h"
++#include "ui_nav_manager.h"
+ #include "ui_panel_memory_stats.h"
+ #include "ui_printer_manager_overlay.h"
+ #include "ui_settings_appearance.h"
+@@ -383,7 +384,10 @@ void register_settings_panel_callbacks() {
+         {"on_safety_clicked", nav_row<get_safety_settings_overlay>()},
+         {"on_system_clicked", nav_row<get_system_settings_overlay>()},
+         {"on_native_advanced_clicked",
+-         [](lv_event_t*) { helix::nav::set_active(PanelId::Advanced); }},
++         [](lv_event_t*) {
++             NavigationManager::instance().request_panel(
++                 PanelId::Advanced, NavigationManager::SwitchDispatch::Queued);
++         }},
+         {"on_help_clicked", nav_row<get_help_settings_overlay>()},
+         {"on_touch_input_clicked", nav_row<get_touch_settings_overlay>()},
+         {"on_connection_clicked", nav_row<get_connection_settings_overlay>()},
+diff --git a/ui_xml/controls_panel.xml b/ui_xml/controls_panel.xml
+index c6b53d87094e32ce5d4309632cf2ef5816e183d5..94fd560f446bb4b469b81bc5612051f05eb60e45 100644
+--- a/ui_xml/controls_panel.xml
++++ b/ui_xml/controls_panel.xml
+@@ -1,6 +1,6 @@
+ <?xml version='1.0' encoding='UTF-8'?>
+ <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+-<!-- U1 control desk: six everyday actions, then calibration and user shortcuts. -->
++<!-- Four everyday controls, with the complete native dashboard retained under System. -->
+ <component>
+   <consts>
+     <px name="u1_controls_tile_h_small" value="80"/>
+@@ -14,261 +14,368 @@
+     <style name="indicator_homed" bg_color="#success"/>
+     <style name="indicator_unhomed" bg_color="#text_muted"/>
+   </styles>
+-  <view name="controls_panel" extends="lv_obj" width="100%" height="100%" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" style_border_width="0" style_bg_color="#screen_bg" scrollable="true" scroll_dir="ver">
++  <view name="controls_panel" extends="lv_obj" width="100%" height="100%" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap" style_border_width="0" style_bg_color="#screen_bg" scrollable="false">
+     <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+-    <text_heading text="设备控制" width="100%"/>
+-    <lv_obj name="u1_controls_grid" width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+-      <lv_obj name="card_position" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
+-        <style name="styles.u1_card"/>
+-        <style name="styles.press_wash" selector="pressed"/>
+-        <event_cb trigger="clicked" callback="on_controls_quick_actions"/>
+-        <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+-          <icon src="axis_arrow" size="sm" variant="text" clickable="false" event_bubble="true"/>
+-          <text_body text="移动" flex_grow="1" clickable="false" event_bubble="true"/>
+-          <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++    <lv_obj name="u1_controls_main" width="100%" height="100%" flex_flow="column"
++            style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++      <bind_flag_if_eq subject="u1_controls_show_all" flag="hidden" ref_value="1"/>
++      <lv_obj name="u1_controls_main_top" width="100%" height="0" flex_grow="1" flex_flow="row"
++              style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++        <lv_obj name="u1_controls_temperature" width="0" flex_grow="1" height="100%" flex_flow="column"
++                style_pad_all="#u1_page_pad" style_flex_main_place="space_between" clickable="true" scrollable="false">
++          <style name="styles.u1_flat_card"/>
++          <style name="styles.press_wash" selector="pressed"/>
++          <event_cb trigger="clicked" callback="on_u1_controls_temperature"/>
++          <lv_obj width="100%" height="#u1_icon_badge" flex_flow="row" style_pad_all="0"
++                  style_pad_gap="#u1_card_gap" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <lv_obj width="#u1_icon_badge" height="#u1_icon_badge" clickable="false" event_bubble="true" scrollable="false">
++              <style name="styles.u1_icon_badge"/>
++              <icon src="thermometer" size="sm" align="center" variant="text" clickable="false" event_bubble="true"/>
++            </lv_obj>
++            <text_body text="温度" flex_grow="1" clickable="false" event_bubble="true"/>
++            <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
++          <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0"
++                  style_pad_gap="#u1_nav_icon_gap" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <repeat count="4">
++              <color_dot name="u1_controls_head_color_${i}" color_subject="tool_switcher_seg_${i}_color"
++                         colors_subject="tool_switcher_seg_${i}_colors" size="#u1_page_pad">
++                <bind_flag_if cond="tool_count le ${i}" flag="hidden"/>
++              </color_dot>
++            </repeat>
++            <text_body text="喷头 · 热床" width="0" flex_grow="1" long_mode="dots" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
+         </lv_obj>
+-        <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false" clickable="false" event_bubble="true">
+-          <text_small text="X"/>
+-          <text_small name="pos_x" bind_text="controls_pos_x" long_mode="dots" width="0" flex_grow="1"/>
+-          <text_small text="Y"/>
+-          <text_small name="pos_y" bind_text="controls_pos_y" long_mode="dots" width="0" flex_grow="1"/>
+-          <text_small text="Z"/>
+-          <text_small name="pos_z" bind_text="controls_pos_z" long_mode="dots" width="0" flex_grow="1"/>
++        <lv_obj name="u1_controls_motion" width="0" flex_grow="1" height="100%" flex_flow="column"
++                style_pad_all="#u1_page_pad" style_flex_main_place="space_between" clickable="true" scrollable="false">
++          <style name="styles.u1_flat_card"/>
++          <style name="styles.press_wash" selector="pressed"/>
++          <event_cb trigger="clicked" callback="on_controls_quick_actions"/>
++          <lv_obj width="100%" height="#u1_icon_badge" flex_flow="row" style_pad_all="0"
++                  style_pad_gap="#u1_card_gap" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <lv_obj width="#u1_icon_badge" height="#u1_icon_badge" clickable="false" event_bubble="true" scrollable="false">
++              <style name="styles.u1_icon_badge"/>
++              <icon src="axis_arrow" size="sm" align="center" variant="text" clickable="false" event_bubble="true"/>
++            </lv_obj>
++            <text_body text="移动" flex_grow="1" clickable="false" event_bubble="true"/>
++            <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
++          <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0"
++                  style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <text_body text="X · Y · Z" flex_grow="1" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++            <text_body text="可移动" style_text_color="#text_muted" clickable="false" event_bubble="true">
++              <bind_flag_if cond="machine_motion_blocked" flag="hidden"/>
++            </text_body>
++            <text_body text="已锁定" style_text_color="#text_muted" clickable="false" event_bubble="true">
++              <bind_flag_if cond="not machine_motion_blocked" flag="hidden"/>
++            </text_body>
++          </lv_obj>
+         </lv_obj>
+       </lv_obj>
+-      <lv_obj name="card_temperatures" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
+-        <style name="styles.u1_card"/>
+-        <style name="styles.press_wash" selector="pressed"/>
+-        <event_cb trigger="clicked" callback="on_nozzle_temp_clicked"/>
+-        <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+-          <icon src="nozzle" size="sm" variant="text" clickable="false" event_bubble="true"/>
+-          <text_body text="喷头温度" flex_grow="1" clickable="false" event_bubble="true"/>
+-          <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++      <lv_obj name="u1_controls_main_bottom" width="100%" height="0" flex_grow="1" flex_flow="row"
++              style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++        <lv_obj name="u1_controls_fans" width="0" flex_grow="1" height="100%" flex_flow="column"
++                style_pad_all="#u1_page_pad" style_flex_main_place="space_between" clickable="true" scrollable="false">
++          <style name="styles.u1_flat_card"/>
++          <style name="styles.press_wash" selector="pressed"/>
++          <event_cb trigger="clicked" callback="on_controls_cooling"/>
++          <lv_obj width="100%" height="#u1_icon_badge" flex_flow="row" style_pad_all="0"
++                  style_pad_gap="#u1_card_gap" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <lv_obj width="#u1_icon_badge" height="#u1_icon_badge" clickable="false" event_bubble="true" scrollable="false">
++              <style name="styles.u1_icon_badge"/>
++              <icon src="fan" size="sm" align="center" variant="text" clickable="false" event_bubble="true"/>
++            </lv_obj>
++            <text_body text="风扇" flex_grow="1" clickable="false" event_bubble="true"/>
++            <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
++          <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0"
++                  style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <text_body text="模型风扇" flex_grow="1" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++            <text_body bind_text="controls_fan_speed" clickable="false" event_bubble="true"/>
++          </lv_obj>
++        </lv_obj>
++        <lv_obj name="u1_controls_speed" width="0" flex_grow="1" height="100%" flex_flow="column"
++                style_pad_all="#u1_page_pad" style_flex_main_place="space_between" clickable="true" scrollable="false">
++          <style name="styles.u1_flat_card"/>
++          <style name="styles.press_wash" selector="pressed"/>
++          <event_cb trigger="clicked" callback="on_u1_controls_speed"/>
++          <lv_obj width="100%" height="#u1_icon_badge" flex_flow="row" style_pad_all="0"
++                  style_pad_gap="#u1_card_gap" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <lv_obj width="#u1_icon_badge" height="#u1_icon_badge" clickable="false" event_bubble="true" scrollable="false">
++              <style name="styles.u1_icon_badge"/>
++              <icon src="speed" size="sm" align="center" variant="text" clickable="false" event_bubble="true"/>
++            </lv_obj>
++            <text_body text="打印速度" flex_grow="1" clickable="false" event_bubble="true"/>
++            <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
++          <lv_obj width="100%" height="#u1_text_line" flex_flow="row" style_pad_all="0"
++                  style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <text_body text="倍率" flex_grow="1" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++            <text_body bind_text="controls_speed_pct" clickable="false" event_bubble="true"/>
++          </lv_obj>
+         </lv_obj>
+-        <temp_display name="nozzle_temp_display" size="sm" show_target="true" bind_current="extruder_temp" bind_target="extruder_target" clickable="false" event_bubble="true"/>
+       </lv_obj>
+-      <lv_obj name="btn_bed_temp" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
+-        <style name="styles.u1_card"/>
+-        <style name="styles.press_wash" selector="pressed"/>
+-        <event_cb trigger="clicked" callback="on_bed_temp_clicked"/>
+-        <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+-          <icon src="radiator" size="sm" variant="text" clickable="false" event_bubble="true"/>
+-          <text_body text="热床温度" flex_grow="1" clickable="false" event_bubble="true"/>
+-          <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++    </lv_obj>
++    <lv_obj name="u1_controls_all_panel" width="100%" height="100%" flex_flow="column"
++            style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="true" scroll_dir="ver">
++      <bind_flag_if_eq subject="u1_controls_show_all" flag="hidden" ref_value="0"/>
++      <ui_button name="u1_controls_back_main" width="100%" height="#u1_touch_target" text="常用控制" icon="arrow_left" variant="ghost">
++        <event_cb trigger="clicked" callback="on_u1_controls_main"/>
++      </ui_button>
++      <text_heading text="设备控制" width="100%"/>
++      <lv_obj name="u1_controls_grid" width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++        <lv_obj name="card_position" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
++          <style name="styles.u1_card"/>
++          <style name="styles.press_wash" selector="pressed"/>
++          <event_cb trigger="clicked" callback="on_controls_quick_actions"/>
++          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <icon src="axis_arrow" size="sm" variant="text" clickable="false" event_bubble="true"/>
++            <text_body text="移动" flex_grow="1" clickable="false" event_bubble="true"/>
++            <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
++          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_xs" scrollable="false" clickable="false" event_bubble="true">
++            <text_small text="X"/>
++            <text_small name="pos_x" bind_text="controls_pos_x" long_mode="dots" width="0" flex_grow="1"/>
++            <text_small text="Y"/>
++            <text_small name="pos_y" bind_text="controls_pos_y" long_mode="dots" width="0" flex_grow="1"/>
++            <text_small text="Z"/>
++            <text_small name="pos_z" bind_text="controls_pos_z" long_mode="dots" width="0" flex_grow="1"/>
++          </lv_obj>
++        </lv_obj>
++        <lv_obj name="card_temperatures" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
++          <style name="styles.u1_card"/>
++          <style name="styles.press_wash" selector="pressed"/>
++          <event_cb trigger="clicked" callback="on_nozzle_temp_clicked"/>
++          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <icon src="nozzle" size="sm" variant="text" clickable="false" event_bubble="true"/>
++            <text_body text="喷头温度" flex_grow="1" clickable="false" event_bubble="true"/>
++            <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
++          <temp_display name="nozzle_temp_display" size="sm" show_target="true" bind_current="extruder_temp" bind_target="extruder_target" clickable="false" event_bubble="true"/>
++        </lv_obj>
++        <lv_obj name="btn_bed_temp" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
++          <style name="styles.u1_card"/>
++          <style name="styles.press_wash" selector="pressed"/>
++          <event_cb trigger="clicked" callback="on_bed_temp_clicked"/>
++          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <icon src="radiator" size="sm" variant="text" clickable="false" event_bubble="true"/>
++            <text_body text="热床温度" flex_grow="1" clickable="false" event_bubble="true"/>
++            <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
++          <temp_display name="bed_temp_display" size="sm" show_target="true" bind_current="bed_temp" bind_target="bed_target" clickable="false" event_bubble="true"/>
++        </lv_obj>
++        <lv_obj name="card_cooling" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
++          <style name="styles.u1_card"/>
++          <style name="styles.press_wash" selector="pressed"/>
++          <event_cb trigger="clicked" callback="on_controls_cooling"/>
++          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <icon src="fan" size="sm" variant="text" clickable="false" event_bubble="true"/>
++            <text_body text="风扇" flex_grow="1" clickable="false" event_bubble="true"/>
++            <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
++          <text_body name="fan_speed_display" bind_text="controls_fan_speed" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++        </lv_obj>
++        <lv_obj name="btn_home_all" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
++          <style name="styles.u1_card"/>
++          <style name="styles.press_wash" selector="pressed"/>
++          <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
++          <bind_state_if cond="machine_motion_blocked" state="disabled"/>
++          <event_cb trigger="clicked" callback="on_controls_home_all"/>
++          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <icon src="home" size="sm" variant="text" clickable="false" event_bubble="true"/>
++            <text_body text="全部归零" flex_grow="1" clickable="false" event_bubble="true"/>
++            <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
++          <text_small text="X / Y / Z" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++        </lv_obj>
++        <lv_obj name="btn_motors" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
++          <style name="styles.u1_card"/>
++          <style name="styles.press_wash" selector="pressed"/>
++          <bind_state_if cond="machine_motion_blocked" state="disabled"/>
++          <event_cb trigger="clicked" callback="on_calibration_motors"/>
++          <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
++            <icon src="engine_off" size="sm" variant="text" clickable="false" event_bubble="true"/>
++            <text_body text="释放电机" flex_grow="1" clickable="false" event_bubble="true"/>
++            <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
++          </lv_obj>
++          <text_small text="手动移动前关闭" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++          <bind_state_if_eq subject="motors_enabled" state="disabled" ref_value="0"/>
+         </lv_obj>
+-        <temp_display name="bed_temp_display" size="sm" show_target="true" bind_current="bed_temp" bind_target="bed_target" clickable="false" event_bubble="true"/>
+       </lv_obj>
+-      <lv_obj name="card_cooling" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
++      <lv_obj name="btn_chamber_temp" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="#u1_page_pad" style_pad_gap="#space_md" style_flex_cross_place="center" clickable="true" scrollable="false">
+         <style name="styles.u1_card"/>
+-        <style name="styles.press_wash" selector="pressed"/>
+-        <event_cb trigger="clicked" callback="on_controls_cooling"/>
+-        <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+-          <icon src="fan" size="sm" variant="text" clickable="false" event_bubble="true"/>
+-          <text_body text="风扇" flex_grow="1" clickable="false" event_bubble="true"/>
+-          <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
+-        </lv_obj>
+-        <text_body name="fan_speed_display" bind_text="controls_fan_speed" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++        <bind_flag_if_eq subject="printer_has_chamber" flag="hidden" ref_value="0"/>
++        <event_cb trigger="clicked" callback="on_chamber_temp_clicked"/>
++        <text_body text="腔体温度" flex_grow="1" clickable="false" event_bubble="true"/>
++        <temp_display name="chamber_temp_display" size="sm" show_target="true" bind_current="chamber_temp" bind_target="chamber_effective_target" bind_mode="chamber_mode" clickable="false" event_bubble="true"/>
+       </lv_obj>
+-      <lv_obj name="btn_home_all" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
++      <lv_obj name="secondary_temps_list" width="100%" height="#u1_touch_target" style_pad_all="#u1_page_pad" clickable="true" scrollable="false">
+         <style name="styles.u1_card"/>
+-        <style name="styles.press_wash" selector="pressed"/>
+-        <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
+-        <bind_state_if cond="machine_motion_blocked" state="disabled"/>
+-        <event_cb trigger="clicked" callback="on_controls_home_all"/>
+-        <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+-          <icon src="home" size="sm" variant="text" clickable="false" event_bubble="true"/>
+-          <text_body text="全部归零" flex_grow="1" clickable="false" event_bubble="true"/>
+-          <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
+-        </lv_obj>
+-        <text_small text="X / Y / Z" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
++        <bind_flag_if_eq subject="controls_more_sensors_count" flag="hidden" ref_value="0"/>
++        <event_cb trigger="clicked" callback="on_controls_more_sensors"/>
++        <text_body name="more_sensors_label" bind_text="controls_more_sensors" align="left_mid" clickable="false" event_bubble="true"/>
+       </lv_obj>
+-      <lv_obj name="btn_motors" width="48%" height="#u1_controls_tile_h" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_xs" style_flex_main_place="center" clickable="true" scrollable="false">
++      <lv_obj name="secondary_fans_list" width="100%" height="content" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_sm" clickable="true" scrollable="false">
+         <style name="styles.u1_card"/>
+-        <style name="styles.press_wash" selector="pressed"/>
+-        <bind_state_if cond="machine_motion_blocked" state="disabled"/>
+-        <event_cb trigger="clicked" callback="on_calibration_motors"/>
+-        <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_flex_cross_place="center" clickable="false" event_bubble="true" scrollable="false">
+-          <icon src="engine_off" size="sm" variant="text" clickable="false" event_bubble="true"/>
+-          <text_body text="释放电机" flex_grow="1" clickable="false" event_bubble="true"/>
+-          <icon src="chevron_right" size="xs" variant="muted" clickable="false" event_bubble="true"/>
+-        </lv_obj>
+-        <text_small text="手动移动前关闭" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+-        <bind_state_if_eq subject="motors_enabled" state="disabled" ref_value="0"/>
++        <event_cb trigger="clicked" callback="on_controls_secondary_fans"/>
+       </lv_obj>
+-    </lv_obj>
+-    <lv_obj name="btn_chamber_temp" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="#u1_page_pad" style_pad_gap="#space_md" style_flex_cross_place="center" clickable="true" scrollable="false">
+-      <style name="styles.u1_card"/>
+-      <bind_flag_if_eq subject="printer_has_chamber" flag="hidden" ref_value="0"/>
+-      <event_cb trigger="clicked" callback="on_chamber_temp_clicked"/>
+-      <text_body text="腔体温度" flex_grow="1" clickable="false" event_bubble="true"/>
+-      <temp_display name="chamber_temp_display" size="sm" show_target="true" bind_current="chamber_temp" bind_target="chamber_effective_target" bind_mode="chamber_mode" clickable="false" event_bubble="true"/>
+-    </lv_obj>
+-    <lv_obj name="secondary_temps_list" width="100%" height="#u1_touch_target" style_pad_all="#u1_page_pad" clickable="true" scrollable="false">
+-      <style name="styles.u1_card"/>
+-      <bind_flag_if_eq subject="controls_more_sensors_count" flag="hidden" ref_value="0"/>
+-      <event_cb trigger="clicked" callback="on_controls_more_sensors"/>
+-      <text_body name="more_sensors_label" bind_text="controls_more_sensors" align="left_mid" clickable="false" event_bubble="true"/>
+-    </lv_obj>
+-    <lv_obj name="secondary_fans_list" width="100%" height="content" flex_flow="column" style_pad_all="#u1_page_pad" style_pad_gap="#space_sm" clickable="true" scrollable="false">
+-      <style name="styles.u1_card"/>
+-      <event_cb trigger="clicked" callback="on_controls_secondary_fans"/>
+-    </lv_obj>
+-    <text_heading text="校准与维护" width="100%"/>
+-    <lv_obj name="calib_tools_grid" width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+-      <ui_button name="btn_bed_mesh" text="热床网格" icon="grid_large" width="48%" height="#u1_touch_target" variant="secondary">
+-        <event_cb trigger="clicked" callback="on_calibration_bed_mesh"/>
+-      </ui_button>
+-      <ui_button name="btn_z_calibration" text="Z 高度校准" icon="z_closer" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true">
+-        <bind_flag_if cond="z_offset_reapplied_per_head eq 1 or (printer_has_tool_offset_cal eq 1 and hide_manual_z_calibration eq 1)" flag="hidden"/>
+-        <event_cb trigger="clicked" callback="on_calibration_zoffset"/>
+-      </ui_button>
+-      <ui_button name="btn_tool_offsets" text="四头偏移校准" icon="axis_arrow" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true" hidden="true">
+-        <bind_flag_if_eq subject="printer_has_tool_offset_cal" flag="hidden" ref_value="0"/>
+-        <event_cb trigger="clicked" callback="on_calibration_tool_offsets"/>
+-      </ui_button>
+-      <ui_button name="btn_qgl" text="QGL" icon="spirit_level" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true" hidden="true">
+-        <bind_flag_if cond="printer_has_qgl eq 0" flag="hidden"/>
+-        <bind_state_if cond="controls_operation_in_progress eq 1" state="disabled"/>
+-        <event_cb trigger="clicked" callback="on_controls_qgl"/>
+-      </ui_button>
+-      <ui_button name="btn_z_tilt" text="Z-Tilt" icon="spirit_level" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true" hidden="true">
+-        <bind_flag_if cond="printer_has_z_tilt eq 0" flag="hidden"/>
+-        <bind_state_if cond="controls_operation_in_progress eq 1" state="disabled"/>
+-        <event_cb trigger="clicked" callback="on_controls_z_tilt"/>
+-      </ui_button>
+-      <ui_button name="btn_pa_cal" text="压力提前校准" icon="gauge" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true" hidden="true">
+-        <bind_flag_if cond="printer_has_pa_cal eq 0" flag="hidden"/>
+-        <event_cb trigger="clicked" callback="on_calibration_pa"/>
+-      </ui_button>
+-      <ui_button name="btn_screws" text="热床螺丝" icon="wrench" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true" hidden="true">
+-        <bind_flag_if cond="printer_has_screws_tilt eq 0" flag="hidden"/>
+-        <event_cb trigger="clicked" callback="on_calibration_screws"/>
+-      </ui_button>
+-    </lv_obj>
+-    <lv_obj name="u1_zoffset_row" width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+-      <ui_button name="btn_zoffset_tune" width="0" flex_grow="1" height="#u1_touch_target" text="Z 偏移微调" variant="secondary">
+-        <event_cb trigger="clicked" callback="on_zoffset_tune"/>
+-      </ui_button>
+-      <ui_button name="btn_save_z_offset" width="0" flex_grow="1" height="#u1_touch_target" text="保存 Z 偏移" variant="primary" moves_machine="true">
+-        <bind_flag_if_eq subject="z_offset_save_available" flag="hidden" ref_value="0"/>
+-        <event_cb trigger="clicked" callback="on_controls_save_z_offset"/>
+-      </ui_button>
+-    </lv_obj>
+-    <ui_card name="card_quick_actions" width="100%" height="content" flex_grow="0" flex_flow="column" style_flex_main_place="space_between" style_radius="#u1_card_radius" style_pad_all="#u1_page_pad" scrollable="false" style_pad_gap="#u1_card_gap">
+-      <lv_obj flex_flow="row" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="0" style_pad_gap="#space_sm">
+-        <bind_flag_if_eq subject="macro_header_visible" flag="hidden" ref_value="0"/>
+-        <icon src="flash" size="sm" variant="primary"/>
+-        <text_small text="快捷操作" style_translate_y="2" style_text_color="#text"/>
++      <text_heading text="校准与维护" width="100%"/>
++      <lv_obj name="calib_tools_grid" width="100%" height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++        <ui_button name="btn_bed_mesh" text="热床网格" icon="grid_large" width="48%" height="#u1_touch_target" variant="secondary">
++          <event_cb trigger="clicked" callback="on_calibration_bed_mesh"/>
++        </ui_button>
++        <ui_button name="btn_z_calibration" text="Z 高度校准" icon="z_closer" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true">
++          <bind_flag_if cond="z_offset_reapplied_per_head eq 1 or (printer_has_tool_offset_cal eq 1 and hide_manual_z_calibration eq 1)" flag="hidden"/>
++          <event_cb trigger="clicked" callback="on_calibration_zoffset"/>
++        </ui_button>
++        <ui_button name="btn_tool_offsets" text="四头偏移校准" icon="axis_arrow" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true" hidden="true">
++          <bind_flag_if_eq subject="printer_has_tool_offset_cal" flag="hidden" ref_value="0"/>
++          <event_cb trigger="clicked" callback="on_calibration_tool_offsets"/>
++        </ui_button>
++        <ui_button name="btn_qgl" text="QGL" icon="spirit_level" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true" hidden="true">
++          <bind_flag_if cond="printer_has_qgl eq 0" flag="hidden"/>
++          <bind_state_if cond="controls_operation_in_progress eq 1" state="disabled"/>
++          <event_cb trigger="clicked" callback="on_controls_qgl"/>
++        </ui_button>
++        <ui_button name="btn_z_tilt" text="Z-Tilt" icon="spirit_level" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true" hidden="true">
++          <bind_flag_if cond="printer_has_z_tilt eq 0" flag="hidden"/>
++          <bind_state_if cond="controls_operation_in_progress eq 1" state="disabled"/>
++          <event_cb trigger="clicked" callback="on_controls_z_tilt"/>
++        </ui_button>
++        <ui_button name="btn_pa_cal" text="压力提前校准" icon="gauge" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true" hidden="true">
++          <bind_flag_if cond="printer_has_pa_cal eq 0" flag="hidden"/>
++          <event_cb trigger="clicked" callback="on_calibration_pa"/>
++        </ui_button>
++        <ui_button name="btn_screws" text="热床螺丝" icon="wrench" width="48%" height="#u1_touch_target" variant="secondary" moves_machine="true" hidden="true">
++          <bind_flag_if cond="printer_has_screws_tilt eq 0" flag="hidden"/>
++          <event_cb trigger="clicked" callback="on_calibration_screws"/>
++        </ui_button>
+       </lv_obj>
+-      <lv_obj width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_xs">
+-        <text_small text="归零" style_min_width="40"/>
+-        <button_group flex_grow="0" height="content">
+-          <button_group_item name="btn_home_all_shortcut" width="0" style_min_width="content" style_pad_hor="#space_xs" text="全部" flex_grow="1" style_border_width="0" moves_machine="true" height="#u1_touch_target">
+-            <bind_style name="home_btn_homed" subject="all_homed" ref_value="1"/>
+-            <bind_style name="home_btn_unhomed" subject="all_homed" ref_value="0"/>
+-            <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
+-            <event_cb trigger="clicked" callback="on_controls_home_all"/>
+-          </button_group_item>
+-          <button_group_item name="btn_home_x" width="0" style_min_width="content" style_pad_hor="#space_xs" text="X" flex_grow="1" moves_machine="true" height="#u1_touch_target">
+-            <bind_style name="home_btn_homed" subject="x_homed" ref_value="1"/>
+-            <bind_style name="home_btn_unhomed" subject="x_homed" ref_value="0"/>
+-            <bind_flag_if_eq subject="printer_has_individual_xyz_homing" flag="hidden" ref_value="0"/>
+-            <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
+-            <event_cb trigger="clicked" callback="on_controls_home_x"/>
+-          </button_group_item>
+-          <button_group_item name="btn_home_y" width="0" style_min_width="content" style_pad_hor="#space_xs" text="Y" flex_grow="1" moves_machine="true" height="#u1_touch_target">
+-            <bind_style name="home_btn_homed" subject="y_homed" ref_value="1"/>
+-            <bind_style name="home_btn_unhomed" subject="y_homed" ref_value="0"/>
+-            <bind_flag_if_eq subject="printer_has_individual_xyz_homing" flag="hidden" ref_value="0"/>
+-            <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
+-            <event_cb trigger="clicked" callback="on_controls_home_y"/>
+-          </button_group_item>
+-          <button_group_item name="btn_home_xy" width="0" style_min_width="content" style_pad_hor="#space_xs" text="XY" flex_grow="1" moves_machine="true" height="#u1_touch_target">
+-            <bind_style name="home_btn_homed" subject="xy_homed" ref_value="1"/>
+-            <bind_style name="home_btn_unhomed" subject="xy_homed" ref_value="0"/>
+-            <bind_flag_if_eq subject="printer_has_individual_xyz_homing" flag="hidden" ref_value="0"/>
+-            <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
+-            <event_cb trigger="clicked" callback="on_controls_home_xy"/>
+-          </button_group_item>
+-          <button_group_item name="btn_home_z" width="0" style_min_width="content" style_pad_hor="#space_xs" text="Z" flex_grow="1" moves_machine="true" height="#u1_touch_target">
+-            <bind_style name="home_btn_homed" subject="z_homed" ref_value="1"/>
+-            <bind_style name="home_btn_unhomed" subject="z_homed" ref_value="0"/>
+-            <bind_flag_if_eq subject="printer_has_individual_xyz_homing" flag="hidden" ref_value="0"/>
+-            <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
+-            <event_cb trigger="clicked" callback="on_controls_home_z"/>
+-          </button_group_item>
+-        </button_group>
++      <lv_obj name="u1_zoffset_row" width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
++        <ui_button name="btn_zoffset_tune" width="0" flex_grow="1" height="#u1_touch_target" text="Z 偏移微调" variant="secondary">
++          <event_cb trigger="clicked" callback="on_zoffset_tune"/>
++        </ui_button>
++        <ui_button name="btn_save_z_offset" width="0" flex_grow="1" height="#u1_touch_target" text="保存 Z 偏移" variant="primary" moves_machine="true">
++          <bind_flag_if_eq subject="z_offset_save_available" flag="hidden" ref_value="0"/>
++          <event_cb trigger="clicked" callback="on_controls_save_z_offset"/>
++        </ui_button>
+       </lv_obj>
+-      <lv_obj width="100%" flex_grow="0" style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="#space_xs" style_flex_main_place="end" height="content">
+-        <lv_obj width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs">
+-          <ui_button name="btn_macro_1" width="0" height="#u1_touch_target" style_pad_ver="0" flex_grow="1" bind_text="macro_1_name" variant="secondary" style_text_font="#font_small" long_mode="wrap" moves_machine="true">
+-            <bind_flag_if_eq subject="macro_1_visible" flag="hidden" ref_value="0"/>
+-            <bind_state_if cond="macro_1_available eq 0" state="disabled"/>
+-            <event_cb trigger="clicked" callback="on_controls_macro" user_data="0"/>
+-          </ui_button>
+-          <lv_obj name="macro_1_light_cell" width="0" height="#button_height" flex_grow="1" style_pad_all="0" scrollable="false" hidden="true">
+-            <bind_flag_if cond="macro_1_light eq 0 or led_controllable eq 0" flag="hidden"/>
+-            <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
+-            <ui_button name="light_button" width="100%" height="#u1_touch_target" style_pad_ver="0" variant="secondary" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_gap="#space_xs" focusable="false">
+-              <bind_state_if cond="printer_connection_state ne 2 or led_command_in_flight eq 1" state="disabled"/>
+-              <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
+-              <icon name="light_icon" src="lightbulb_outline" size="sm" variant="muted" clickable="false" event_bubble="true"/>
+-              <text_small text="Light" clickable="false" event_bubble="true"/>
+-              <event_cb trigger="clicked" callback="light_toggle_cb"/>
++      <ui_card name="card_quick_actions" width="100%" height="content" flex_grow="0" flex_flow="column" style_flex_main_place="space_between" style_radius="#u1_card_radius" style_pad_all="#u1_page_pad" scrollable="false" style_pad_gap="#u1_card_gap">
++        <lv_obj flex_flow="row" style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="0" style_pad_gap="#space_sm">
++          <bind_flag_if_eq subject="macro_header_visible" flag="hidden" ref_value="0"/>
++          <icon src="flash" size="sm" variant="primary"/>
++          <text_small text="快捷操作" style_translate_y="2" style_text_color="#text"/>
++        </lv_obj>
++        <lv_obj width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_xs">
++          <text_small text="归零" style_min_width="40"/>
++          <button_group flex_grow="0" height="content">
++            <button_group_item name="btn_home_all_shortcut" width="0" style_min_width="content" style_pad_hor="#space_xs" text="全部" flex_grow="1" style_border_width="0" moves_machine="true" height="#u1_touch_target">
++              <bind_style name="home_btn_homed" subject="all_homed" ref_value="1"/>
++              <bind_style name="home_btn_unhomed" subject="all_homed" ref_value="0"/>
++              <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
++              <event_cb trigger="clicked" callback="on_controls_home_all"/>
++            </button_group_item>
++            <button_group_item name="btn_home_x" width="0" style_min_width="content" style_pad_hor="#space_xs" text="X" flex_grow="1" moves_machine="true" height="#u1_touch_target">
++              <bind_style name="home_btn_homed" subject="x_homed" ref_value="1"/>
++              <bind_style name="home_btn_unhomed" subject="x_homed" ref_value="0"/>
++              <bind_flag_if_eq subject="printer_has_individual_xyz_homing" flag="hidden" ref_value="0"/>
++              <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
++              <event_cb trigger="clicked" callback="on_controls_home_x"/>
++            </button_group_item>
++            <button_group_item name="btn_home_y" width="0" style_min_width="content" style_pad_hor="#space_xs" text="Y" flex_grow="1" moves_machine="true" height="#u1_touch_target">
++              <bind_style name="home_btn_homed" subject="y_homed" ref_value="1"/>
++              <bind_style name="home_btn_unhomed" subject="y_homed" ref_value="0"/>
++              <bind_flag_if_eq subject="printer_has_individual_xyz_homing" flag="hidden" ref_value="0"/>
++              <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
++              <event_cb trigger="clicked" callback="on_controls_home_y"/>
++            </button_group_item>
++            <button_group_item name="btn_home_xy" width="0" style_min_width="content" style_pad_hor="#space_xs" text="XY" flex_grow="1" moves_machine="true" height="#u1_touch_target">
++              <bind_style name="home_btn_homed" subject="xy_homed" ref_value="1"/>
++              <bind_style name="home_btn_unhomed" subject="xy_homed" ref_value="0"/>
++              <bind_flag_if_eq subject="printer_has_individual_xyz_homing" flag="hidden" ref_value="0"/>
++              <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
++              <event_cb trigger="clicked" callback="on_controls_home_xy"/>
++            </button_group_item>
++            <button_group_item name="btn_home_z" width="0" style_min_width="content" style_pad_hor="#space_xs" text="Z" flex_grow="1" moves_machine="true" height="#u1_touch_target">
++              <bind_style name="home_btn_homed" subject="z_homed" ref_value="1"/>
++              <bind_style name="home_btn_unhomed" subject="z_homed" ref_value="0"/>
++              <bind_flag_if_eq subject="printer_has_individual_xyz_homing" flag="hidden" ref_value="0"/>
++              <bind_state_if_eq subject="controls_operation_in_progress" state="disabled" ref_value="1"/>
++              <event_cb trigger="clicked" callback="on_controls_home_z"/>
++            </button_group_item>
++          </button_group>
++        </lv_obj>
++        <lv_obj width="100%" flex_grow="0" style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="#space_xs" style_flex_main_place="end" height="content">
++          <lv_obj width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs">
++            <ui_button name="btn_macro_1" width="0" height="#u1_touch_target" style_pad_ver="0" flex_grow="1" bind_text="macro_1_name" variant="secondary" style_text_font="#font_small" long_mode="wrap" moves_machine="true">
++              <bind_flag_if_eq subject="macro_1_visible" flag="hidden" ref_value="0"/>
++              <bind_state_if cond="macro_1_available eq 0" state="disabled"/>
++              <event_cb trigger="clicked" callback="on_controls_macro" user_data="0"/>
+             </ui_button>
+-          </lv_obj>
+-          <ui_button name="btn_macro_2" width="0" height="#u1_touch_target" style_pad_ver="0" flex_grow="1" bind_text="macro_2_name" variant="secondary" style_text_font="#font_small" long_mode="wrap" moves_machine="true">
+-            <bind_flag_if_eq subject="macro_2_visible" flag="hidden" ref_value="0"/>
+-            <bind_state_if cond="macro_2_available eq 0" state="disabled"/>
+-            <event_cb trigger="clicked" callback="on_controls_macro" user_data="1"/>
+-          </ui_button>
+-          <lv_obj name="macro_2_light_cell" width="0" height="#button_height" flex_grow="1" style_pad_all="0" scrollable="false" hidden="true">
+-            <bind_flag_if cond="macro_2_light eq 0 or led_controllable eq 0" flag="hidden"/>
+-            <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
+-            <ui_button name="light_button" width="100%" height="#u1_touch_target" style_pad_ver="0" variant="secondary" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_gap="#space_xs" focusable="false">
+-              <bind_state_if cond="printer_connection_state ne 2 or led_command_in_flight eq 1" state="disabled"/>
++            <lv_obj name="macro_1_light_cell" width="0" height="#button_height" flex_grow="1" style_pad_all="0" scrollable="false" hidden="true">
++              <bind_flag_if cond="macro_1_light eq 0 or led_controllable eq 0" flag="hidden"/>
+               <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
+-              <icon name="light_icon" src="lightbulb_outline" size="sm" variant="muted" clickable="false" event_bubble="true"/>
+-              <text_small text="Light" clickable="false" event_bubble="true"/>
+-              <event_cb trigger="clicked" callback="light_toggle_cb"/>
++              <ui_button name="light_button" width="100%" height="#u1_touch_target" style_pad_ver="0" variant="secondary" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_gap="#space_xs" focusable="false">
++                <bind_state_if cond="printer_connection_state ne 2 or led_command_in_flight eq 1" state="disabled"/>
++                <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
++                <icon name="light_icon" src="lightbulb_outline" size="sm" variant="muted" clickable="false" event_bubble="true"/>
++                <text_small text="Light" clickable="false" event_bubble="true"/>
++                <event_cb trigger="clicked" callback="light_toggle_cb"/>
++              </ui_button>
++            </lv_obj>
++            <ui_button name="btn_macro_2" width="0" height="#u1_touch_target" style_pad_ver="0" flex_grow="1" bind_text="macro_2_name" variant="secondary" style_text_font="#font_small" long_mode="wrap" moves_machine="true">
++              <bind_flag_if_eq subject="macro_2_visible" flag="hidden" ref_value="0"/>
++              <bind_state_if cond="macro_2_available eq 0" state="disabled"/>
++              <event_cb trigger="clicked" callback="on_controls_macro" user_data="1"/>
+             </ui_button>
+-          </lv_obj>
+-        </lv_obj>
+-        <lv_obj width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs">
+-          <ui_button name="btn_macro_3" width="0" height="#u1_touch_target" style_pad_ver="0" flex_grow="1" bind_text="macro_3_name" variant="secondary" style_text_font="#font_small" long_mode="wrap" moves_machine="true">
+-            <bind_flag_if_eq subject="macro_3_visible" flag="hidden" ref_value="0"/>
+-            <bind_state_if cond="macro_3_available eq 0" state="disabled"/>
+-            <event_cb trigger="clicked" callback="on_controls_macro" user_data="2"/>
+-          </ui_button>
+-          <lv_obj name="macro_3_light_cell" width="0" height="#button_height" flex_grow="1" style_pad_all="0" scrollable="false" hidden="true">
+-            <bind_flag_if cond="macro_3_light eq 0 or led_controllable eq 0" flag="hidden"/>
+-            <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
+-            <ui_button name="light_button" width="100%" height="#u1_touch_target" style_pad_ver="0" variant="secondary" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_gap="#space_xs" focusable="false">
+-              <bind_state_if cond="printer_connection_state ne 2 or led_command_in_flight eq 1" state="disabled"/>
++            <lv_obj name="macro_2_light_cell" width="0" height="#button_height" flex_grow="1" style_pad_all="0" scrollable="false" hidden="true">
++              <bind_flag_if cond="macro_2_light eq 0 or led_controllable eq 0" flag="hidden"/>
+               <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
+-              <icon name="light_icon" src="lightbulb_outline" size="sm" variant="muted" clickable="false" event_bubble="true"/>
+-              <text_small text="Light" clickable="false" event_bubble="true"/>
+-              <event_cb trigger="clicked" callback="light_toggle_cb"/>
+-            </ui_button>
++              <ui_button name="light_button" width="100%" height="#u1_touch_target" style_pad_ver="0" variant="secondary" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_gap="#space_xs" focusable="false">
++                <bind_state_if cond="printer_connection_state ne 2 or led_command_in_flight eq 1" state="disabled"/>
++                <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
++                <icon name="light_icon" src="lightbulb_outline" size="sm" variant="muted" clickable="false" event_bubble="true"/>
++                <text_small text="Light" clickable="false" event_bubble="true"/>
++                <event_cb trigger="clicked" callback="light_toggle_cb"/>
++              </ui_button>
++            </lv_obj>
+           </lv_obj>
+-          <ui_button name="btn_macro_4" width="0" height="#u1_touch_target" style_pad_ver="0" flex_grow="1" bind_text="macro_4_name" variant="secondary" style_text_font="#font_small" long_mode="wrap" moves_machine="true">
+-            <bind_flag_if_eq subject="macro_4_visible" flag="hidden" ref_value="0"/>
+-            <bind_state_if cond="macro_4_available eq 0" state="disabled"/>
+-            <event_cb trigger="clicked" callback="on_controls_macro" user_data="3"/>
+-          </ui_button>
+-          <lv_obj name="macro_4_light_cell" width="0" height="#button_height" flex_grow="1" style_pad_all="0" scrollable="false" hidden="true">
+-            <bind_flag_if cond="macro_4_light eq 0 or led_controllable eq 0" flag="hidden"/>
+-            <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
+-            <ui_button name="light_button" width="100%" height="#u1_touch_target" style_pad_ver="0" variant="secondary" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_gap="#space_xs" focusable="false">
+-              <bind_state_if cond="printer_connection_state ne 2 or led_command_in_flight eq 1" state="disabled"/>
++          <lv_obj width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_pad_gap="#space_xs">
++            <ui_button name="btn_macro_3" width="0" height="#u1_touch_target" style_pad_ver="0" flex_grow="1" bind_text="macro_3_name" variant="secondary" style_text_font="#font_small" long_mode="wrap" moves_machine="true">
++              <bind_flag_if_eq subject="macro_3_visible" flag="hidden" ref_value="0"/>
++              <bind_state_if cond="macro_3_available eq 0" state="disabled"/>
++              <event_cb trigger="clicked" callback="on_controls_macro" user_data="2"/>
++            </ui_button>
++            <lv_obj name="macro_3_light_cell" width="0" height="#button_height" flex_grow="1" style_pad_all="0" scrollable="false" hidden="true">
++              <bind_flag_if cond="macro_3_light eq 0 or led_controllable eq 0" flag="hidden"/>
+               <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
+-              <icon name="light_icon" src="lightbulb_outline" size="sm" variant="muted" clickable="false" event_bubble="true"/>
+-              <text_small text="Light" clickable="false" event_bubble="true"/>
+-              <event_cb trigger="clicked" callback="light_toggle_cb"/>
++              <ui_button name="light_button" width="100%" height="#u1_touch_target" style_pad_ver="0" variant="secondary" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_gap="#space_xs" focusable="false">
++                <bind_state_if cond="printer_connection_state ne 2 or led_command_in_flight eq 1" state="disabled"/>
++                <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
++                <icon name="light_icon" src="lightbulb_outline" size="sm" variant="muted" clickable="false" event_bubble="true"/>
++                <text_small text="Light" clickable="false" event_bubble="true"/>
++                <event_cb trigger="clicked" callback="light_toggle_cb"/>
++              </ui_button>
++            </lv_obj>
++            <ui_button name="btn_macro_4" width="0" height="#u1_touch_target" style_pad_ver="0" flex_grow="1" bind_text="macro_4_name" variant="secondary" style_text_font="#font_small" long_mode="wrap" moves_machine="true">
++              <bind_flag_if_eq subject="macro_4_visible" flag="hidden" ref_value="0"/>
++              <bind_state_if cond="macro_4_available eq 0" state="disabled"/>
++              <event_cb trigger="clicked" callback="on_controls_macro" user_data="3"/>
+             </ui_button>
++            <lv_obj name="macro_4_light_cell" width="0" height="#button_height" flex_grow="1" style_pad_all="0" scrollable="false" hidden="true">
++              <bind_flag_if cond="macro_4_light eq 0 or led_controllable eq 0" flag="hidden"/>
++              <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
++              <ui_button name="light_button" width="100%" height="#u1_touch_target" style_pad_ver="0" variant="secondary" flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center" style_pad_gap="#space_xs" focusable="false">
++                <bind_state_if cond="printer_connection_state ne 2 or led_command_in_flight eq 1" state="disabled"/>
++                <!-- DUPLICATE_NAME_OK: each slot cell is scoped to its own LedWidget lookup -->
++                <icon name="light_icon" src="lightbulb_outline" size="sm" variant="muted" clickable="false" event_bubble="true"/>
++                <text_small text="Light" clickable="false" event_bubble="true"/>
++                <event_cb trigger="clicked" callback="light_toggle_cb"/>
++              </ui_button>
++            </lv_obj>
+           </lv_obj>
+         </lv_obj>
+-      </lv_obj>
+-    </ui_card>
++      </ui_card>
++    </lv_obj>
+   </view>
+ </component>
+diff --git a/ui_xml/navigation_bar.xml b/ui_xml/navigation_bar.xml
+index febf5371f8ab24b9b508e7dbd6f41c6b22b1f8cd..e961b177ed05e26ee172b38f51ff694751457a7d 100644
+--- a/ui_xml/navigation_bar.xml
++++ b/ui_xml/navigation_bar.xml
+@@ -80,6 +80,7 @@
+     </ui_button>
+     <ui_button name="nav_btn_controls" width="0" flex_grow="1" height="#u1_touch_target" variant="ghost"
+                style_min_width="0" style_pad_all="0" style_border_width="0" style_radius="#u1_nav_radius">
++      <event_cb trigger="clicked" callback="on_u1_controls_main"/>
+       <bind_flag_if_eq subject="home_edit_mode" flag="hidden" ref_value="1"/>
+       <bind_style_if name="styles.u1_selected_light" cond="(active_panel eq 2) and settings_dark_mode eq 0"/>
+       <bind_style_if name="styles.u1_selected_dark" cond="(active_panel eq 2) and settings_dark_mode eq 1"/>
+diff --git a/ui_xml/settings_system_overlay.xml b/ui_xml/settings_system_overlay.xml
+index f249f056e249c381cf8935e0daa5326bfc341a77..39b80bf84d069f4c815d73fd5bac62e4141b7dd7 100644
+--- a/ui_xml/settings_system_overlay.xml
++++ b/ui_xml/settings_system_overlay.xml
+@@ -8,6 +8,7 @@
+     <!-- Content Area - no padding, rows handle their own -->
+     <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_top="#u1_page_pad" style_pad_left="0" style_pad_right="0" style_pad_bottom="#u1_page_pad" scrollable="true" flex_flow="column" style_pad_gap="#u1_card_gap" scrollbar_mode="auto">
+       <setting_group name="u1_system_native_entries" style_radius="#u1_card_radius">
++        <setting_action_row name="row_all_controls" label="全部控制" icon="fine_tune" description="归零、温度、校准与快捷操作" description_min_bp="0" callback="on_u1_controls_all"/>
+         <setting_action_row name="row_native_advanced" label="原生高级功能" icon="tune" description="宏、校准、控制台与诊断" description_min_bp="0" callback="on_native_advanced_clicked"/>
+         <setting_action_row name="row_appearance" label="主题与外观" icon="palette" callback="on_appearance_clicked" bind_description="settings_status_appearance" description_min_bp="0" />
+         <setting_action_row name="row_printing" label="打印偏好" icon="printer_3d" callback="on_printing_clicked" description_min_bp="0" />

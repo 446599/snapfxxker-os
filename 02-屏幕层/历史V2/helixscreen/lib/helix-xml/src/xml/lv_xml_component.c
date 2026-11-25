@@ -1,0 +1,2024 @@
+/**
+ * @file lv_xml_component.c
+ *
+ * SPDX-License-Identifier: MIT
+ * SPDX-FileCopyrightText: 2025 LVGL Kft
+ * SPDX-FileCopyrightText: 2026 356C LLC
+ */
+
+/*********************
+ *      INCLUDES
+ *********************/
+#include "lv_xml_component.h"
+#if LV_USE_XML
+
+#include <lvgl.h>
+#include "lv_xml_component_private.h"
+#include <lvgl_private.h>
+#include "lv_xml_private.h"
+#include "lv_xml_parser.h"
+#include "lv_xml_style.h"
+#include "lv_xml_base_types.h"
+#include "lv_xml_widget.h"
+#include "parsers/lv_xml_obj_parser.h"
+#include "../libs/expat/expat.h"
+#include <lvgl.h>
+#include "lv_xml_expr.h"
+#include <string.h>
+
+/*********************
+ *      DEFINES
+ *********************/
+#include "lv_xml_globals.h"
+#define xml_path_prefix lv_xml_path_prefix
+
+/**********************
+ *      TYPEDEFS
+ **********************/
+typedef struct {
+    lv_style_selector_t selector;
+    lv_style_prop_t prop;
+    lv_xml_style_prop_anim_type_t prop_type;
+    lv_color_t color_start;
+    lv_color_t color_end;
+} anim_data_t;
+
+/**********************
+ *  STATIC PROTOTYPES
+ **********************/
+static void start_metadata_handler(void * user_data, const char * name, const char ** attrs);
+static void end_metadata_handler(void * user_data, const char * name);
+static void process_const_element(lv_xml_parser_state_t * state, const char ** attrs);
+static void process_font_element(lv_xml_parser_state_t * state, const char * type, const char ** attrs);
+static void process_image_element(lv_xml_parser_state_t * state, const char * type, const char ** attrs);
+static void process_prop_element(lv_xml_parser_state_t * state, const char * name, const char ** attrs);
+static void process_subject_expr_element(lv_xml_parser_state_t * state, const char ** attrs);
+static char * extract_view_content(const char * xml_definition);
+static void anim_exec_cb(lv_anim_t * a, int32_t v);
+static void component_scope_retire(lv_xml_component_scope_t * scope);
+static bool scope_styles_are_live(lv_xml_component_scope_t * scope);
+static void component_scope_free(lv_xml_component_scope_t * scope);
+static void component_scope_drop_others(const char * name, const lv_xml_component_scope_t * keep);
+static void scope_instance_delete_cb(lv_event_t * e);
+static void scope_free_async_cb(void * scope_v);
+static void subject_expr_record_release(lv_xml_subject_expr_t * record);
+static void scope_retime_transitions(lv_ll_t * list);
+static bool scope_reapply_style_tokens(lv_ll_t * list);
+static void component_scope_index_link(lv_xml_component_scope_t * scope);
+static void component_scope_index_unlink(lv_xml_component_scope_t * scope);
+static lv_xml_component_scope_t * component_scope_find(const char * component_name);
+
+/**********************
+ *  STATIC VARIABLES
+ **********************/
+
+static lv_ll_t component_scope_ll;
+
+/** Scopes that were unregistered/replaced while instances of them were still on
+ *  screen. Out of `component_scope_ll`, so no lookup or foreach can reach them,
+ *  but still holding their style storage for those instances. Drained by the
+ *  async free once the last instance dies, and force-drained by
+ *  lv_xml_component_deinit(). Same node size as component_scope_ll, which is
+ *  what lets lv_ll_chg_list() move a node between the two. */
+static lv_ll_t pending_free_scope_ll;
+
+/** The `"globals"` scope: shared metadata, not a component, and never retired.
+ *  Kept so the instance counting can skip it explicitly. */
+static lv_xml_component_scope_t * global_scope_p;
+
+/** Name -> scope over `component_scope_ll`, answering what the list walk would:
+ *  the head-most scope registered under that name. Every component tag and every
+ *  `component.style` reference looks a scope up, and the list holds hundreds.
+ *  `globals` is left out; `global_scope_p` answers it. */
+static lv_xml_name_index_t component_scope_index;
+
+static lv_xml_component_loader_cb_t component_loader;
+/** Set while the loader runs: it registers through this file, which looks names up. */
+static bool component_loader_running;
+
+/** Fixed-point fraction of 256 applied to every declared transition duration.
+ *  256 runs transitions as authored; 0 disables motion. */
+static uint32_t transition_scale = 256;
+
+/**********************
+ *      MACROS
+ **********************/
+
+/**********************
+ *   GLOBAL FUNCTIONS
+ **********************/
+
+void lv_xml_component_init(void)
+{
+    lv_ll_init(&component_scope_ll, sizeof(lv_xml_component_scope_t));
+    lv_ll_init(&pending_free_scope_ll, sizeof(lv_xml_component_scope_t));
+
+    lv_xml_component_scope_t * global_scope = lv_ll_ins_head(&component_scope_ll);
+    lv_memzero(global_scope, sizeof(lv_xml_component_scope_t));
+
+    lv_xml_component_scope_init(global_scope);
+    global_scope->name = lv_strdup("globals");
+    global_scope->indexed = true;
+    global_scope_p = global_scope;
+}
+
+void lv_xml_component_scope_init(lv_xml_component_scope_t * scope)
+{
+    lv_ll_init(&scope->style_ll, sizeof(lv_xml_style_t));
+    lv_ll_init(&scope->const_ll, sizeof(lv_xml_const_t));
+    lv_ll_init(&scope->param_ll, sizeof(lv_xml_param_t));
+    lv_ll_init(&scope->gradient_ll, sizeof(lv_xml_grad_t));
+    lv_ll_init(&scope->subjects_ll, sizeof(lv_xml_subject_t));
+    lv_ll_init(&scope->subject_expr_ll, sizeof(lv_xml_subject_expr_t));
+    lv_ll_init(&scope->frag_ll, sizeof(xml_frag_record_t));
+    lv_ll_init(&scope->instance_ll, sizeof(lv_xml_scope_instance_t));
+    lv_ll_init(&scope->event_ll, sizeof(lv_xml_event_cb_t));
+    lv_ll_init(&scope->image_ll, sizeof(lv_xml_image_t));
+    lv_ll_init(&scope->font_ll, sizeof(lv_xml_font_t));
+    lv_ll_init(&scope->timeline_ll, sizeof(lv_xml_timeline_t));
+}
+
+void lv_xml_component_scope_instance_attach(lv_xml_component_scope_t * scope, lv_obj_t * view_root)
+{
+    if(scope == NULL) return;
+
+    /*The globals scope is shared metadata, not a component: nothing instantiates
+     *it and nothing ever retires it, so counting it would only add noise.*/
+    if(scope == global_scope_p) return;
+
+    /*A parse that produced no view root has no instance to protect and nowhere to
+     *hang the decrement. Counting it would pin the scope forever. Every caller
+     *treats a NULL root as a failed create and returns NULL, so nothing survives
+     *that could dangle - unlike the frag records, which warn here because they DO
+     *have a fallback path (the unregister-time sweep).*/
+    if(view_root == NULL) return;
+
+    lv_xml_scope_instance_t * inst = lv_ll_ins_head(&scope->instance_ll);
+    if(inst == NULL || lv_obj_add_event_cb(view_root, scope_instance_delete_cb, LV_EVENT_DELETE, inst) == NULL) {
+        /*Without the decrement hook the count would never come back down and the
+         *scope would be pinned for the rest of the process. Leaving the instance
+         *untracked restores exactly today's behaviour (the documented "delete
+         *instances before unregistering" precondition), which is the better of the
+         *two failures.*/
+        if(inst) lv_ll_remove(&scope->instance_ll, inst);
+        lv_free(inst);
+        LV_LOG_ERROR("OOM: no delete hook for an instance of '%s'; its scope is not lifetime-tracked",
+                     scope->name ? scope->name : "?");
+        return;
+    }
+
+    /*Only reachable through a stale caller-held pointer - the registry cannot hand
+     *out a retired scope. Its free may already be queued, so cancel it: this
+     *instance is about to depend on the very style storage that free would release.*/
+    if(scope->pending_free && scope->instance_cnt == 0) {
+        lv_async_call_cancel(scope_free_async_cb, scope);
+        LV_LOG_WARN("Creating an instance of '%s' from a scope that was already replaced/unregistered",
+                    scope->name ? scope->name : "?");
+    }
+
+    inst->root = view_root;
+    inst->scope = scope;
+    scope->instance_cnt++;
+}
+
+
+lv_obj_t * lv_xml_component_process(lv_xml_parser_state_t * state, const char * name, const char ** attrs)
+{
+    lv_xml_component_scope_t * scope = lv_xml_component_get_scope(name);
+    if(scope == NULL) return NULL;
+    /* A component wrapping a same-named C++ widget (`<view extends="temp_display">`
+     * in temp_display.xml) reaches here only when that widget is not registered:
+     * its view root then names the component itself, and every instance would
+     * build another one until the stack overflows. */
+    if(scope->extends && lv_streq(scope->extends, name)) {
+        LV_LOG_WARN("Component '%s' extends its own name and no widget '%s' is registered", name, name);
+        return NULL;
+    }
+    lv_obj_t * item = lv_xml_create_in_scope(state->parent, &state->scope, scope, attrs);
+    if(item == NULL) {
+        LV_LOG_WARN("Couldn't create component '%s'", name);
+        return NULL;
+    }
+
+
+    /* Apply the properties of the component, e.g. <my_button x="20" width="300"/> */
+    state->item = item;
+
+    /* An instance-site attribute the component declares in <api> is its
+     * public interface, consumed by $param substitution inside the view.
+     * Letting it fall through to the root widget's native attributes as well
+     * gives it a second meaning whenever the names collide: `disabled="<subject>"`
+     * names a subject to the component but reads as a boolean to the widget,
+     * leaving the instance permanently disabled whatever the subject says.
+     * Strip <api> names; every other attribute passes through unchanged. */
+    uint32_t attr_count = 0;
+    while(attrs[attr_count] != NULL) attr_count++;
+    const char ** apply_attrs = lv_malloc(sizeof(const char *) * (attr_count + 1));
+    if(apply_attrs == NULL) {
+        LV_LOG_WARN("OOM filtering component attrs; applying unfiltered");
+        lv_widget_processor_t * proc = lv_xml_widget_get_extended_widget_processor(scope->extends);
+        proc->apply_cb(state, attrs);
+        return item;
+    }
+    uint32_t keep = 0;
+    for(uint32_t i = 0; i < attr_count; i += 2) {
+        bool is_api_name = false;
+        lv_xml_param_t * prop;
+        LV_LL_READ(&scope->param_ll, prop) {
+            if(lv_streq(prop->name, attrs[i])) {
+                is_api_name = true;
+                break;
+            }
+        }
+        if(!is_api_name) {
+            apply_attrs[keep++] = attrs[i];
+            apply_attrs[keep++] = attrs[i + 1];
+        }
+    }
+    apply_attrs[keep] = NULL;
+    lv_widget_processor_t * extended_proc = lv_xml_widget_get_extended_widget_processor(scope->extends);
+    extended_proc->apply_cb(state, apply_attrs);
+    lv_free(apply_attrs);
+
+#if LV_USE_OBJ_NAME
+    /*Set a default indexed name.
+     *Name precedence (identical in lv_xml_create()): the instance site wins, a
+     *name the component set on its own <view> root comes next, and only an
+     *object with no name at all gets the "<component>_#" default. The default
+     *used to be applied unconditionally, which silently discarded
+     *`<view name="...">`.*/
+    if(state->item) {
+        const char * value_of_name = lv_xml_get_value_of(attrs, "name");
+        if(value_of_name) lv_obj_set_name(item, value_of_name);
+        else if(lv_obj_get_name(item) == NULL) {
+            char name_buf[128];
+            lv_snprintf(name_buf, sizeof(name_buf), "%s_#", scope->name);
+            lv_obj_set_name(state->item, name_buf);
+        }
+    }
+#endif
+    return item;
+}
+
+/* FNV-1a; names are short identifiers. */
+static uint32_t name_index_hash(const char * name)
+{
+    uint32_t h = 2166136261u;
+    while(*name) {
+        h ^= (uint8_t)*name++;
+        h *= 16777619u;
+    }
+    return h;
+}
+
+static const char * name_index_rec_name(const void * rec)
+{
+    return *(const char * const *)rec;
+}
+
+void * lv_xml_name_index_find(const lv_xml_name_index_t * idx, const char * name)
+{
+    if(idx->cap == 0 || name == NULL) return NULL;
+    uint32_t mask = idx->cap - 1;
+    for(uint32_t i = name_index_hash(name) & mask;; i = (i + 1) & mask) {
+        void * rec = idx->slots[i];
+        if(rec == NULL) return NULL;
+        if(lv_streq(name_index_rec_name(rec), name)) return rec;
+    }
+}
+
+static void name_index_place(lv_xml_name_index_t * idx, void * rec)
+{
+    uint32_t mask = idx->cap - 1;
+    uint32_t i = name_index_hash(name_index_rec_name(rec)) & mask;
+    while(idx->slots[i] != NULL) i = (i + 1) & mask;
+    idx->slots[i] = rec;
+}
+
+void lv_xml_name_index_insert(lv_xml_name_index_t * idx, void * rec)
+{
+    if(idx->failed) return;
+    /* Keep the load at or under one half so probe runs stay short. */
+    if((idx->count + 1) * 2 > idx->cap) {
+        uint32_t new_cap = idx->cap ? idx->cap * 2 : 64;
+        void ** old = idx->slots;
+        uint32_t old_cap = idx->cap;
+        void ** slots = lv_malloc_zeroed(new_cap * sizeof(void *));
+        if(slots == NULL) {
+            /* Unindexed from here on: lookups fall back to the list walk. */
+            LV_LOG_ERROR("OOM: name index grow to %" LV_PRIu32 " slots", new_cap);
+            lv_xml_name_index_clear(idx);
+            idx->failed = true;
+            return;
+        }
+        idx->slots = slots;
+        idx->cap = new_cap;
+        for(uint32_t i = 0; i < old_cap; i++) {
+            if(old[i]) name_index_place(idx, old[i]);
+        }
+        lv_free(old);
+    }
+    name_index_place(idx, rec);
+    idx->count++;
+}
+
+void lv_xml_name_index_remove(lv_xml_name_index_t * idx, void * rec)
+{
+    if(idx->failed || idx->cap == 0) return;
+    uint32_t mask = idx->cap - 1;
+    uint32_t i = name_index_hash(name_index_rec_name(rec)) & mask;
+    while(idx->slots[i] != rec) {
+        if(idx->slots[i] == NULL) return;
+        i = (i + 1) & mask;
+    }
+    idx->slots[i] = NULL;
+    idx->count--;
+    /* Backward-shift the rest of the probe run so find() never stops early at
+     * the hole just made. */
+    for(uint32_t j = (i + 1) & mask; idx->slots[j] != NULL; j = (j + 1) & mask) {
+        void * moved = idx->slots[j];
+        idx->slots[j] = NULL;
+        name_index_place(idx, moved);
+    }
+}
+
+void lv_xml_name_index_clear(lv_xml_name_index_t * idx)
+{
+    lv_free(idx->slots);
+    idx->slots = NULL;
+    idx->cap = 0;
+    idx->count = 0;
+    idx->failed = false;
+}
+
+void lv_xml_set_component_loader(lv_xml_component_loader_cb_t cb)
+{
+    component_loader = cb;
+}
+
+lv_xml_component_scope_t * lv_xml_component_find_scope(const char * component_name)
+{
+    return component_scope_find(component_name);
+}
+
+lv_xml_component_scope_t * lv_xml_component_get_scope(const char * component_name)
+{
+    lv_xml_component_scope_t * scope = component_scope_find(component_name);
+    if(scope || component_loader == NULL || component_loader_running) return scope;
+    if(component_name == NULL || lv_streq(component_name, "globals")) return NULL;
+    /* Every element of a parsed view is looked up here (implied tags ask each one
+     * for its props), and a widget is never a component: keep built-in names
+     * away from the loader. */
+    if(lv_xml_widget_get_processor(component_name)) return NULL;
+
+    component_loader_running = true;
+    component_loader(component_name);
+    component_loader_running = false;
+    return component_scope_find(component_name);
+}
+
+static lv_xml_component_scope_t * component_scope_find(const char * component_name)
+{
+    if(component_name == NULL) return NULL;
+
+    /* Every subject and const lookup that misses its own component falls back to
+     * "globals", which was registered first and so sits at the tail of the list:
+     * answer it without walking every registered component. */
+    if(global_scope_p && lv_streq(component_name, "globals")) return global_scope_p;
+
+    if(lv_xml_name_index_usable(&component_scope_index)) {
+        lv_xml_component_scope_t * hit = lv_xml_name_index_find(&component_scope_index, component_name);
+        if(hit || !lv_streq(component_name, "globals")) return hit;
+    }
+
+    lv_xml_component_scope_t * scope;
+    LV_LL_READ(&component_scope_ll, scope) {
+        if(lv_streq(scope->name, component_name)) return scope;
+    }
+
+    return NULL;
+}
+
+void lv_xml_component_foreach(lv_xml_component_iter_cb_t cb, void * user_data)
+{
+    if(cb == NULL) return;
+
+    lv_xml_component_scope_t * scope;
+    LV_LL_READ(&component_scope_ll, scope) {
+        cb(scope->name, user_data);
+    }
+}
+
+lv_result_t lv_xml_register_component_from_data(const char * name, const char * xml_def)
+{
+    bool globals = false;
+    if(lv_streq(name, "globals")) globals = true;
+
+    /* Create a temporary parser state to extract styles/params/consts.
+     * Always run the full initializer first: it zeroes the struct and inits the
+     * parent_ll/pcdata_ll lists that start_metadata_handler relies on. The
+     * globals branch then overlays state.scope onto the (already-initialized)
+     * state so metadata is written into the shared global scope. Skipping the
+     * initializer for globals left parent_ll/pcdata_ll/context/parent/view as
+     * stack garbage, which the metadata handler reads and dereferences —
+     * undefined behavior with stack-dependent (intermittent) results. */
+    lv_xml_parser_state_t state;
+    lv_xml_parser_state_init(&state);
+    if(globals) {
+        lv_xml_component_scope_t * global_scope = lv_xml_component_get_scope("globals");
+        state.scope = *global_scope;
+    }
+    else {
+        state.scope.name = name;
+    }
+
+    /* Parse the XML to extract metadata */
+    XML_Memory_Handling_Suite mem_handlers;
+    mem_handlers.malloc_fcn = lv_malloc;
+    mem_handlers.realloc_fcn = lv_realloc;
+    mem_handlers.free_fcn = lv_free;
+    XML_Parser parser = XML_ParserCreate_MM(NULL, &mem_handlers, NULL);
+    XML_SetUserData(parser, &state);
+    XML_SetElementHandler(parser, start_metadata_handler, end_metadata_handler);
+
+    if(XML_Parse(parser, xml_def, lv_strlen(xml_def), XML_TRUE) == XML_STATUS_ERROR) {
+        LV_LOG_ERROR("XML parsing error; %s on line %lu",
+                     XML_ErrorString(XML_GetErrorCode(parser)),
+                     (unsigned long)XML_GetCurrentLineNumber(parser));
+        XML_ParserFree(parser);
+        if(globals) {
+            /* The parse wrote into this copy of the live global scope, and a
+             * grown name index has already freed the array the original still
+             * points at: the copy is the only consistent state left. */
+            lv_memcpy(lv_xml_component_get_scope("globals"), &state.scope,
+                      sizeof(lv_xml_component_scope_t));
+        }
+        else {
+            lv_free((char *)state.scope.extends);
+        }
+        return LV_RESULT_INVALID;
+    }
+
+    XML_ParserFree(parser);
+
+
+    /* Copy extracted metadata to component processor */
+    if(globals) {
+        lv_xml_component_scope_t * global_scope = lv_xml_component_get_scope("globals");
+        lv_memcpy(global_scope, &state.scope, sizeof(lv_xml_component_scope_t));
+    }
+    else {
+        lv_xml_component_scope_t * scope = lv_ll_ins_head(&component_scope_ll);
+        if(scope == NULL) {
+            LV_LOG_ERROR("OOM: failed to register component '%s'", name);
+            return LV_RESULT_INVALID;
+        }
+        lv_memzero(scope, sizeof(lv_xml_component_scope_t));
+        lv_memcpy(scope, &state.scope, sizeof(lv_xml_component_scope_t));
+
+        /* Extract view content directly instead of using XML parser */
+        scope->view_def = extract_view_content(xml_def);
+        scope->name = lv_strdup(name);
+        component_scope_index_link(scope);
+        if(!scope->view_def) {
+            LV_LOG_WARN("Failed to extract view content");
+            /* Clean up and return error. get_scope() matches from the head, so
+             * this removes the scope just inserted above; a definition already
+             * registered under the same name is deliberately left standing -
+             * a half-written file mid-hot-reload must not destroy the working
+             * component it failed to replace. */
+            lv_xml_component_unregister(name);
+            return LV_RESULT_INVALID;
+        }
+
+        /* The new definition REPLACES any earlier one registered under the same
+         * name. Without this the old scope stays in the registry, shadowed but
+         * never reclaimed: lookups match the head so the new definition wins,
+         * while foreach reports the name twice and one unregister only exposes
+         * the older definition again. HELIX_HOT_RELOAD re-registers on every
+         * file save, so it accumulated a full scope per save.
+         *
+         * Freeing a scope that still has live instances is the same operation
+         * the public lv_xml_component_unregister() already performs, and it
+         * carries the same precondition: the scope's lv_style_t storage dies
+         * with it, so a caller that keeps old instances alive must keep them
+         * out of any layout or draw pass until they are deleted. Deferred
+         * to after the view_def check so a failed parse changes nothing. */
+        component_scope_drop_others(name, scope);
+    }
+
+    return LV_RESULT_OK;
+}
+
+
+lv_result_t lv_xml_register_component_from_file(const char * path)
+{
+    /* Extract component name from path */
+    /* Create a copy of the filename to modify */
+    char * filename = lv_strdup(lv_fs_get_last(path));
+    const char * ext = lv_fs_get_ext(filename);
+    filename[lv_strlen(filename) - lv_strlen(ext) - 1] = '\0'; /*Trim the extension*/
+
+    lv_fs_res_t fs_res;
+    lv_fs_file_t f;
+    fs_res = lv_fs_open(&f, path, LV_FS_MODE_RD);
+    if(fs_res != LV_FS_RES_OK) {
+        LV_LOG_WARN("Couldn't open %s", path);
+        lv_free(filename);
+        return LV_RESULT_INVALID;
+    }
+
+    /* Determine file size */
+    lv_fs_seek(&f, 0, LV_FS_SEEK_END);
+    uint32_t file_size = 0;
+    lv_fs_tell(&f, &file_size);
+    lv_fs_seek(&f, 0, LV_FS_SEEK_SET);
+
+    /* Create the buffer */
+    char * xml_buf = lv_malloc(file_size + 1);
+    if(xml_buf == NULL) {
+        LV_LOG_WARN("Memory allocation failed for file %s (%" LV_PRIu32 " bytes)", path, file_size + 1);
+        lv_free(filename);
+        lv_fs_close(&f);
+        return LV_RESULT_INVALID;
+    }
+
+    /* Read the file content  */
+    uint32_t rn;
+    lv_fs_read(&f, xml_buf, file_size, &rn);
+    if(rn != file_size) {
+        LV_LOG_WARN("Couldn't read %s fully", path);
+        lv_free(filename);
+        lv_free(xml_buf);
+        lv_fs_close(&f);
+        return LV_RESULT_INVALID;
+    }
+
+    /* Null-terminate the buffer */
+    xml_buf[rn] = '\0';
+
+    /* Register the component */
+    lv_result_t res = lv_xml_register_component_from_data(filename, xml_buf);
+
+    /* Housekeeping */
+    lv_free(filename);
+    lv_free(xml_buf);
+    lv_fs_close(&f);
+
+    return res;
+}
+
+/**
+ * A `subjects_ll` record holds one of two provenances, and only its `owned`
+ * flag tells them apart:
+ *
+ * OWNED (`<subject>` / `<subject_expr>`): the parser lv_zalloc'd the
+ *   lv_subject_t and this record is its only owner, so releasing the record
+ *   must deinit and free it. The lv_subject_deinit() is not optional: widgets
+ *   created from the component (bind_text / bind_flag_if / bind_style_* /
+ *   cond= / subject_expr, all of which register via lv_subject_add_observer*)
+ *   keep observers on these subjects. Without the deinit the raw lv_free would
+ *   leave those observers dangling, and the widget's later LV_EVENT_DELETE
+ *   (e.g. NavigationManager::rebuild_active_views on a HELIX_HOT_RELOAD
+ *   re-register, which deletes the old widgets AFTER the component is
+ *   unregistered) would lv_observer_delete() a freed subject -> UAF.
+ *   lv_subject_deinit only walks subs_ll and removes observers; it does not
+ *   touch value/prev_value, so the string buffers are freed separately.
+ *
+ * BORROWED (lv_xml_register_subject from application code): the caller owns the
+ *   storage -- typically a C++ `static inline lv_subject_t` or a member of a
+ *   long-lived manager -- and only lent the pointer. Freeing it hands a
+ *   non-heap (or foreign-heap) address to lv_free: with LV_USE_STDLIB_MALLOC =
+ *   LV_STDLIB_CLIB that is libc free() on a __DATA address -> immediate heap
+ *   abort. Deinit'ing it is just as wrong even though it does not crash here:
+ *   the subject outlives this record, and lv_subject_deinit rips the observers
+ *   off widgets in OTHER live components that legitimately observe the same
+ *   subject, leaving them silently unbound. Only the record's own name string
+ *   belongs to us.
+ *
+ * The name is lv_strdup'd by register_subject_impl on both paths, so it is
+ * always freed. Does NOT unlink the record from its list -- the caller either
+ * lv_ll_clear()s the whole list or lv_ll_remove()s this one.
+ */
+void lv_xml_subject_record_release(lv_xml_subject_t * s)
+{
+    if(s == NULL) return;
+
+    lv_free((char *)s->name);
+    lv_xml_subject_record_release_storage(s);
+}
+
+/**
+ * The storage half of the rule above, split out for register_subject_impl():
+ * re-registering a name keeps the record and its name copy and replaces only
+ * the subject, so it needs the ownership walk WITHOUT the name free. The
+ * distinction, the deinit-before-free ordering and the string buffers all live
+ * here so there is exactly one copy of them.
+ *
+ * Leaves `s->subject` dangling - every caller either frees the record straight
+ * after or overwrites the pointer.
+ */
+void lv_xml_subject_record_release_storage(lv_xml_subject_t * s)
+{
+    if(s == NULL || !s->owned || s->subject == NULL) return;
+
+    lv_subject_deinit(s->subject);
+    if(s->subject->type == LV_SUBJECT_TYPE_STRING) {
+        lv_free((char *)s->subject->prev_value.pointer);
+        lv_free((char *)s->subject->value.pointer);
+    }
+    lv_free(s->subject);
+}
+
+lv_result_t lv_xml_component_unregister(const char * name)
+{
+    /* Not get_scope(): unregistering a name must not first load it. */
+    lv_xml_component_scope_t * scope = component_scope_find(name);
+    if(scope == NULL) return LV_RESULT_INVALID;
+
+    component_scope_retire(scope);
+
+    return LV_RESULT_OK;
+}
+
+void lv_xml_component_deinit(void)
+{
+    /* lv_xml_component_init() used to be a bare lv_ll_init(), which zeroes the
+     * head and orphans every scope that was registered before it - the same
+     * init/deinit asymmetry as the widget-processor list, minus the dangling
+     * head (lv_ll_init writes NULL, so nothing is walked into freed memory).
+     * Draining the list here makes lv_xml_deinit() actually give the memory
+     * back and lets an lv_xml_deinit()/lv_xml_init() cycle start clean. */
+    lv_xml_component_scope_t * scope;
+    /* The first drain frees the globals node: stop handing it out before. */
+    global_scope_p = NULL;
+    lv_xml_name_index_clear(&component_scope_index);
+    while((scope = lv_ll_get_head(&component_scope_ll)) != NULL) {
+        lv_ll_remove(&component_scope_ll, scope);
+        component_scope_free(scope);
+    }
+    lv_ll_init(&component_scope_ll, sizeof(lv_xml_component_scope_t));
+
+    /* Scopes deferred by component_scope_retire() are FORCE-freed here, live
+     * instances or not. This runs from lv_xml_deinit(), i.e. at process or
+     * per-test teardown where the widget tree is already gone (or is about to be
+     * torn down by lv_deinit()), so there is nothing left to keep the styles
+     * alive for - and honouring the deferral here would leak the scope
+     * permanently, since nothing would ever decrement it again. Each one may
+     * still have a queued async free naming it; cancel that first so the timer
+     * cannot fire on freed memory. */
+    while((scope = lv_ll_get_head(&pending_free_scope_ll)) != NULL) {
+        lv_async_call_cancel(scope_free_async_cb, scope);
+        lv_ll_remove(&pending_free_scope_ll, scope);
+        component_scope_free(scope);
+    }
+    lv_ll_init(&pending_free_scope_ll, sizeof(lv_xml_component_scope_t));
+}
+
+uint32_t lv_xml_get_transition_scale(void)
+{
+    return transition_scale;
+}
+
+void lv_xml_set_transition_scale(uint32_t scale_256)
+{
+    transition_scale = scale_256;
+
+    /* A scope on `pending_free_scope_ll` is out of the lookup path but can
+     * still back widgets on screen through a borrowed style, so it needs the
+     * same retiming as a live scope. */
+    scope_retime_transitions(&component_scope_ll);
+    scope_retime_transitions(&pending_free_scope_ll);
+}
+
+void lv_xml_reapply_style_tokens(void)
+{
+    /* Pending-free scopes can still back widgets on screen through a borrowed
+     * style, exactly as for retiming. */
+    bool changed = scope_reapply_style_tokens(&component_scope_ll);
+    changed |= scope_reapply_style_tokens(&pending_free_scope_ll);
+    /*Each report walks the whole display; one covers every changed style.*/
+    if(changed) lv_obj_report_style_change(NULL);
+}
+
+/**********************
+ *   STATIC FUNCTIONS
+ **********************/
+
+/** Rewrite every `#const` color of every style in every scope on `list` with
+ *  the const's current value. Returns whether any style changed. */
+static bool scope_reapply_style_tokens(lv_ll_t * list)
+{
+    bool changed = false;
+    lv_xml_component_scope_t * scope;
+    LV_LL_READ(list, scope) {
+        lv_xml_style_t * style;
+        LV_LL_READ(&scope->style_ll, style) {
+            for(uint32_t i = 0; i < style->token_cnt; i++) {
+                const char * value = lv_xml_get_const_silent(NULL, style->tokens[i].const_name);
+                if(value == NULL) continue;
+                lv_style_value_t next = { .color = lv_xml_to_color(value) };
+                lv_style_value_t cur;
+                if(lv_style_get_prop(&style->style, style->tokens[i].prop, &cur) == LV_STYLE_RES_FOUND &&
+                   lv_color_eq(cur.color, next.color)) continue;
+                lv_style_set_prop(&style->style, style->tokens[i].prop, next);
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
+/** Retime every style's transition in every scope on `list` from its authored
+ *  duration, so repeated calls at different scales never compound. */
+static void scope_retime_transitions(lv_ll_t * list)
+{
+    lv_xml_component_scope_t * scope;
+    LV_LL_READ(list, scope) {
+        lv_xml_style_t * style;
+        LV_LL_READ(&scope->style_ll, style) {
+            if(style->trans_dsc == NULL) continue;
+            style->trans_dsc->time =
+                (uint32_t)(((uint64_t)style->trans_authored_time * transition_scale) >> 8);
+        }
+    }
+}
+
+/** Make `scope`, just inserted at the head of `component_scope_ll`, the index's
+ *  answer for its name. */
+static void component_scope_index_link(lv_xml_component_scope_t * scope)
+{
+    if(scope->name == NULL) return;
+    lv_xml_component_scope_t * shadowed = lv_xml_name_index_find(&component_scope_index, scope->name);
+    if(shadowed) lv_xml_name_index_remove(&component_scope_index, shadowed);
+    lv_xml_name_index_insert(&component_scope_index, scope);
+}
+
+/** Take `scope`, about to leave `component_scope_ll`, out of the index, handing
+ *  its name to the next scope registered under it, if one is still listed. */
+static void component_scope_index_unlink(lv_xml_component_scope_t * scope)
+{
+    if(scope->name == NULL) return;
+    if(lv_xml_name_index_find(&component_scope_index, scope->name) != scope) return;
+    lv_xml_name_index_remove(&component_scope_index, scope);
+    lv_xml_component_scope_t * other;
+    LV_LL_READ(&component_scope_ll, other) {
+        if(other != scope && other->name != NULL && lv_streq(other->name, scope->name)) {
+            lv_xml_name_index_insert(&component_scope_index, other);
+            return;
+        }
+    }
+}
+
+/** Unlink and free every scope registered under `name` except `keep`.
+ *  The registry is a plain list with no uniqueness constraint, so this is what
+ *  makes re-registration a replacement rather than a shadowing insert. */
+static void component_scope_drop_others(const char * name, const lv_xml_component_scope_t * keep)
+{
+    lv_xml_component_scope_t * scope = lv_ll_get_head(&component_scope_ll);
+    while(scope != NULL) {
+        /* Read `next` before the node can be unlinked or freed. */
+        lv_xml_component_scope_t * next = lv_ll_get_next(&component_scope_ll, scope);
+        if(scope != keep && scope->name != NULL && lv_streq(scope->name, name)) {
+            component_scope_retire(scope);
+        }
+        scope = next;
+    }
+}
+
+/**
+ * Take `scope` out of the live registry and reclaim it - but only once nothing
+ * is using it.
+ *
+ * The scope's `style_ll` holds the lv_style_t storage that every widget built
+ * from the component points AT: lv_obj_add_style() records the raw pointer, it
+ * does not copy. So freeing a scope whose instances are still on screen is a
+ * use-after-free on the next layout or draw pass. Re-registration used to leak
+ * the old scope, which accidentally kept those styles valid; making
+ * re-registration a real replacement turned that latent leak into a live UAF,
+ * and this is what closes it.
+ *
+ * The scope stops being FINDABLE immediately either way - it leaves
+ * `component_scope_ll` here, so a lookup after a hot reload returns the new
+ * definition, never this one. Only the memory is deferred, onto
+ * `pending_free_scope_ll`, until the last instance's LV_EVENT_DELETE brings the
+ * count to zero (scope_instance_delete_cb).
+ *
+ * With no live instances - the overwhelmingly common case: a plain unregister,
+ * or a reload of a component nothing has built yet - this is byte for byte the
+ * old behaviour, an unlink and an immediate free.
+ */
+static void component_scope_retire(lv_xml_component_scope_t * scope)
+{
+    /* Two independent reasons to hold the storage. `instance_cnt` covers widgets
+     * built FROM this scope. `styles_borrowed` covers widgets built from a
+     * DIFFERENT scope that resolved one of our styles through the
+     * `component.style` form and are holding a raw lv_style_t* into our
+     * style_ll - the count never sees those, and for a styles-only library it is
+     * permanently zero, so freeing on the count alone handed a dangling style to
+     * every borrower. */
+    /* Neither counter sees an object that outlived its view root - one reparented
+     * onto a layer, or an overlay scrim left standing. `scope_styles_are_live()`
+     * asks the object tree directly instead of predicting from a count, so a
+     * scope whose styles are still referenced is deferred rather than freed. */
+    component_scope_index_unlink(scope);
+    if(scope->instance_cnt == 0 && !scope->styles_borrowed && !scope_styles_are_live(scope)) {
+        lv_ll_remove(&component_scope_ll, scope);
+        component_scope_free(scope);
+        return;
+    }
+
+    scope->pending_free = 1;
+    lv_ll_chg_list(&component_scope_ll, &pending_free_scope_ll, scope, true);
+    if(scope->instance_cnt != 0) {
+        LV_LOG_INFO("Component '%s' replaced/unregistered with %" LV_PRIu32 " live instance(s); "
+                    "its scope is held until the last one is deleted",
+                    scope->name ? scope->name : "?", scope->instance_cnt);
+    }
+    else {
+        /* Nothing will ever decrement this one - see `styles_borrowed`. It is
+         * held until lv_xml_component_deinit() force-drains the pending list. */
+        LV_LOG_INFO("Component '%s' replaced/unregistered after lending a style to another "
+                    "scope; its style storage is held until deinit",
+                    scope->name ? scope->name : "?");
+    }
+}
+
+/** LV_EVENT_DELETE on an instance's view root: drop this instance's claim on the
+ *  scope, and reclaim the scope if it was retired while this was the last one.
+ *
+ *  The free CANNOT happen here. LVGL sends LV_EVENT_DELETE to the root BEFORE it
+ *  destroys the subtree (obj_delete_core), and every one of those children is
+ *  still holding this scope's lv_style_t pointers - their own destructors run
+ *  lv_obj_remove_style_all() -> lv_obj_refresh_style(), which reads style
+ *  properties back off the object and its ancestors. Freeing the styles from
+ *  inside this callback would hand that walk freed memory, which is the same
+ *  bug one level down. So the release is pushed onto lv_async_call(), which runs
+ *  from the timer handler once the deletion has fully unwound. */
+static void scope_instance_delete_cb(lv_event_t * e)
+{
+    lv_xml_scope_instance_t * inst = (lv_xml_scope_instance_t *)lv_event_get_user_data(e);
+    if(inst == NULL) return;
+
+    lv_xml_component_scope_t * scope = inst->scope;
+
+    lv_ll_remove(&scope->instance_ll, inst);
+    lv_free(inst);                       /*the record IS the ll node (see lv_ll_ins_head)*/
+
+    if(scope->instance_cnt > 0) scope->instance_cnt--;
+    if(scope->instance_cnt != 0 || !scope->pending_free) return;
+
+    if(lv_async_call(scope_free_async_cb, scope) != LV_RESULT_OK) {
+        /*Leave it on the pending list rather than freeing it here: a late reclaim
+         *at lv_xml_component_deinit() is a bounded hold, freeing it now is a UAF.*/
+        LV_LOG_ERROR("OOM: couldn't schedule the release of scope '%s'; held until lv_xml_deinit()",
+                     scope->name ? scope->name : "?");
+    }
+}
+
+/** Timer-context tail of the above: the instance tree is fully destroyed by now,
+ *  so the scope's styles have no readers left. */
+static void scope_free_async_cb(void * scope_v)
+{
+    lv_xml_component_scope_t * scope = (lv_xml_component_scope_t *)scope_v;
+    lv_ll_remove(&pending_free_scope_ll, scope);
+    component_scope_free(scope);
+}
+
+/** Release everything a scope owns, and the scope itself. Unconditional: the
+ *  live-instance gate is in component_scope_retire(), and this is also the FORCE
+ *  path lv_xml_component_deinit() takes. The caller must have already unlinked it
+ *  from whichever list held it. */
+
+/* Does any live object still hold a raw pointer into this scope's style_ll? */
+static bool obj_holds_scope_style(lv_obj_t * obj, lv_xml_component_scope_t * scope)
+{
+    if(obj == NULL) return false;
+    for(uint32_t i = 0; i < obj->style_cnt; i++) {
+        lv_xml_style_t * xs;
+        LV_LL_READ(&scope->style_ll, xs) {
+            if(obj->styles[i].style == &xs->style) return true;
+        }
+    }
+    uint32_t n = lv_obj_get_child_count(obj);
+    for(uint32_t c = 0; c < n; c++) {
+        if(obj_holds_scope_style(lv_obj_get_child(obj, c), scope)) return true;
+    }
+    return false;
+}
+
+static bool scope_styles_are_live(lv_xml_component_scope_t * scope)
+{
+    if(lv_ll_get_head(&scope->style_ll) == NULL) return false;   /* no styles to dangle */
+    lv_display_t * d = lv_display_get_next(NULL);
+    while(d != NULL) {
+        /* Every root an object can be reachable from: the loaded screen, and the
+         * three layers, which outlive a screen change and are where a deferred
+         * delete parks its subject. */
+        lv_obj_t * roots[4] = { lv_display_get_screen_active(d),
+                                lv_display_get_layer_top(d),
+                                lv_display_get_layer_sys(d),
+                                lv_display_get_layer_bottom(d) };
+        for(int r = 0; r < 4; r++) {
+            if(obj_holds_scope_style(roots[r], scope)) return true;
+        }
+        d = lv_display_get_next(d);
+    }
+    return false;
+}
+
+static void component_scope_free(lv_xml_component_scope_t * scope)
+{
+    /* Instances that outlive their scope: only reachable from the forced
+     * lv_xml_component_deinit() path, since the deferral is what keeps this
+     * function away from a scope that still has any. Their view roots each carry
+     * a pending scope_instance_delete_cb whose user data is a node in the list
+     * about to be freed, so the hooks come off before the nodes go - otherwise
+     * lv_deinit()'s own screen teardown fires them on freed memory. */
+    lv_xml_scope_instance_t * inst;
+    LV_LL_READ(&scope->instance_ll, inst) {
+        if(inst->root) lv_obj_remove_event_cb_with_user_data(inst->root, scope_instance_delete_cb, inst);
+    }
+    lv_ll_clear(&scope->instance_ll);
+
+    lv_free((char *)scope->name);
+    lv_free((char *)scope->view_def);
+    lv_free((char *)scope->extends);
+
+    lv_xml_const_t * cnst;
+    LV_LL_READ(&scope->const_ll, cnst) {
+        lv_free((char *)cnst->name);
+        lv_free((char *)cnst->value);
+    }
+    lv_xml_name_index_clear(&scope->const_index);
+    lv_ll_clear(&scope->const_ll);
+
+    lv_xml_param_t * param;
+    LV_LL_READ(&scope->param_ll, param) {
+        lv_free((char *)param->name);
+        lv_free((char *)param->def);
+        lv_free((char *)param->type);
+    }
+    lv_ll_clear(&scope->param_ll);
+
+    lv_xml_font_t * font;
+    LV_LL_READ(&scope->font_ll, font) {
+        lv_free((char *)font->name);
+    }
+    lv_ll_clear(&scope->font_ll);
+
+    /* `name` is always lv_strdup()'d by lv_xml_register_image(), so it is
+     * unconditionally ours. `src` is NOT: only the LV_IMAGE_SRC_FILE branch
+     * allocates a prefixed copy. A VARIABLE or SYMBOL source is the caller's
+     * pointer, typically a compiled-in `static const lv_image_dsc_t` - handing
+     * that to lv_free() corrupts the allocator pool (a segfault in tlsf's
+     * block_link_next() on the builtin allocator). */
+    lv_xml_image_t * image;
+    LV_LL_READ(&scope->image_ll, image) {
+        lv_free((char *)image->name);
+        if(image->src_is_owned) lv_free((char *)image->src);
+    }
+    lv_ll_clear(&scope->image_ll);
+
+    lv_xml_style_t * style;
+    LV_LL_READ(&scope->style_ll, style) {
+        lv_free((char *)style->name);
+        lv_free((char *)style->long_name);
+        lv_xml_style_transition_clear(style);
+        lv_xml_style_tokens_clear(style);
+        lv_style_reset(&style->style);
+    }
+    lv_ll_clear(&scope->style_ll);
+
+
+    lv_xml_grad_t * grad;
+    LV_LL_READ(&scope->gradient_ll, grad) {
+        lv_free((char *)grad->name);
+    }
+    lv_ll_clear(&scope->gradient_ll);
+
+    /* Event callbacks: only the name is heap (lv_strdup in lv_xml_register_event_cb);
+     * `cb` is a function pointer the application owns. Callbacks are resolved at
+     * create time and copied into the widget's own event list, so nothing that
+     * survives this scope points back at these records. */
+    lv_xml_event_cb_t * event_cb;
+    LV_LL_READ(&scope->event_ll, event_cb) {
+        lv_free((char *)event_cb->name);
+    }
+    lv_ll_clear(&scope->event_ll);
+
+    /* Subject-bound fragment records (<repeat>, and later <if>) MUST be torn down
+     * BEFORE subject_expr_ll and subjects_ll: each record's observer sits on a
+     * scope subject (freed in the subjects_ll walk below) or on a still-live
+     * GLOBAL subject. Detaching every observer while its subject is still valid
+     * avoids firing the rebuild callback on a freed record the next time that
+     * subject changes (use-after-free). lv_xml_frag_record_free() only detaches
+     * the observer and frees the record's owned heap (captured body, parent-attrs
+     * snapshot, roots array); it deliberately does NOT touch the expansion's
+     * widgets, which lv_obj_delete of the component instance (mandated before
+     * unregister) has already freed. */
+    xml_frag_record_t * frag;
+    LV_LL_READ(&scope->frag_ll, frag) {
+        lv_xml_frag_record_free(frag);
+    }
+    lv_ll_clear(&scope->frag_ll);
+
+    /* <subject_expr> derived subjects MUST be torn down BEFORE subjects_ll:
+     * their observers may sit on input subjects that live in subjects_ll (freed
+     * below) OR on still-live global subjects. Detaching every observer while
+     * all input subjects are still valid avoids both (a) a use-after-free of
+     * `ctx` when a global input later changes and (b) touching an already-freed
+     * same-scope subject. The derived lv_subject_t itself lives in subjects_ll
+     * and is freed there, not here. */
+    lv_xml_subject_expr_t * subject_expr;
+    LV_LL_READ(&scope->subject_expr_ll, subject_expr) {
+        subject_expr_record_release(subject_expr);
+    }
+    lv_ll_clear(&scope->subject_expr_ll);
+
+    /* Ownership rule lives in lv_xml_subject_record_release() -- read it there. */
+    lv_xml_subject_t * subject;
+    LV_LL_READ(&scope->subjects_ll, subject) {
+        lv_xml_subject_record_release(subject);
+    }
+    lv_xml_name_index_clear(&scope->subject_index);
+    lv_ll_clear(&scope->subjects_ll);
+
+    lv_xml_timeline_t * timeline;
+    LV_LL_READ(&scope->timeline_ll, timeline) {
+        lv_xml_anim_timeline_child_t * child;
+        LV_LL_READ(&timeline->anims_ll, child) {
+            if(child->is_anim) {
+                lv_free(child->data.anim.user_data); /*It was anim_data_t*/
+                lv_free(child->data.anim.var); /*It was the name of the target object*/
+            }
+            else {
+                lv_free((void *) child->data.incl.target_name);
+                lv_free((void *) child->data.incl.timeline_name);
+            }
+        }
+        lv_ll_clear(&timeline->anims_ll);
+        lv_free((char *)timeline->name);
+    }
+    lv_ll_clear(&scope->timeline_ll);
+
+    lv_free(scope);
+}
+
+static void process_const_element(lv_xml_parser_state_t * state, const char ** attrs)
+{
+    const char * name = lv_xml_get_value_of(attrs, "name");
+    const char * value = lv_xml_get_value_of(attrs, "value");
+
+    if(name == NULL) {
+        LV_LOG_WARN("'name' is missing from a constant");
+        return;
+    }
+    if(value == NULL) {
+        LV_LOG_WARN("'value' is missing from a constant");
+        return;
+    }
+
+    lv_xml_register_const(&state->scope, name, value);
+}
+
+static void process_font_element(lv_xml_parser_state_t * state, const char * type, const char ** attrs)
+{
+    const char * name = lv_xml_get_value_of(attrs, "name");
+    if(name == NULL) {
+        LV_LOG_WARN("'name' is missing from a font");
+        return;
+    }
+
+    const char * src_path = lv_xml_get_value_of(attrs, "src_path");
+    if(src_path == NULL) {
+        LV_LOG_WARN("'src_path' is missing from a `%s` font", name);
+        return;
+    }
+
+    const char * as_file = lv_xml_get_value_of(attrs, "as_file");
+    if(as_file == NULL || lv_streq(as_file, "false")) {
+        LV_LOG_INFO("Ignore non-file based font `%s`", name);
+        return;
+    }
+
+    char src_path_full[LV_XML_MAX_PATH_LENGTH];
+    lv_snprintf(src_path_full, sizeof(src_path_full), "%s%s", xml_path_prefix, src_path);
+
+    lv_xml_font_t * f;
+    LV_LL_READ(&state->scope.font_ll, f) {
+        if(lv_streq(f->name, name)) {
+            LV_LOG_INFO("Font %s is already registered. Don't register it again.", name);
+            return;
+        }
+    }
+
+    /*E.g. <tiny_ttf name="inter_xl" src_path="fonts/Inter-SemiBold.ttf" size="22"/> */
+    if(lv_streq(type, "tiny_ttf")) {
+        const char * size = lv_xml_get_value_of(attrs, "size");
+        if(size == NULL) {
+            LV_LOG_WARN("'size' is missing from a `%s` tiny_ttf font", name);
+            return;
+        }
+#if LV_TINY_TTF_FILE_SUPPORT
+        lv_font_t * font = lv_tiny_ttf_create_file(src_path_full, lv_xml_atoi(size));
+        if(font == NULL) {
+            LV_LOG_WARN("Couldn't load  `%s` tiny_ttf font", name);
+            return;
+        }
+        lv_result_t res = lv_xml_register_font(&state->scope, name, font);
+        if(res == LV_RESULT_INVALID) {
+            LV_LOG_WARN("Failed to register `%s` tiny_ttf font", name);
+            lv_tiny_ttf_destroy(font);
+            return;
+        }
+
+        /*Get the font which was just created and add a destroy_cb*/
+        lv_xml_font_t * new_font;
+        LV_LL_READ(&state->scope.font_ll, new_font) {
+            if(lv_streq(new_font->name, name))  {
+                new_font->font_destroy_cb = lv_tiny_ttf_destroy;
+                break;
+            }
+        }
+
+#else
+        LV_LOG_WARN("LV_TINY_TTF_FILE_SUPPORT is not enabled for `%s` font", name);
+
+#endif
+    }
+    else if(lv_streq(type, "bin")) {
+        lv_font_t * font = lv_binfont_create(src_path_full);
+        if(font == NULL) {
+            LV_LOG_WARN("Couldn't load `%s` bin font", name);
+            return;
+        }
+
+        lv_result_t res = lv_xml_register_font(&state->scope, name, font);
+        if(res == LV_RESULT_INVALID) {
+            LV_LOG_WARN("Failed to register `%s` bin font", name);
+            lv_binfont_destroy(font);
+            return;
+        }
+
+        lv_xml_font_t * new_font;
+        LV_LL_READ(&state->scope.font_ll, new_font) {
+            if(lv_streq(new_font->name, name))  {
+                new_font->font_destroy_cb = lv_binfont_destroy;
+                break;
+            }
+        }
+    }
+    else {
+        LV_LOG_WARN("`%s` is a not supported font type", type);
+    }
+}
+
+static void process_image_element(lv_xml_parser_state_t * state, const char * type, const char ** attrs)
+{
+    const char * name = lv_xml_get_value_of(attrs, "name");
+    if(name == NULL) {
+        LV_LOG_WARN("'name' is missing from a font");
+        return;
+    }
+
+    const char * src_path = lv_xml_get_value_of(attrs, "src_path");
+    if(src_path == NULL) {
+        LV_LOG_WARN("'src_path' is missing from a `%s` font", name);
+        return;
+    }
+
+    /* E.g. <file name="avatar" src_path="avatar1.png">*/
+    if(lv_streq(type, "file")) {
+        lv_xml_register_image(&state->scope, name, src_path);
+    }
+    else {
+        LV_LOG_INFO("Ignore non-file image `%s`", name);
+    }
+}
+
+static void process_subject_element(lv_xml_parser_state_t * state, const char * type, const char ** attrs)
+{
+    const char * name = lv_xml_get_value_of(attrs, "name");
+    const char * value = lv_xml_get_value_of(attrs, "value");
+
+    /* HelixScreen's ui_xml convention is `<subject name="x" type="int" value="0"/>`
+     * (a single "subject" tag with a "type" attribute), not upstream LVGL's
+     * `<int name="x" value="0"/>` tag-per-type convention that `type` (the tag
+     * name passed by the caller) otherwise reflects. Prefer the attribute when
+     * present so `<subject type="...">` actually takes effect instead of
+     * silently leaving the subject at LV_SUBJECT_TYPE_INVALID. */
+    const char * type_attr = lv_xml_get_value_of(attrs, "type");
+    if(type_attr != NULL) type = type_attr;
+
+    if(name == NULL) {
+        LV_LOG_WARN("'name' is missing from a subject");
+        return;
+    }
+    if(value == NULL) {
+        LV_LOG_WARN("'value' is missing from a subject");
+        return;
+    }
+
+    lv_subject_t * subject = lv_zalloc(sizeof(lv_subject_t));
+    const char * min_value_str = lv_xml_get_value_of(attrs, "min_value");
+    const char * max_value_str = lv_xml_get_value_of(attrs, "max_value");
+
+    if(lv_streq(type, "int")) {
+        lv_subject_init_int(subject, lv_xml_atoi(value));
+        if(min_value_str) lv_subject_set_min_value_int(subject, lv_xml_atoi(min_value_str));
+        if(max_value_str) lv_subject_set_max_value_int(subject, lv_xml_atoi(max_value_str));
+    }
+#if LV_USE_FLOAT
+    else if(lv_streq(type, "float")) {
+        lv_subject_init_float(subject, lv_xml_atof(value));
+        if(min_value_str) lv_subject_set_min_value_float(subject, lv_xml_atof(min_value_str));
+        if(max_value_str) lv_subject_set_max_value_float(subject, lv_xml_atof(max_value_str));
+    }
+#endif
+    else if(lv_streq(type, "color")) lv_subject_init_color(subject, lv_xml_to_color(value));
+    else if(lv_streq(type, "string")) {
+        /*Simple solution for now. Will be improved later*/
+        char * buf_prev = lv_malloc(256);
+        char * buf_act = lv_malloc(256);
+        lv_subject_init_string(subject, buf_act, buf_prev, 256, value);
+    }
+    else {
+        /* No branch matched, so the lv_zalloc'd subject is still
+         * LV_SUBJECT_TYPE_INVALID: every bind against it would stick at its
+         * default and every lv_subject_set_* would be a silent no-op - exactly
+         * the failure `type=` exists to prevent, reachable through a plain typo
+         * (`type="integer"`). Registering it would hide the mistake for the
+         * lifetime of the app, so warn and register nothing: a missing subject
+         * is diagnosable at the binding site, an invalid one is not. */
+        LV_LOG_WARN("Unknown subject type '%s' for subject '%s'; the subject is NOT registered", type, name);
+        lv_free(subject);
+        return;
+    }
+
+    /* Parser-allocated: subjects_ll owns `subject` and frees it on scope teardown. */
+    lv_xml_register_subject_owned(&state->scope, name, subject);
+}
+
+/**
+ * Shared observer context for a <subject_expr> derived subject: the derived
+ * subject to write into and the compiled expression to re-evaluate. One
+ * instance is shared by every observer registered on the expression's
+ * distinct input subjects; it's freed exactly once, at scope teardown
+ * (see the `subject_expr_ll` walk in `lv_xml_component_unregister`) rather
+ * than via `auto_free_user_data` on any one observer, since multiple
+ * observers share this same pointer and a per-observer free would double-free.
+ */
+typedef struct {
+    lv_subject_t * derived;
+    lv_xml_expr_t * expr;
+} subject_expr_ctx_t;
+
+/* Resolver shim: <subject_expr> looks up its input subjects by name in the
+ * enclosing component's scope, exactly like a plain <subject> reference. */
+static lv_subject_t * subject_expr_resolver(void * ctx, const char * name)
+{
+    return lv_xml_get_subject((lv_xml_component_scope_t *)ctx, name);
+}
+
+static void subject_expr_observer_cb(lv_observer_t * obs, lv_subject_t * s)
+{
+    LV_UNUSED(s);
+    subject_expr_ctx_t * c = (subject_expr_ctx_t *)lv_observer_get_user_data(obs);
+    lv_subject_set_int(c->derived, lv_xml_expr_eval(c->expr));
+}
+
+/**
+ * Everything one `<subject_expr>` record owns, minus the derived lv_subject_t
+ * (that one lives in `subjects_ll` and is released there). Detaching the
+ * observers FIRST is the whole point: they sit on input subjects that may be
+ * still-live globals, and every one of them shares `ctx`, so freeing `ctx`
+ * while any is attached is a use-after-free the next time that input changes.
+ * Does NOT unlink the record - the caller lv_ll_clear()s or lv_ll_remove()s it.
+ */
+static void subject_expr_record_release(lv_xml_subject_expr_t * record)
+{
+    if(record == NULL) return;
+
+    for(uint32_t i = 0; i < record->observer_count; i++) {
+        if(record->observers[i]) lv_observer_delete(record->observers[i]);
+    }
+    lv_free(record->observers);
+    lv_xml_expr_free(record->expr);
+    lv_free(record->ctx);
+}
+
+void lv_xml_subject_expr_drop_for_subject(lv_xml_component_scope_t * scope, const lv_subject_t * derived)
+{
+    if(scope == NULL || derived == NULL) return;
+
+    lv_xml_subject_expr_t * record;
+    LV_LL_READ(&scope->subject_expr_ll, record) {
+        const subject_expr_ctx_t * ctx = (const subject_expr_ctx_t *)record->ctx;
+        if(ctx == NULL || ctx->derived != derived) continue;
+
+        subject_expr_record_release(record);
+        lv_ll_remove(&scope->subject_expr_ll, record);
+        lv_free(record);
+        return;
+    }
+}
+
+/**
+ * `<subject_expr name="x" expr="...">`: creates an int subject `x` whose value
+ * is kept in sync with the result of evaluating `expr`, by observing every
+ * distinct subject the expression references.
+ *
+ * Ordering constraint: every subject named in `expr` must already be
+ * registered in this scope (or globally) by the time this element is parsed
+ * -- either a global subject, or an earlier `<subject>`/`<subject_expr>` entry
+ * in the same `<subjects>` block. Forward references are not supported
+ * (`lv_xml_expr_compile` warns and this function bails out without
+ * registering anything).
+ */
+static void process_subject_expr_element(lv_xml_parser_state_t * state, const char ** attrs)
+{
+    const char * name = lv_xml_get_value_of(attrs, "name");
+    const char * expr_s = lv_xml_get_value_of(attrs, "expr");
+
+    if(name == NULL) {
+        LV_LOG_WARN("'name' is missing from a subject_expr");
+        return;
+    }
+    if(expr_s == NULL) {
+        LV_LOG_WARN("'expr' is missing from subject_expr '%s'", name);
+        return;
+    }
+
+    lv_xml_expr_t * expr = lv_xml_expr_compile(expr_s, subject_expr_resolver, &state->scope);
+    if(expr == NULL) {
+        LV_LOG_WARN("subject_expr '%s': failed to compile expr '%s'", name, expr_s);
+        return;
+    }
+
+    lv_subject_t * derived = lv_zalloc(sizeof(lv_subject_t));
+    if(derived == NULL) {
+        LV_LOG_ERROR("OOM: failed to allocate subject_expr '%s'", name);
+        lv_xml_expr_free(expr);
+        return;
+    }
+    lv_subject_init_int(derived, lv_xml_expr_eval(expr));   /* seed with current value */
+
+    /* subjects_ll now owns `derived` and frees it on scope teardown, same as
+     * any <subject>. */
+    lv_xml_register_subject_owned(&state->scope, name, derived);
+
+    subject_expr_ctx_t * ctx = lv_malloc(sizeof(subject_expr_ctx_t));
+    if(ctx == NULL) {
+        LV_LOG_ERROR("OOM: failed to allocate subject_expr context for '%s'", name);
+        lv_xml_expr_free(expr);
+        return;   /* `derived` stays registered (harmless, static value); no observers to leak */
+    }
+    ctx->derived = derived;
+    ctx->expr = expr;
+
+    /* Track (expr, ctx) for a single teardown-time free -- subjects_ll's
+     * cleanup only knows how to free `derived`, not the expression or the
+     * context shared by its observers. */
+    lv_xml_subject_expr_t * record = lv_ll_ins_head(&state->scope.subject_expr_ll);
+    if(record == NULL) {
+        LV_LOG_ERROR("OOM: failed to track subject_expr '%s' for teardown", name);
+        lv_xml_expr_free(expr);
+        lv_free(ctx);
+        return;
+    }
+    record->expr = expr;
+    record->ctx = ctx;
+    record->observers = NULL;
+    record->observer_count = 0;
+
+    /* `ctx` is freed exactly once via the subject_expr_ll teardown. Each
+     * observer shares this same `ctx` pointer, so per-observer auto-free would
+     * double-free it (lv_subject_add_observer zero-inits auto_free_user_data
+     * off, which is what we want).
+     *
+     * We retain every observer handle so scope teardown can lv_observer_delete()
+     * it BEFORE freeing `ctx`. Without this, an observer left attached to a
+     * still-live *global* input subject would fire subject_expr_observer_cb on
+     * a freed `ctx` (use-after-free) the next time that global subject changed. */
+    size_t n = lv_xml_expr_subject_count(expr);
+    if(n > 0) {
+        record->observers = lv_malloc(sizeof(lv_observer_t *) * n);
+        if(record->observers == NULL) {
+            LV_LOG_ERROR("OOM: failed to allocate subject_expr observers for '%s'", name);
+            /* Fall through: with no retained handles we cannot safely detach
+             * later, so register nothing. `record` stays with 0 observers;
+             * expr/ctx are still freed at teardown. */
+            return;
+        }
+        record->observer_count = (uint32_t)n;
+        for(size_t i = 0; i < n; i++) {
+            record->observers[i] =
+                lv_subject_add_observer(lv_xml_expr_subject_at(expr, i), subject_expr_observer_cb, ctx);
+        }
+    }
+}
+
+static void process_timeline_element(lv_xml_parser_state_t * state, const char ** attrs)
+{
+    const char * name = lv_xml_get_value_of(attrs, "name");
+
+    if(name == NULL) {
+        LV_LOG_WARN("'name' is missing from a timeline");
+        return;
+    }
+
+    /*If already registered skip all. Don't set state->context
+     *so animations won't be added later either*/
+    lv_xml_timeline_t * at;
+    LV_LL_READ(&state->scope.timeline_ll, at) {
+        if(lv_streq(at->name, name)) {
+            LV_LOG_INFO("Timeline %s is already registered. Don't register it again.", name);
+            return;
+        }
+    }
+
+    lv_xml_register_timeline(&state->scope, name);
+
+    /*Save the created timeline so that animations can be added to it later*/
+    state->context = lv_xml_get_timeline(&state->scope, name);
+}
+
+static void process_animation_element(lv_xml_parser_state_t * state, const char ** attrs)
+{
+    if(state->context == NULL) {
+        LV_LOG_INFO("No parent timeline is set, skipping");
+        return;
+    }
+
+    const char * target_str = lv_xml_get_value_of(attrs, "target");
+    const char * prop_str = lv_xml_get_value_of(attrs, "prop");
+    const char * start_str = lv_xml_get_value_of(attrs, "start");
+    const char * end_str = lv_xml_get_value_of(attrs, "end");
+    const char * duration_str = lv_xml_get_value_of(attrs, "duration");
+    const char * delay_str = lv_xml_get_value_of(attrs, "delay");
+    const char * early_apply_str = lv_xml_get_value_of(attrs, "early_apply");
+    const char * selector_str = lv_xml_get_value_of(attrs, "selector");
+
+    if(target_str == NULL) {
+        LV_LOG_WARN("'target' is missing from a animation");
+        return;
+    }
+
+    if(prop_str == NULL) {
+        LV_LOG_WARN("'prop' is missing from a animation");
+        return;
+    }
+
+    lv_style_prop_t prop = lv_xml_style_prop_to_enum(prop_str);
+    if(prop == LV_STYLE_PROP_INV) {
+        LV_LOG_WARN("Unknown style property; '%s'", prop_str);
+        return;
+    }
+
+    lv_xml_style_prop_anim_type_t prop_type = lv_xml_style_prop_anim_type(prop);
+    if(prop_type == LV_XML_STYLE_PROP_ANIM_UNKNOWN) {
+        LV_LOG_WARN("Style property '%s' is not animateable", prop_str);
+        return;
+    }
+
+    if(start_str == NULL) {
+        LV_LOG_WARN("'start' is missing from a animation");
+        return;
+    }
+
+    if(end_str == NULL) {
+        LV_LOG_WARN("'end' is missing from a animation");
+        return;
+    }
+
+    if(duration_str == NULL) duration_str = "1000";
+    if(delay_str == NULL) delay_str = "0";
+    if(early_apply_str == NULL) early_apply_str = "false";
+    if(selector_str == NULL) selector_str = "";
+
+    lv_style_selector_t selector = lv_xml_style_selector_text_to_enum(selector_str);
+
+    if(target_str[0] == '#') target_str = lv_xml_get_const(&state->scope, &target_str[1]);
+    if(prop_str[0] == '#') prop_str = lv_xml_get_const(&state->scope, &prop_str[1]);
+    if(start_str[0] == '#') start_str = lv_xml_get_const(&state->scope, &start_str[1]);
+    if(end_str[0] == '#') end_str = lv_xml_get_const(&state->scope, &end_str[1]);
+    if(duration_str[0] == '#') duration_str = lv_xml_get_const(&state->scope, &duration_str[1]);
+    if(delay_str[0] == '#') delay_str = lv_xml_get_const(&state->scope, &delay_str[1]);
+    if(early_apply_str[0] == '#') early_apply_str = lv_xml_get_const(&state->scope, &early_apply_str[1]);
+
+    lv_xml_timeline_t * at = state->context;
+    if(at == NULL) {
+        LV_LOG_WARN("There was no parent timeline for the animation");
+        return;
+    }
+
+    if(!target_str || !prop_str || !start_str || !end_str || !duration_str || !delay_str || !early_apply_str) {
+        LV_LOG_WARN("Couldn't resolve one or more constants. Skipping the animation.");
+        return;
+    }
+
+    lv_xml_anim_timeline_child_t * child = lv_ll_ins_tail(&at->anims_ll);
+    if(child == NULL) {
+        LV_LOG_ERROR("OOM: failed to allocate animation child");
+        return;
+    }
+    child->is_anim = true;
+    lv_anim_t * a = &child->data.anim;
+
+    anim_data_t * anim_data = lv_malloc(sizeof(anim_data_t));
+    anim_data->selector = selector;
+    anim_data->prop = prop;
+    anim_data->prop_type = prop_type;
+
+    lv_anim_init(a);
+
+    if(prop_type == LV_XML_STYLE_PROP_ANIM_INT) {
+        int32_t start = lv_xml_to_size(start_str);
+        int32_t end = lv_xml_to_size(end_str);
+        lv_anim_set_values(a, start, end);
+        lv_anim_set_custom_exec_cb(a, anim_exec_cb);
+    }
+    else if(prop_type == LV_XML_STYLE_PROP_ANIM_OPA) {
+        int32_t start = lv_xml_to_opa(start_str);
+        int32_t end = lv_xml_to_opa(end_str);
+        lv_anim_set_values(a, start, end);
+        lv_anim_set_custom_exec_cb(a, anim_exec_cb);
+    }
+    else if(prop_type == LV_XML_STYLE_PROP_ANIM_COLOR) {
+        anim_data->color_start = lv_xml_to_color(start_str);
+        anim_data->color_end = lv_xml_to_color(end_str);
+        lv_anim_set_values(a, 0, 255);
+        lv_anim_set_custom_exec_cb(a, anim_exec_cb);
+    }
+
+    lv_anim_set_var(a, lv_strdup(target_str));
+    lv_anim_set_duration(a, lv_xml_atoi(duration_str));
+    lv_anim_set_delay(a, lv_xml_atoi(delay_str));
+    lv_anim_set_early_apply(a, lv_xml_to_bool(early_apply_str));
+    lv_anim_set_user_data(a, anim_data);
+}
+
+static void process_include_timeline_element(lv_xml_parser_state_t * state, const char ** attrs)
+{
+    lv_xml_timeline_t * at = state->context;
+    if(at == NULL) {
+        LV_LOG_INFO("No parent timeline is set, skipping");
+        return;
+    }
+
+    const char * target_str = lv_xml_get_value_of(attrs, "target");
+    const char * timeline_str = lv_xml_get_value_of(attrs, "timeline");
+    const char * delay_str = lv_xml_get_value_of(attrs, "delay");
+
+
+    if(target_str == NULL) {
+        LV_LOG_WARN("'target' is missing from timeline include");
+        return;
+    }
+
+    if(timeline_str == NULL) {
+        LV_LOG_WARN("'timeline' is missing from timeline include");
+        return;
+    }
+
+    if(delay_str == NULL) delay_str = "0";
+    if(target_str[0] == '#') target_str = lv_xml_get_const(&state->scope, &target_str[1]);
+    if(timeline_str[0] == '#') timeline_str = lv_xml_get_const(&state->scope, &timeline_str[1]);
+    if(delay_str[0] == '#') delay_str = lv_xml_get_const(&state->scope, &delay_str[1]);
+
+    if(!target_str || !timeline_str || !delay_str) {
+        LV_LOG_WARN("Couldn't resolve one or more constants. Skipping the timeline include.");
+        return;
+    }
+
+    lv_xml_anim_timeline_child_t * child = lv_ll_ins_tail(&at->anims_ll);
+    LV_ASSERT_MALLOC(child);
+    if(child == NULL) {
+        LV_LOG_WARN("Couldn't allocate memory");
+        return;
+    }
+
+    child->is_anim = false;
+    child->data.incl.delay = lv_xml_atoi(delay_str);
+    child->data.incl.target_name = lv_strdup(target_str);
+    LV_ASSERT_MALLOC(child->data.incl.target_name);
+    child->data.incl.timeline_name = lv_strdup(timeline_str);
+    LV_ASSERT_MALLOC(child->data.incl.timeline_name);
+
+    if(child->data.incl.target_name == NULL || child->data.incl.timeline_name == NULL) {
+        LV_LOG_WARN("Couldn't allocate memory");
+        lv_free((void *)child->data.incl.target_name);
+        lv_free((void *)child->data.incl.timeline_name);
+        lv_ll_remove(&at->anims_ll, child);
+    }
+}
+
+static void process_grad_element(lv_xml_parser_state_t * state, const char * tag_name, const char ** attrs)
+{
+    lv_xml_grad_t * grad = lv_ll_ins_tail(&state->scope.gradient_ll);
+    if(grad == NULL) {
+        LV_LOG_ERROR("OOM: failed to allocate gradient");
+        return;
+    }
+    lv_memzero(grad, sizeof(lv_xml_grad_t));
+
+    grad->name = lv_strdup(lv_xml_get_value_of(attrs, "name"));
+    lv_grad_dsc_t * dsc = &grad->grad_dsc;
+    lv_memzero(dsc, sizeof(lv_grad_dsc_t));
+    dsc->extend = LV_GRAD_EXTEND_PAD;
+
+    if(lv_streq(tag_name, "linear")) {
+        dsc->dir = LV_GRAD_DIR_LINEAR;
+        char buf[64];
+        char * buf_p = buf;
+        const char * start = lv_xml_get_value_of(attrs, "start");
+        lv_strlcpy(buf, start, sizeof(buf));
+        dsc->params.linear.start.x = lv_xml_to_size(lv_xml_split_str(&buf_p, ' '));
+        dsc->params.linear.start.y = lv_xml_to_size(buf_p);
+
+        buf_p = buf;
+        const char * end = lv_xml_get_value_of(attrs, "end");
+        lv_strlcpy(buf, end, sizeof(buf));
+        dsc->params.linear.end.x = lv_xml_to_size(lv_xml_split_str(&buf_p, ' '));
+        dsc->params.linear.end.y = lv_xml_to_size(buf_p);
+    }
+    else if(lv_streq(tag_name, "radial")) {
+        dsc->dir = LV_GRAD_DIR_RADIAL;
+        char buf[64];
+        char * buf_p = buf;
+        const char * center = lv_xml_get_value_of(attrs, "center");
+        if(center) {
+            lv_strlcpy(buf, center, sizeof(buf));
+            dsc->params.radial.end.x = lv_xml_to_size(lv_xml_split_str(&buf_p, ' '));
+            dsc->params.radial.end.y = lv_xml_to_size(buf_p);
+        }
+        else {
+            dsc->params.radial.end.x = lv_pct(50);
+            dsc->params.radial.end.y = lv_pct(50);
+        }
+        buf_p = buf;
+        const char * center_edge = lv_xml_get_value_of(attrs, "edge");
+        if(center_edge) {
+            lv_strlcpy(buf, center_edge, sizeof(buf));
+            dsc->params.radial.end_extent.x = lv_xml_to_size(lv_xml_split_str(&buf_p, ' '));
+            dsc->params.radial.end_extent.y = lv_xml_to_size(buf_p);
+        }
+        else {
+            dsc->params.radial.end_extent.x = lv_pct(100);
+            dsc->params.radial.end_extent.y = lv_pct(100);
+        }
+
+        buf_p = buf;
+        const char * center_radius = lv_xml_get_value_of(attrs, "radius");
+        if(center_radius) {
+            int32_t r = lv_xml_atoi(center_radius);
+            lv_strlcpy(buf, center_edge, sizeof(buf));
+            dsc->params.radial.end_extent.x = dsc->params.radial.end.x + r;
+            dsc->params.radial.end_extent.y = dsc->params.radial.end.y;
+        }
+
+        buf_p = buf;
+        const char * focal = lv_xml_get_value_of(attrs, "focal_center");
+        if(focal) {
+            lv_strlcpy(buf, focal, sizeof(buf));
+            dsc->params.radial.focal.x = lv_xml_to_size(lv_xml_split_str(&buf_p, ' '));
+            dsc->params.radial.focal.y = lv_xml_to_size(buf_p);
+        }
+        else {
+            dsc->params.radial.focal.x = dsc->params.radial.end.x;
+            dsc->params.radial.focal.y = dsc->params.radial.end.y;
+        }
+
+        buf_p = buf;
+        const char * focal_edge = lv_xml_get_value_of(attrs, "focal_edge");
+        if(focal_edge) {
+            lv_strlcpy(buf, focal_edge, sizeof(buf));
+            dsc->params.radial.focal_extent.x = lv_xml_to_size(lv_xml_split_str(&buf_p, ' '));
+            dsc->params.radial.focal_extent.y = lv_xml_to_size(buf_p);
+        }
+        else {
+            dsc->params.radial.focal_extent.x = dsc->params.radial.focal.x;
+            dsc->params.radial.focal_extent.y = dsc->params.radial.focal.y;
+        }
+
+        buf_p = buf;
+        const char * focal_radius = lv_xml_get_value_of(attrs, "focal_radius");
+        if(focal_radius) {
+            int32_t r = lv_xml_atoi(center_radius);
+            lv_strlcpy(buf, center_edge, sizeof(buf));
+            dsc->params.radial.focal_extent.x = dsc->params.radial.focal.x + r;
+            dsc->params.radial.focal_extent.y = dsc->params.radial.focal.y;
+        }
+
+    }
+
+    else if(lv_streq(tag_name, "conical")) {
+        dsc->dir = LV_GRAD_DIR_CONICAL;
+        char buf[64];
+        char * buf_p = buf;
+        const char * center = lv_xml_get_value_of(attrs, "center");
+        if(center) {
+            lv_strlcpy(buf, center, sizeof(buf));
+            dsc->params.conical.center.x = lv_xml_to_size(lv_xml_split_str(&buf_p, ' '));
+            dsc->params.conical.center.y = lv_xml_to_size(buf_p);
+        }
+        else {
+            dsc->params.conical.center.x = lv_pct(50);
+            dsc->params.conical.center.y = lv_pct(50);
+        }
+        buf_p = buf;
+        const char * angle = lv_xml_get_value_of(attrs, "angle");
+        if(angle) {
+            lv_strlcpy(buf, angle, sizeof(buf));
+            dsc->params.conical.start_angle = lv_xml_atoi(lv_xml_split_str(&buf_p, ' '));
+            dsc->params.conical.end_angle = lv_xml_atoi(buf_p);
+        }
+        else {
+            dsc->params.conical.start_angle = 0;
+            dsc->params.conical.end_angle = 360;
+        }
+    }
+    else if(lv_streq(tag_name, "horizontal")) {
+        dsc->dir = LV_GRAD_DIR_HOR;
+    }
+    else if(lv_streq(tag_name, "vertical")) {
+        dsc->dir = LV_GRAD_DIR_VER;
+    }
+    else {
+        LV_LOG_WARN("Unknown gradient type; %s", tag_name);
+    }
+}
+
+
+static void process_grad_stop_element(lv_xml_parser_state_t * state, const char ** attrs)
+{
+    /*Add the stop to the last gradient*/
+    lv_xml_grad_t * grad = lv_ll_get_tail(&state->scope.gradient_ll);
+    lv_grad_dsc_t * dsc = &grad->grad_dsc;
+
+    uint32_t idx = dsc->stops_count;
+    if(idx == LV_GRADIENT_MAX_STOPS) {
+        LV_LOG_WARN("Too many gradient stops. Incresase LV_GRADIENT_MAX_STOPS");
+        return;
+    }
+    const char * color_value = lv_xml_get_value_of(attrs, "color");
+    const char * opa_value = lv_xml_get_value_of(attrs, "opa");
+    const char * offset_value = lv_xml_get_value_of(attrs, "offset");
+
+    dsc->stops[idx].color = color_value ? lv_xml_to_color(color_value) : lv_color_black();
+    dsc->stops[idx].opa = opa_value ? lv_xml_to_opa(opa_value) : LV_OPA_COVER;
+    dsc->stops[idx].frac = offset_value ? lv_xml_to_opa(offset_value) : (uint8_t)((int32_t)idx * 255 /
+                                                                                  (LV_GRADIENT_MAX_STOPS - 1));
+
+    dsc->stops_count++;
+}
+
+static void process_prop_element(lv_xml_parser_state_t * state, const char * name, const char ** attrs)
+{
+    if(!lv_streq(name, "prop")) return;
+
+    lv_xml_param_t * prop = lv_ll_ins_tail(&state->scope.param_ll);
+    if(prop == NULL) {
+        LV_LOG_ERROR("OOM: failed to allocate prop");
+        return;
+    }
+    lv_memzero(prop, sizeof(lv_xml_param_t));
+
+    prop->name = lv_strdup(lv_xml_get_value_of(attrs, "name"));
+    const char * def = lv_xml_get_value_of(attrs, "default");
+    if(def) prop->def = lv_strdup(def);
+    else prop->def = NULL;
+
+    const char * type = lv_xml_get_value_of(attrs, "type");
+    if(type == NULL) type = "compound"; /*If there in no type it means there are <param>s*/
+    prop->type = lv_strdup(type);
+}
+
+
+static void start_metadata_handler(void * user_data, const char * name, const char ** attrs)
+{
+    lv_xml_parser_state_t * state = (lv_xml_parser_state_t *)user_data;
+
+    lv_xml_parser_section_t old_section = state->section;
+    lv_xml_parser_start_section(state, name);
+    if(lv_streq(name, "view")) {
+        const char * extends = lv_xml_get_value_of(attrs, "extends");
+        if(extends == NULL) extends = "lv_obj";
+
+        /*A globals scope re-registered, or a second <view>, already owns an extends string.*/
+        lv_free((char *)state->scope.extends);
+        state->scope.extends = lv_strdup(extends);
+    }
+
+    if(lv_streq(name, "widget")) state->scope.is_widget = 1;
+    else if(lv_streq(name, "screen")) state->scope.is_screen = 1;
+
+    /* Process elements based on current context */
+    switch(state->section) {
+        case LV_XML_PARSER_SECTION_API:
+            if(old_section != state->section) return;   /*Ignore the section opening, e.g. <api>*/
+            process_prop_element(state, name, attrs);
+            break;
+
+        case LV_XML_PARSER_SECTION_CONSTS:
+            if(old_section != state->section) return;   /*Ignore the section opening, e.g. <consts>*/
+            process_const_element(state, attrs);
+            break;
+
+        case LV_XML_PARSER_SECTION_GRAD:
+            if(old_section != state->section) return;   /*Ignore the section opening, e.g. <gradients>*/
+            process_grad_element(state, name, attrs);
+            break;
+
+        case LV_XML_PARSER_SECTION_GRAD_STOP:
+            process_grad_stop_element(state, attrs);
+            break;
+
+        case LV_XML_PARSER_SECTION_STYLES:
+            if(old_section != state->section) return;   /*Ignore the section opening, e.g. <styles>*/
+            lv_xml_register_style(&state->scope, attrs);
+            break;
+
+        case LV_XML_PARSER_SECTION_FONTS:
+            if(old_section != state->section) return;   /*Ignore the section opening, e.g. <styles>*/
+            process_font_element(state, name, attrs);
+            break;
+
+        case LV_XML_PARSER_SECTION_IMAGES:
+            if(old_section != state->section) return;   /*Ignore the section opening, e.g. <styles>*/
+            process_image_element(state, name, attrs);
+            break;
+
+        case LV_XML_PARSER_SECTION_SUBJECTS:
+            if(old_section != state->section) return;   /*Ignore the section opening, e.g. <subjects>*/
+            if(lv_streq(name, "subject_expr")) process_subject_expr_element(state, attrs);
+            else process_subject_element(state, name, attrs);
+            break;
+        case LV_XML_PARSER_SECTION_TIMELINE:
+            process_timeline_element(state, attrs);
+            break;
+        case LV_XML_PARSER_SECTION_ANIMATION:
+            process_animation_element(state, attrs);
+            break;
+        case LV_XML_PARSER_SECTION_INCLUDE_TIMELINE:
+            process_include_timeline_element(state, attrs);
+            break;
+        default:
+            break;
+    }
+}
+
+static void end_metadata_handler(void * user_data, const char * name)
+{
+    lv_xml_parser_state_t * state = (lv_xml_parser_state_t *)user_data;
+    lv_xml_parser_end_section(state, name);
+}
+
+/**
+ * Scan forward from `p` for `needle`, skipping anything inside an XML comment
+ * (`<!-- ... -->`), a CDATA section (`<![CDATA[ ... ]]>`) or a processing
+ * instruction (`<? ... ?>`). Returns NULL if the needle does not occur outside
+ * such a region, or if one of them is left unterminated (nothing after it can
+ * be trusted either).
+ */
+static const char * xml_find_outside_markup(const char * p, const char * needle)
+{
+    size_t needle_len = lv_strlen(needle);
+
+    while(*p) {
+        if(p[0] == '<' && p[1] == '!') {
+            if(lv_strncmp(p, "<!--", 4) == 0) {
+                const char * close = strstr(p + 4, "-->");
+                if(close == NULL) return NULL;
+                p = close + 3;
+                continue;
+            }
+            if(lv_strncmp(p, "<![CDATA[", 9) == 0) {
+                const char * close = strstr(p + 9, "]]>");
+                if(close == NULL) return NULL;
+                p = close + 3;
+                continue;
+            }
+        }
+        if(p[0] == '<' && p[1] == '?') {
+            const char * close = strstr(p + 2, "?>");
+            if(close == NULL) return NULL;
+            p = close + 2;
+            continue;
+        }
+        if(lv_strncmp(p, needle, needle_len) == 0) return p;
+        p++;
+    }
+
+    return NULL;
+}
+
+/**
+ * Advance past the start tag beginning at `tag` (which must point at its '<'),
+ * returning a pointer just past the closing '>' and reporting through
+ * `self_closing` whether the tag ended with "/>". Quoted attribute values are
+ * honoured, so a '>' or a '/' inside a value does not terminate the tag.
+ * Returns NULL for an unterminated tag.
+ */
+static const char * xml_skip_start_tag(const char * tag, bool * self_closing)
+{
+    char quote = '\0';
+    bool slash = false;
+    const char * p;
+
+    for(p = tag; *p; p++) {
+        if(quote != '\0') {
+            if(*p == quote) quote = '\0';
+            continue;
+        }
+        if(*p == '"' || *p == '\'') {
+            quote = *p;
+            slash = false;
+            continue;
+        }
+        if(*p == '>') {
+            *self_closing = slash;
+            return p + 1;
+        }
+        if(*p == '/') slash = true;
+        else if(*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') slash = false;
+    }
+
+    return NULL;
+}
+
+/**
+ * The opening `<view` of the document: the first one that is neither inside a
+ * comment/CDATA nor merely a prefix of a longer name (`<viewport ...>`).
+ */
+static const char * xml_find_view_start(const char * doc)
+{
+    const char * p = doc;
+
+    while((p = xml_find_outside_markup(p, "<view")) != NULL) {
+        char c = p[5];
+        if(c == '\0' || c == '>' || c == '/' || c == ' ' || c == '\t' || c == '\n' || c == '\r') return p;
+        p++;
+    }
+
+    return NULL;
+}
+
+static char * extract_view_content(const char * xml_definition)
+{
+    if(!xml_definition) return NULL;
+
+    /* The view body is located by scanning rather than by a bare strstr for
+     * "</view>": a literal `</view>` inside a comment or a CDATA section is not
+     * the closing tag, and cutting the body there stores a truncated `view_def`
+     * that is still well-formed enough for registration to report success - and
+     * then fails on EVERY create, forever. Commenting out a block of a layout
+     * file is an ordinary thing to do and must not silently break a component. */
+    const char * start = xml_find_view_start(xml_definition);
+    if(!start) return NULL;
+
+    bool self_closing = false;
+    const char * end = xml_skip_start_tag(start, &self_closing);
+    if(!end) return NULL;   /*Unterminated `<view ...` - nothing usable to store*/
+
+    /*A `<view ... />` is the whole view; otherwise the body runs to the real
+     *closing tag. Note the expat metadata pass already ran and succeeded, so a
+     *document reaching here is well-formed: a missing `</view>` means the tag
+     *belongs to something else, not that the file was truncated.*/
+    if(!self_closing) {
+        end = xml_find_outside_markup(end, "</view>");
+        if(!end) return NULL;
+        end += 7; /* Include "</view>" in result */
+    }
+
+    /* Calculate and allocate length */
+    size_t len = end - start;
+    char * view_content = lv_malloc(len + 1);
+    if(!view_content) return NULL;
+
+    /* Copy content and null terminate */
+    lv_memcpy(view_content, start, len);
+    view_content[len] = '\0';
+
+    return view_content;
+}
+
+
+static void anim_exec_cb(lv_anim_t * a, int32_t v)
+{
+    anim_data_t * anim_data = lv_anim_get_user_data(a);
+
+    lv_style_value_t style_value = {0};
+    if(anim_data->prop_type == LV_XML_STYLE_PROP_ANIM_INT || anim_data->prop_type == LV_XML_STYLE_PROP_ANIM_OPA) {
+        style_value.num = v;
+    }
+    else if(anim_data->prop_type == LV_XML_STYLE_PROP_ANIM_COLOR) {
+        style_value.color = lv_color_mix(anim_data->color_end, anim_data->color_start, v);
+    }
+
+    lv_obj_set_local_style_prop(a->var, anim_data->prop, style_value, anim_data->selector);
+}
+
+
+#endif /* LV_USE_XML */

@@ -1,0 +1,34 @@
+diff --git a/src/ui/theme/theme_responsive.cpp b/src/ui/theme/theme_responsive.cpp
+index ed2c9882f12f6ff021d067ce25b5b0b2703aa886..621b8643b49a4fd0628e9c24307a74d2ec4dc930 100644
+--- a/src/ui/theme/theme_responsive.cpp
++++ b/src/ui/theme/theme_responsive.cpp
+@@ -363,6 +363,15 @@ void theme_manager_register_responsive_spacing(lv_display_t* display) {
+     lv_xml_register_const(scope, "overlay_width_transient", transient_str);
+     lv_xml_register_const(scope, "overlay_width_destination", destination_str);
+ 
++    // U1 overlays occupy the screen above the persistent bottom navigation.
++    // Publish the derived height so raw overlay roots can share the XML geometry.
++    const char* nav_height_str = lv_xml_get_const(nullptr, "u1_nav_height");
++    int32_t nav_height = nav_height_str ? std::atoi(nav_height_str) : 0;
++    char overlay_height_str[16];
++    snprintf(overlay_height_str, sizeof(overlay_height_str), "%d",
++             std::max<int32_t>(0, ver_res - nav_height));
++    lv_xml_register_const(scope, "u1_overlay_height", overlay_height_str);
++
+     spdlog::trace("[Theme] Layout: nav_width={}px, gap={}px, overlay transient={}px "
+                   "destination={}px",
+                   nav_width, gap, widths.transient, widths.destination);
+@@ -455,6 +464,13 @@ void theme_manager_refresh_layout_constants(lv_display_t* display) {
+     lv_xml_update_const(scope, "overlay_width_transient", transient_str);
+     lv_xml_update_const(scope, "overlay_width_destination", destination_str);
+ 
++    const char* nav_height_str = lv_xml_get_const(nullptr, "u1_nav_height");
++    int32_t nav_height = nav_height_str ? std::atoi(nav_height_str) : 0;
++    char overlay_height_str[16];
++    snprintf(overlay_height_str, sizeof(overlay_height_str), "%d",
++             std::max<int32_t>(0, ver_res - nav_height));
++    lv_xml_update_const(scope, "u1_overlay_height", overlay_height_str);
++
+     // Update breakpoint subject — use shared helper so rotation never
+     // downgrades XXLarge to XLarge (previous bug: missing XLARGE_MAX check).
+     UiBreakpoint bp = breakpoint_for(resp_res);

@@ -1,0 +1,223 @@
+{
+  "time_utc": "2026-11-07T05:59:18.853632+00:00",
+  "scope": "HOST MOCK TESTS + ARM RELOCATABLE COMPILE ONLY; NOT INSTALLED IN ANY FIRMWARE",
+  "sanitizers": "ASan and UBSan; LeakSanitizer disabled because runtime ptrace blocks it; no heap allocations in tested C",
+  "base_sha256": "a468e366226e7c483d3dd96b444223e89cbf0d1b10573d42b6263843ffd6be3e",
+  "checks": [
+    {
+      "check": "compile-core",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "host-core",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "compile-core-san",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "host-core-san",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "compile-bridge",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "host-bridge",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "compile-bridge-san",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "host-bridge-san",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "arm-version",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "arm-bounded_rc522",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "arm-stock_bounded_bridge",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "production-compile-refused",
+      "return_code": 1,
+      "expected": 1
+    },
+    {
+      "check": "arm-thunks",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "arm-relocatable-only",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "arm-unresolved",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "arm-size",
+      "return_code": 0,
+      "expected": 0
+    },
+    {
+      "check": "arm-disassembly",
+      "return_code": 0,
+      "expected": 0
+    }
+  ],
+  "files": {
+    "run_checks.py": {
+      "sha256": "f022d87a44b3e0de54747db8841023cac9267d212e03a85369fd28e89644d913",
+      "bytes": 4014
+    },
+    "source/firmware/bounded_rc522.c": {
+      "sha256": "bb1953ba49bcf0f825127423039080a59d65b4c1d7df1684b1ecb10fa852b896",
+      "bytes": 8255
+    },
+    "source/firmware/bounded_rc522.h": {
+      "sha256": "c51897bae8e8dc372761d5c629d6e82bf7ea185bbd7c80528cdf7d36cb5c8a9a",
+      "bytes": 2831
+    },
+    "source/firmware/stock_bounded_bridge.c": {
+      "sha256": "16ec4793fc4da24a126ac73b241c6bbc051fcb10ef37d414895852898a5fa95d",
+      "bytes": 3022
+    },
+    "source/firmware/stock_bounded_bridge.h": {
+      "sha256": "974fbb2b2b05acd0b3b7e415a05a6762e66ed938de6874cbeec75748c98df95e",
+      "bytes": 2154
+    },
+    "source/firmware/stock_bounded_thunks.S": {
+      "sha256": "e7673e2ce1fecbdd22f8fa525d7d0a7ba7ebef38773a7d55593389bf845e2521",
+      "bytes": 601
+    },
+    "tests/test_bounded_rc522.c": {
+      "sha256": "388fff2ce45070876754678583c44551d4d307cf93d73913ecdeb5e9f11a1567",
+      "bytes": 9286
+    },
+    "tests/test_stock_bridge.c": {
+      "sha256": "5f5d56f0f4bca8849ab776780a89a58dca52b9f5d4eb9aa1f441c49038d88e77",
+      "bytes": 3159
+    },
+    "arm/current/OFFLINE-UNLINKED-INTEGRATION.o": {
+      "sha256": "aa3e0a48900c7cab36d0f91dc1797da7d988c9b9818427ec0fb6adad9dca85e4",
+      "bytes": 3740
+    },
+    "arm/current/bounded_rc522.o": {
+      "sha256": "93dc9e7dbed710045f06118ffef818b3df99bd4937dcf13d0b04e0182248232a",
+      "bytes": 2600
+    },
+    "arm/current/stock_bounded_bridge.o": {
+      "sha256": "1b152af70a86f44a5e6fda35e0cebad03a7101fb9d0f0c2ffb6836c6d9ce1ba5",
+      "bytes": 1744
+    },
+    "arm/current/stock_bounded_thunks.o": {
+      "sha256": "ca4df4997c88ed8982be5e0a2fe31b02c9397302ee35afe90f1ba76b35a2aa4c",
+      "bytes": 824
+    },
+    "arm/current/SHOULD-NOT-EXIST.su": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "arm/current/bounded_rc522.su": {
+      "sha256": "ec3dbc84ba1c1df094a0499e13837903b0c1a7f3e11d003c3ecc1a41f2f80e06",
+      "bytes": 1206
+    },
+    "arm/current/stock_bounded_bridge.su": {
+      "sha256": "129cf5add356fc00fa51b537a09d16ee37342a7cfdb70f4858329b1ffa771e85",
+      "bytes": 800
+    },
+    "output/current/arm-bounded_rc522.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "output/current/arm-disassembly.log": {
+      "sha256": "9818ca9ccc8c737b2669524be0ed9206cbe94f1da3700b3932bdb9fd1ab6e7c2",
+      "bytes": 27087
+    },
+    "output/current/arm-relocatable-only.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "output/current/arm-size.log": {
+      "sha256": "a49bf3675eedbc73cc8f9075452f83718070f9d06c35862dc40830b770c52c57",
+      "bytes": 193
+    },
+    "output/current/arm-stock_bounded_bridge.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "output/current/arm-thunks.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "output/current/arm-unresolved.log": {
+      "sha256": "5f9867ad1c128fbc8985e990a4e9336fd2f53ff5e8d5c64c06e1c61dc300b768",
+      "bytes": 208
+    },
+    "output/current/arm-version.log": {
+      "sha256": "a24b8af1f922555c6996da666c05ac377382428a81e4ead6ac5e7b6a421daf33",
+      "bytes": 253
+    },
+    "output/current/compile-bridge-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "output/current/compile-bridge.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "output/current/compile-core-san.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "output/current/compile-core.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "output/current/host-bridge-san.log": {
+      "sha256": "7eeaf9f50495ac77921349f844a3dfa5d1623e46813c045688505373ebc92c5c",
+      "bytes": 214
+    },
+    "output/current/host-bridge.log": {
+      "sha256": "7eeaf9f50495ac77921349f844a3dfa5d1623e46813c045688505373ebc92c5c",
+      "bytes": 214
+    },
+    "output/current/host-core-san.log": {
+      "sha256": "49ad4a562fe678c4951ebafed6ed7e90ff58ca8889aa63bf1c7d596b9e99e1da",
+      "bytes": 102
+    },
+    "output/current/host-core.log": {
+      "sha256": "49ad4a562fe678c4951ebafed6ed7e90ff58ca8889aa63bf1c7d596b9e99e1da",
+      "bytes": 102
+    },
+    "output/current/production-compile-refused.log": {
+      "sha256": "dd8e46bed77171abf32299933ea042eaac5b42f924751bd57ba8c80dd2abf304",
+      "bytes": 440
+    }
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "result": {
+    "gcode_store": [
+      {
+        "message": "ACE_FW_RELEASE ACE=0",
+        "time": 1794047028.0398088,
+        "type": "command"
+      },
+      {
+        "message": "[multiACE] ACE 1 released for firmware update (port /dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0) - reconnect with ACE_FW_RESUME",
+        "time": 1794047028.095605,
+        "type": "response"
+      },
+      {
+        "message": "ACE_FW_RESUME ACE=0",
+        "time": 1794047028.4677832,
+        "type": "command"
+      },
+      {
+        "message": "<span style=\"color:#90EE90\">ACE 1: \u5df2\u8fde\u63a5\u5230 ACE 2 Pro </span> \n \u56fa\u4ef6\u7248\u672c: <span style=\"color:#458EFF\">V1.1.92O</span>",
+        "time": 1794047028.5260055,
+        "type": "response"
+      },
+      {
+        "message": "[multiACE] ACE 1 reconnected after firmware update",
+        "time": 1794047028.533251,
+        "type": "response"
+      },
+      {
+        "message": "<span style=\"color:#90EE90\">ACE 1: \u5df2\u8fde\u63a5\u5230 ACE 2 Pro </span> \n \u56fa\u4ef6\u7248\u672c: <span style=\"color:#458EFF\">V1.1.92O</span>",
+        "time": 1794047028.567427,
+        "type": "response"
+      },
+      {
+        "message": "ACE_FW_RELEASE ACE=0",
+        "time": 1794047035.2961287,
+        "type": "command"
+      },
+      {
+        "message": "[multiACE] ACE 1 released for firmware update (port /dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0) - reconnect with ACE_FW_RESUME",
+        "time": 1794047035.3520217,
+        "type": "response"
+      },
+      {
+        "message": "ACE_FW_RESUME ACE=0",
+        "time": 1794047058.0817685,
+        "type": "command"
+      },
+      {
+        "message": "<span style=\"color:#90EE90\">ACE 1: \u5df2\u8fde\u63a5\u5230 ACE 2 Pro </span> \n \u56fa\u4ef6\u7248\u672c: <span style=\"color:#458EFF\">V1.1.93O</span>",
+        "time": 1794047058.143351,
+        "type": "response"
+      },
+      {
+        "message": "[multiACE] ACE 1 reconnected after firmware update",
+        "time": 1794047058.152419,
+        "type": "response"
+      },
+      {
+        "message": "<span style=\"color:#90EE90\">ACE 1: \u5df2\u8fde\u63a5\u5230 ACE 2 Pro </span> \n \u56fa\u4ef6\u7248\u672c: <span style=\"color:#458EFF\">V1.1.93O</span>",
+        "time": 1794047058.1659613,
+        "type": "response"
+      },
+      {
+        "message": "A_DISCOVER ACE=0\nA_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794047069.1416862,
+        "type": "command"
+      },
+      {
+        "message": "A_DISCOVER ACE=0\nA_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794047069.1416862,
+        "type": "command"
+      },
+      {
+        "message": "A_DISCOVER ACE=0\nA_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794047069.1416862,
+        "type": "command"
+      },
+      {
+        "message": "A_DISCOVER ACE=0\nA_INFO ACE=0\nA_STATUS ACE=0\nA_TEMP ACE=0",
+        "time": 1794047069.1416862,
+        "type": "command"
+      },
+      {
+        "message": "// [A discover_device] {\"_v2_command\": 0, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 18, \"msg\": \"success\", \"result\": {\"uid1\": 808780566, \"uid2\": 17445170, \"uid3\": 942880330}}",
+        "time": 1794047069.1954904,
+        "type": "response"
+      },
+      {
+        "message": "// [A get_info] {\"_v2_command\": 7, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 20, \"msg\": \"success\", \"result\": {\"boot_version\": \"\", \"firmware\": \"V1.1.93O\", \"model\": \"ACE 2 Pro\"}}",
+        "time": 1794047069.2470546,
+        "type": "response"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 21, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 46, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047069.2992985,
+        "type": "response"
+      },
+      {
+        "message": "// [A get_temp] {\"_v2_command\": 64, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 22, \"msg\": \"success\", \"result\": {\"box1_temp\": 0.0, \"box2_temp\": 0.0, \"env_humidity\": 46.228694915771484, \"env_temp\": 25.154495239257812, \"ptc1_temp\": 21.7213191986084, \"ptc2_temp\": 20.482088088989258}}",
+        "time": 1794047069.3514931,
+        "type": "response"
+      }
+    ]
+  }
+}

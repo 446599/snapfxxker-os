@@ -1,0 +1,182 @@
+{
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "status1": {
+    "_status_wire_valid": true,
+    "cont_assist_time": 0.0,
+    "dryer_status": {
+      "duration": 0,
+      "remain_time": 0,
+      "status": "stop",
+      "target_temp": 0
+    },
+    "enable_rfid": 1,
+    "fan_speed": 0,
+    "feed_assist_count": 0,
+    "humidity": 47,
+    "slots": [
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 0,
+        "rfid": 0,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "unknown",
+        "type": ""
+      },
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 1,
+        "rfid": 0,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "unknown",
+        "type": ""
+      },
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 2,
+        "rfid": 0,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "unknown",
+        "type": ""
+      },
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 3,
+        "rfid": 0,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "empty",
+        "type": ""
+      }
+    ],
+    "status": "ready",
+    "temp": 25
+  },
+  "encoder1": 4,
+  "encoder2": 4,
+  "status2": {
+    "_status_wire_valid": true,
+    "cont_assist_time": 0.0,
+    "dryer_status": {
+      "duration": 0,
+      "remain_time": 0,
+      "status": "stop",
+      "target_temp": 0
+    },
+    "enable_rfid": 1,
+    "fan_speed": 0,
+    "feed_assist_count": 0,
+    "humidity": 47,
+    "slots": [
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 0,
+        "rfid": 0,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "unknown",
+        "type": ""
+      },
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 1,
+        "rfid": 0,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "unknown",
+        "type": ""
+      },
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 2,
+        "rfid": 0,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "unknown",
+        "type": ""
+      },
+      {
+        "_wire_valid": true,
+        "brand": "",
+        "color": [
+          0,
+          0,
+          0
+        ],
+        "index": 3,
+        "rfid": 0,
+        "sku": "",
+        "slot_status": "ready",
+        "status": "empty",
+        "type": ""
+      }
+    ],
+    "status": "ready",
+    "temp": 25
+  },
+  "gate_present": true,
+  "device": {
+    "firmware": "V1.1.93O",
+    "status": "busy",
+    "connected": true,
+    "fw_hold": false,
+    "dryer": {
+      "status": "stop",
+      "target_temp": 0,
+      "duration": 0,
+      "remain_time": 0
+    }
+  },
+  "printer_state": "idle",
+  "telemetry_still": true,
+  "read_errors": []
+}

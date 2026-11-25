@@ -1,0 +1,127 @@
+--- a/web/frontend/index.html
++++ b/web/frontend/index.html
+@@ -188,11 +188,13 @@
+             </div>
+           </div>
+           <div class="panel-card-label">{{ panelSlotLabel(panelAce.idx, slot.idx) }}</div>
++          <small v-if="rfidHoldForRoute(panelAce.idx, slot.idx)" class="dash-block-reason">{{ rfidHoldMessage(panelAce.idx, slot.idx) }}</small>
++          <button v-if="rfidRecoveryAllowed(panelAce.idx, slot.idx)" @click="slotAction(panelAce,slot,'eject')" :disabled="slotActionDisabled(panelAce,slot,'eject')">退出 ACE 恢复</button>
+           <div class="panel-card-actions">
+             <button class="panel-btn"
+                     :class="{reload: needsReload(panelAce.idx, slot.idx)}"
+                     @click="loadSlot(panelAce.idx, slot.idx)"
+-                    :disabled="isPrinting || slotIsEmpty(panelAce.idx, slot.idx) || slotHeadHasNoAce(slot.idx) || (state.mode === 'head' ? (slotLoadedInHead(panelAce.idx, slot.idx) && !needsReload(panelAce.idx, slot.idx)) : (!needsReload(panelAce.idx, slot.idx) && isToolheadOccupied(panelAce.idx, slot.idx)))"
++                    :disabled="rfidHoldForRoute(panelAce.idx, slot.idx) || isPrinting || slotIsEmpty(panelAce.idx, slot.idx) || slotHeadHasNoAce(slot.idx) || (state.mode === 'head' ? (slotLoadedInHead(panelAce.idx, slot.idx) && !needsReload(panelAce.idx, slot.idx)) : (!needsReload(panelAce.idx, slot.idx) && isToolheadOccupied(panelAce.idx, slot.idx)))"
+                     :title="isPrinting ? t('ui.dashboard.blocked_printing') : (slotIsEmpty(panelAce.idx, slot.idx) ? t('ui.dashboard.slot_empty_hint', {ace: dispIdx(panelAce.idx), slot: dispIdx(slot.idx)}) : (slotHeadHasNoAce(slot.idx) ? t('ui.dashboard.slot_head_no_ace', {head: dispIdx(slot.idx)}) : ''))">{{
+                 needsReload(panelAce.idx, slot.idx) ? t('ui.dashboard.reload') : t('ui.dashboard.load') }}</button>
+             <!-- Unload is per HEAD, not per slot. Shown on the slot anyway
+@@ -208,7 +210,7 @@
+       </div>
+       <div class="panel-all">
+         <button v-if="state.mode !== 'head'" @click="loadAll(panelAce.idx)"
+-                :disabled="isPrinting">{{ t('ui.dashboard.load_all') }}</button>
++                :disabled="rfidAnyHold() || isPrinting">{{ t('ui.dashboard.load_all') }}</button>
+         <button class="warn" @click="unloadAll()"
+                 :disabled="isPrinting">{{ t('ui.dashboard.unload_all') }}</button>
+       </div>
+@@ -282,10 +284,11 @@
+                     </div>
+                   </div>
+                   <div class="panel-card-label">{{ spoolForHead(th.idx) ? spoolTitle(spoolForHead(th.idx)) : '' }}</div>
++                  <small v-if="rfidHoldForHead(th.idx)" class="dash-block-reason">{{ rfidHoldMessage(null, null) }}</small>
+                   <div class="panel-card-actions">
+                     <button class="panel-btn" v-if="th.feeder || th.manual"
+                             @click="loadFeederHead(th.idx)"
+-                            :disabled="isPrinting || th.filament_at_extruder"
++                            :disabled="rfidHoldForHead(th.idx) || isPrinting || th.filament_at_extruder"
+                             :title="isPrinting ? t('ui.dashboard.blocked_printing') : ''">{{
+                         t('ui.dashboard.load') }}</button>
+                     <button class="panel-btn warn"
+@@ -479,7 +482,7 @@
+             <div class="dash-material"><span class="dash-disc" :style="{background:slot.color || '#dad5cb'}"></span><div><small>{{ language === 'zh' ? '料槽' : 'SLOT' }} {{ dispIdx(slot.idx) }}<template v-if="slot.state !== 'empty'"> · {{ slotOrigin(slot) }}</template></small><strong>{{ displayedAce.connected !== true ? (language === 'zh' ? '状态未知' : 'Status unknown') : slot.state !== 'empty' && slot.state !== 'unknown' && !slot.material ? (language === 'zh' ? '已检测耗材 · 材质未确认' : 'Filament detected · material unconfirmed') : materialText(slot) }}</strong><span>{{ displayedAce.connected !== true ? (language === 'zh' ? '设备离线' : 'Device offline') : slot.brand || (slot.state === 'empty' ? (language === 'zh' ? '等待插入' : 'Empty') : (language === 'zh' ? '信息待确认' : 'Details unconfirmed')) }}</span></div></div>
+             <div class="dash-path" :class="{loaded:routeLoaded(slot)}"><span>ACE {{ dispIdx(displayedAce.idx) }} · {{ dispIdx(slot.idx) }}</span><i></i><strong>{{ slotRoute(displayedAce.idx,slot.idx) ? 'T' + dispIdx(slotRoute(displayedAce.idx,slot.idx).head) : '—' }}</strong></div>
+             <div class="dash-state"><span>{{ language === 'zh' ? '入口' : 'Entry' }} · {{ displayedAce.connected !== true ? (language === 'zh' ? '未知' : 'Unknown') : slot.state === 'empty' ? (language === 'zh' ? '无料' : 'Empty') : slot.state === 'unknown' ? (language === 'zh' ? '未知' : 'Unknown') : (language === 'zh' ? '有料' : 'Present') }}</span><span>{{ language === 'zh' ? '喷头' : 'Head' }} · {{ ({unknown:language === 'zh' ? '未知' : 'Unknown',not_detected:language === 'zh' ? '未到位' : 'Not detected',confirmed:language === 'zh' ? '已到位' : 'Confirmed',sensor_source_unknown:language === 'zh' ? '传感器有料 · 来源未知' : 'Detected · source unknown',sensor_other_source:language === 'zh' ? '传感器有料 · 其他来源' : 'Detected · different source',load_failed:language === 'zh' ? '装载失败 · 未确认' : 'Load failed · unconfirmed'})[slotHeadEvidence(slot)] }}</span><small v-if="spoolWeightLabel(spoolForSlot(displayedAce.idx,slot.idx) || {})">{{ language === 'zh' ? '耗材库记录' : 'Library record' }} · {{ spoolWeightLabel(spoolForSlot(displayedAce.idx,slot.idx) || {}) }}</small><small v-else>{{ language === 'zh' ? '余量尚未测得' : 'Remaining unavailable' }}</small></div>
+-            <div class="dash-actions"><button @click="slotAction(displayedAce,slot,'eject')" :disabled="slotActionDisabled(displayedAce,slot,'eject')">退出 ACE</button><button @click="slotAction(displayedAce,slot,'rfid')" :disabled="slotActionDisabled(displayedAce,slot)">识别耗材</button><button v-if="state.tag_op?.busy && state.tag_op.kind === 'read' && state.tag_op.ace === displayedAce.idx && state.tag_op.slot === slot.idx" @click="stopSlotRfid(displayedAce,slot)">停止识别</button><button v-if="state.slot_action?.kind === 'eject' && state.slot_action?.state === 'running' && state.slot_action.ace === displayedAce.idx && state.slot_action.slot === slot.idx" @click="stopSlotAction()">停止退出</button><small v-if="slotActionDisabled(displayedAce,slot,'eject') && slotActionDisabled(displayedAce,slot,'rfid') && !slotActionText(displayedAce,slot)" class="dash-block-reason">{{ slotBlockReason(displayedAce,slot) }}</small><small v-if="slotActionText(displayedAce,slot)" class="dash-block-reason">{{ slotActionText(displayedAce,slot) }}</small><button @click="selectDashboard(slot)">{{ language === 'zh' ? '详情' : 'Details' }}</button><button @click="openPicker(displayedAce,slot)">{{ language === 'zh' ? '编辑' : 'Edit' }}</button><button class="dash-primary" @click="loadSlot(displayedAce.idx,slot.idx)" :disabled="state.slot_action?.state === 'running' || displayedAce.connected !== true || isPrinting || slotIsEmpty(displayedAce.idx,slot.idx) || slotHeadHasNoAce(slot.idx) || (state.mode === 'head' ? (slotLoadedInHead(displayedAce.idx,slot.idx) && !needsReload(displayedAce.idx,slot.idx)) : (!needsReload(displayedAce.idx,slot.idx) && isToolheadOccupied(displayedAce.idx,slot.idx)))">{{ language === 'zh' ? '装载到喷头' : 'Load to head' }}</button><button v-if="targetHead(slot)" @click="unloadHead(targetHead(slot).idx)" :disabled="state.slot_action?.state === 'running' || isPrinting || displayedAce.connected !== true || (!targetHead(slot).head_source_known && !targetHead(slot).filament_at_extruder)">{{ language === 'zh' ? '从喷头卸载' : 'Unload head' }}</button><small v-if="displayedAce.connected !== true || isPrinting || slotIsEmpty(displayedAce.idx,slot.idx) || slotHeadHasNoAce(slot.idx) || (state.mode === 'head' ? (slotLoadedInHead(displayedAce.idx,slot.idx) && !needsReload(displayedAce.idx,slot.idx)) : (!needsReload(displayedAce.idx,slot.idx) && isToolheadOccupied(displayedAce.idx,slot.idx)))" class="dash-block-reason">{{ displayedAce.connected !== true ? (language === 'zh' ? '设备离线' : 'Device offline') : isPrinting ? (language === 'zh' ? '打印中不可装载' : 'Printing in progress') : slotIsEmpty(displayedAce.idx,slot.idx) ? (language === 'zh' ? '料槽为空' : 'Slot empty') : (language === 'zh' ? '喷头状态或接线不允许装载' : 'Head status or routing prevents loading') }}</small></div>
++            <small v-if="rfidHoldForRoute(displayedAce.idx, slot.idx)" class="dash-block-reason">{{ rfidHoldMessage(displayedAce.idx, slot.idx) }}</small><div class="dash-actions"><button @click="slotAction(displayedAce,slot,'eject')" :disabled="slotActionDisabled(displayedAce,slot,'eject')">退出 ACE</button><button @click="slotAction(displayedAce,slot,'rfid')" :disabled="slotActionDisabled(displayedAce,slot)">识别耗材</button><button v-if="state.tag_op?.busy && state.tag_op.kind === 'read' && state.tag_op.ace === displayedAce.idx && state.tag_op.slot === slot.idx" @click="stopSlotRfid(displayedAce,slot)">停止识别</button><button v-if="state.slot_action?.kind === 'eject' && state.slot_action?.state === 'running' && state.slot_action.ace === displayedAce.idx && state.slot_action.slot === slot.idx" @click="stopSlotAction()">停止退出</button><small v-if="slotActionDisabled(displayedAce,slot,'eject') && slotActionDisabled(displayedAce,slot,'rfid') && !slotActionText(displayedAce,slot)" class="dash-block-reason">{{ slotBlockReason(displayedAce,slot) }}</small><small v-if="slotActionText(displayedAce,slot)" class="dash-block-reason">{{ slotActionText(displayedAce,slot) }}</small><button @click="selectDashboard(slot)">{{ language === 'zh' ? '详情' : 'Details' }}</button><button @click="openPicker(displayedAce,slot)">{{ language === 'zh' ? '编辑' : 'Edit' }}</button><button class="dash-primary" @click="loadSlot(displayedAce.idx,slot.idx)" :disabled="rfidHoldForRoute(displayedAce.idx, slot.idx) || state.slot_action?.state === 'running' || displayedAce.connected !== true || isPrinting || slotIsEmpty(displayedAce.idx,slot.idx) || slotHeadHasNoAce(slot.idx) || (state.mode === 'head' ? (slotLoadedInHead(displayedAce.idx,slot.idx) && !needsReload(displayedAce.idx,slot.idx)) : (!needsReload(displayedAce.idx,slot.idx) && isToolheadOccupied(displayedAce.idx,slot.idx)))">{{ language === 'zh' ? '装载到喷头' : 'Load to head' }}</button><button v-if="targetHead(slot)" @click="unloadHead(targetHead(slot).idx)" :disabled="state.slot_action?.state === 'running' || isPrinting || displayedAce.connected !== true || (!targetHead(slot).head_source_known && !targetHead(slot).filament_at_extruder)">{{ language === 'zh' ? '从喷头卸载' : 'Unload head' }}</button><small v-if="displayedAce.connected !== true || isPrinting || slotIsEmpty(displayedAce.idx,slot.idx) || slotHeadHasNoAce(slot.idx) || (state.mode === 'head' ? (slotLoadedInHead(displayedAce.idx,slot.idx) && !needsReload(displayedAce.idx,slot.idx)) : (!needsReload(displayedAce.idx,slot.idx) && isToolheadOccupied(displayedAce.idx,slot.idx)))" class="dash-block-reason">{{ displayedAce.connected !== true ? (language === 'zh' ? '设备离线' : 'Device offline') : isPrinting ? (language === 'zh' ? '打印中不可装载' : 'Printing in progress') : slotIsEmpty(displayedAce.idx,slot.idx) ? (language === 'zh' ? '料槽为空' : 'Slot empty') : (language === 'zh' ? '喷头状态或接线不允许装载' : 'Head status or routing prevents loading') }}</small></div>
+           </article>
+         </div>
+         <aside v-if="selectedSlot" class="dash-detail"><span class="dash-eyebrow">SLOT DETAILS</span><h2>{{ language === 'zh' ? '料槽详情' : 'Slot details' }} · {{ dispIdx(selectedSlot.idx) }}</h2><p>{{ materialText(selectedSlot) }} <span v-if="selectedSlot.state !== 'empty'" class="dash-pill">{{ slotOrigin(selectedSlot) }}</span></p><dl><div><dt>{{ language === 'zh' ? '标签 UID' : 'Tag UID' }}</dt><dd>{{ selectedSlot.uid || '—' }}</dd></div><div><dt>{{ language === 'zh' ? '识别来源' : 'Source' }}</dt><dd>{{ slotOrigin(selectedSlot) }}</dd></div><div><dt>{{ language === 'zh' ? '余量' : 'Remaining' }}</dt><dd><template v-if="spoolWeightLabel(spoolForSlot(displayedAce.idx,selectedSlot.idx) || {})">{{ spoolWeightLabel(spoolForSlot(displayedAce.idx,selectedSlot.idx) || {}) }} · {{ language === 'zh' ? '耗材库记录' : 'Library record' }}</template><template v-else>{{ language === 'zh' ? '尚未测得' : 'Unavailable' }}</template><small>{{ spoolWeightLabel(spoolForSlot(displayedAce.idx,selectedSlot.idx) || {}) ? (language === 'zh' ? '来自绑定的耗材库，并非本次测量' : 'From linked library, not measured now') : (language === 'zh' ? '当前未提供测量结果' : 'No measurement available') }}</small><button class="dash-inline-link" @click="tab='spools'">{{ language === 'zh' ? '查看耗材库 / Spoolman' : 'Material library / Spoolman' }}</button></dd></div><div><dt>{{ language === 'zh' ? '入口状态' : 'Entry' }}</dt><dd>{{ displayedAce.connected !== true ? (language === 'zh' ? '未知' : 'Unknown') : selectedSlot.state === 'empty' ? (language === 'zh' ? '无料' : 'Empty') : selectedSlot.state === 'unknown' ? (language === 'zh' ? '未知' : 'Unknown') : (language === 'zh' ? '检测到耗材' : 'Filament present') }}</dd></div><div><dt>{{ language === 'zh' ? '关联喷头' : 'Head' }}</dt><dd>{{ routeText(displayedAce.idx,selectedSlot.idx) }}</dd></div><div><dt>{{ language === 'zh' ? '操作状态' : 'Operations' }}</dt><dd>{{ displayedAce.connected !== true ? (language === 'zh' ? '设备离线' : 'Device offline') : isPrinting ? (language === 'zh' ? '打印中不可操作' : 'Unavailable while printing') : (language === 'zh' ? '按实际槽位和喷头状态判断' : 'Subject to slot and head state') }}</dd></div></dl><button class="dash-back" @click="backToRows">{{ language === 'zh' ? '返回料槽列表' : 'Back to slots' }}</button><button @click="openPicker(displayedAce,selectedSlot)">{{ language === 'zh' ? '编辑耗材信息' : 'Edit filament' }}</button><button @click="openDevice(displayedAce)">{{ language === 'zh' ? '查看设备详情' : 'Device details' }} →</button></aside>
+@@ -543,7 +546,7 @@
+                         @click="toggleDryPanel(ace.idx)"
+                         :title="t('ui.dashboard.dryer')">{{ t('ui.dashboard.dryer') }}</button>
+                 <button class="ace-load-all" v-if="state.mode !== 'head'" @click.stop="loadAll(ace.idx)"
+-                        :disabled="isPrinting" :title="isPrinting ? t('ui.dashboard.blocked_printing') : ''">{{ t('ui.dashboard.load_all') }}</button>
++                        :disabled="rfidAnyHold() || isPrinting" :title="isPrinting ? t('ui.dashboard.blocked_printing') : ''">{{ t('ui.dashboard.load_all') }}</button>
+               </span>
+             </h2>
+             <div class="slot-row" @click.stop>
+@@ -596,10 +599,12 @@
+                   <em v-else-if="slot.uid" class="src-badge src-uid"
+                       :title="slot.uid">{{ t('ui.common.source_uid') }}</em>
+                 </button>
++                <small v-if="rfidHoldForRoute(ace.idx, slot.idx)" class="dash-block-reason">{{ rfidHoldMessage(ace.idx, slot.idx) }}</small>
++                <button v-if="rfidRecoveryAllowed(ace.idx,slot.idx)" @click.stop="slotAction(ace,slot,'eject')" :disabled="slotActionDisabled(ace,slot,'eject')">退出 ACE 恢复</button>
+                 <button class="slot-load-btn"
+                         :class="{reload: needsReload(ace.idx, slot.idx)}"
+                         @click.stop="loadSlot(ace.idx, slot.idx)"
+-                        :disabled="isPrinting || slotIsEmpty(ace.idx, slot.idx) || slotHeadHasNoAce(slot.idx) || (state.mode === 'head' ? (slotLoadedInHead(ace.idx, slot.idx) && !needsReload(ace.idx, slot.idx)) : (!needsReload(ace.idx, slot.idx) && isToolheadOccupied(ace.idx, slot.idx)))"
++                        :disabled="rfidHoldForRoute(ace.idx, slot.idx) || isPrinting || slotIsEmpty(ace.idx, slot.idx) || slotHeadHasNoAce(slot.idx) || (state.mode === 'head' ? (slotLoadedInHead(ace.idx, slot.idx) && !needsReload(ace.idx, slot.idx)) : (!needsReload(ace.idx, slot.idx) && isToolheadOccupied(ace.idx, slot.idx)))"
+                         :title="isPrinting ? t('ui.dashboard.blocked_printing') : (slotIsEmpty(ace.idx, slot.idx) ? t('ui.dashboard.slot_empty_hint', {ace: dispIdx(ace.idx), slot: dispIdx(slot.idx)}) : slotHeadHasNoAce(slot.idx) ? t('ui.dashboard.slot_head_no_ace', {head: dispIdx(slot.idx)}) : (needsReload(ace.idx, slot.idx) ? t('ui.dashboard.reload_hint') : t('ui.dashboard.load')))">
+                   {{ needsReload(ace.idx, slot.idx) ? t('ui.dashboard.reload') : t('ui.dashboard.load') }}
+                 </button>
+@@ -800,9 +805,10 @@
+             <div class="nt-src-note" v-if="uiTheme === 'new' && state.mode === 'head' && t_.feeder && t_.module_exist">
+               <span>{{ t('ui.dashboard.nt_source') }}</span>{{ t('ui.dashboard.nt_feeder_note') }}
+             </div>
++            <small v-if="rfidHoldForHead(t_.idx)" class="dash-block-reason">{{ rfidHoldMessage(null, null) }}</small>
+             <div class="toolhead-actions" v-if="t_.module_exist">
+               <button v-if="(t_.feeder || t_.manual) && !t_.filament_at_extruder" @click="loadFeederHead(t_.idx)"
+-                      :disabled="isPrinting" :title="isPrinting ? t('ui.dashboard.blocked_printing') : ''">{{ t('ui.dashboard.load') }}</button>
++                      :disabled="rfidHoldForHead(t_.idx) || isPrinting" :title="isPrinting ? t('ui.dashboard.blocked_printing') : ''">{{ t('ui.dashboard.load') }}</button>
+               <button class="warn" @click="unloadHead(t_.idx)"
+                       :disabled="(!t_.head_source_known && !t_.filament_at_extruder) || isPrinting"
+                       :title="isPrinting ? t('ui.dashboard.blocked_printing') : ''">{{ t('ui.dashboard.unload') }}</button>
+@@ -2679,6 +2685,7 @@
+           </div>
+         </template>
+       </div>
++      <div v-if="(picker.head === null || picker.head === undefined) && rfidHoldForRoute(picker.ace, picker.slot)" class="tag-op-bar inline">{{ rfidHoldMessage(picker.ace, picker.slot) }}</div>
+       <div v-if="uiTheme === 'new' && (picker.head === null || picker.head === undefined) && aceTagRead(picker.ace)"
+            class="nt-rfid-bar">
+         <span class="nt-lbl">{{ t('ui.dialog.nt_rfid_tag') }}</span>
+@@ -2693,11 +2700,11 @@
+                  @change="picker.tagUidSku = $event.target.checked"> {{ t('ui.dialog.write_tag_uid_sku') }}
+         </label>
+         <button @click="tagWrite()"
+-                :disabled="!slotOccupied(picker.ace, picker.slot) || !picker.material"
++                :disabled="rfidHoldForRoute(picker.ace, picker.slot) || !slotOccupied(picker.ace, picker.slot) || !picker.material"
+                 :title="t('ui.dialog.write_tag_title')">{{ t('ui.dialog.picker_write_tag') }}</button>
+         </template>
+         <button @click="tagRead()"
+-                :disabled="!slotOccupied(picker.ace, picker.slot) || (state.tag_op && state.tag_op.busy)"
++                :disabled="pickerTagReadDisabled()"
+                 :title="t('ui.dialog.read_tag_title')">{{ t('ui.dialog.picker_read_tag') }}</button>
+       </div>
+       <div class="row nt-dlg-foot">
+@@ -2720,11 +2727,11 @@
+                    @change="picker.tagUidSku = $event.target.checked"> {{ t('ui.dialog.write_tag_uid_sku') }}
+           </label>
+           <button @click="tagWrite()"
+-                  :disabled="!slotOccupied(picker.ace, picker.slot) || !picker.material"
++                  :disabled="rfidHoldForRoute(picker.ace, picker.slot) || !slotOccupied(picker.ace, picker.slot) || !picker.material"
+                   :title="t('ui.dialog.write_tag_title')">{{ t('ui.dialog.picker_write_tag') }}</button>
+           </template>
+           <button @click="tagRead()"
+-                  :disabled="!slotOccupied(picker.ace, picker.slot) || (state.tag_op && state.tag_op.busy)"
++                  :disabled="pickerTagReadDisabled()"
+                   :title="t('ui.dialog.read_tag_title')">{{ t('ui.dialog.picker_read_tag') }}</button>
+         </template>
+       </div>
+@@ -2740,6 +2747,7 @@
+         <span class="tag-op-msg">{{ tagWriteOutcome.msg }}</span>
+         <button class="notif-dismiss" @click="dismissTagWriteOutcome()">×</button>
+       </div>
++      <div v-if="macroLog" class="tag-op-bar inline">{{ macroLog }}</div>
+     </div>
+   </div>
+   <!-- Spool PA dialog: view/edit pa_matrix entries, copy/paste between

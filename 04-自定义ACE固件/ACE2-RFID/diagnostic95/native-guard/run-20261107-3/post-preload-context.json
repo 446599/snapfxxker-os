@@ -1,0 +1,41 @@
+{
+  "context": {
+    "0": 1138446860,
+    "1": 2143289344,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 1
+  },
+  "cmd13": {
+    "_code_absent": true,
+    "_code_present": false,
+    "_index_present": true,
+    "brand": "",
+    "code": 0,
+    "color": [
+      245,
+      90,
+      116
+    ],
+    "index": 2,
+    "rfid": 2,
+    "sku": "SME5DDA105",
+    "tag": {
+      "field2": 258,
+      "group6": [
+        1000,
+        175
+      ]
+    },
+    "type": "PLA Basic"
+  },
+  "context_floats": {
+    "0": 438.6409912109375,
+    "1": NaN,
+    "2": 0.0,
+    "3": 0.0,
+    "4": 0.0,
+    "5": 1.401298464324817e-45
+  }
+}

@@ -1,0 +1,6 @@
+size 78672
+sha256 758bddd50b4f7e03e399ffa35bf8316f2c3c1f403a780e13c432bca6d8d2bb27
+md5 260c1c899badfa853077c62cb26b48b3
+CRC/Kermit init-0 0x7a4b
+CRC/init-ffff 0x2497
+patch image size, Kermit CRC, hooks, version, trailer: OK

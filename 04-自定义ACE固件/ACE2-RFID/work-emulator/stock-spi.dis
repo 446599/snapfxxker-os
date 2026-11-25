@@ -1,0 +1,89 @@
+
+/workspace/scratch/f283fdd55202/ace2-open-build/input/ACE2_V1.1.31_20260306.bin:     file format binary
+
+
+Disassembly of section .data:
+
+0800f574 <.data+0x7574>:
+ 800f574:	b081      	sub	sp, #4
+ 800f576:	e9d0 2301 	ldrd	r2, r3, [r0, #4]
+ 800f57a:	6153      	str	r3, [r2, #20]
+ 800f57c:	2278      	movs	r2, #120	@ 0x78
+ 800f57e:	9200      	str	r2, [sp, #0]
+ 800f580:	9a00      	ldr	r2, [sp, #0]
+ 800f582:	1e53      	subs	r3, r2, #1
+ 800f584:	9300      	str	r3, [sp, #0]
+ 800f586:	b10a      	cbz	r2, 0x800f58c
+ 800f588:	bf00      	nop
+ 800f58a:	e7f9      	b.n	0x800f580
+ 800f58c:	6802      	ldr	r2, [r0, #0]
+ 800f58e:	bf00      	nop
+ 800f590:	6893      	ldr	r3, [r2, #8]
+ 800f592:	079b      	lsls	r3, r3, #30
+ 800f594:	d5fc      	bpl.n	0x800f590
+ 800f596:	2380      	movs	r3, #128	@ 0x80
+ 800f598:	ea43 0141 	orr.w	r1, r3, r1, lsl #1
+ 800f59c:	60d1      	str	r1, [r2, #12]
+ 800f59e:	6801      	ldr	r1, [r0, #0]
+ 800f5a0:	688a      	ldr	r2, [r1, #8]
+ 800f5a2:	07d2      	lsls	r2, r2, #31
+ 800f5a4:	d0fc      	beq.n	0x800f5a0
+ 800f5a6:	68ca      	ldr	r2, [r1, #12]
+ 800f5a8:	688a      	ldr	r2, [r1, #8]
+ 800f5aa:	0792      	lsls	r2, r2, #30
+ 800f5ac:	d5fc      	bpl.n	0x800f5a8
+ 800f5ae:	22ff      	movs	r2, #255	@ 0xff
+ 800f5b0:	60ca      	str	r2, [r1, #12]
+ 800f5b2:	6801      	ldr	r1, [r0, #0]
+ 800f5b4:	688a      	ldr	r2, [r1, #8]
+ 800f5b6:	07d2      	lsls	r2, r2, #31
+ 800f5b8:	d0fc      	beq.n	0x800f5b4
+ 800f5ba:	68c9      	ldr	r1, [r1, #12]
+ 800f5bc:	e9d0 2303 	ldrd	r2, r3, [r0, #12]
+ 800f5c0:	6153      	str	r3, [r2, #20]
+ 800f5c2:	e9d0 2301 	ldrd	r2, r3, [r0, #4]
+ 800f5c6:	b2c8      	uxtb	r0, r1
+ 800f5c8:	6113      	str	r3, [r2, #16]
+ 800f5ca:	b001      	add	sp, #4
+ 800f5cc:	4770      	bx	lr
+ 800f5ce:	0000      	movs	r0, r0
+ 800f5d0:	b081      	sub	sp, #4
+ 800f5d2:	e9d0 c301 	ldrd	ip, r3, [r0, #4]
+ 800f5d6:	f8cc 3014 	str.w	r3, [ip, #20]
+ 800f5da:	2378      	movs	r3, #120	@ 0x78
+ 800f5dc:	9300      	str	r3, [sp, #0]
+ 800f5de:	bf00      	nop
+ 800f5e0:	9b00      	ldr	r3, [sp, #0]
+ 800f5e2:	f1a3 0c01 	sub.w	ip, r3, #1
+ 800f5e6:	f8cd c000 	str.w	ip, [sp]
+ 800f5ea:	b10b      	cbz	r3, 0x800f5f0
+ 800f5ec:	bf00      	nop
+ 800f5ee:	e7f7      	b.n	0x800f5e0
+ 800f5f0:	f8d0 c000 	ldr.w	ip, [r0]
+ 800f5f4:	f8dc 3008 	ldr.w	r3, [ip, #8]
+ 800f5f8:	079b      	lsls	r3, r3, #30
+ 800f5fa:	d5fb      	bpl.n	0x800f5f4
+ 800f5fc:	237e      	movs	r3, #126	@ 0x7e
+ 800f5fe:	ea03 0141 	and.w	r1, r3, r1, lsl #1
+ 800f602:	f8cc 100c 	str.w	r1, [ip, #12]
+ 800f606:	6801      	ldr	r1, [r0, #0]
+ 800f608:	688b      	ldr	r3, [r1, #8]
+ 800f60a:	07db      	lsls	r3, r3, #31
+ 800f60c:	d0fc      	beq.n	0x800f608
+ 800f60e:	68cb      	ldr	r3, [r1, #12]
+ 800f610:	688b      	ldr	r3, [r1, #8]
+ 800f612:	079b      	lsls	r3, r3, #30
+ 800f614:	d5fc      	bpl.n	0x800f610
+ 800f616:	60ca      	str	r2, [r1, #12]
+ 800f618:	6801      	ldr	r1, [r0, #0]
+ 800f61a:	bf00      	nop
+ 800f61c:	688a      	ldr	r2, [r1, #8]
+ 800f61e:	07d2      	lsls	r2, r2, #31
+ 800f620:	d0fc      	beq.n	0x800f61c
+ 800f622:	68c9      	ldr	r1, [r1, #12]
+ 800f624:	e9d0 1203 	ldrd	r1, r2, [r0, #12]
+ 800f628:	614a      	str	r2, [r1, #20]
+ 800f62a:	e9d0 1001 	ldrd	r1, r0, [r0, #4]
+ 800f62e:	6108      	str	r0, [r1, #16]
+ 800f630:	b001      	add	sp, #4
+ 800f632:	4770      	bx	lr

@@ -1,0 +1,24 @@
+/home/lava/printer_data/controlled-exploration/fault-checkpoint4.json 329 2026-11-07 04:33:11.365880416 +0000
+de89cc826842d0f7057af7841ccf56d332ba5ee42272623eb62d49ed2f8358ea  /home/lava/printer_data/controlled-exploration/fault-checkpoint4.json
+{
+  "fault": {
+    "ace_idx": 0,
+    "slot": 3,
+    "reason": "post-STOP telemetry invalid: encoder absent"
+  },
+  "stop_acknowledged": true,
+  "commanded_mm": 20,
+  "direction": "rollback",
+  "decoder": 0,
+  "decoder_field_absent": true,
+  "length": 1,
+  "steps": 14,
+  "raw_buffer": 21845,
+  "episode": "slot4-20261107-0423"
+}
+/home/lava/printer_data/controlled-exploration/fault-checkpoint4.json.released 65 2026-11-07 04:33:57.413814925 +0000
+af94fc213706fe3446753f8839a1c16736ad13a50a72a9e5d832fcb50b66154b  /home/lava/printer_data/controlled-exploration/fault-checkpoint4.json.released
+de89cc826842d0f7057af7841ccf56d332ba5ee42272623eb62d49ed2f8358ea
+/home/lava/printer_data/controlled-exploration/fault-checkpoint4.json.additional-fault 31 2026-11-07 12:04:45.556132504 +0000
+57ed8bdddd03b5bc904f1c0af9a9a281e8576f79b05f3427851e277845935345  /home/lava/printer_data/controlled-exploration/fault-checkpoint4.json.additional-fault
+additional fault while latched

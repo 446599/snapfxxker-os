@@ -1,0 +1,287 @@
+{
+  "recorded_date": "2026-11-09",
+  "scope": "Native UI fonts/icons and the externally supplied static libnl provider. This is not a complete binary SBOM.",
+  "font_assets": [
+    {
+      "file": "assets/fonts/NotoSans-Regular.ttf",
+      "sha256": "fe8c022f48d8dd29f17b744d16f9346f4357e16f7d4f7be58b000ae7c291b614",
+      "git_blob_sha1": "4bac02f2f46dcbf78fe25be1992785d749ae3bf5",
+      "family": "Noto Sans",
+      "embedded_version": "Version 2.015",
+      "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)",
+      "license_metadata": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org",
+      "source_url": "https://github.com/prestonbrown/helixscreen/blob/cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1/assets/fonts/NotoSans-Regular.ttf",
+      "license": "OFL-1.1",
+      "source_commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+      "match_evidence": "Local Git blob SHA-1 equals the font asset in the HelixScreen base commit."
+    },
+    {
+      "file": "assets/fonts/NotoSans-Bold.ttf",
+      "sha256": "13a813c49624ae3ba3c5c6e72c5ebffc4b9e1e6ea32f421c04069b037c6ad431",
+      "git_blob_sha1": "07f0d257e31568cdf49729ec1ef4683889c0be4a",
+      "family": "Noto Sans",
+      "embedded_version": "Version 2.015",
+      "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)",
+      "license_metadata": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org",
+      "source_url": "https://github.com/prestonbrown/helixscreen/blob/cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1/assets/fonts/NotoSans-Bold.ttf",
+      "license": "OFL-1.1",
+      "source_commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+      "match_evidence": "Local Git blob SHA-1 equals the font asset in the HelixScreen base commit."
+    },
+    {
+      "file": "assets/fonts/NotoSans-Light.ttf",
+      "sha256": "8bf10e8d399c5b70554eb76fe2629899a1098f1a8acb599804b76c619845ce0c",
+      "git_blob_sha1": "c58b837b2cc7007c1bfc92dbe95b3e7f9446f745",
+      "family": "Noto Sans Light",
+      "embedded_version": "Version 2.015; ttfautohint (v1.8.4.7-5d5b)",
+      "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)",
+      "license_metadata": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL",
+      "source_url": "https://github.com/prestonbrown/helixscreen/blob/cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1/assets/fonts/NotoSans-Light.ttf",
+      "license": "OFL-1.1",
+      "source_commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+      "match_evidence": "Local Git blob SHA-1 equals the font asset in the HelixScreen base commit."
+    },
+    {
+      "file": "assets/fonts/NotoSansCJKsc-Regular.otf",
+      "sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+      "git_blob_sha1": "dc15562470b4f842321894787a0d066879ccff8b",
+      "family": "Noto Sans CJK SC",
+      "embedded_version": "Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603",
+      "copyright": "© 2014-2021 Adobe (http://www.adobe.com/).",
+      "license_metadata": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+      "source_url": "https://github.com/notofonts/noto-cjk/blob/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
+      "license": "OFL-1.1",
+      "source_ref": "Sans2.004",
+      "source_commit": "523d033d6cb47f4a80c58a35753646f5c3608a78",
+      "match_evidence": "Local Git blob SHA-1 equals the upstream asset at Sans2.004."
+    },
+    {
+      "file": "assets/fonts/NotoSansCJKjp-Regular.otf",
+      "sha256": "68a3fc98800b2a27b371f2fb79991daf3633bd89309d4ffaa6946fd587f375b5",
+      "git_blob_sha1": "f56224957fb13a81b4c14bac34f2f058a017f9fb",
+      "family": "Noto Sans CJK JP",
+      "embedded_version": "Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603",
+      "copyright": "© 2014-2021 Adobe (http://www.adobe.com/).",
+      "license_metadata": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+      "source_url": "https://github.com/notofonts/noto-cjk/blob/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf",
+      "license": "OFL-1.1",
+      "source_ref": "Sans2.004",
+      "source_commit": "523d033d6cb47f4a80c58a35753646f5c3608a78",
+      "match_evidence": "Local Git blob SHA-1 equals the upstream asset at Sans2.004."
+    },
+    {
+      "file": "assets/fonts/SourceCodePro-Regular.ttf",
+      "sha256": "74bd80d3e42a08517cd7e1108ba3d86f2da29ac0f3065be95e0357956ab9db37",
+      "git_blob_sha1": "10c73d7d901cf0dfa8ba03e45e3271d466291520",
+      "family": "Source Code Pro",
+      "embedded_version": "Version 2.042;hotconv 1.1.0;makeotfexe 2.6.0",
+      "copyright": "© 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’",
+      "license_metadata": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL. This Font Software is distributed on an ‘AS IS’ BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+      "source_url": "https://github.com/prestonbrown/helixscreen/blob/cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1/assets/fonts/SourceCodePro-Regular.ttf",
+      "license": "OFL-1.1",
+      "source_commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+      "match_evidence": "Local Git blob SHA-1 equals the font asset in the HelixScreen base commit.",
+      "reserved_font_name": "Source"
+    },
+    {
+      "file": "assets/fonts/materialdesignicons-webfont.ttf",
+      "sha256": "61e8aba5a4e981fe22cf7c8e8bcdbea00476e75c62c37f01bf7ee33361d68428",
+      "git_blob_sha1": "bba7dcf6c6e6a8352938d681a39aa4aead4f33ed",
+      "family": "Material Design Icons",
+      "embedded_version": "Version 1.0",
+      "copyright": null,
+      "license_metadata": null,
+      "source_url": "https://github.com/Templarian/MaterialDesign-Webfont/blob/57b567a448bd579892174cd47c47f9e187ea56c6/fonts/materialdesignicons-webfont.ttf",
+      "license": "Apache-2.0",
+      "source_ref": "v7.4.47",
+      "source_commit": "57b567a448bd579892174cd47c47f9e187ea56c6",
+      "license_url": "https://github.com/Templarian/MaterialDesign-Webfont/blob/57b567a448bd579892174cd47c47f9e187ea56c6/LICENSE",
+      "match_evidence": "Local Git blob SHA-1 equals v7.4.47; embedded Version 1.0 is not the release number."
+    },
+    {
+      "file": "assets/fonts/helix-custom-icons.ttf",
+      "sha256": "cc59adbc19e6024b4906fc73a5cc9f8ce587519d3fbd1d94ad85c28eb1fa38f8",
+      "git_blob_sha1": "5694d710726d2b66d7d05897e9dc19c44651229e",
+      "family": "HelixScreen Custom Icons",
+      "embedded_version": null,
+      "copyright": null,
+      "license_metadata": null,
+      "source_url": "https://github.com/prestonbrown/helixscreen/blob/cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1/assets/fonts/helix-custom-icons.ttf",
+      "license": "Mixed project assets; Spoolman-derived glyph under MIT",
+      "source_ref": "HelixScreen base plus supplied source snapshot",
+      "source_commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+      "license_note": "Preserve HelixScreen COPYRIGHT and Spoolman-MIT.txt; source SVGs and scripts/build_custom_icon_font.py are included in the source tree."
+    }
+  ],
+  "static_libnl": {
+    "component": "libnl-3 and libnl-genl-3",
+    "actual_version": "3.7.0-2",
+    "architecture": "arm64",
+    "provider": "Debian binary packages",
+    "source_package": "libnl3",
+    "license": "LGPL-2.1-only for the used library code; retain complete Debian copyright for file-specific exceptions",
+    "vendor_source_not_used": {
+      "path": "lib/libnl",
+      "commit": "bdf83151326e365f137fe0e36dc9b1b7aeb1cf33",
+      "version": "3.9.0"
+    },
+    "static_archives": [
+      {
+        "name": "libnl-3.a",
+        "sha256": "ae46a52400db3a9480876e709bc476622430fc21119724de0eb9c54eeae8c3a9"
+      },
+      {
+        "name": "libnl-genl-3.a",
+        "sha256": "8a4af5172354f50bf4488d65f26af5fe95f21e26707f581976a7f01420ab181c"
+      }
+    ],
+    "source_files": [
+      {
+        "file": "libnl3_3.7.0-2.dsc",
+        "url": "https://deb.debian.org/debian/pool/main/libn/libnl3/libnl3_3.7.0-2.dsc",
+        "sha256": "5287128322f6236a8bcd272ab4f532cf0ad06fb9c99c9420e670977053e6d3cf",
+        "size_bytes": null
+      },
+      {
+        "file": "libnl3_3.7.0.orig.tar.gz",
+        "url": "https://deb.debian.org/debian/pool/main/libn/libnl3/libnl3_3.7.0.orig.tar.gz",
+        "sha256": "9fe43ccbeeea72c653bdcf8c93332583135cda46a79507bfd0a483bb57f65939",
+        "size_bytes": 1000913
+      },
+      {
+        "file": "libnl3_3.7.0-2.debian.tar.xz",
+        "url": "https://deb.debian.org/debian/pool/main/libn/libnl3/libnl3_3.7.0-2.debian.tar.xz",
+        "sha256": "3055cc313bcdf37237a09adef5868a4743d58a36174c3d71242963883b0704f4",
+        "size_bytes": 22312
+      }
+    ],
+    "source_access_note": "URLs were checked on 2026-11-09 and archive SHA256 values were verified by downloading. These URLs identify corresponding library source but do not mean the archives are bundled here. A binary distributor must maintain a compliant source delivery method.",
+    "binary_packages": [
+      {
+        "Package": "libnl-3-dev",
+        "Source": "libnl3",
+        "Version": "3.7.0-2",
+        "Architecture": "arm64",
+        "Filename": "pool/main/libn/libnl3/libnl-3-dev_3.7.0-2_arm64.deb",
+        "SHA256": "6832cb3cd490d166e4d07e24b11850148b02f25cdb6a1607dd20790657bbf8f3",
+        "download_url": "https://deb.debian.org/debian/pool/main/libn/libnl3/libnl-3-dev_3.7.0-2_arm64.deb"
+      },
+      {
+        "Package": "libnl-genl-3-dev",
+        "Source": "libnl3",
+        "Version": "3.7.0-2",
+        "Architecture": "arm64",
+        "Filename": "pool/main/libn/libnl3/libnl-genl-3-dev_3.7.0-2_arm64.deb",
+        "SHA256": "ecccc90dc207a901c6a655e8315d11901b70ee05e7b3cecde97714110fae8bb4",
+        "download_url": "https://deb.debian.org/debian/pool/main/libn/libnl3/libnl-genl-3-dev_3.7.0-2_arm64.deb"
+      }
+    ]
+  },
+  "binary_binding": {
+    "revision": "advanced-settings-yellow-white-2026-11-09",
+    "verified_from": "HelixScreen build/snapmaker-u1/bin (new ARM64 build outputs, before runtime staging)",
+    "format": "Statically linked AArch64 ELF",
+    "binaries": {
+      "helix-screen": {
+        "size_bytes": 27179064,
+        "sha256": "56f51a646ef1241a0c660cee7ce4f9ac921c9d7ef8058effbbe1755d6aa9efe2",
+        "build_id_sha1": "80c4a1b3ccb9a4909a240665aecea1574776d89f"
+      },
+      "helix-splash": {
+        "size_bytes": 2368184,
+        "sha256": "0e5f7aac7ffeb1bf5660cf2001ede3ce5988eb23e2b49449e792d390f4b21f78"
+      },
+      "helix-watchdog": {
+        "size_bytes": 3220560,
+        "sha256": "d12aa05c37fd90c04a9f90e885766fac261c884d11b24a93d31b87e199efa9d9"
+      }
+    }
+  },
+  "build_evidence": [
+    "verification/v3-build.json",
+    "verification/v3-cross-packages.json",
+    "build-v3/cross-deps.mk"
+  ],
+  "other_debian_inputs": [
+    {
+      "package": "libc6-dev-arm64-cross",
+      "source": "cross-toolchain-base (77)",
+      "version": "2.41-11cross1",
+      "architecture": "all",
+      "sha256": "61e0b87dec4929abc9fb345ef324139498bf23ddbf0b10ca3a743b59c8ddf8bb",
+      "download_url": "https://deb.debian.org/debian/pool/main/c/cross-toolchain-base/libc6-dev-arm64-cross_2.41-11cross1_all.deb"
+    },
+    {
+      "package": "libgcc-14-dev-arm64-cross",
+      "source": "gcc-14-cross (9)",
+      "version": "14.2.0-19cross1",
+      "architecture": "all",
+      "sha256": "44d31567993f2f138638e3088cc75240d13c7d8a2ebe69032aafd37bc35c7a6f",
+      "download_url": "https://deb.debian.org/debian/pool/main/g/gcc-14-cross/libgcc-14-dev-arm64-cross_14.2.0-19cross1_all.deb"
+    },
+    {
+      "package": "libstdc++-14-dev-arm64-cross",
+      "source": "gcc-14-cross (9)",
+      "version": "14.2.0-19cross1",
+      "architecture": "all",
+      "sha256": "dc2d2e1e59f2687a6cb30f3f5ed25e795f2769482ee8f7c5835f00481bf5ad65",
+      "download_url": "https://deb.debian.org/debian/pool/main/g/gcc-14-cross/libstdc++-14-dev-arm64-cross_14.2.0-19cross1_all.deb"
+    },
+    {
+      "package": "libdrm-dev",
+      "source": "libdrm",
+      "version": "2.4.124-2",
+      "architecture": "arm64",
+      "sha256": "7871c74757d8d000c900dbbdb0e81a2665893fcab1704b6019953529bb4c0f4a",
+      "download_url": "https://deb.debian.org/debian/pool/main/libd/libdrm/libdrm-dev_2.4.124-2_arm64.deb"
+    },
+    {
+      "package": "libevdev-dev",
+      "source": "libevdev",
+      "version": "1.13.4+dfsg-1",
+      "architecture": "arm64",
+      "sha256": "d904f61784d347b928e0a3d02dc98b166fe9eb64de777c8df6d18f16bb679838",
+      "download_url": "https://deb.debian.org/debian/pool/main/libe/libevdev/libevdev-dev_1.13.4+dfsg-1_arm64.deb"
+    },
+    {
+      "package": "libzstd-dev",
+      "source": "libzstd",
+      "version": "1.5.7+dfsg-1",
+      "architecture": "arm64",
+      "sha256": "05cf42de5c9fdf17f49f663b47bfe736f10fbc7080fcc3a86ac43d5d670de149",
+      "download_url": "https://deb.debian.org/debian/pool/main/libz/libzstd/libzstd-dev_1.5.7+dfsg-1_arm64.deb"
+    },
+    {
+      "package": "libssl-dev",
+      "source": "openssl",
+      "version": "3.5.7-1~deb13u2",
+      "architecture": "arm64",
+      "sha256": "b81910e8728fab596158c8384d6aa101c8249c1769eb2d33c73643b2be7a0bcf",
+      "download_url": "https://deb.debian.org/debian/pool/main/o/openssl/libssl-dev_3.5.7-1~deb13u2_arm64.deb"
+    },
+    {
+      "package": "libudev-dev",
+      "source": "systemd",
+      "version": "257.13-1~deb13u1",
+      "architecture": "arm64",
+      "sha256": "4f63c79e9eec01eadf4a450d8ef12e327b82cf49f5106abc9ac39a3353f04314",
+      "download_url": "https://deb.debian.org/debian/pool/main/s/systemd/libudev-dev_257.13-1~deb13u1_arm64.deb"
+    },
+    {
+      "package": "zlib1g-dev",
+      "source": "zlib (1:1.3.dfsg+really1.3.1-1)",
+      "version": "1:1.3.dfsg+really1.3.1-1+b1",
+      "architecture": "arm64",
+      "sha256": "745ebcf1fa115e230af76216355d7290a24f1790fe3780249b519c0e4d30534f",
+      "download_url": "https://deb.debian.org/debian/pool/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.1-1+b1_arm64.deb"
+    }
+  ],
+  "other_debian_inputs_note": "These packages are build inputs from the recorded private sysroot. The list is not a claim that every file or library from every package was linked. Preserve the package copyright files, and use the final link/build record when identifying actual runtime components.",
+  "font_generator": {
+    "package": "lv_font_conv",
+    "version": "1.5.3",
+    "resolved": "https://registry.npmjs.org/lv_font_conv/-/lv_font_conv-1.5.3.tgz",
+    "integrity": "sha512-0xJQThBOw2iptFccSXrKDIUTQAwr/2zhKjCI1lATIRgZo8uvYRTmenKafW9yTw6G0y5AyW00tqGpUtYuTuBIbQ==",
+    "lockfile": "verification/v3-font-tools-package-lock.json"
+  }
+}

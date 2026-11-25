@@ -1,0 +1,344 @@
+# Macros Panel (Developer Guide)
+
+The Macros Panel system: full-screen overlay for browsing and executing Klipper macros, parameter detection and input, home panel widgets, and standard macro slot resolution.
+
+**Key files**: `include/ui_panel_macros.h`, `src/ui/controls/ui_panel_macros.cpp`, `ui_xml/macro_panel.xml`, `ui_xml/macro_card.xml`
+
+---
+
+## Architecture Overview
+
+The Macros Panel is an overlay that lists all discovered Klipper macros, handles dangerous-macro confirmation, detects parameters, and dispatches execution. Two home panel widgets provide quick access.
+
+```
+Home Panel
+├── MacrosWidget (1x1) ──────────→ Opens MacrosPanel overlay
+├── FavoriteMacroWidget (1x1) ──→ Executes a single configured macro
+│   └── fetch_and_execute()
+│       ├── Dangerous? → modal_confirm()   (always, ignores the toggle)
+│       ├── require_confirmation off → execute_macro_gcode() with the saved
+│       │                                values, no dialog
+│       └── require_confirmation on  → same three knowledge levels as the panel,
+│                                      with the Safety confirm on KNOWN_NO_PARAMS
+│
+MacrosPanel (overlay)
+├── macro_panel.xml ──→ overlay_panel with title "Macros"
+│   ├── status_message ──→ bound to "macros_status" subject
+│   ├── macro_list (scrollable) ──→ populated by C++
+│   │   └── macro_card.xml × N ──→ one per visible macro
+│   └── empty_state ──→ shown when no macros
+│
+├── populate_macro_list()
+│   └── MoonrakerAPI::hardware().macros() → sorted → filtered → create_macro_card()
+│
+├── on_macro_card_clicked (static callback)
+│   └── fetch_params_and_execute()
+│       ├── Dangerous? → modal_confirm() → fetch_params_and_run()
+│       └── Safe? → fetch_params_and_run()
+│           ├── KNOWN_NO_PARAMS → execute_macro()
+│           ├── KNOWN_PARAMS → MacroParamModal → execute_with_params()
+│           └── UNKNOWN → MacroParamModal (freeform) → execute_with_params()
+│
+└── execute_with_params()
+    ├── SET_GCODE_VARIABLE for variable overrides
+    └── MACRO_NAME KEY=VALUE... via api->execute_gcode()
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `include/ui_panel_macros.h` | MacrosPanel class (extends OverlayBase) |
+| `src/ui/controls/ui_panel_macros.cpp` | Implementation -- macro list, click handling, execution |
+| `ui_xml/macro_panel.xml` | Layout: overlay_panel with scrollable macro_list + empty_state |
+| `ui_xml/macro_card.xml` | Reusable card component: icon + name + chevron, clicked callback |
+| `include/macro_param_cache.h` | Pre-parsed macro parameters (populated during discovery) |
+| `include/macro_param_defaults.h` | Saved per-macro parameter defaults + the Ask toggle |
+| `include/macro_executor.h` | `decide_macro_run()`: the one run decision every surface shares |
+| `include/macro_param_modal.h` | Modal for user input when macro has parameters |
+| `include/standard_macros.h` | 10 standard macro slots with auto-detection |
+| `include/macro_manager.h` | HelixScreen helper macro (helix_macros.cfg) install/update |
+| `include/ui_settings_macro_buttons.h` | Settings overlay for quick buttons + standard macro config |
+| `include/favorite_macro_widget.h` | Home panel 1x1 widget for favorite macro execution |
+| `include/favorite_macro_config.h` | Per-instance widget config (macro, icon, color, `require_confirmation`) |
+| `include/favorite_macro_config_modal.h` | The widget's Macro / Appearance / Options config modal |
+| `ui_xml/favorite_macro_config_modal.xml` | Layout for that modal, including the Options tab |
+| `src/ui/panel_widgets/macros_widget.h` | Home panel 1x1 widget to open Macros overlay |
+| `ui_xml/components/panel_widget_macros.xml` | XML for macros home panel widget |
+| `ui_xml/components/panel_widget_favorite_macro.xml` | XML for favorite macro home widget |
+
+---
+
+## Macro Discovery and Display
+
+Macros come from `MoonrakerAPI::hardware().macros()`, populated during printer discovery. The panel sorts them alphabetically and filters system macros (prefixed with `_`) by default, with a toggle to show them.
+
+### Display Name Prettification
+
+`prettify_macro_name()` converts raw Klipper macro names to human-readable form:
+
+- `CLEAN_NOZZLE` becomes "Clean Nozzle"
+- `_HELIX_BED_MESH` becomes "_Helix Bed Mesh" (system prefix preserved)
+
+---
+
+## Dangerous Macro Protection
+
+These macros show a confirmation dialog before execution:
+
+- `SAVE_CONFIG`
+- `FIRMWARE_RESTART`
+- `RESTART`
+- `SHUTDOWN`
+- `M112`
+- `EMERGENCY_STOP`
+
+The confirmation uses `modal_confirm()` with appropriate severity level.
+
+Dangerous macros are the one gate nothing can turn off. The Macro Button widget's
+per-instance "Require Confirmation?" opt-out (below) is checked *after* this
+branch has already returned, so opting out cannot arm a one-tap `EMERGENCY_STOP`
+(#925).
+
+---
+
+## Macro Button: per-widget confirmation
+
+Each Macro Button widget instance carries its own `require_confirmation` flag
+(`FavoriteMacroConfig`, default `true`), edited on the Options tab of the widget's
+config modal. It governs both prompts a run can raise:
+
+| `require_confirmation` | Tapping the widget |
+|------------------------|--------------------|
+| `true` (default) | `KNOWN_PARAMS` / `UNKNOWN` → `MacroParamModal` (prefilled with the saved defaults when a record exists). `KNOWN_NO_PARAMS` → the Settings → Safety & Alerts "Confirm before running macros" dialog, when that setting is on. |
+| `false` | `execute_macro_gcode()` with no dialog. The saved defaults' values ride along; with no record the macro runs bare, as before. |
+
+The two prompts collapse into one switch because they answer the same question:
+for a macro with parameters the param modal *is* the confirmation step, so a
+widget that wants one-tap execution has to suppress both. Note the asymmetry with
+the global Safety setting — that one only ever gated `KNOWN_NO_PARAMS` runs, and
+still does; `require_confirmation` sits in front of it.
+
+`UNKNOWN` is worth calling out: macros registered through Klipper's
+`register_command` have no `gcode_macro` template to parse, so they land there and
+would otherwise raise the freeform param modal on every tap regardless of whether
+they take arguments. Turning confirmation off is how a user says "this one takes
+nothing, just run it".
+
+**Interaction with saved defaults.** The saved record carries its own
+`ask_for_params` toggle (below). On the widget the two switches multiply: the
+param modal appears only when `require_confirmation && ask_for_params`. Turning
+either off suppresses it — `require_confirmation` off because the whole widget is
+one-tap by design, `ask_for_params` off because the user saved these values
+precisely to stop retyping them. In both cases the saved values still go with the
+run; only the form disappears.
+
+**Storage.** `require_confirmation` is written into the widget's `config` object
+under `panel_widgets/<panel>/pages[]/widgets[]`, and omitted when `true` to keep
+the JSON minimal. Before config v23 the same switch was stored inverted as
+`skip_param_prompt`, which suppressed only the param modal. `migrate_v22_to_v23()`
+(`src/system/config.cpp`) rewrites it in place;
+`favorite_macro_config_from_json()` also reads the legacy key, for configs the
+migration cannot reach (preset assets, hand-edited files).
+
+---
+
+## Parameter Handling
+
+MacroParamCache pre-parses parameters during macro discovery and classifies each macro into one of three knowledge levels:
+
+| Level | Behavior |
+|-------|----------|
+| **KNOWN_NO_PARAMS** | Execute immediately, no modal |
+| **KNOWN_PARAMS** | Show MacroParamModal with detected fields and defaults |
+| **UNKNOWN** | Show MacroParamModal with freeform parameter input |
+
+### Parameter Flavors
+
+Parameters come in two types, handled differently at execution time:
+
+| Type | Source | Execution |
+|------|--------|-----------|
+| **Variables** | `variable_*` in Klipper macro config | `SET_GCODE_VARIABLE` commands sent before macro call |
+| **Params** | Jinja2 `params.*` references | Appended as `KEY=VALUE` to the macro call |
+
+### Saved parameter defaults
+
+`MacroParamDefaults` (`include/macro_param_defaults.h`) keeps one record per
+macro — a `values` map plus an `ask_for_params` toggle that defaults on — under
+the active printer's config subtree, keyed by lowercased macro name exactly like
+MacroParamCache. A record with no values and ask still on is removed, so a macro
+whose fields were all cleared costs nothing. There is no config migration: the
+key simply appears the first time a record is saved.
+
+The run decision is `decide_macro_run()` (`include/macro_executor.h`), one pure
+function every surface calls — panel, favorite-macro widget, filament router,
+quick buttons. Its rules, which the header comment states in full:
+
+- **Saved values never complete a run on their own.** A `KNOWN_PARAMS` macro
+  runs without a prompt only when the caller's `known_values` cover every
+  declared parameter; a fully-saved record still prompts, because a saved value
+  is what the user last typed, not what they chose for this run. What skips the
+  prompt is `ask_for_params` off (or the surface's own policy suppressing it).
+- **Prefill is saved overlaid by known.** When the modal does open, it shows
+  the saved values with `known_values` (e.g. a quick button's preset) winning
+  on any parameter both supply.
+- A run that raises no modal carries the saved values overlaid by the caller's
+  known_values — a filament load's computed nozzle temp wins over a saved TEMP
+  on the same name — both filtered to the macro's declared names. A
+  `Suppress`-policy surface passes no known values, so it keeps sending only
+  the saved record's values (nothing without a record). Dangerous-macro
+  confirmation is decided before any of this and cannot be disarmed by it.
+
+Each surface builds the same `MacroRunRequest`: `prompt_for_params` is the
+conjunction of its own policy and the record's `ask_for_params` — the panel
+passes ask as-is, the widget `require_confirmation && ask`, the filament router
+`(policy != Suppress) && ask` — and `saved_values` carries the record's values.
+
+**Editing a record.** Two entry points, both `KNOWN_PARAMS` macros only: the
+Macros panel's edit mode shows a tune action on those rows, and the widget
+config modal's Options tab shows a "Default Parameters" action row (hidden
+otherwise, via the `fav_macro_has_param_defaults` subject recomputed per macro).
+Both open `MacroParamModal::show_for_defaults()` — the same parameter fields
+prefilled from the record, retitled "Default Parameters", with Save/Cancel and
+the "Ask for parameters" toggle under the fields.
+
+---
+
+## Standard Macros System
+
+10 semantic slots provide consistent access to common operations:
+
+- LoadFilament, UnloadFilament, Purge, Pause, Resume, Cancel
+- BedMesh, BedLevel, CleanNozzle, HeatSoak
+
+### Resolution Priority
+
+1. User configured (via Settings) — verified to exist on the printer before it is trusted
+2. Auto-detected (pattern matching against discovered macros)
+3. HELIX fallback (built-in helper macros from `helix_macros.cfg`)
+4. Empty (slot not available)
+
+A configured name the printer does not define is demoted at init and the slot
+resolves as though unconfigured. In the Controls panel a demoted slot keeps its
+button in place but greys it out — a button that disappears reads as a bug in
+the screen, while a disabled one points at the assignment that needs fixing —
+rather than sending a command Klipper would reject with "Unknown command".
+
+See `STANDARD_MACROS_SPEC.md` for the full specification.
+
+---
+
+## Home Panel Integration
+
+Two widget types appear on the home panel:
+
+| Widget | Size | Behavior |
+|--------|------|----------|
+| **MacrosWidget** | 1x1 | Opens the full MacrosPanel overlay |
+| **FavoriteMacroWidget** | 1x1, up to 5 slots | Executes a single configured macro directly |
+
+### Macro Settings
+
+`MacroButtonsOverlay` in settings provides:
+
+- Quick button configuration (which macros appear on home panel)
+- Standard macro slot overrides (override auto-detection per slot)
+
+---
+
+## Key Patterns
+
+### Global Singleton Access
+
+MacrosPanel uses the global panel pattern for static callback access:
+
+```cpp
+MacrosPanel& get_global_macros_panel() {
+    return helix::lazy_global<MacrosPanel>("MacrosPanel");
+}
+
+void MacrosPanel::on_macro_card_clicked(lv_event_t* e) {
+    auto& self = get_global_macros_panel();
+    // ... find card in self.macro_entries_
+}
+```
+
+### Overlay Navigation
+
+Opening the MacrosPanel from any widget or panel:
+
+```cpp
+get_global_macros_panel().show(parent_screen_);
+```
+
+### Async Safety
+
+WebSocket callbacks capture copies of data, never references:
+
+```cpp
+std::string macro_copy = macro_name;
+api->execute_gcode(gcode,
+    [macro_copy]() { spdlog::info("Executed {}", macro_copy); },
+    [macro_copy](const MoonrakerError& err) { ... });
+```
+
+### Parameter Modal with Alive Guard
+
+The alive guard prevents use-after-free when the panel is destroyed while a modal is open:
+
+```cpp
+std::weak_ptr<bool> weak = alive_;
+param_modal_.show_for_macro(lv_screen_active(), name, params,
+    [this, weak, name](const MacroParamResult& result) {
+        if (weak.expired()) return;  // Panel destroyed during modal
+        execute_with_params(name, result);
+    });
+```
+
+---
+
+## XML Components
+
+### macro_panel.xml
+
+Extends `overlay_panel` with:
+
+- Title "Macros" (translatable)
+- Status message bound to `macros_status` subject
+- Scrollable `macro_list` container (populated dynamically in C++)
+- Empty state with icon + message (hidden by default, shown when no macros match)
+- Disabled state bound to `nav_buttons_enabled` subject
+
+### macro_card.xml
+
+Extends `lv_button` with API props:
+
+- `macro_name` (string) -- displayed as bold text
+- `macro_description` (string) -- optional subtitle (hidden by default)
+- Icon: `code_tags`, chevron right indicator
+- Click callback: `on_macro_card_clicked`
+
+---
+
+## Testing
+
+| Test File | Coverage |
+|-----------|----------|
+| `test_helix_macro_manager.cpp` | Helper macro install/update |
+| `test_macro_param_cache.cpp` | Parameter caching |
+| `test_macro_param_defaults.cpp` | Saved-defaults store: set/get/clear, per-printer isolation |
+| `test_macro_param_modal_defaults.cpp` | Save-mode modal: prefill, toggle, Save hands back the record |
+| `test_macro_run_decision.cpp` | `decide_macro_run()`: saved values never complete a run |
+| `test_macro_param_parser.cpp` | Jinja2 parameter parsing |
+| `test_standard_macros.cpp` | Slot resolution and auto-detection |
+| `test_subject_macros.cpp` | XML subject bindings |
+| `tests/unit/test_macro_buttons_slot_mapping.cpp` | Settings UI |
+| `test_led_macro_backend.cpp` | LED integration |
+
+---
+
+## Related Docs
+
+- `STANDARD_MACROS_SPEC.md` -- Full spec for the 10 standard macro slots
+- `MODAL_SYSTEM.md` -- Modal architecture used by confirmation dialogs and MacroParamModal

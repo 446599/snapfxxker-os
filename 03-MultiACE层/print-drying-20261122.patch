@@ -1,1 +1,224 @@
-../verification/print-drying-deploy-20261122/print-drying.patch
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-1.27b-233.20261121-flow.15.72
++1.27b-233.20261122-flow.15.73
+--- a/config/extended/ace.cfg
++++ b/config/extended/ace.cfg
+@@ -290,6 +290,10 @@
+ description: Stop drying on current ACE
+ gcode:
+   ACE_STOP_DRYING
++[gcode_macro ACE_SET_PRINT_DRYING]
++description: Dry the ACE used by this print at 55C until the print ends
++gcode:
++  ACE_PRINT_DRYING_CONTROL ENABLE={params.ENABLE|default(0)|int}
+ [gcode_macro ACEF__Mode_Normal]
+ description: Switch to Normal mode (stock feeders, no ACE)
+ gcode:
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -2073,6 +2073,9 @@
+         if self._dry_cycles.printing:
+             self.printer.register_event_handler(
+                 'virtual_sdcard:reset_file', self._dry_cycles.printing.release)
++            self.gcode.register_command(
++                'ACE_PRINT_DRYING_CONTROL', self._dry_cycles.printing.arm,
++                desc='Enable or disable 55C drying for the next print')
+ 
+         # Every homing move (G28 axis home AND each probe sample via
+         # probing_move) is bracketed by these events; the inductance-coil
+@@ -4807,6 +4810,8 @@
+         return motion
+ 
+     def _on_print_start(self, *args):
++        if self._dry_cycles.printing:
++            self._dry_cycles.printing.begin()
+         # Sniffed per print. print_stats:start fires on start AND on resume
+         # (note_start runs in the virtual_sdcard work handler), so the flag
+         # is refreshed on every resume as well.
+@@ -25318,6 +25323,8 @@
+             'calibration_unload': dict(
+                 getattr(self, '_calibration_unload', None) or {}),
+             'head_presence': head_presence,
++            'print_drying': (self._dry_cycles.printing.dry_status()
++                             if self._dry_cycles.printing else None),
+             'head_physical_source': (self._path_calibration.physical_sources()
+                                      if getattr(self, '_path_calibration', None) is not None else {}),
+             'path_operations': (self._path_operations.status()
+--- a/klipper/extras/ace_dry_cycle.py
++++ b/klipper/extras/ace_dry_cycle.py
+@@ -348,7 +348,7 @@
+                     self.pulses.pop(idx, None)
+         c['roll_count'] += 1
+ 
+-    def start(self, idx, target, minutes, slot=None, first=None):
++    def start(self, idx, target, minutes, slot=None, first=None, print_scope=None):
+         a = self.ace
+         phase = self._visible(idx)[0]
+         if not self.online(idx) or phase not in ('idle', 'complete') or not self._observation(idx):
+@@ -357,12 +357,18 @@
+             raise RuntimeError('设备正在烘干或状态未知')
+         if not 35 <= target <= a.max_dryer_temperature or not 1 <= minutes <= 1440:
+             raise RuntimeError('温度或烘干时长超出范围')
+-        if self.printing:
++        if print_scope is not None:
++            if (self.printing is None or self.printing.job is not print_scope
++                    or not print_scope.get('dry_enabled') or slot is not None):
++                raise RuntimeError('Print drying is no longer active')
++        elif self.printing:
+             self.printing.temperature_for(idx, target)
+         if slot is not None and (not a.dry_exhaust_delay or not self.eligible(idx, slot)):
+             raise RuntimeError('此槽未通过空载回卷检查')
+         c = self._new(idx, 'starting', '正在启动烘干', slot)
+         c.update(target=target, minutes=minutes)
++        if print_scope is not None:
++            c['print_scope'] = print_scope
+         try:
+             self._remember(idx, True)
+             if not self._live(idx, c):
+@@ -538,6 +544,12 @@
+                 self._reconcile_print_temperature(idx, c, info, now)
+                 if not self._live(idx, c):
+                     return a.reactor.NEVER
++                if (c.get('print_scope') is not None and self.printing.owns_cycle(idx)
++                        and not c['pending'] and now + 300. >= c['end']
++                        and state in ('starting', 'keeping', 'drying')):
++                    self._request(idx, c, 'drying', dict(temp=c['target'], duration=c['minutes'],
++                                                        fan_speed=7000, auto_roll=False), 11)
++                    c['end'] = a.reactor.monotonic() + c['minutes'] * 60.
+             if a._is_v2(idx) and a.dry_exhaust_delay > 0:
+                 self._update_exhaust(idx, c, now)
+             elif state in ('keeping', 'drying'):
+--- a/klipper/extras/ace_print_drying.py
++++ b/klipper/extras/ace_print_drying.py
+@@ -18,6 +18,8 @@
+ _PRINT_LIMITS = {'PLA': 45, 'PETG': 55}
+ _COOL_WITH_HEAT_OFF = 40
+ _START_TIMEOUT = 600.
++PRINT_DRY_TEMP = 55
++PRINT_DRY_LEASE_MINUTES = 15
+ 
+ 
+ def read_print_routes(path):
+@@ -73,6 +75,7 @@
+         self.inventories = inventories
+         self.sd = None
+         self.job = None
++        self.armed_until = 0.
+         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='ace-print-routes')
+ 
+     def install(self):
+@@ -111,9 +114,77 @@
+             self.sd.work_timer = None
+ 
+     def release(self, *args):
+-        if self.job and self.job.get('scan') is not None:
+-            self.job['scan'].cancel()
+-        self.job = None
++        job, self.job = self.job, None
++        if job is None:
++            return
++        if job.get('scan') is not None:
++            job['scan'].cancel()
++        if job.get('dry_enabled'):
++            self.ace.reactor.register_callback(lambda now: self._stop_owned(job))
++
++    def arm(self, gcmd):
++        enabled = gcmd.get_int('ENABLE', 0, minval=0, maxval=1)
++        now = self.ace.reactor.monotonic()
++        self.armed_until = now + _START_TIMEOUT if enabled and not self.active() else 0.
++
++    def begin(self):
++        job = self.job
++        if job is None or not job.get('started') or 'dry_enabled' in job:
++            return
++        reactor = self.ace.reactor
++        now = reactor.monotonic()
++        job['dry_enabled'] = self.armed_until > now
++        self.armed_until = 0.
++        if job['dry_enabled']:
++            job['dry_attempts'] = set()
++            reactor.register_timer(lambda when: self._try_start(job, when), now + 1.)
++
++    def _try_start(self, job, now):
++        a, d = self.ace, self.dryer
++        if self.job is not job:
++            return a.reactor.NEVER
++        stats = a.printer.lookup_object('print_stats', None)
++        if getattr(stats, 'state', None) != 'printing' or self.planning():
++            return now + 2.
++        boxes = set(job.get('dry_boxes', ()))
++        for head in job['heads']:
++            src = source_route(a._head_source.get(head))
++            if src and a.head_uses_ace(head):
++                boxes.add(src[0])
++        for idx in sorted(boxes - job['dry_attempts']):
++            if self.job is not job:
++                break
++            if not d.safe_for_maintenance(idx):
++                continue
++            job['dry_attempts'].add(idx)
++            try:
++                d.start(idx, PRINT_DRY_TEMP, PRINT_DRY_LEASE_MINUTES, print_scope=job)
++                logging.info('[multiACE] print drying ACE %d started at %d C', idx, PRINT_DRY_TEMP)
++            except (RuntimeError, OSError) as exc:
++                logging.warning('[multiACE] print drying ACE %d not started: %s', idx, exc)
++                self._stop_owned(job, only=idx)
++        return a.reactor.monotonic() + 2. if self.job is job else a.reactor.NEVER
++
++    def _stop_owned(self, job, only=None):
++        d = self.dryer
++        for idx, cycle in sorted(d.cycles.items()):
++            if ((only is None or idx == only) and cycle.get('print_scope') is job
++                    and cycle['phase'] != 'stopping' and d._live(idx, cycle)):
++                try:
++                    d.stop(idx)
++                    logging.info('[multiACE] print drying ACE %d stop requested', idx)
++                except (RuntimeError, OSError) as exc:
++                    logging.warning('[multiACE] print drying ACE %d stop not confirmed: %s', idx, exc)
++
++    def owns_cycle(self, idx):
++        cycle = self.dryer.cycles.get(idx, {})
++        return (self.job is not None and cycle.get('print_scope') is self.job
++                and self.dryer._live(idx, cycle))
++
++    def dry_status(self):
++        return dict(armed=self.armed_until > self.ace.reactor.monotonic(),
++                    enabled=bool(self.job and self.job.get('dry_enabled')),
++                    aces=sorted(i for i in self.dryer.cycles if self.owns_cycle(i)))
+ 
+     def active(self):
+         state = self.ace.printer.lookup_object('print_stats', None)
+@@ -215,6 +286,7 @@
+         mapped = {box for _, box, _ in routes}
+         if not mapped <= boxes:
+             return boxes
++        self.job['dry_boxes'] = set(mapped)
+         planned = {head for head, _, _ in routes}
+         self.job['heads'].update(heads)
+         for head in heads:
+@@ -285,6 +357,8 @@
+ 
+     def limit(self, idx):
+         """Zero means that a reserved box must remain unheated."""
++        if self.owns_cycle(idx):
++            return PRINT_DRY_TEMP
+         if not self.reserved(idx):
+             return None
+         a = self.ace
+@@ -333,6 +407,14 @@
+             return True
+         if type(temp) not in (int, float) or not math.isfinite(temp) or not 0 < temp <= limit:
+             return False
++        if self.owns_cycle(idx) and c['phase'] in d.ACTIVE and not status.get('rotisserie'):
++            # The print cycle never rotates the spool. A heater ACK in flight
++            # must not reject a feed request on the same connection.
++            if status.get('status') == 'stop' and d.stopped(idx):
++                return True
++            target = status.get('target_temp')
++            return (type(target) is int and 35 <= target <= PRINT_DRY_TEMP
++                    and status.get('status') in ('starting', 'keeping', 'drying'))
+         if d.stopped(idx):
+             return idx not in d.unresolved
+         cap = self.limit(idx)

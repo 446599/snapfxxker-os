@@ -1,0 +1,126 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component>
+  <consts>
+    <px name="calibration_footer_height" value="54" />
+  </consts>
+  <styles>
+    <style name="selected" border_color="#primary" border_width="2" />
+  </styles>
+  <view name="path_calibration" extends="lv_obj" width="100%" height="#u1_overlay_height" align="top_left" flex_flow="column" style_pad_all="0" style_pad_gap="0" style_border_width="0" style_bg_color="#screen_bg" style_bg_opa="255" scrollable="false">
+    <lv_obj name="overlay_header" width="100%" height="#u1_header_height" flex_flow="row" style_pad_hor="#u1_page_pad" style_pad_ver="0" style_pad_gap="#u1_compact_gap" style_flex_cross_place="center" style_bg_color="#card_bg" style_bg_opa="255" scrollable="false">
+      <ui_button name="path_calibration_back" text="返回" icon="chevron_left" icon_position="left" variant="ghost" width="#u1_header_back_width" height="#u1_touch_target" style_pad_hor="0" style_text_font="#u1_body_font">
+        <event_cb trigger="clicked" callback="path_calibration_back" />
+      </ui_button>
+      <text_body width="0" flex_grow="1" bind_text="path_calibration_title" long_mode="dots" style_text_font="#u1_heading_font" style_text_align="center" />
+      <lv_obj width="#u1_header_back_width" height="1" style_pad_all="0" style_bg_opa="0" clickable="false" scrollable="false" />
+    </lv_obj>
+    <lv_obj name="overlay_content" width="100%" height="0" flex_grow="1" flex_flow="column" style_pad_hor="#u1_page_pad" style_pad_ver="#u1_card_gap" style_pad_gap="#u1_card_gap" scrollable="true" scroll_dir="ver">
+      <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="#u1_card_pad"
+              style_pad_gap="#u1_compact_gap" scrollable="false">
+        <style name="styles.u1_card"/>
+        <text_body width="100%" bind_text="path_calibration_message" long_mode="wrap" style_text_font="#u1_body_font" />
+        <text_small text="先测完本台有料路线，再逐管标记 Y 前停车点" width="100%" long_mode="wrap" style_text_color="#text_muted">
+          <bind_flag_if cond="path_calibration_active" flag="hidden" />
+        </text_small>
+      </lv_obj>
+      <lv_obj name="path_calibration_heads" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="not path_calibration_head_choices_visible" flag="hidden" />
+        <repeat count="4">
+          <ui_button name="path_calibration_head_${i}" text="喷头 ${i + 1}" variant="secondary" width="0" flex_grow="1" height="100%" style_pad_hor="#space_xs" style_text_font="#u1_body_font">
+            <bind_flag_if cond="not path_calibration_head_choice_${i}" flag="hidden" />
+            <bind_style_if name="selected" cond="path_calibration_selected_head eq ${i}" />
+            <event_cb trigger="clicked" callback="path_calibration_head_select" user_data="${i}" />
+          </ui_button>
+        </repeat>
+      </lv_obj>
+      <lv_obj name="path_calibration_lanes" width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <repeat count="4">
+          <ui_button name="path_calibration_lane_${i}" bind_text="path_calibration_button_${i}" variant="secondary" width="0" flex_grow="1" height="100%" style_pad_hor="#space_xs" style_text_font="#u1_body_font">
+            <bind_style_if name="selected" cond="path_calibration_selected eq ${i}" />
+            <bind_state_if cond="path_calibration_busy" state="disabled" />
+            <event_cb trigger="clicked" callback="path_calibration_slot" user_data="${i}" />
+          </ui_button>
+        </repeat>
+      </lv_obj>
+      <text_small width="100%" bind_text="path_calibration_route_detail" long_mode="wrap" />
+      <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="not path_calibration_waiting" flag="hidden" />
+        <ui_button name="path_calibration_insert" text="已重新插入，继续" width="0" flex_grow="1" height="#u1_touch_target" style_text_font="#u1_body_font" style_text_color="#FFFFFF">
+          <bind_state_if cond="not path_calibration_can_continue" state="disabled" />
+          <event_cb trigger="clicked" callback="path_calibration_action" user_data="insert" />
+        </ui_button>
+        <ui_button name="path_calibration_skip" text="跳过空槽" variant="secondary" width="0" flex_grow="1" height="#u1_touch_target" style_text_font="#u1_body_font">
+          <bind_state_if cond="path_calibration_busy" state="disabled" />
+          <event_cb trigger="clicked" callback="path_calibration_action" user_data="skip" />
+        </ui_button>
+      </lv_obj>
+      <ui_button name="path_calibration_confirm_source" text="确认当前槽正在给该喷头供料" width="100%" height="#u1_touch_target" style_text_font="#u1_body_font" style_text_color="#FFFFFF">
+        <bind_flag_if cond="not path_calibration_source_confirm_ready" flag="hidden" />
+        <event_cb trigger="clicked" callback="path_calibration_action" user_data="confirm_source" />
+      </ui_button>
+      <ui_button name="path_calibration_confirm_route" text="已目视确认其他支路停在 Y 前" width="100%" height="#u1_touch_target" style_text_font="#u1_body_font" style_text_color="#FFFFFF">
+        <bind_flag_if cond="not path_calibration_confirm_ready" flag="hidden" />
+        <event_cb trigger="clicked" callback="path_calibration_action" user_data="confirm_route" />
+      </ui_button>
+      <lv_obj width="100%" height="content" flex_flow="column" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <bind_flag_if cond="path_calibration_stage ne 2" flag="hidden" />
+        <text_body width="100%" bind_text="path_calibration_position" long_mode="wrap" style_text_font="#u1_body_font" />
+        <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <ui_button name="path_calibration_step_10" text="10 mm" width="0" flex_grow="1" variant="secondary" height="100%" style_text_font="#u1_body_font">
+            <bind_style_if name="selected" cond="path_calibration_step eq 10" />
+            <event_cb trigger="clicked" callback="path_calibration_step_select" user_data="10" />
+          </ui_button>
+          <ui_button name="path_calibration_step_50" text="50 mm" width="0" flex_grow="1" variant="secondary" height="100%" style_text_font="#u1_body_font">
+            <bind_style_if name="selected" cond="path_calibration_step eq 50" />
+            <event_cb trigger="clicked" callback="path_calibration_step_select" user_data="50" />
+          </ui_button>
+          <ui_button name="path_calibration_step_100" text="100 mm" width="0" flex_grow="1" variant="secondary" height="100%" style_text_font="#u1_body_font">
+            <bind_style_if name="selected" cond="path_calibration_step eq 100" />
+            <event_cb trigger="clicked" callback="path_calibration_step_select" user_data="100" />
+          </ui_button>
+          <ui_button name="path_calibration_jog_back" text="后退" width="0" flex_grow="1" variant="secondary" height="100%" style_text_font="#u1_body_font">
+            <bind_state_if cond="not path_calibration_back_ready" state="disabled" />
+            <event_cb trigger="clicked" callback="path_calibration_action" user_data="jog_back" />
+          </ui_button>
+          <ui_button name="path_calibration_jog_forward" text="前进" width="0" flex_grow="1" variant="secondary" height="100%" style_text_font="#u1_body_font">
+            <bind_state_if cond="not path_calibration_forward_ready" state="disabled" />
+            <event_cb trigger="clicked" callback="path_calibration_action" user_data="jog_forward" />
+          </ui_button>
+        </lv_obj>
+        <ui_button name="path_calibration_save" text="确认 Y 前位置并保存" width="100%" height="#u1_touch_target" style_text_font="#u1_body_font" style_text_color="#FFFFFF">
+          <bind_state_if cond="not path_calibration_can_save" state="disabled" />
+          <event_cb trigger="clicked" callback="path_calibration_action" user_data="save" />
+        </ui_button>
+      </lv_obj>
+    </lv_obj>
+    <lv_obj width="100%" height="#calibration_footer_height" flex_flow="row" style_pad_hor="#u1_page_pad"
+            style_pad_ver="#u1_compact_gap" style_pad_gap="#u1_card_gap" style_bg_color="#card_bg" style_bg_opa="255" scrollable="false">
+      <bind_flag_if cond="path_calibration_active" flag="hidden"/>
+      <ui_button name="path_calibration_prepare_single" text="仅补测所选路线" variant="secondary" width="0" flex_grow="1" height="#u1_touch_target" style_radius="#u1_card_radius" style_shadow_width="0" style_text_font="#u1_body_font">
+        <bind_flag_if cond="path_calibration_active" flag="hidden" />
+        <bind_state_if cond="not path_calibration_can_start" state="disabled" />
+        <event_cb trigger="clicked" callback="path_calibration_action" user_data="prepare_single" />
+      </ui_button>
+      <ui_button name="path_calibration_prepare" text="一键准备并测长" width="0" flex_grow="1" height="#u1_touch_target" style_radius="#u1_card_radius" style_shadow_width="0" style_text_font="#u1_body_font" style_text_color="#FFFFFF">
+        <bind_flag_if cond="path_calibration_active" flag="hidden" />
+        <bind_state_if cond="not path_calibration_can_start" state="disabled" />
+        <event_cb trigger="clicked" callback="path_calibration_action" user_data="prepare" />
+      </ui_button>
+    </lv_obj>
+    <lv_obj name="path_calibration_controls" width="100%" height="#calibration_footer_height" flex_flow="row" style_pad_hor="#u1_page_pad" style_pad_ver="#u1_compact_gap" style_pad_gap="#u1_card_gap" style_border_width="1" style_border_side="top" style_border_color="#border" style_bg_color="#card_bg" style_bg_opa="255" scrollable="false">
+      <bind_flag_if cond="not path_calibration_active" flag="hidden" />
+      <ui_button name="path_calibration_cancel" text="取消" variant="ghost" width="0" height="#u1_touch_target" style_pad_hor="0" style_text_font="#u1_body_font" flex_grow="1">
+        <bind_state_if cond="not path_calibration_active" state="disabled" />
+        <event_cb trigger="clicked" callback="path_calibration_action" user_data="cancel" />
+      </ui_button>
+      <ui_button name="path_calibration_stop" text="停止" variant="outline" width="0" height="#u1_touch_target" style_pad_hor="0" style_text_font="#u1_body_font" flex_grow="1">
+        <bind_state_if cond="not path_calibration_active" state="disabled" />
+        <event_cb trigger="clicked" callback="path_calibration_action" user_data="stop" />
+      </ui_button>
+      <ui_button name="path_calibration_resume" text="继续" variant="primary" style_text_color="#FFFFFF" width="0" height="#u1_touch_target" style_pad_hor="0" style_text_font="#u1_body_font" flex_grow="1">
+        <bind_state_if cond="not path_calibration_active or path_calibration_busy" state="disabled" />
+        <event_cb trigger="clicked" callback="path_calibration_action" user_data="resume" />
+      </ui_button>
+    </lv_obj>
+  </view>
+</component>

@@ -1,0 +1,347 @@
+
+There are no discarded input sections
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+                0x080197a0                        . = 0x80197a0
+
+.text           0x080197a0     0x2b81
+ rf-00-experimental_gate.o(.text*)
+ .text          0x080197a0        0x0 rf-00-experimental_gate.o
+ .text.experiment_gate
+                0x080197a0       0x26 rf-00-experimental_gate.o
+                0x080197a0                experiment_reset_gate
+                0x080197a2                br_platform_enter
+                0x080197a6                br_platform_leave
+                0x080197aa                ex_raw_reject_stub
+                0x080197b4                ex_event_factory_entry
+ rf-01-event_storage.o(.text*)
+ *fill*         0x080197c6        0x2 
+ .text          0x080197c8      0x154 rf-01-event_storage.o
+                0x080197c8                ex_storage_allocation_size
+                0x080197dc                ex_storage_header_valid
+                0x0801983c                ex_storage_current
+                0x0801988c                rf_platform_state
+                0x08019898                ex_event_factory
+ rf-02-experimental_binding.o(.text*)
+ .text          0x0801991c      0x258 rf-02-experimental_binding.o
+                0x080199bc                br_platform_denied
+                0x080199fc                br_platform_transaction
+                0x08019a36                br_platform_commit_valid
+                0x08019a38                ex_stop_request
+                0x08019a40                ex_offline_begin
+                0x08019af0                rf_platform_now
+                0x08019afc                rf_platform_ready
+                0x08019b00                rf_platform_budget
+                0x08019b04                rf_platform_quiescence
+                0x08019b08                rf_platform_cleanup
+                0x08019b0c                rf_platform_bad_outcome
+                0x08019b14                ex_finalize
+                0x08019b3c                ex_decoder_ready
+                0x08019b48                ex_reject_select
+                0x08019b56                ex_reject_halt
+                0x08019b64                ex_reject_worker
+ rf-03-bounded_rc522.o(.text*)
+ .text          0x08019b74      0x4e0 rf-03-bounded_rc522.o
+                0x08019d66                br_read
+                0x08019d7a                br_write
+                0x08019e1e                br_publish
+                0x08019e94                br_transceive_exact
+                0x0801a03e                br_transceive
+ rf-04-stock_bounded_bridge.o(.text*)
+ .text          0x0801a054      0x1a4 rf-04-stock_bounded_bridge.o
+                0x0801a078                br_stock_read
+                0x0801a0aa                br_stock_write
+                0x0801a0d0                br_stock_select
+                0x0801a130                br_stock_transceive_sized
+                0x0801a194                br_stock_transceive_checked
+ rf-05-stock_bounded_thunks.o(.text*)
+ .text          0x0801a1f8       0x20 rf-05-stock_bounded_thunks.o
+                0x0801a1f8                br_stock_transceive_entry
+                0x0801a210                br_stock_select_original
+ rf-06-rf_owner.o(.text*)
+ .text          0x0801a218      0x448 rf-06-rf_owner.o
+                0x0801a2f2                rf_init_exclusive
+                0x0801a30a                rf_acquire
+                0x0801a3c8                rf_begin_operation
+                0x0801a432                rf_complete_operation
+                0x0801a4a0                rf_finish
+                0x0801a4e0                rf_cancel
+                0x0801a50c                rf_renew
+                0x0801a564                rf_disconnect
+                0x0801a598                rf_expire
+                0x0801a5b6                rf_claim_cleanup
+                0x0801a5bc                rf_claim_cleanup_for
+                0x0801a5c4                rf_complete_cleanup
+ rf-07-rf_stock_adapter.o(.text*)
+ .text          0x0801a660      0x2b2 rf-07-rf_stock_adapter.o
+                0x0801a7a4                rf_background_entry
+                0x0801a7d8                rf_cmd68_entry
+                0x0801a82e                rf_cmd13_entry
+                0x0801a884                rf_cmd14_entry
+                0x0801a8de                rf_requeue_entry
+ rf-08-rf_stock_trampolines.o(.text*)
+ .text          0x0801a912       0x3e rf-08-rf_stock_trampolines.o
+                0x0801a912                rf_background_original
+                0x0801a91a                rf_cmd68_original
+                0x0801a922                rf_cmd13_original
+                0x0801a92a                rf_cmd14_original
+                0x0801a932                rf_requeue_original
+                0x0801a93a                rf_platform_enter
+                0x0801a946                rf_platform_leave
+ rf-09-native_tag_decoder.o(.text*)
+ .text          0x0801a950     0x16bc rf-09-native_tag_decoder.o
+                0x0801b6d8                memset
+                0x0801b6e8                memcpy
+                0x0801b950                delay_ms
+                0x0801bce8                decode_native_tag
+                0x0801be54                decode_cmd68_tag
+                0x0801befc                decode_cmd68_uid_tag
+ rf-10-uid_stub.o(.text*)
+ .text          0x0801c00c        0x4 rf-10-uid_stub.o
+                0x0801c00c                uid_stub
+ rf-11-rawtag_stub.o(.text*)
+ .text          0x0801c010        0x4 rf-11-rawtag_stub.o
+                0x0801c010                rawtag_stub
+ rf-12-rawtag_cache_stub.o(.text*)
+ .text          0x0801c014        0xa rf-12-rawtag_cache_stub.o
+                0x0801c014                rawtag_cache_stub
+ rf-13-rawtag_extract_stub.o(.text*)
+ .text          0x0801c01e        0xa rf-13-rawtag_extract_stub.o
+                0x0801c01e                rawtag_extract_stub
+ rf-14-pageread_gate_stub.o(.text*)
+ .text          0x0801c028        0xc rf-14-pageread_gate_stub.o
+                0x0801c028                pageread_gate_stub
+ rf-00-experimental_gate.o(.rodata*)
+ rf-01-event_storage.o(.rodata*)
+ rf-02-experimental_binding.o(.rodata*)
+ rf-03-bounded_rc522.o(.rodata*)
+ rf-04-stock_bounded_bridge.o(.rodata*)
+ rf-05-stock_bounded_thunks.o(.rodata*)
+ rf-06-rf_owner.o(.rodata*)
+ rf-07-rf_stock_adapter.o(.rodata*)
+ rf-08-rf_stock_trampolines.o(.rodata*)
+ rf-09-native_tag_decoder.o(.rodata*)
+ .rodata.str1.1
+                0x0801c034      0x1c1 rf-09-native_tag_decoder.o
+                                0x1f1 (size before relaxing)
+ *fill*         0x0801c1f5        0x3 
+ .rodata        0x0801c1f8      0x129 rf-09-native_tag_decoder.o
+ rf-10-uid_stub.o(.rodata*)
+ rf-11-rawtag_stub.o(.rodata*)
+ rf-12-rawtag_cache_stub.o(.rodata*)
+ rf-13-rawtag_extract_stub.o(.rodata*)
+ rf-14-pageread_gate_stub.o(.rodata*)
+
+.glue_7         0x0801c324        0x0
+ .glue_7        0x0801c324        0x0 linker stubs
+
+.glue_7t        0x0801c324        0x0
+ .glue_7t       0x0801c324        0x0 linker stubs
+
+.vfp11_veneer   0x0801c324        0x0
+ .vfp11_veneer  0x0801c324        0x0 linker stubs
+
+.v4_bx          0x0801c324        0x0
+ .v4_bx         0x0801c324        0x0 linker stubs
+
+.iplt           0x0801c324        0x0
+ .iplt          0x0801c324        0x0 rf-00-experimental_gate.o
+
+.bss            0x0801c321        0x0
+ *(.bss*)
+ .bss           0x0801c321        0x0 rf-00-experimental_gate.o
+ .bss           0x0801c321        0x0 rf-01-event_storage.o
+ .bss           0x0801c321        0x0 rf-02-experimental_binding.o
+ .bss           0x0801c321        0x0 rf-03-bounded_rc522.o
+ .bss           0x0801c321        0x0 rf-04-stock_bounded_bridge.o
+ .bss           0x0801c321        0x0 rf-05-stock_bounded_thunks.o
+ .bss           0x0801c321        0x0 rf-06-rf_owner.o
+ .bss           0x0801c321        0x0 rf-07-rf_stock_adapter.o
+ .bss           0x0801c321        0x0 rf-08-rf_stock_trampolines.o
+ .bss           0x0801c321        0x0 rf-09-native_tag_decoder.o
+ .bss           0x0801c321        0x0 rf-10-uid_stub.o
+ .bss           0x0801c321        0x0 rf-11-rawtag_stub.o
+ .bss           0x0801c321        0x0 rf-12-rawtag_cache_stub.o
+ .bss           0x0801c321        0x0 rf-13-rawtag_extract_stub.o
+ .bss           0x0801c321        0x0 rf-14-pageread_gate_stub.o
+ .bss           0x0801c321        0x0 ph-c.o
+ .bss           0x0801c321        0x0 ph-S.o
+ *(COMMON)
+
+.data           0x0801c321        0x0
+ *(.data*)
+ .data          0x0801c321        0x0 rf-00-experimental_gate.o
+ .data          0x0801c321        0x0 rf-01-event_storage.o
+ .data          0x0801c321        0x0 rf-02-experimental_binding.o
+ .data          0x0801c321        0x0 rf-03-bounded_rc522.o
+ .data          0x0801c321        0x0 rf-04-stock_bounded_bridge.o
+ .data          0x0801c321        0x0 rf-05-stock_bounded_thunks.o
+ .data          0x0801c321        0x0 rf-06-rf_owner.o
+ .data          0x0801c321        0x0 rf-07-rf_stock_adapter.o
+ .data          0x0801c321        0x0 rf-08-rf_stock_trampolines.o
+ .data          0x0801c321        0x0 rf-09-native_tag_decoder.o
+ .data          0x0801c321        0x0 rf-10-uid_stub.o
+ .data          0x0801c321        0x0 rf-11-rawtag_stub.o
+ .data          0x0801c321        0x0 rf-12-rawtag_cache_stub.o
+ .data          0x0801c321        0x0 rf-13-rawtag_extract_stub.o
+ .data          0x0801c321        0x0 rf-14-pageread_gate_stub.o
+ .data          0x0801c321        0x0 ph-c.o
+ .data          0x0801c321        0x0 ph-S.o
+                0x00000001                        ASSERT ((SIZEOF (.data) == 0x0), No initialized RAM in offline fixture)
+                0x00000001                        ASSERT ((SIZEOF (.bss) == 0x0), No unreserved state is permitted)
+                0x0800e904                        epilogue = 0x800e904
+                0x0800f574                        rc522_read_reg = 0x800f574
+                0x0800f5d0                        rc522_write_reg = 0x800f5d0
+                0x0800f32c                        rc522_transceive = 0x800f32c
+                0x0800f50c                        rc522_timer = 0x800f50c
+                0x0800f30a                        rc522_flush = 0x800f30a
+                0x0800deb6                        rfid_select = 0x800deb6
+                0x0800e18c                        rfid_pageread = 0x800e18c
+                0x0800e846                        resume = 0x800e846
+                0x0800fe40                        cache_resume = 0x800fe40
+                0x0800e22c                        pageread_resume = 0x800e22c
+                0x0800e23c                        pageread_fail = 0x800e23c
+                0x0800fe3a                        extract_resume = 0x800fe3a
+                0x0800fe98                        scan_exit = 0x800fe98
+                0x0800fe94                        scan_fail = 0x800fe94
+                0x080132c5                        ex_stock_malloc = 0x80132c5
+                0x0801613f                        ex_stock_event_factory = 0x801613f
+                0x0800deba                        stock_select_resume = 0x800deba
+                0x0800e248                        stock_background_resume = 0x800e248
+                0x0800e7ac                        stock_cmd68_resume = 0x800e7ac
+                0x0800e914                        stock_cmd13_resume = 0x800e914
+                0x0800e750                        stock_cmd14_resume = 0x800e750
+                0x0800e710                        stock_requeue_resume = 0x800e710
+
+.igot.plt       0x0801c324        0x0
+ .igot.plt      0x0801c324        0x0 rf-00-experimental_gate.o
+                0x08030000                        . = 0x8030000
+
+.preload_text   0x08030000      0x4a0
+ ph-c.o(.text*)
+ .text          0x08030000      0x11c ph-c.o
+                0x08030000                ph_init_exclusive
+                0x08030024                ph_claim_reader
+                0x08030078                ph_release_reader
+                0x080300b4                ph_publish_failure
+ ph-S.o(.text*)
+ .text          0x0803011c      0x384 ph-S.o
+                0x0803011c                ph_insert_hook
+                0x08030170                ph_start_hook
+                0x080301c6                ph_after_wait_hook
+                0x0803021c                ph_active_hook
+                0x08030276                ph_enable_gpio_hook
+                0x080302ba                ph_enable_timer_hook
+                0x0803031a                ph_disable_timer_hook
+                0x08030354                ph_encoder_enable_hook
+                0x080303c2                ph_start_pwm_hook
+                0x0803040a                ph_control_pwm_hook
+                0x08030452                ph_irq_enter
+                0x0803045e                ph_irq_leave
+                0x08030468                ph_stock_power_disable
+ ph-c.o(.rodata*)
+ ph-S.o(.rodata*)
+
+.binding_required
+                0x080304a0       0x14
+ ph-S.o(.binding_required)
+ .binding_required
+                0x080304a0       0x14 ph-S.o
+                0x00000001                        ASSERT (((ADDR (.text) + SIZEOF (.text)) <= ADDR (.preload_text)), RF/preload text overlap)
+                0x00000001                        ASSERT (((ADDR (.bss) + SIZEOF (.bss)) <= 0x21000000), RF/preload RAM overlap)
+                0x0800f72a                        stock_insert_resume = 0x800f72a
+                0x0800f6c4                        stock_insert_return = 0x800f6c4
+                0x0800ecec                        stock_start_resume = 0x800ecec
+                0x0800eed0                        stock_start_return = 0x800eed0
+                0x0800ed3c                        stock_after_wait_resume = 0x800ed3c
+                0x0800ed7a                        stock_gpio_resume = 0x800ed7a
+                0x0800ee9c                        stock_timer_resume = 0x800ee9c
+                0x0800f018                        stock_control_resume = 0x800f018
+                0x0800f088                        stock_power_disable = 0x800f088
+                0x08009eb8                        stock_encoder_disable = 0x8009eb8
+                0x0800ed4c                        stock_active_resume = 0x800ed4c
+                0x08009d6a                        stock_encoder_resume = 0x8009d6a
+                0x08009d72                        stock_encoder_return = 0x8009d72
+                0x0800efaa                        stock_disable_timer_resume = 0x800efaa
+                0x21000000                        ph_storage = 0x21000000
+                0x0badf00d                        ph_verified_reserved_ram = 0xbadf00d
+                0x0badf00d                        ph_verified_exclusive_startup = 0xbadf00d
+                0x0badf00d                        ph_verified_owned_failure_source = 0xbadf00d
+                0x0badf00d                        ph_verified_all_motion_writers = 0xbadf00d
+                0x0badf00d                        ph_verified_controller_quiescence = 0xbadf00d
+LOAD rf-00-experimental_gate.o
+LOAD rf-01-event_storage.o
+LOAD rf-02-experimental_binding.o
+LOAD rf-03-bounded_rc522.o
+LOAD rf-04-stock_bounded_bridge.o
+LOAD rf-05-stock_bounded_thunks.o
+LOAD rf-06-rf_owner.o
+LOAD rf-07-rf_stock_adapter.o
+LOAD rf-08-rf_stock_trampolines.o
+LOAD rf-09-native_tag_decoder.o
+LOAD rf-10-uid_stub.o
+LOAD rf-11-rawtag_stub.o
+LOAD rf-12-rawtag_cache_stub.o
+LOAD rf-13-rawtag_extract_stub.o
+LOAD rf-14-pageread_gate_stub.o
+LOAD ph-c.o
+LOAD ph-S.o
+OUTPUT(/workspace/scratch/f283fdd55202/ace2-open-build/integration-preload/merged/COMBINED-NOFLASH.elf elf32-littlearm)
+LOAD linker stubs
+
+.rel.dyn        0x080304b4        0x0
+ .rel.iplt      0x080304b4        0x0 rf-00-experimental_gate.o
+
+.ARM.attributes
+                0x00000000       0x2f
+ .ARM.attributes
+                0x00000000       0x21 rf-00-experimental_gate.o
+ .ARM.attributes
+                0x00000021       0x2d rf-01-event_storage.o
+ .ARM.attributes
+                0x0000004e       0x2d rf-02-experimental_binding.o
+ .ARM.attributes
+                0x0000007b       0x2d rf-03-bounded_rc522.o
+ .ARM.attributes
+                0x000000a8       0x2d rf-04-stock_bounded_bridge.o
+ .ARM.attributes
+                0x000000d5       0x21 rf-05-stock_bounded_thunks.o
+ .ARM.attributes
+                0x000000f6       0x2d rf-06-rf_owner.o
+ .ARM.attributes
+                0x00000123       0x2d rf-07-rf_stock_adapter.o
+ .ARM.attributes
+                0x00000150       0x1b rf-08-rf_stock_trampolines.o
+ .ARM.attributes
+                0x0000016b       0x2d rf-09-native_tag_decoder.o
+ .ARM.attributes
+                0x00000198       0x21 rf-10-uid_stub.o
+ .ARM.attributes
+                0x000001b9       0x21 rf-11-rawtag_stub.o
+ .ARM.attributes
+                0x000001da       0x21 rf-12-rawtag_cache_stub.o
+ .ARM.attributes
+                0x000001fb       0x21 rf-13-rawtag_extract_stub.o
+ .ARM.attributes
+                0x0000021c       0x21 rf-14-pageread_gate_stub.o
+ .ARM.attributes
+                0x0000023d       0x2d ph-c.o
+ .ARM.attributes
+                0x0000026a       0x1b ph-S.o
+
+.comment        0x00000000       0x26
+ .comment       0x00000000       0x26 rf-01-event_storage.o
+                                 0x27 (size before relaxing)
+ .comment       0x00000026       0x27 rf-02-experimental_binding.o
+ .comment       0x00000026       0x27 rf-03-bounded_rc522.o
+ .comment       0x00000026       0x27 rf-04-stock_bounded_bridge.o
+ .comment       0x00000026       0x27 rf-06-rf_owner.o
+ .comment       0x00000026       0x27 rf-07-rf_stock_adapter.o
+ .comment       0x00000026       0x27 rf-09-native_tag_decoder.o
+ .comment       0x00000026       0x27 ph-c.o

@@ -1,0 +1,246 @@
+/**
+ * @file lv_xml_dropdown_parser.c
+ *
+ * SPDX-License-Identifier: MIT
+ * SPDX-FileCopyrightText: 2025 LVGL Kft
+ * SPDX-FileCopyrightText: 2026 356C LLC
+ */
+
+/*********************
+ *      INCLUDES
+ *********************/
+#include "lv_xml_dropdown_parser.h"
+#if LV_USE_XML && LV_USE_DROPDOWN
+
+#include <lvgl.h>
+#include <lvgl_private.h>
+#include "../lv_xml_private.h"
+#if LV_USE_TRANSLATION
+    #include <lvgl.h>
+#endif
+
+/*********************
+ *      DEFINES
+ *********************/
+
+/**********************
+ *      TYPEDEFS
+ **********************/
+
+/**********************
+ *  STATIC PROTOTYPES
+ **********************/
+static void dropdown_selected_observer_cb(lv_observer_t * observer, lv_subject_t * subject);
+#if LV_USE_TRANSLATION
+static void dropdown_translate_options(lv_obj_t * dd, const char * tags);
+static void dropdown_on_language_changed(lv_event_t * e);
+static void dropdown_on_delete_free_tags(lv_event_t * e);
+#endif
+
+/**********************
+ *  STATIC VARIABLES
+ **********************/
+
+/**********************
+ *      MACROS
+ **********************/
+
+/**********************
+ *   GLOBAL FUNCTIONS
+ **********************/
+
+void * lv_xml_dropdown_create(lv_xml_parser_state_t * state, const char ** attrs)
+{
+    LV_UNUSED(attrs);
+    void * item = lv_dropdown_create(lv_xml_state_get_parent(state));
+
+    return item;
+}
+
+
+void lv_xml_dropdown_apply(lv_xml_parser_state_t * state, const char ** attrs)
+{
+    void * item = lv_xml_state_get_item(state);
+
+    lv_xml_obj_apply(state, attrs); /*Apply the common properties, e.g. width, height, styles flags etc*/
+
+    lv_xml_attr_check_enter(state);
+
+    for(int i = 0; attrs[i]; i += 2) {
+        const char * name = attrs[i];
+        const char * value = attrs[i + 1];
+
+        if(lv_streq("options", name)) lv_dropdown_set_options(item, value);
+        else if(lv_streq("text", name)) lv_dropdown_set_text(item, value);
+        else if(lv_streq("selected", name)) lv_dropdown_set_selected(item, lv_xml_atoi(value));
+        else if(lv_streq("symbol", name)) lv_dropdown_set_symbol(item, lv_xml_get_image(&state->scope, value));
+        else if(lv_streq("bind_value", name)) {
+            lv_subject_t * subject = lv_xml_get_subject(&state->scope, value);
+            if(subject) {
+                lv_dropdown_bind_value(item, subject);
+            }
+            else {
+                LV_LOG_WARN("Subject \"%s\" doesn't exist in dropdown bind_value", value);
+            }
+        }
+        /* One-way counterpart to bind_value: the subject drives the selection and
+         * nothing writes back. That leaves the widget's own value_changed handler
+         * as the only writer, so a handler that vetoes a choice and restores the
+         * previous one still reads the previous value rather than the new one. */
+        else if(lv_streq("bind_selected", name)) {
+            /* Empty subject = intentional "no binding" (an optional subject left
+             * at its empty default, same convention as the obj parser's binds). */
+            if(value[0] == '\0') continue;
+            lv_subject_t * subject = lv_xml_get_subject(&state->scope, value);
+            if(subject) {
+                lv_subject_add_observer_obj(subject, dropdown_selected_observer_cb, item, NULL);
+            }
+            else {
+                LV_LOG_WARN("Subject \"%s\" doesn't exist in dropdown bind_selected", value);
+            }
+        }
+#if LV_USE_TRANSLATION
+        else if(lv_streq("options_tag", name)) {
+            if(value[0] == '\0') continue;  /* Skip empty tags */
+            char * tags_copy = lv_strdup(value);
+            dropdown_translate_options(item, value);
+            lv_obj_add_event_cb(item, dropdown_on_language_changed,
+                                LV_EVENT_TRANSLATION_LANGUAGE_CHANGED, tags_copy);
+            lv_obj_add_event_cb(item, dropdown_on_delete_free_tags,
+                                LV_EVENT_DELETE, tags_copy);
+        }
+#endif
+        else lv_xml_attr_check_miss(state, name);
+    }
+}
+
+void * lv_xml_dropdown_list_create(lv_xml_parser_state_t * state, const char ** attrs)
+{
+    LV_UNUSED(attrs);
+
+    return lv_dropdown_get_list(lv_xml_state_get_parent(state));
+}
+
+void lv_xml_dropdown_list_apply(lv_xml_parser_state_t * state, const char ** attrs)
+{
+    LV_UNUSED(state);
+    LV_UNUSED(attrs);
+
+    lv_xml_obj_apply(state, attrs);
+}
+
+/**********************
+ *   STATIC FUNCTIONS
+ **********************/
+
+static void dropdown_selected_observer_cb(lv_observer_t * observer, lv_subject_t * subject)
+{
+    const int32_t v = lv_subject_get_int(subject);
+
+    /* A negative value means "no selection" to callers that use -1 as unset.
+     * Widening it instead would wrap to a huge index, which lv_dropdown_set_selected
+     * clamps to the LAST option - the opposite of leaving the widget alone. */
+    if(v < 0) return;
+
+    lv_dropdown_set_selected((lv_obj_t *)observer->target, (uint32_t)v);
+}
+
+#if LV_USE_TRANSLATION
+/**
+ * Re-resolve every tag in the newline-separated @p tags list and push the result
+ * back as the dropdown's options.
+ *
+ * SELECTION PRESERVATION. lv_dropdown_set_options() unconditionally resets
+ * sel_opt_id to 0, so re-translating on a language change would silently discard
+ * whatever the user had picked and jump the widget back to its first entry. The
+ * selected INDEX is the thing that survives a language change - the option
+ * strings themselves are expected to change out from under it - so the index is
+ * captured before the rewrite and restored after.
+ *
+ * A well-formed pack cannot shorten the list: the tag list is fixed at parse
+ * time and every tag resolves to exactly one line, missing translations included
+ * (lv_tr() falls back to the tag itself). A malformed pack still must not index
+ * out of range, so the restore is clamped to the last valid option rather than
+ * trusted. Clamping keeps the selection as near as the new list allows; falling
+ * back to 0 would reintroduce the very jump this exists to prevent.
+ */
+static void dropdown_translate_options(lv_obj_t * dd, const char * tags)
+{
+    const uint32_t sel_before = lv_dropdown_get_selected(dd);
+
+    /* Count total length needed */
+    uint32_t total_len = 0;
+    const char * p = tags;
+    while(*p) {
+        const char * nl = lv_strchr(p, '\n');
+        uint32_t seg_len = nl ? (uint32_t)(nl - p) : lv_strlen(p);
+
+        /* Temporarily null-terminate this segment for lv_tr() */
+        char tmp[256];
+        if(seg_len >= sizeof(tmp)) seg_len = sizeof(tmp) - 1;
+        lv_memcpy(tmp, p, seg_len);
+        tmp[seg_len] = '\0';
+
+        const char * translated = lv_tr(tmp);
+        total_len += lv_strlen(translated) + 1; /* +1 for \n or \0 */
+
+        if(nl) p = nl + 1;
+        else break;
+    }
+
+    if(total_len == 0) return;
+
+    char * buf = lv_malloc(total_len);
+    if(!buf) return;
+
+    char * dst = buf;
+    p = tags;
+    while(*p) {
+        const char * nl = lv_strchr(p, '\n');
+        uint32_t seg_len = nl ? (uint32_t)(nl - p) : lv_strlen(p);
+
+        char tmp[256];
+        if(seg_len >= sizeof(tmp)) seg_len = sizeof(tmp) - 1;
+        lv_memcpy(tmp, p, seg_len);
+        tmp[seg_len] = '\0';
+
+        const char * translated = lv_tr(tmp);
+        uint32_t tlen = lv_strlen(translated);
+        lv_memcpy(dst, translated, tlen);
+        dst += tlen;
+
+        if(nl) {
+            *dst = '\n';
+            dst++;
+            p = nl + 1;
+        }
+        else {
+            break;
+        }
+    }
+    *dst = '\0';
+
+    lv_dropdown_set_options(dd, buf);
+    lv_free(buf);
+
+    const uint32_t count = lv_dropdown_get_option_count(dd);
+    if(count == 0) return; /*Nothing to select; leave the widget as set_options left it*/
+
+    lv_dropdown_set_selected(dd, sel_before < count ? sel_before : count - 1);
+}
+
+static void dropdown_on_language_changed(lv_event_t * e)
+{
+    lv_obj_t * dd = lv_event_get_target(e);
+    const char * tags = (const char *)lv_event_get_user_data(e);
+    if(tags) dropdown_translate_options(dd, tags);
+}
+
+static void dropdown_on_delete_free_tags(lv_event_t * e)
+{
+    char * tags = (char *)lv_event_get_user_data(e);
+    if(tags) lv_free(tags);
+}
+#endif /* LV_USE_TRANSLATION */
+
+#endif /* LV_USE_XML */

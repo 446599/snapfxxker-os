@@ -1,0 +1,572 @@
+--- ace2-rfid-dev-20261107/diagnostic92/live/ace.py	2026-11-07 18:02:10
++++ ace2-rfid-dev-20261107/preload-feature/ace.py	2026-11-07 19:04:40
+@@ -13,6 +13,7 @@
+ 
+ from .ace_stop_guard import (StopFaultLatch, StopGuardGCode, StopUnconfirmedError,
+                              stop_response_accepted)
++from .ace_load_rf import RfGate, RfDenied
+ from .ace_protocol_v1 import AceProtocolV1
+ from .ace_protocol_v2 import AceProtocolV2
+ 
+@@ -731,6 +732,7 @@
+         self.printer = config.get_printer()
+         self.reactor = self.printer.get_reactor()
+         self._stop_guard = StopFaultLatch()
++        self._rf_gate = RfGate()
+         from .ace_latch_recovery import restore_checkpoint
+         restore_checkpoint(self._stop_guard)
+         self.gcode = StopGuardGCode(self.printer.lookup_object('gcode'),
+@@ -3610,11 +3612,39 @@
+             self._insert_read_queue = []
+         if not any(q[0] == idx and q[1] == slot
+                    for q in self._insert_read_queue):
+-            self._insert_read_queue.append((idx, slot, depth))
++            self._insert_queue_push(idx, slot, depth)
+             logging.info('[multiACE] [insert-read] QUEUED ACE %d slot %d for '
+                          'the end of the print (depth=%s)'
+                          % (idx, slot, depth))
+ 
++    def _insert_queue_push(self, idx, slot, depth, front=False):
++        q = getattr(self, '_insert_read_queue', None)
++        if q is None:
++            q = self._insert_read_queue = []
++        serial = self._serials.get(idx)
++        if serial is None or self._stop_guard.snapshot() is not None:
++            return False
++        entry = (idx, slot, depth, getattr(self, '_insert_fault_epoch', 0),
++                 getattr(self, '_insert_slot_generation', {}).get((idx, slot), 0), serial)
++        if front:
++            q.insert(0, entry)
++        else:
++            q.append(entry)
++        return True
++
++    def _queue_insert_callback(self, fn, idx, slot, depth='auto'):
++        epoch = getattr(self, '_insert_fault_epoch', 0)
++        generation = getattr(self, '_insert_slot_generation', {}).get((idx, slot), 0)
++        serial = self._serials.get(idx)
++        def run(_eventtime):
++            if (self._stop_guard.snapshot() is not None
++                    or epoch != getattr(self, '_insert_fault_epoch', 0)
++                    or generation != getattr(self, '_insert_slot_generation', {}).get((idx, slot), 0)
++                    or serial is None or self._serials.get(idx) is not serial):
++                return
++            fn(idx, slot, depth)
++        self.reactor.register_async_callback(run)
++
+     def _insert_read_then_preload(self, idx, slot, depth='auto'):
+         """ACTIVE ACE: verified abort of the
+         firmware insert procedure -> UID-first transport-sweep read ->
+@@ -3630,14 +3660,28 @@
+                          'running - re-insert ignored' % (idx, slot))
+             return
+         self._insert_read_running.add(key)
++        serial = self._serials.get(idx)
++        epoch = getattr(self, '_insert_fault_epoch', 0)
++        generation = getattr(self, '_insert_slot_generation', {}).get((idx, slot), 0)
++        def still_current():
++            return (self._active_device_index == idx and serial is not None
++                    and self._serials.get(idx) is serial
++                    and self._stop_guard.snapshot() is None
++                    and epoch == getattr(self, '_insert_fault_epoch', 0)
++                    and generation == getattr(self, '_insert_slot_generation', {}).get((idx, slot), 0))
+         try:
+-            self._insert_uid_read(idx, slot, depth)
++            ready_to_preload = self._insert_uid_read(idx, slot, depth)
++            if ready_to_preload is not True:
++                return
+         except Exception:
+             logging.exception('[multiACE] [insert-read]')
++            return
+         finally:
+             self._insert_read_running.discard(key)
+         try:
+-            self._pre_load(slot)
++            self._require_no_stop_fault()
++            if still_current():
++                self._pre_load(slot, target_idx=idx, precondition=still_current)
+         except Exception:
+             logging.exception('[multiACE] insert pre-load')
+ 
+@@ -3677,7 +3721,7 @@
+                     self._insert_read_queue = []
+                 if not any(q[0] == idx and q[1] == slot
+                            for q in self._insert_read_queue):
+-                    self._insert_read_queue.insert(0, (idx, slot, depth))
++                    self._insert_queue_push(idx, slot, depth, front=True)
+                     logging.info('[multiACE] [insert-read] a print started '
+                                  'before the queued read of ACE %d slot %d '
+                                  '- re-queued' % (idx, slot))
+@@ -3696,7 +3740,7 @@
+                 self._insert_read_queue = []
+             if not any(q[0] == idx and q[1] == slot
+                        for q in self._insert_read_queue):
+-                self._insert_read_queue.append((idx, slot, depth))
++                self._insert_queue_push(idx, slot, depth)
+                 logging.info('[multiACE] [insert-read] another tag op is '
+                              'running - aborted the pull-in and QUEUED '
+                              'ACE %d slot %d (depth=%s)'
+@@ -3725,69 +3769,44 @@
+                 # firmware may have snuck the pull-in (or the whole
+                 # procedure) in while it waited - the unit serializes
+                 # pull-ins itself and runs them at the next idle gap.
+-                if self._v2_slot_rfid(idx, slot) in (1, 2):
+-                    depth = None             # procedure completed meanwhile
+-                elif (self._v2_get_slot_status(idx, slot)
+-                        in V2_ACTIVE_MOTION_STATES):
++                if self._v2_get_slot_status(idx, slot) in V2_ACTIVE_MOTION_STATES:
++                    # Another native movement resets the decoder; do not
++                    # reuse the previously recorded absolute position.
+                     depth = self._insert_verified_abort(idx, slot)
++            from .ace_preload_integrated import run_insert
+             reader = AceTagReader(self)
+-
+-            def _respond(msg):
+-                self.log_always('[multiACE] %s' % msg)
+-                logging.info('[multiACE] [rc522] %s' % msg)
++            serial = self._serials.get(idx)
++            epoch = getattr(self, '_insert_fault_epoch', 0)
++            generation = getattr(self, '_insert_slot_generation', {}).get((idx, slot), 0)
++            sibling_generation = getattr(self, '_insert_slot_generation', {}).get((idx, slot ^ 1), 0)
++            def target_valid():
++                return (serial is not None and self._serials.get(idx) is serial
++                        and self._stop_guard.snapshot() is None
++                        and epoch == getattr(self, '_insert_fault_epoch', 0)
++                        and generation == getattr(self, '_insert_slot_generation', {}).get((idx, slot), 0))
++            def valid():
++                return (target_valid() and sibling_generation ==
++                        getattr(self, '_insert_slot_generation', {}).get((idx, slot ^ 1), 0))
++            result = run_insert(self, reader, idx, slot, depth, valid)
++            if (result.get('state') == 'cancelled' and target_valid() and not valid()
++                    and type(result.get('depth_mm')) is int):
++                self._insert_queue_push(idx, slot, result['depth_mm'])
++            if valid():
++                registry = getattr(self, '_insert_scan_results', None)
++                if registry is None:
++                    registry = self._insert_scan_results = {}
++                result['_generation'] = generation
++                result['_serial'] = serial
++                registry[(idx, slot)] = result
++                identity = result.get('identity')
++                if result.get('uid') and identity and result.get('state') not in ('ambiguous','motion_fault','cancelled'):
++                    # Volatile display metadata only: do not create/bind inventory.
++                    self._v2_filament_info_per_ace.setdefault(idx, {})[slot] = {
++                        'type':identity['type'], 'color':list(identity['color']),
++                        'brand':identity['brand'], 'sku':'', 'uid':result['uid'],
++                        'subtype':'', 'host':True, 'fmt':'mifare'}
++            return result.get('park_verified') is True and valid()
+ 
+-            _respond('rc522: insert on ACE %d slot %d - transport sweep + '
+-                     'tag read (UID-first)'
+-                     % (self._disp(idx), self._disp(slot)))
+-            try:
+-                # ONE long forward sweep (> a full revolution, the tag must
+-                # pass the antenna), listening on the way; ends with one
+-                # correction move to the stock net park depth.
+-                res = reader.read_slot_transport(idx, slot, _respond,
+-                                                 start_depth=depth,
+-                                                 net_target=INSERT_PARK_NET,
+-                                                 sweep_mm=INSERT_SWEEP_MM)
+-                if res in ('deferred', 'unread'):
+-                    # 'deferred': the neighbour bay was mid-insert (its
+-                    # firmware procedure running, so it could not be
+-                    # rotated out of the shared field). 'unread': a card
+-                    # answered the sweep but the read got neither UID nor
+-                    # identity - typically with the pair neighbour queued at
+-                    # the bite; read alone it succeeds. Either way: re-queue ONCE
+-                    # behind whatever is queued - by then the neighbour's
+-                    # own read has run and it is idle. depth=None: the
+-                    # sweep already parked this lane at the net target,
+-                    # the retry sweeps on from there (the tag sits within
+-                    # the first ~200 units of it).
+-                    once = getattr(self, '_insert_deferred_once', None)
+-                    if once is None:
+-                        once = self._insert_deferred_once = set()
+-                    if (idx, slot) not in once:
+-                        once.add((idx, slot))
+-                        if not hasattr(self, '_insert_read_queue'):
+-                            self._insert_read_queue = []
+-                        self._insert_read_queue.append((idx, slot, None))
+-                        _nq = [q for q in self._insert_read_queue
+-                               if q[0] == idx and q[1] == (slot ^ 1)]
+-                        logging.info('[multiACE] [insert-read] %s ACE %d '
+-                                     'slot %d - re-queued once (neighbour '
+-                                     'slot %d queued=%s)'
+-                                     % ('deferred' if res == 'deferred'
+-                                        else 'read got nothing on',
+-                                        idx, slot, slot ^ 1, bool(_nq)))
+-                    else:
+-                        once.discard((idx, slot))
+-                        _respond('rc522: %s on the second try - giving up '
+-                                 'on this insert read'
+-                                 % ('neighbour still busy'
+-                                    if res == 'deferred'
+-                                    else 'read got nothing again'))
+-                elif getattr(self, '_insert_deferred_once', None):
+-                    self._insert_deferred_once.discard((idx, slot))
+-            except Exception as e:
+-                _respond('rc522: insert read failed: %s' % e)
+-                logging.exception(
+-                    '[multiACE] [rc522] insert read_slot_transport')
+         finally:
+             setattr(self, '_tag_read_busy', False)
+             self._insert_drain_queue()
+@@ -3801,6 +3820,11 @@
+         q = getattr(self, '_insert_read_queue', None)
+         if not q:
+             return
++        if self._stop_guard.snapshot() is not None:
++            # Queued inserts predate the fault; they cannot inherit a later
++            # recovery as proof of their position or STOP completion.
++            q.clear()
++            return
+         ps = self.printer.lookup_object('print_stats', None)
+         if ps is not None and (getattr(ps, 'state', '') or '').lower() \
+                 in ('printing', 'paused'):
+@@ -3823,7 +3847,14 @@
+         # that pulls filament out of the cold toolhead without the cold
+         # pull, so such entries are dropped, never read.
+         while q:
+-            idx, slot, depth = q.pop(0)
++            entry = q.pop(0)
++            if len(entry) != 6:
++                continue  # older queue entries have no session evidence
++            idx, slot, depth, epoch, generation, serial = entry
++            if (epoch != getattr(self, '_insert_fault_epoch', 0)
++                    or generation != getattr(self, '_insert_slot_generation', {}).get((idx, slot), 0)
++                    or self._serials.get(idx) is not serial):
++                continue
+             why = self._insert_queue_stale_reason(idx, slot)
+             if why is None:
+                 break
+@@ -3834,13 +3865,9 @@
+         logging.info('[multiACE] [insert-read] draining queue: ACE %d '
+                      'slot %d next (depth=%s)' % (idx, slot, depth))
+         if idx == self._active_device_index:
+-            self.reactor.register_async_callback(
+-                (lambda et, a=idx, g=slot, d=depth:
+-                 self._insert_read_then_preload(a, g, d)))
++            self._queue_insert_callback(self._insert_read_then_preload, idx, slot, depth)
+         else:
+-            self.reactor.register_async_callback(
+-                (lambda et, a=idx, g=slot, d=depth:
+-                 self._insert_tag_read_safe(a, g, d)))
++            self._queue_insert_callback(self._insert_tag_read_safe, idx, slot, depth)
+ 
+     def _insert_queue_stale_reason(self, idx, slot):
+         """None when a queued insert read may still run on (idx, slot);
+@@ -3875,15 +3902,16 @@
+             logging.exception('[multiACE] [insert-read] drain retry')
+ 
+     def _insert_verified_abort(self, idx, slot):
+-        """Stop the firmware insert procedure and VERIFY it stayed stopped.
+-        A stop landing before the pull-in begins is a silent no-op and the
+-        procedure starts afterwards (the full procedure then runs anyway).
+-        So: watch
+-        the decoder; movement -> re-stop; frozen for 3 consecutive samples
+-        -> aborted, return the pulled-in depth (decoder units ~ mm). If the
+-        abort cannot be pinned within INSERT_ABORT_VERIFY_S, fall back to
+-        waiting for the procedure to FINISH (slot 'ready') and return None
+-        - the tip is then already parked at the stock net depth."""
++        """Abort an observed fresh insert, or latch if position/STOP is uncertain.
++
++        Cached RFID, a previous negative decoder value, timeout and an
++        implausible depth cannot establish this session's park position.
++        """
++        def _unconfirmed():
++            self._latch_stop_fault(idx, slot, 'insert position or stop unconfirmed')
++            self._require_no_stop_fault()
++            raise RuntimeError('insert position or stop unconfirmed')
++
+         # Already-completed procedure (a QUEUED insert waited past it, or a
+         # very late detection): rfid is set, or the decoder still shows the
+         # retract phase's NEGATIVE count. The spool is parked at stock net
+@@ -3893,7 +3921,7 @@
+             logging.info('[multiACE] [insert-read] procedure already '
+                          'complete on ACE %d slot %d (rfid set) - no abort '
+                          'needed' % (idx, slot))
+-            return None
++            _unconfirmed()
+         # Let the fresh pull-in demonstrably GRAB ~2cm before braking (an
+         # insert that never moves feels dead). It is also what makes the
+         # stop STICK: the firmware holds a 200 ms delay between the motor
+@@ -3924,7 +3952,7 @@
+                              '%.0fs and decoder shows a retract (%d) - '
+                              'procedure already complete on ACE %d slot %d'
+                              % (INSERT_GRAB_WAIT_S, d, idx, slot))
+-                return None
++                _unconfirmed()
+             # No fresh pull SEEN, and the counter is not a finished
+             # retract either: the decoder is not telling us anything about
+             # this insert - uninitialised after boot (the pulse accumulator
+@@ -3944,14 +3972,21 @@
+                 if (self._v2_slot_rfid(idx, slot) in (1, 2)
+                         or (self._v2_get_slot_status(idx, slot) == 'ready'
+                             and not self._v2_any_slot_active(idx))):
+-                    return None
++                    _unconfirmed()
+                 self.reactor.pause(self.reactor.monotonic() + 1.0)
+-            logging.info('[multiACE] [insert-read] procedure never '
+-                         'finished on ACE %d slot %d - reading from the '
+-                         'stock net depth anyway' % (idx, slot))
+-            return None
++            self._latch_stop_fault(idx, slot, 'insert movement not confirmed stopped')
++            self._require_no_stop_fault()
++        def _stop_or_latch():
++            try:
++                accepted = self._stop_feeding(slot, idx=idx) is True
++            except Exception:
++                accepted = False
++            if not accepted:
++                self._latch_stop_fault(idx, slot, 'insert STOP unconfirmed')
++                self._require_no_stop_fault()
++
+         last = self._read_decoder(idx, slot)
+-        self._stop_feeding(slot, idx=idx)
++        _stop_or_latch()
+         frozen = 0
+         deadline = self.reactor.monotonic() + INSERT_ABORT_VERIFY_S
+         while self.reactor.monotonic() < deadline and frozen < 3:
+@@ -3963,7 +3998,7 @@
+                 # The procedure moved past our stop - it was running (or
+                 # started after the no-op stop). Brake again, mid-motion
+                 # grips.
+-                self._stop_feeding(slot, idx=idx)
++                _stop_or_latch()
+                 frozen = 0
+             else:
+                 frozen += 1
+@@ -3975,15 +4010,10 @@
+                 logging.info('[multiACE] [insert-read] procedure completed '
+                              'during verify on ACE %d slot %d (decoder=%d)'
+                              % (idx, slot, last))
+-                return None
++                _unconfirmed()
+             depth = max(0, int(last or 0))
+             if depth > INSERT_DEPTH_MAX:
+-                logging.info('[multiACE] [insert-read] abort verified on ACE '
+-                             '%d slot %d but decoder depth %d is implausible '
+-                             '(> %d) - assuming the stock net depth %d'
+-                             % (idx, slot, depth, INSERT_DEPTH_MAX,
+-                                INSERT_PARK_NET))
+-                depth = INSERT_PARK_NET
++                _unconfirmed()
+             logging.info('[multiACE] [insert-read] abort verified on ACE %d '
+                          'slot %d, depth=%d' % (idx, slot, depth))
+             return depth
+@@ -3994,11 +4024,10 @@
+         while self.reactor.monotonic() < deadline:
+             if (self._v2_get_slot_status(idx, slot) == 'ready'
+                     and not self._v2_any_slot_active(idx)):
+-                return None
++                _unconfirmed()
+             self.reactor.pause(self.reactor.monotonic() + 1.0)
+-        logging.info('[multiACE] [insert-read] procedure never finished - '
+-                     'reading anyway')
+-        return None
++        self._latch_stop_fault(idx, slot, 'insert STOP not verified')
++        self._require_no_stop_fault()
+ 
+     def _v2_any_slot_active(self, idx):
+         """True if any slot on this V2 is in a real motor motion (feeding a
+@@ -6174,6 +6203,7 @@
+ 
+     def _latch_stop_fault(self, idx, slot, reason):
+         self._stop_guard.latch(idx, slot, reason)
++        self._insert_fault_epoch = getattr(self, '_insert_fault_epoch', 0) + 1
+         self._auto_feed_enabled = False
+         return self._stop_guard.message()
+ 
+@@ -6209,8 +6239,37 @@
+                     self._reject_stop_fault_callback(cb, req))
+ 
+     def _stop_guarded_write(self, idx, request, serial, data):
+-        if self._stop_guard.write(serial, data, request):
+-            return True
++        precondition = request.get('_session_precondition')
++        if precondition is not None and not precondition():
++            lock = self._cb_locks.get(idx)
++            if lock is not None:
++                with lock:
++                    callback = self._callback_maps.get(idx, {}).pop(request.get('id'), None)
++            else:
++                callback = self._callback_maps.get(idx, {}).pop(request.get('id'), None)
++            if callback is not None:
++                def stale(_eventtime):
++                    callback(self=self, response={'id':request.get('id'), 'code':99,
++                             'msg':'insert session changed', '_host_stale_session':True})
++                self.reactor.register_async_callback(stale)
++            return False
++        try:
++            if self._rf_gate.write(idx, request, serial,
++                    lambda: self._stop_guard.write(serial, data, request)):
++                return True
++        except RfDenied:
++            lock = self._cb_locks.get(idx)
++            if lock is not None:
++                with lock:
++                    callback = self._callback_maps.get(idx, {}).pop(request.get('id'), None)
++            else:
++                callback = self._callback_maps.get(idx, {}).pop(request.get('id'), None)
++            if callback is not None:
++                def rejected(_eventtime):
++                    callback(self=self, response={'id':request.get('id'), 'code':99,
++                             'msg':'RF lease busy', '_host_rf_busy':True})
++                self.reactor.register_async_callback(rejected)
++            return False
+         self._drop_queued_stop_fault(idx, request)
+         return False
+ 
+@@ -7317,6 +7376,12 @@
+         if slots and self._v2_rfid_rescan_pending.pop(idx, False):
+             self._v2_rfid_boot_rescan(idx, slots)
+         for i, slot in enumerate(slots):
++            scan = getattr(self, '_insert_scan_results', {}).get((idx, i))
++            if (scan and scan.get('_serial') is self._serials.get(idx)
++                    and scan.get('_generation') == getattr(self, '_insert_slot_generation', {}).get((idx, i), 0)
++                    and not self._is_empty_status(slot.get('status', ''))):
++                slot['remaining_estimate'] = {k: scan[k] for k in
++                    ('state', 'remaining_g', 'remaining_g_min', 'remaining_g_max', 'circumference_mm', 'captured_at', 'assumptions') if k in scan}
+             cached = cache.get(i)
+             host_read = bool(cached and cached.get('host'))
+             # A UID-only read (MIFARE/Bambu, or a tag with no decodable
+@@ -8789,6 +8854,17 @@
+                 self._refresh_slot_overrides_if_changed()
+                 prev_info = self._info_per_ace.get(idx, self._make_default_info(idx))
+                 prev_slots = prev_info.get('slots', [])
++                # Invalidate before merging, so a remove/reinsert heartbeat
++                # cannot surface a previous session's estimate even once.
++                for sidx, new_slot in enumerate(result.get('slots') or []):
++                    old_slot = prev_slots[sidx] if sidx < len(prev_slots) else {}
++                    if self._is_empty_status(old_slot.get('status')) != self._is_empty_status(new_slot.get('status')):
++                        generations = getattr(self, '_insert_slot_generation', None)
++                        if generations is None:
++                            generations = self._insert_slot_generation = {}
++                        key = (idx, sidx)
++                        generations[key] = generations.get(key, 0) + 1
++                        getattr(self, '_insert_scan_results', {}).pop(key, None)
+                 self._merge_v2_filament_info(idx, result)
+                 self._strip_native_tag_names(idx, result)
+                 self._gen1_vet_firmware_ids(idx, result)
+@@ -8837,10 +8913,10 @@
+                     except (KeyError, IndexError):
+                         continue
+                     prev_slot = prev_slots[i] if i < len(prev_slots) else {}
+-                    if is_active:
+-                        was_empty = self._is_empty_status(prev_slot.get('status'))
+-                        now_empty = self._is_empty_status(new_slot.get('status'))
+-                        if was_empty != now_empty:
++                    was_empty = self._is_empty_status(prev_slot.get('status'))
++                    now_empty = self._is_empty_status(new_slot.get('status'))
++                    if was_empty != now_empty:
++                        if is_active:
+                             display_refresh_needed = True
+                     if (is_active
+                             and self._gate_status_per_ace.get(idx, [GATE_UNKNOWN] * 4)[i] == GATE_EMPTY
+@@ -8854,9 +8930,7 @@
+                             # procedure, UID-first park read, stock net
+                             # depth, then _pre_load. Stock-firmware units
+                             # keep their untouched procedure below.
+-                            self.reactor.register_async_callback(
+-                                (lambda et, a=idx, g=i:
+-                                 self._insert_read_then_preload(a, g)))
++                            self._queue_insert_callback(self._insert_read_then_preload, idx, i)
+                         else:
+                             self.reactor.register_async_callback(
+                                 (lambda et, c=self._pre_load, gate=i: c(gate)))
+@@ -8874,9 +8948,8 @@
+                         logging.info('[multiACE] slot insert on ACE %d slot %d '
+                                      'during print - pre-load deferred (not '
+                                      'while actively printing)' % (idx, i))
+-                        self.reactor.register_async_callback(
+-                            (lambda et, a=idx, g=i:
+-                             self._insert_abort_and_queue(a, g)))
++                        self._queue_insert_callback(
++                            lambda a, g, _d: self._insert_abort_and_queue(a, g), idx, i)
+                     elif (self._is_v2_idx(idx)
+                             and self._is_open_fw_idx(idx)
+                             and not is_active
+@@ -8888,9 +8961,7 @@
+                         # no pre-load (that is active-only - it feeds via the
+                         # active device). The abort+park targets THIS ACE via
+                         # idx, no device switch needed.
+-                        self.reactor.register_async_callback(
+-                            (lambda et, a=idx, g=i:
+-                             self._insert_tag_read_safe(a, g)))
++                        self._queue_insert_callback(self._insert_tag_read_safe, idx, i)
+                     if (new_slot.get('rfid') == 2
+                             and prev_slot.get('rfid') != 2
+                             and not self._swap_in_progress):
+@@ -9327,26 +9398,31 @@
+     def _handle_serial_failure(self, err, first, first_error=None):
+         self._handle_per_ace_failure(self._active_device_index, err)
+ 
+-    def _pre_load(self, gate):
++    def _pre_load(self, gate, target_idx=None, precondition=None):
+         feed_length = self.head_feed_length[gate]
+ 
+         if feed_length <= 0:
+             return
+ 
++        target = self._active_device_index if target_idx is None else target_idx
+         self.log_always(self._t('msg.wait_ace_preload'))
+-        self.wait_ace_ready()
++        self.wait_ace_ready_on(target)
+ 
+         sensor = self.printer.lookup_object(
+             'filament_motion_sensor e%d_filament' % gate, None)
+ 
+-        self._feed(gate, feed_length,
+-                   self.get_feed_speed(self._active_device_index), 0)
++        if self._feed(gate, feed_length, self.get_feed_speed(target), 0,
++                      ace=target, precondition=precondition) is False:
++            return
+ 
+-        while not self.is_ace_ready():
++        while (self._info_per_ace.get(target) or {}).get('status') != 'ready':
++            if precondition is not None and not precondition():
++                self._stop_feeding(gate, idx=target)
++                return
+             self.reactor.pause(self.reactor.monotonic() + 0.105)
+             if sensor and sensor.get_status(0)['filament_detected']:
+-                self._stop_feeding(gate)
+-                self.wait_ace_ready()
++                self._stop_feeding(gate, idx=target)
++                self.wait_ace_ready_on(target)
+                 self.log_always(self._t('msg.filament_detected_preload'))
+                 break
+ 
+@@ -9595,7 +9671,7 @@
+ 
+         self._disable_feed_assist(index)
+ 
+-    def _feed(self, index, length, speed, how_wait=None, ace=None):
++    def _feed(self, index, length, speed, how_wait=None, ace=None, precondition=None):
+         self._require_no_stop_fault()
+         def callback(self, response):
+             if response.get('code', 0) != 0:
+@@ -9608,10 +9684,12 @@
+         # so feeding on a non-active ACE needs no ACE_SWITCH first.
+         idx = self._active_device_index if ace is None else int(ace)
+         self.wait_ace_ready_on(idx)
+-        self.send_request_to(
+-            idx,
+-            request={"method": "feed_filament", "params": {"index": index, "length": length, "speed": speed}},
+-            callback=callback)
++        if precondition is not None and not precondition():
++            return False
++        request = {"method": "feed_filament", "params": {"index": index, "length": length, "speed": speed}}
++        if precondition is not None:
++            request['_session_precondition'] = precondition
++        self.send_request_to(idx, request=request, callback=callback)
+         if how_wait is not None:
+             self.dwell(delay=(how_wait / speed) + 0.1)
+         else:
+@@ -23108,6 +23186,7 @@
+                     # 'spool' when the identity above comes from the
+                     # bound spool because the card carries none.
+                     'ident_src': s.get('ident_src', ''),
++                    'remaining_estimate': s.get('remaining_estimate'),
+                 })
+             protocol = self._protocols.get(i)
+             # Pushed external reading (ACE_SET_HUMIDITY): last value, age,

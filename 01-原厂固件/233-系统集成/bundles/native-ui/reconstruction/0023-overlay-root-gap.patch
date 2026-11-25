@@ -1,0 +1,13 @@
+diff --git a/ui_xml/overlay_panel.xml b/ui_xml/overlay_panel.xml
+index fdd98d8e229c40d5b6ea4b944efac510e6571a10..4c8fc0e4e0b1479faad040f09d1a6143575ca989 100644
+--- a/ui_xml/overlay_panel.xml
++++ b/ui_xml/overlay_panel.xml
+@@ -87,7 +87,7 @@
+          is drawn again in that band, every frame of a scroll. -->
+     <style name="corners_square" radius="0"/>
+   </styles>
+-  <view extends="lv_obj" width="#overlay_width_transient" height="100%" align="right_mid" style_pad_all="0" style_border_width="0" style_bg_opa="255" style_bg_color="$bg_color" scrollable="false" flex_flow="column">
++  <view extends="lv_obj" width="#overlay_width_transient" height="100%" align="right_mid" style_pad_all="0" style_pad_gap="0" style_border_width="0" style_bg_opa="255" style_bg_color="$bg_color" scrollable="false" flex_flow="column">
+     <style name="transient_edge" selector="user_1"/>
+     <bind_style_if_lt name="corners_square" subject="platform_tier" ref_value="2"/>
+     <!-- Header Bar -->

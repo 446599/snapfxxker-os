@@ -1,0 +1,2168 @@
+{
+  "upstream": "https://github.com/prestonbrown/helixscreen.git",
+  "base_commit": "cf2e80ab6ccbf44b5ee389ffd0d68b4858ea9fd1",
+  "submodules": {
+    "lib/lvgl": {
+      "commit": "80ca777e37a2b176770726a02e07a6fb79ef0b39",
+      "url": "https://github.com/lvgl/lvgl.git"
+    },
+    "lib/libhv": {
+      "commit": "71770e04becaa149e0ef8ffc4d3900c5466ddddb",
+      "url": "https://github.com/ithewei/libhv.git"
+    },
+    "lib/wpa_supplicant": {
+      "commit": "b5e326d24298ac52fba3c4e5ba5ae79780c78dc9",
+      "url": "https://github.com/fluispotter/hostap.git"
+    },
+    "lib/spdlog": {
+      "commit": "14ab43ec0b9df6cf793c75785ec5f70b65f2f965",
+      "url": "https://github.com/gabime/spdlog.git"
+    },
+    "lib/sdl2": {
+      "commit": "5d249570393f7a37e037abf22cd6012a4cc56a71",
+      "url": "https://github.com/libsdl-org/SDL.git"
+    },
+    "lib/glm": {
+      "commit": "a583c59e1616a628b18195869767ea4d6faca5f4",
+      "url": "https://github.com/g-truc/glm.git"
+    },
+    "lib/cpp-terminal": {
+      "commit": "48ae2f284084850901c45b6c10a9d68949c1b272",
+      "url": "https://github.com/jupyter-xeus/cpp-terminal.git"
+    },
+    "lib/libnl": {
+      "commit": "bdf83151326e365f137fe0e36dc9b1b7aeb1cf33",
+      "url": "https://github.com/thom311/libnl.git"
+    },
+    "lib/lv_i18n": {
+      "commit": "f6ac92ee2c31b57032fc6addc9aa15de2fee4568",
+      "url": "https://github.com/lvgl/lv_i18n"
+    },
+    "lib/lv_markdown": {
+      "commit": "77ec2c0c91614a50575a44c39d8db52c057ae681",
+      "url": "https://github.com/prestonbrown/lv_markdown.git"
+    },
+    "lib/linenoise": {
+      "commit": "452e3793858a15cc006bb3aa3ea06378eb98c5b5",
+      "url": "https://github.com/antirez/linenoise.git"
+    },
+    "lib/helix-xml": {
+      "commit": "08c7b07612e03de3c2e67e10a8a3ccd44e21de03",
+      "url": "https://github.com/prestonbrown/helix-xml.git"
+    },
+    "lib/libjpeg-turbo": {
+      "commit": "c85e6b905bf237038faa936dab160ebfc5da0344",
+      "url": "https://github.com/libjpeg-turbo/libjpeg-turbo.git"
+    },
+    "lib/lua": {
+      "commit": "312b9efaa1061c2c4cad08554dbc1351c3270eef",
+      "url": "https://github.com/lua/lua.git"
+    }
+  },
+  "overlay_files": {
+    ".gitignore": {
+      "sha256": "1e44577675a049e685ebf002697118b9336c9b1e8c427bc8140190d9e13d826a",
+      "mode": 420
+    },
+    "assets/config/panel_widgets/snapmaker_u1/home.json": {
+      "sha256": "b157b48ee42394eee2455f79b099b47c1a811b61a0effb003ce210f20e246d21",
+      "mode": 420
+    },
+    "assets/config/themes/defaults/u1-warm.json": {
+      "sha256": "93dc273afda232d44024407fb9e409c1b3c6063d4f7f9e76cb9c447c2a306512",
+      "mode": 420
+    },
+    "assets/fonts/cjk/.cjk_codepoints.manifest": {
+      "sha256": "90d910974c673da5ce3cb099da6d3ae5402ef3f71a92b1ea99dd7b8b7c2c35d6",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_10.bin": {
+      "sha256": "cffd0a5b662cbe625215873e6d6ddee495b70e72c5d7cb82a1ea57abb12bfa53",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_11.bin": {
+      "sha256": "1732fa40a0e2ff3a1d02ed038407aef58ab99595fbdf88a9350763e5bffb29db",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_12.bin": {
+      "sha256": "8df6501383e98a9ca6fe91301de889f2e00761aeb97ccecb7e75d357e5e7467e",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_14.bin": {
+      "sha256": "4360ce73ae1a12625a5486a8e5b6c45164c448f9f79ce0ebd8edc600090dfb42",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_16.bin": {
+      "sha256": "3d66a8615538c4437d32a043a43a7dd9352638f906ed89d9e931d5384d3267f5",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_18.bin": {
+      "sha256": "773dd40d9282bdd0a44f7e247d3ddddca802c8b32e5a13046b66575f35bd6b98",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_20.bin": {
+      "sha256": "da59987e29f8a4710fb883542f53cfba6899286328a1208af40dbb38b4cd6ec0",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_24.bin": {
+      "sha256": "dcc57536551a184aecb3d799c910a8a32bf304b134855e15d39d46c567a19153",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_26.bin": {
+      "sha256": "04dc0762aa805a0fe060d8c48c0e3eb7f7d910fd7f8d3e7af4d89aec5c047d89",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_28.bin": {
+      "sha256": "cf70d27ebbcfd4f284cb8e776ca4964faf5cc903e09a7b0ec95565ba6ac9bd4e",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_32.bin": {
+      "sha256": "06d7388b9f79a61da034e80d1a5793455010aa7a534722a871c4791754e64e5e",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_40.bin": {
+      "sha256": "651012f73aabffa0a14c15d7467afad7426d4a73a5c5ab654204c646c579a9b6",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_48.bin": {
+      "sha256": "b41791bf240a3a8aeae81eaf297662b64542c0d2c2aec6e561dc83ab4d3195c0",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_64.bin": {
+      "sha256": "4caa969e3c1372bd157dda533d5be47de4a423836d2a2bbe1263bf6e6e71b2bb",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_8.bin": {
+      "sha256": "df55332cb4ab32247c84b0467122a6f6f7c62b189b92ec3b6b798226a4682d1f",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_bold_14.bin": {
+      "sha256": "a563fccdc3b94dbf85f712be9ba43bf8db81ee7e5d0367793acac32ea6cc085f",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_bold_16.bin": {
+      "sha256": "a615e6a40d5ff7dcc06bb8c51ea624f3ef08ff8748d8b05d3556745539b28ffa",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_bold_18.bin": {
+      "sha256": "644ea0b573d089c364365f94c9d56662d10346b79095c304f8072f4f7723468b",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_bold_20.bin": {
+      "sha256": "b0f366f7d395480aab7404c13aa193694c35d42626ef4b94fff98d6f82e08cdd",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_bold_24.bin": {
+      "sha256": "09f5845d61de8ee843b972d35f7c01f12220e2f5fb999e42ff8274aea7a57335",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_bold_28.bin": {
+      "sha256": "ca3e05440c6d618bf7b0e6a47a8b4edeb3c8c1babab0e277403c85d4ab76fa9f",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_bold_32.bin": {
+      "sha256": "3f44086b2aae5af89ead8ae208c805dc4ad300ccffa65bf9e8ab49060ad2f039",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_bold_40.bin": {
+      "sha256": "a319d6bc44c9e85ad4f34edbf14cc81fc77745400fb20731bbdc62384ed4cf7b",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_bold_48.bin": {
+      "sha256": "418e98a9cf90ea1bef3d2db40b372d98f60a6ad73820fcec71dc645fa5a356c3",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_bold_64.bin": {
+      "sha256": "6c132f392f5a308bbb7d95603e540971f69f3c6cc70dc952412517ef7c87d0f7",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_light_10.bin": {
+      "sha256": "92536e13ee3408ad39f57bdc14fd75b4af8b41a40541a6833249f047621a2928",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_light_11.bin": {
+      "sha256": "f91de85eb5e76ba972ba434796c69c6623dbec76bab71fc12a24c0fead92cc62",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_light_12.bin": {
+      "sha256": "a472efa17e5fc0003271aa479a95a874308bb97c753176dbd0e853e7f4054a7c",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_light_14.bin": {
+      "sha256": "f83e9448b71a7537c2971ddac39bd2377ef6fcb5d16f05d4a5ffce8359e54dea",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_light_16.bin": {
+      "sha256": "a69dd6f3dd715e9b14f82b5956ad6e8e8b5d4d216cca45553ed8b08599ad7085",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_light_18.bin": {
+      "sha256": "bda9d7c48408ba13a12d48fec9816257f37709e54835ae41d5d1ae5a224750b3",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_light_20.bin": {
+      "sha256": "c54e4c314270e187b01205f40174551d070d70149bfe56b390621808d25ef9d8",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_light_26.bin": {
+      "sha256": "90509c0b28ac6fb92107edd9eb961b873d63646ec31d806c4a54728889a1d08b",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_light_32.bin": {
+      "sha256": "11e2a6dbf774275a37b75db2379ed2c51415eaf1aa04d4362152d60850b80a46",
+      "mode": 420
+    },
+    "assets/fonts/cjk/noto_sans_cjk_light_40.bin": {
+      "sha256": "a202821544139fd81adb9d825c6d56240f77ee0842ef173d8feb9a809da61e66",
+      "mode": 420
+    },
+    "assets/fonts/filename/OFL.txt": {
+      "sha256": "9354887b5adbb848efe0b09f66accf86174869afafa032828fa17e39c417051f",
+      "mode": 420
+    },
+    "assets/fonts/filename/noto_sans_cjk_16.bin": {
+      "sha256": "ce9d518dfee94f81ffee6638b44b27dde0de8bd70d0331a41862bbf6ac69ed36",
+      "mode": 420
+    },
+    "assets/images/u1-toolhead-front-2d-ui.png": {
+      "sha256": "2f59e748a320896d04651704d457cdbc68a01d947c47761dd25c3b9c3b2f8585",
+      "mode": 420
+    },
+    "docs/CLAUDE.md": {
+      "sha256": "c7fddf16e79ad3de6db26278326ac9cd377249236fd0eac1807d675fad8f9745",
+      "mode": 420
+    },
+    "docs/README.md": {
+      "sha256": "e1951fbff9925ba1daf2c298907f271e075e5d592a1698f836c0b099eafc2cc8",
+      "mode": 420
+    },
+    "docs/devel/CLAUDE.md": {
+      "sha256": "07b95e461107c2134c82d7eb8f2a275b4995b872b4ba4e5af51110d25f14f993",
+      "mode": 420
+    },
+    "docs/devel/ENVIRONMENT_VARIABLES.md": {
+      "sha256": "eede3282d001d283aafe681ca9e52a49f7bd920c995a8f228c631e4a9935de8d",
+      "mode": 420
+    },
+    "docs/devel/U1_UI_DESIGN_SYSTEM.md": {
+      "sha256": "1ca772c73d133251045019455bf97ab28e501449e1b674e9fca58a923e340396",
+      "mode": 420
+    },
+    "docs/devel/UI_CONTRIBUTOR_GUIDE.md": {
+      "sha256": "e5fd9745abe3abcbfb0709601f9f1ea137004461ee9d69c1abaca30517cbb0d0",
+      "mode": 420
+    },
+    "include/accel_sensor_types.h": {
+      "sha256": "0c10abf6104330a414e5de1c71c2f6c9cdf9f376654cecbfd6729aca83598c3e",
+      "mode": 420
+    },
+    "include/ams_backend_multiace.h": {
+      "sha256": "a58f9dabdde4bff26d21343ed49a408676bbf98de547ee71b8c8372d7dba6ceb",
+      "mode": 420
+    },
+    "include/ams_head_presence.h": {
+      "sha256": "34433faaa989f98a9a08794fc2f138e40d10af19472a0bcf5223ee99910fb525",
+      "mode": 420
+    },
+    "include/ams_types.h": {
+      "sha256": "c5c620f06375d653fbdf9f0f1fac6699099f2a8f8ed786836701d35610dbc102",
+      "mode": 420
+    },
+    "include/cjk_font_manager.h": {
+      "sha256": "91aff7880e743ec0ea4af33d5b012b467f635c990d46fce9c2138b1503eaa325",
+      "mode": 420
+    },
+    "include/console_line.h": {
+      "sha256": "88978dd6fafda70f0a34505e473d6eff5581e08addc48528c1fbd3aa5283fe4a",
+      "mode": 420
+    },
+    "include/core/http_executor.h": {
+      "sha256": "465eda4db2546f4175770a2d8a8dcd35f9ce95288a07cf3543151fd0de816c7f",
+      "mode": 420
+    },
+    "include/display_settings_manager.h": {
+      "sha256": "3988f1ec2491c7e800c66069e9171ddb3b9474433fd9fe23d21ec16aa3512731",
+      "mode": 420
+    },
+    "include/firmware_settings_demo.h": {
+      "sha256": "90b9834798c1e64e8b43e05274f0abf5255f53852af66903e4c804c8c04ec578",
+      "mode": 420
+    },
+    "include/first_run_tour.h": {
+      "sha256": "80e177295779783ab4023cb19f9ba928c30b4e230cb0a7497642a75ec20e0eda",
+      "mode": 420
+    },
+    "include/material_fault_demo.h": {
+      "sha256": "0c99aa23ffaa07dabee9f93ec9adb5ddd4af073dc61f6fa52f938989c3d8fca4",
+      "mode": 420
+    },
+    "include/material_fault_notice.h": {
+      "sha256": "89a50a2e67483741047ac047fe88d324368b57bd947919e4ae50c714a21d050f",
+      "mode": 420
+    },
+    "include/material_operation.h": {
+      "sha256": "3636ebd4b0f9697b23a76683c8c4df3e6c1c9a4eec7063252563722acfbad7d7",
+      "mode": 420
+    },
+    "include/material_workspace.h": {
+      "sha256": "1efd1d18de431e5429a8d515b3ea3a3f1a48135b61bbbeea46561f513c067598",
+      "mode": 420
+    },
+    "include/moonraker_client_mock.h": {
+      "sha256": "fa28b412a4bd96278455ca95d39dfc2053f316ac66a2eef38b51a892ccc4ab24",
+      "mode": 420
+    },
+    "include/multiace_status.h": {
+      "sha256": "1c78b6b19be94b2f9e1b3eef40b33b69409d73bd514a5ce13c1454319c5bee51",
+      "mode": 420
+    },
+    "include/path_calibration_demo.h": {
+      "sha256": "14e7061608faab5ad07d281f10a1e630846a672a5d5c4603a301ceaa65ac2945",
+      "mode": 420
+    },
+    "include/print_control_buttons.h": {
+      "sha256": "1c1f2037590a8645c20d2e1a2db8d06df49e1336777cafa4a85a529430ec1322",
+      "mode": 420
+    },
+    "include/printer_fan_state.h": {
+      "sha256": "5bbf9c906280f2b7d2342b87f9227b0c611bcb62696c827867ed898ef229445b",
+      "mode": 420
+    },
+    "include/refresh_timing.h": {
+      "sha256": "374fbcc974bcdd60704d93da9efd4c3bf205d9e71b7d759f8ee30589f13e39b7",
+      "mode": 420
+    },
+    "include/refresh_timing_env.h": {
+      "sha256": "91cedd04d0604b5c6b6c8a857774f3c348ebfd4a3f902566434dc0b4d641eb1b",
+      "mode": 420
+    },
+    "include/splash_screen.h": {
+      "sha256": "f05e76a07b6e3943031ca49409f9fd636a412a36f52127e5ff4e96bb06f044dd",
+      "mode": 420
+    },
+    "include/theme_manager.h": {
+      "sha256": "615b2e85146e56ab774bf10aa07050cf58345196cf768d430af21e5f378a8384",
+      "mode": 420
+    },
+    "include/u1_filament_model.h": {
+      "sha256": "780086713cede81bf5b8c3e0d02c4d3264afacb625f7fe6fc63db994c1f7424f",
+      "mode": 420
+    },
+    "include/u1_filament_overview.h": {
+      "sha256": "74ff4293c76798610b2a3d9c397145e01721f243d3b0d85fbc7e574b2ce8c210",
+      "mode": 420
+    },
+    "include/u1_home_overview.h": {
+      "sha256": "257d2c1fda51c1d9010f1cbdeb2e3c73a71736278fb74dd7c772f3c66143d02c",
+      "mode": 420
+    },
+    "include/u1_splash_layout.h": {
+      "sha256": "f89f0507200d3a70c901606994eea148fbfb6f958a82cacd4b5ba4a1f3c4d35a",
+      "mode": 420
+    },
+    "include/ui_exclude_mode_controller.h": {
+      "sha256": "21e180eb601bf7ca1093de0b402dad270d463e6dcca92f3829b46b80cf1e1586",
+      "mode": 420
+    },
+    "include/ui_fan_dial.h": {
+      "sha256": "d5dfe47bc7695f8cf7abf0914e94fc9b4a975575548d96545cc72420812ab375",
+      "mode": 420
+    },
+    "include/ui_firmware_settings.h": {
+      "sha256": "4879d7c2080dbfe71e83ee81af4488f52a40ff57987bf21105f7f35009a4bcfb",
+      "mode": 420
+    },
+    "include/ui_head_inventory.h": {
+      "sha256": "04e8dfc712f61875e9410c8d0f65ce8fcf18de8f17f756b0cc49785c421e52ad",
+      "mode": 420
+    },
+    "include/ui_jog_pad.h": {
+      "sha256": "8a82d04d68988c34d6918db09f30cd46441ebfd52801b5187c82f3fd407754fb",
+      "mode": 420
+    },
+    "include/ui_material_fault_notifications.h": {
+      "sha256": "aa9b0ea0c88210e447f05fc0bd48ef9571dd1b8cc3eba35cd039961f33aaf920",
+      "mode": 420
+    },
+    "include/ui_material_operation_banner.h": {
+      "sha256": "3aacc4f88e5d4f48a09cdc85e5cab4939dc46a3af19d3fa6f4c72391e1919502",
+      "mode": 420
+    },
+    "include/ui_material_workspace.h": {
+      "sha256": "1793057f752859fe67239d842981318070fc27b7aedc2267ce9460025c791524",
+      "mode": 420
+    },
+    "include/ui_notification_history.h": {
+      "sha256": "58c2dbe5db9e516ba043a04839507c36a8693f4e8213d9792fdd802589ad8f53",
+      "mode": 420
+    },
+    "include/ui_notification_manager.h": {
+      "sha256": "4d1c474640e222192f08b02b14908f01ff7401486715c55b1d4c007338e0bf32",
+      "mode": 420
+    },
+    "include/ui_overlay_temp_graph.h": {
+      "sha256": "5926c02e526b31adbf0cd73564bf92f6d92919446a4c7fd7b47bc28c6fc630fc",
+      "mode": 420
+    },
+    "include/ui_panel_advanced.h": {
+      "sha256": "879b6cb93fdaf3dd23eab521ec6252f4fb5221759c0ea564ad71bf06e0dd128a",
+      "mode": 420
+    },
+    "include/ui_panel_ams_overview.h": {
+      "sha256": "855b3772f7aebd4953519c8b85a292c0fb6bad4410936dca102c0bd4d248ebfb",
+      "mode": 420
+    },
+    "include/ui_panel_controls.h": {
+      "sha256": "37d311597106654fabdae29b4386b18061984eafba9977aa8d4139a852d76c70",
+      "mode": 420
+    },
+    "include/ui_panel_filament.h": {
+      "sha256": "e9e5de3d75a39a56da15f502561c961ddcfb35ea4aaf27b558e6fabbe529e202",
+      "mode": 420
+    },
+    "include/ui_panel_home.h": {
+      "sha256": "b7b0ad4be552c4fdaf34076670576640d4ea254b832ac3bd2bdc96c1ca5b0c55",
+      "mode": 420
+    },
+    "include/ui_panel_motion.h": {
+      "sha256": "b70ef3f8bbea76eafb9840caed45a2eb3482d3c5fba6aa9e5211ff675bfeb7e5",
+      "mode": 420
+    },
+    "include/ui_panel_notification_history.h": {
+      "sha256": "217601c13b5a7a2b427fcd31dfa92629fb508e2ae604984608fa2a63f924b1da",
+      "mode": 420
+    },
+    "include/ui_panel_print_select.h": {
+      "sha256": "d8f1b7a3c445e515188e1fe41811955ff5843728d674bee3f7e56602a29cf4c6",
+      "mode": 420
+    },
+    "include/ui_panel_settings.h": {
+      "sha256": "a2465eb68635e8a8c74bf7f45b9c0728d0821dbc880c129b056f2e9d1f057ab2",
+      "mode": 420
+    },
+    "include/ui_path_calibration.h": {
+      "sha256": "4179dcaaf000212bcf741377d451131495ebd184c0d373299d107d03027470fa",
+      "mode": 420
+    },
+    "include/ui_print_select_detail_view.h": {
+      "sha256": "a9055f6fce1e9c8faea405cff4f4ace929b3eef743341a365bf8c85bb149e263",
+      "mode": 420
+    },
+    "include/ui_print_tune_overlay.h": {
+      "sha256": "2e2b42ff65e33f525dd70125319f5a4cf5fb801ddd6c7dfdc36c407182b03b62",
+      "mode": 420
+    },
+    "include/ui_toast_manager.h": {
+      "sha256": "5b96f8c1c4669f5eddb32bffef17420c8aa7885e3de040404f19feb299e6856e",
+      "mode": 420
+    },
+    "mk/cross.mk": {
+      "sha256": "00f9f673db59469a484d3360fc6ba0dd253a4895ed810c66a5ef2cd8f46b197e",
+      "mode": 420
+    },
+    "mk/fonts.mk": {
+      "sha256": "0cab70fb4ddde35c8405d0198ded6a9784e460c1d80f4b18625aa54cf042a2bd",
+      "mode": 420
+    },
+    "mk/splash.mk": {
+      "sha256": "4d585d7b401e4273f8a5d6e6ebd73e08f0dfef27aea1b948dbb44873aaae9898",
+      "mode": 420
+    },
+    "mk/watchdog.mk": {
+      "sha256": "1fce1cf0b3bfe0fd7e1d6101fcc70687575b13d2f56b01b5d53386eb2e852c5d",
+      "mode": 420
+    },
+    "scripts/CLAUDE.md": {
+      "sha256": "f8a076ca0b2bc3744144f8c768324b1436ee92399199335259e6173b7a9ff353",
+      "mode": 420
+    },
+    "scripts/qc/cjk_fonts.sh": {
+      "sha256": "48f3eae6d9a030f0a600d96bd510dc23794033471a1e5491adf95425a42b7126",
+      "mode": 420
+    },
+    "scripts/regen_filename_font.py": {
+      "sha256": "e643825eb536fed655410e9fb2875e97a3daeb78e436a75db7e9d96082758e5b",
+      "mode": 420
+    },
+    "scripts/regen_runtime_cjk.py": {
+      "sha256": "3564cf2f928d77ee1c6eac333d391433e45874a87fff53b8e2738f7b1b24589c",
+      "mode": 420
+    },
+    "scripts/translations/cjk_charset.py": {
+      "sha256": "852aa385e9a280537e89cfc18d321c9b5ce155b6ca1ed4753e1373fe14139fcd",
+      "mode": 420
+    },
+    "scripts/translations/provider_ui_messages.json": {
+      "sha256": "45d112c7b6dec9121a0ae94d847e787ef62ed33afce8aa49aeed9eb0877ea348",
+      "mode": 420
+    },
+    "scripts/translations/runtime_locale_samples.json": {
+      "sha256": "ad918fe07e19d4c2e6d8c6f2eded3f4be229ecd72b2398a793a97641ddef96e9",
+      "mode": 420
+    },
+    "src/application/asset_manager.cpp": {
+      "sha256": "01c6bf20eb1b6e665e264d4f41b8f48e27c1cd089655bc94765974af77774f91",
+      "mode": 420
+    },
+    "src/application/session_wiring.cpp": {
+      "sha256": "990db19c8d6e1f6b9056a710cc22883c97b8a217d103fa0ab1a03a76a940104f",
+      "mode": 420
+    },
+    "src/application/subject_initializer.cpp": {
+      "sha256": "79f7367ccad020e923515f9b56078dd0448abc9db361bd81812add3866f74d55",
+      "mode": 420
+    },
+    "src/core/http_executor.cpp": {
+      "sha256": "6adc126148a70b6ee8d5e5048d3400cccf3e91208b4a4f00f412d52662cfaf76",
+      "mode": 420
+    },
+    "src/generated/theme_token_table.cpp": {
+      "sha256": "d59d96e102f0eaa2b887b63695c230441d0d594b5561ae2812330bdb121d27ae",
+      "mode": 420
+    },
+    "src/helix_splash.cpp": {
+      "sha256": "f64ad9769c1d3edd1071d4bfbb59efeebbcc552f8fa510f7c697fac061c68db5",
+      "mode": 420
+    },
+    "src/mock/moonraker_client_mock.cpp": {
+      "sha256": "b9a6b706e3d1c2408a0762108bda3666fdb79dea363405a1a57ea95667286c00",
+      "mode": 420
+    },
+    "src/mock/moonraker_client_mock_discovery.cpp": {
+      "sha256": "cc970449aacf021578aa16d5102edf6806014d0bb54b45a875e979e3e73e103a",
+      "mode": 420
+    },
+    "src/mock/moonraker_client_mock_multiace.cpp": {
+      "sha256": "8e0c020ad5bd37c09a70ad4c63a8cf84601c7df3785058b7ee4cbff54b3740de",
+      "mode": 420
+    },
+    "src/mock/moonraker_client_mock_temperature.cpp": {
+      "sha256": "d371eebbe483062b56f5ae0080e3f0d195723cecb004d7f6412b38eb514aa11e",
+      "mode": 420
+    },
+    "src/printer/ams_backend_multiace.cpp": {
+      "sha256": "527b5555487ae81f0fa3755a5c012afa6cbc2f711703615c8b33945f6e325f6c",
+      "mode": 420
+    },
+    "src/printer/firmware_settings_demo.cpp": {
+      "sha256": "2d59a57dd6ba579035af5c1a383f1182dc80f21f3ad3d29182234023870bc578",
+      "mode": 420
+    },
+    "src/printer/hardware_object_table.cpp": {
+      "sha256": "4082771f36933a18687b1ddc1b589845dddf1f75ab37c9de1f4d0ec002b25def",
+      "mode": 420
+    },
+    "src/printer/material_fault_demo.cpp": {
+      "sha256": "0def50f73c3c296ecb5746e8832aa71634b1df25f5193e68b466e7e746c3452a",
+      "mode": 420
+    },
+    "src/printer/material_fault_notice.cpp": {
+      "sha256": "bd52857e661a6fbc6565f60062d3b9e1a591dc4a20f9d13fc9a7afbb8a500f28",
+      "mode": 420
+    },
+    "src/printer/material_operation.cpp": {
+      "sha256": "2f9703e0fd405eceaa6b3e32a1781e280411b23485b1b36c7a0811ffca90711e",
+      "mode": 420
+    },
+    "src/printer/material_slot_task.cpp": {
+      "sha256": "f52f259c7bd4fb6f35fd39f816a4683cd9ea7fae8044d05b7e612f828d8cb23a",
+      "mode": 420
+    },
+    "src/printer/material_workspace.cpp": {
+      "sha256": "f788201f46b60c40f9c2be6bbe9c48873faff31f3878ed89fcb707484ba2292d",
+      "mode": 420
+    },
+    "src/printer/multiace_status.cpp": {
+      "sha256": "ddada77de0e93ac90e1c670b1610f0ed2c8cf0751855da973cf1271a7d188d15",
+      "mode": 420
+    },
+    "src/printer/path_calibration_demo.cpp": {
+      "sha256": "dd199c456fabe1e3a038224cc18b597fefaeab56b6635292a394dd77810009e4",
+      "mode": 420
+    },
+    "src/printer/printer_fan_state.cpp": {
+      "sha256": "fa7ba86336869bdcebb70636c907fad61581a01f3ec1bbf425722dd32f9b8fd9",
+      "mode": 420
+    },
+    "src/printer/u1_filament_model.cpp": {
+      "sha256": "6cad77d5df44ed3212fbac15f2d90619890ac75462789376742ff611b1ba318b",
+      "mode": 420
+    },
+    "src/remote/remote_control_server.cpp": {
+      "sha256": "206c817d533d8f46d73cfaab9b408e32d822e1a683e3efd94241cb797f8f1606",
+      "mode": 420
+    },
+    "src/system/cjk_font_manager.cpp": {
+      "sha256": "90a0512c107585a7a0565556e34b6f6c95fa6bf379e8996b27d9525e84183451",
+      "mode": 420
+    },
+    "src/system/display_settings_manager.cpp": {
+      "sha256": "61727e7e8e0ab3283cb8cce9aa69b4c27594df408cf3d37d23e30b803becdf81",
+      "mode": 420
+    },
+    "src/ui/components/ui_component_header_bar.cpp": {
+      "sha256": "5bff2fe87548e6125e7c27370320b26a59eda84dfd4d45373b1fa41016e56574",
+      "mode": 420
+    },
+    "src/ui/components/ui_keyboard_manager.cpp": {
+      "sha256": "36ae86c9fc5611c306c3ef0a322f1edffdda5d134acbb62f2915ab40429c1d61",
+      "mode": 420
+    },
+    "src/ui/components/ui_switch.cpp": {
+      "sha256": "5dd598666a65b087baa3a081d5620e80970c9d6465caadfff7688fc9e84b14f7",
+      "mode": 420
+    },
+    "src/ui/controls/console_line.cpp": {
+      "sha256": "840f70b7dbabe8e0b81d3693b9c85155183caed84fe474f47b33c570885e4949",
+      "mode": 420
+    },
+    "src/ui/controls/ui_fan_control_overlay.cpp": {
+      "sha256": "0ba6568b10c0776ea2321d37f07b02c94ef69e3ceaedcacc899071ec813c6a81",
+      "mode": 420
+    },
+    "src/ui/controls/ui_fan_dial.cpp": {
+      "sha256": "cf59ca43313b774c6f7135961a08861b821b0f17cad3e18ad16381269b4aeb0e",
+      "mode": 420
+    },
+    "src/ui/controls/ui_jog_pad.cpp": {
+      "sha256": "f2c3ccca18a39a3254882b722aab510e0f81234f4f4e43742924efdebecdbb45",
+      "mode": 420
+    },
+    "src/ui/controls/ui_overlay_temp_graph.cpp": {
+      "sha256": "873e9c61e14ca4d5972b525de67d087e1241a939166fbb1a5218d5de5ef96585",
+      "mode": 420
+    },
+    "src/ui/controls/ui_panel_advanced.cpp": {
+      "sha256": "f41063b6f4828f5aa9fbd2653df6d47023c59de3a2284b35c88a203aa613b019",
+      "mode": 420
+    },
+    "src/ui/controls/ui_panel_console.cpp": {
+      "sha256": "7e8b0f572e44ce462c027dc8ea4692c508d81b3a94d6223f949efdf909c11cc5",
+      "mode": 420
+    },
+    "src/ui/controls/ui_panel_controls.cpp": {
+      "sha256": "5ad03667e247ccba178a3a38f43a6979ac645672a1fd21d8aa485db4d9da35da",
+      "mode": 420
+    },
+    "src/ui/controls/ui_panel_motion.cpp": {
+      "sha256": "d26c990cbd2828bd49cf66f565edad704b94b8925f5c5f856803ebe9f2a6bee2",
+      "mode": 420
+    },
+    "src/ui/filament/u1_filament_overview.cpp": {
+      "sha256": "0f53b71fc7d28c28bf64ff7cb7c5585ba9f1edb0ee49d23e4b0522ad91125488",
+      "mode": 420
+    },
+    "src/ui/filament/ui_head_inventory.cpp": {
+      "sha256": "d998cad21adfed56ded5b47158b31c32380e5eab179987b3c5db8c588fc79a4b",
+      "mode": 420
+    },
+    "src/ui/filament/ui_material_workspace.cpp": {
+      "sha256": "26bbb6ccc6ae4781748c031972a7d7733eda6c905b085026df28df6ebbdc8880",
+      "mode": 420
+    },
+    "src/ui/filament/ui_panel_ams_overview.cpp": {
+      "sha256": "415fffb64bb2b5b832c0276c5b6cedc135d3a712388702ba42e92e06670b0a3c",
+      "mode": 420
+    },
+    "src/ui/filament/ui_panel_filament.cpp": {
+      "sha256": "a397d666519c4fab28caa4445a2d5094da70f6768ab6483e75b2be9908801068",
+      "mode": 420
+    },
+    "src/ui/filament/ui_path_calibration.cpp": {
+      "sha256": "f77346c74606b116f5132327762efe4fc65d56846ebc95234156c0645ead65b2",
+      "mode": 420
+    },
+    "src/ui/home/u1_home_overview.cpp": {
+      "sha256": "0d4b4974e11472d27b2a1ebb10fc3ed9c04c09496fc5b5b0da62cf93ca705bd2",
+      "mode": 420
+    },
+    "src/ui/home/ui_panel_home.cpp": {
+      "sha256": "5f1182e6bc7e43764bb6e4f0a3000ad4e720efdb3559fc14049e787655ec0fae",
+      "mode": 420
+    },
+    "src/ui/notify/ui_material_fault_notifications.cpp": {
+      "sha256": "7663de2023a1e45e93313a2c3da83dc50c8b93aed7bfb548aa29537a5ff801c4",
+      "mode": 420
+    },
+    "src/ui/notify/ui_material_operation_banner.cpp": {
+      "sha256": "81b2b90b6c0685a7a9dadd4352ce8efbe0c74b2e39f4f233753a7aa7e3be44bd",
+      "mode": 420
+    },
+    "src/ui/notify/ui_notification_history.cpp": {
+      "sha256": "0e35f85f0119fa3f7c31125087905b4bb00119748a074bc54d07ad412e86bbd4",
+      "mode": 420
+    },
+    "src/ui/notify/ui_notification_manager.cpp": {
+      "sha256": "dae62b23e20652cd1b8e5537d302829d154ca45d40557991ec1b2a43557759c7",
+      "mode": 420
+    },
+    "src/ui/notify/ui_panel_notification_history.cpp": {
+      "sha256": "84f73dbfdf69de5171503b5e99d2ab7ddc477f6380496dbd471139a04325656a",
+      "mode": 420
+    },
+    "src/ui/notify/ui_toast_manager.cpp": {
+      "sha256": "9f3d381a7e2c8a311be3e3bfe1d61a81edea9b4d635438399e8d60412aa07aa8",
+      "mode": 420
+    },
+    "src/ui/overlay_geometry.cpp": {
+      "sha256": "66eabf18d47696a6f1a5b911e3fecaa368f85ae2fa8dd77dd96629daf9b2289b",
+      "mode": 420
+    },
+    "src/ui/panel_widgets/print_status_widget.cpp": {
+      "sha256": "650d7400fa04de7458fdd5b9381783249e49cc2f6c8c8bdbef8329437c0461d7",
+      "mode": 420
+    },
+    "src/ui/panel_widgets/print_status_widget.h": {
+      "sha256": "0133fcc8649671b106b970e73929102a7e282dddfd729a2a2fa11306bf5399cc",
+      "mode": 420
+    },
+    "src/ui/panel_widgets/tool_switcher_widget.cpp": {
+      "sha256": "7fbaa7f050426d0693e36c407a4f419b57b0920f5f398cb121c943c483bd17e4",
+      "mode": 420
+    },
+    "src/ui/panel_widgets/tool_switcher_widget.h": {
+      "sha256": "1bbb623a34cfb27658f931bed95b0376129c6894c9f48f232f646dc109c611c4",
+      "mode": 420
+    },
+    "src/ui/print/print_control_buttons.cpp": {
+      "sha256": "9ff2cb47f0a07cf0a10be6524123a758948bd5c754a9fdcc7698eae79309d18f",
+      "mode": 420
+    },
+    "src/ui/print/print_status_layout_fitter.cpp": {
+      "sha256": "fa4f5654d6c623b4a8ff03d4446784e790bca006bfc5b4485d621916b09b7dfa",
+      "mode": 420
+    },
+    "src/ui/print/print_status_tile_layout.cpp": {
+      "sha256": "dc2b3b9eac24cb62f504539da46315a3eec0add7ac35d761675a96f3bee57950",
+      "mode": 420
+    },
+    "src/ui/print/ui_exclude_mode_controller.cpp": {
+      "sha256": "e927e82a93ef63b2acf2338513f130afa0022880e2a4dbae30f600f2e39057fb",
+      "mode": 420
+    },
+    "src/ui/print/ui_overlay_timelapse_install.cpp": {
+      "sha256": "d67afa93fd203322db87d31dd8ae57a3633d9dadb48c5184cae37886ecf0b589",
+      "mode": 420
+    },
+    "src/ui/print/ui_panel_print_select.cpp": {
+      "sha256": "af8c8c84d2a46033aeab6b8e4a83049ff99fda97cbfef14abbb63dd9bb2eaf35",
+      "mode": 420
+    },
+    "src/ui/print/ui_print_select_detail_view.cpp": {
+      "sha256": "0ad54c318d3efb469648cf66efc430ef05ddb2bd92155ac8ee9f81794b1ccab0",
+      "mode": 420
+    },
+    "src/ui/print/ui_print_tune_overlay.cpp": {
+      "sha256": "5a4190a27d213b74ac9f04fd070b7a71973c66cf89a9f4de31695c8acc0e6773",
+      "mode": 420
+    },
+    "src/ui/settings/setting_group.cpp": {
+      "sha256": "37c6c6883b0d7c844dd1185118777ed73ddf93c28c40b90382f2fa45aa8e0082",
+      "mode": 420
+    },
+    "src/ui/settings/ui_firmware_settings.cpp": {
+      "sha256": "e709d167cc216bf2f3e020d958d403c451b3bfa944121ededf55ef1a01d5a3a6",
+      "mode": 420
+    },
+    "src/ui/settings/ui_panel_settings.cpp": {
+      "sha256": "2f44bf38a6c8a84577d41d23f7bc84a99ca727c1b65e0610a6c8c72d0cf3a1a6",
+      "mode": 420
+    },
+    "src/ui/splash_screen.cpp": {
+      "sha256": "8dfade5987e2863b30efee0ae05bef86c3ce914c75bc48dd32bb8c67bf2a1dbb",
+      "mode": 420
+    },
+    "src/ui/style_configs.cpp": {
+      "sha256": "6ab0c13d5fa3b59be0c35b1684f723b715f90aa4a6de4a14b98bc22a59292209",
+      "mode": 420
+    },
+    "src/ui/theme/theme_lvgl_apply.cpp": {
+      "sha256": "f3a350c4f864add6199e79e74a52c0896f25fd7628d985f3cec77e3f2a69ea87",
+      "mode": 420
+    },
+    "src/ui/theme/theme_responsive.cpp": {
+      "sha256": "f9958e445fdeea16386ae983305c1314636c40829ac02c5f75f22676696c6cd4",
+      "mode": 420
+    },
+    "src/ui/tour/tour_overlay.cpp": {
+      "sha256": "251d9164bcdf8add0673f6f3e3fd9dc72676e11f97d5d49635df5a485813c549",
+      "mode": 420
+    },
+    "src/ui/tour/tour_steps.cpp": {
+      "sha256": "e24318261cf78e17081d114abcfb36ed483c43c3e1265946e30af4a8735eeac2",
+      "mode": 420
+    },
+    "src/ui/ui_nav_backdrop.cpp": {
+      "sha256": "4b97ff92aa501ea46950a053e47ceda141b901f4ef06fca4801164193beac255",
+      "mode": 420
+    },
+    "src/ui/ui_nav_manager.cpp": {
+      "sha256": "1bbb830e20cbb8a9a996ec3a8d24d10daffd864bfa6333beb2a7d596eb0a7617",
+      "mode": 420
+    },
+    "src/ui/ui_nav_transitions.cpp": {
+      "sha256": "28957d3e1e06be8544887da7a5c2561be247ee8ab262a203244e821d098b1d99",
+      "mode": 420
+    },
+    "src/ui/wizard/ui_wizard.cpp": {
+      "sha256": "e4bb7e8fd698e8c05ba63dbe9c552b85b168e81938665c4d27fbb741c371df8b",
+      "mode": 420
+    },
+    "src/xml_registration.cpp": {
+      "sha256": "2b9edb7d88e4683a3067a45262205a7228477a2f1fdac0632598ad0e4fbc3f76",
+      "mode": 420
+    },
+    "tests/fixtures/theme_const_golden.txt": {
+      "sha256": "6fccc11702d0cd4fa69f632eaf02a4902c43df4c0b2c2bdcc6d32ca24d9b7f5b",
+      "mode": 420
+    },
+    "tests/helix_test_fixture.cpp": {
+      "sha256": "ddc5db7ebd48ede323a54720c7f008d10c71026922dcf9cd0f29f18a97a1801e",
+      "mode": 420
+    },
+    "tests/lvgl_ui_test_fixture.cpp": {
+      "sha256": "47e96d53f194145b332e7ab2496f88f6b9f2fa113efacfd4530ca15f00c4db38",
+      "mode": 420
+    },
+    "tests/python/test_cjk_locale_glyphs.py": {
+      "sha256": "8c54ce63e6b1beb99a9281c60744127583b93ff848a87797251f2343a9a5ef22",
+      "mode": 420
+    },
+    "tests/python/test_u1_display_refactor.py": {
+      "sha256": "68af2f13a930c3db1225e476bd86dd37570a4f175366ca4511a857a7b049ec92",
+      "mode": 420
+    },
+    "tests/standalone/material_fault_notifications.cpp": {
+      "sha256": "46a5fa51f8e37907ecb913c48f77363fbe7cbd368a4d544e8b56edcbd340b13e",
+      "mode": 420
+    },
+    "tests/standalone/run-material-fault-notifications.sh": {
+      "sha256": "892e55af1563f4282ce056ba19b31ed6374cf710aba48937780cd5d8a3d8aa35",
+      "mode": 493
+    },
+    "tests/standalone/run-u1-filament-model.sh": {
+      "sha256": "e9254afdb4a909e97036a538fc433ffa225cff39b4793e2e0999e8aa27b4c896",
+      "mode": 493
+    },
+    "tests/standalone/u1_filament_model.cpp": {
+      "sha256": "9987823950368b1250e62ebe9e49767bcf62d4bf6532926c81ecb77fdbeaf9dc",
+      "mode": 420
+    },
+    "tests/test_helpers/tool_switcher_rig.h": {
+      "sha256": "03fb029d2b2279b75897dbd8137fce6f5885113c7b6349b79e276666ea37ee22",
+      "mode": 420
+    },
+    "tests/unit/application/test_refresh_timing.cpp": {
+      "sha256": "78861a683db4b63a80346780a4444f85b2b6389450a6064b644d37368430cd4b",
+      "mode": 420
+    },
+    "tests/unit/test_ams_backend_multiace.cpp": {
+      "sha256": "04f18921cd4c347316bda5ca38faf1bc53d3d51d12476631b673b8c1263d157f",
+      "mode": 420
+    },
+    "tests/unit/test_ams_mock_multiace_parity.cpp": {
+      "sha256": "c14b5f522673422ae54dae2843bcc6c7522105063167c79c8a0bb352e27f1c1d",
+      "mode": 420
+    },
+    "tests/unit/test_display_settings_manager.cpp": {
+      "sha256": "00d42f2cc6b5336e9d0b8b0053c2acc4d6ca2cec585964287f8bb0dc409629ca",
+      "mode": 420
+    },
+    "tests/unit/test_exclude_mode_controller.cpp": {
+      "sha256": "f50e592e24e50a1870545f4e5d7687104c993eb3de75995b775e4e5cf2f53770",
+      "mode": 420
+    },
+    "tests/unit/test_first_run_tour.cpp": {
+      "sha256": "df63b84c891269f29fcd6363bdec86600a6cdb75cb574959f32115da5d8af067",
+      "mode": 420
+    },
+    "tests/unit/test_head_inventory_routes.cpp": {
+      "sha256": "b58684b842b7dc8095c20841a386a1533d324fff8770e98fd2a5454e7c1020f6",
+      "mode": 420
+    },
+    "tests/unit/test_header_bar_action_disabled_cond.cpp": {
+      "sha256": "2ab0e3a7ff795eef50f7420fca4cd84a965f7767514c3e22ac3c47cda16ea494",
+      "mode": 420
+    },
+    "tests/unit/test_header_bar_content_slot.cpp": {
+      "sha256": "fbd3a2870287705ad8270498164b6fb9093acbf32dff4066f0e8f572fa55cf37",
+      "mode": 420
+    },
+    "tests/unit/test_material_operation.cpp": {
+      "sha256": "c107463738ff9397d2367eefff03cef0a176243883a4daf553e55721d1eb11ab",
+      "mode": 420
+    },
+    "tests/unit/test_material_workspace.cpp": {
+      "sha256": "20a6f782a8378dbe7c6289dc46aa2e7c8b004de32828f4bdb085d50605478048",
+      "mode": 420
+    },
+    "tests/unit/test_multiace_status.cpp": {
+      "sha256": "71bf769d04a39c3e551cd20bed539130491095cb31cb54c3ab0f0a6310763752",
+      "mode": 420
+    },
+    "tests/unit/test_native_control_contract.cpp": {
+      "sha256": "79bc378a9166d2330150fe1ed57a6863defd034145bfbfdef7424315b12c94e1",
+      "mode": 420
+    },
+    "tests/unit/test_nav_overlay_activation.cpp": {
+      "sha256": "a2d6b35711890b29971af29da0e0945201477a7d7afb9bdd1a8501d56f181666",
+      "mode": 420
+    },
+    "tests/unit/test_navbar_estop.cpp": {
+      "sha256": "486f7351bcf04f670d22bd46a4c31903872cabbb0b5006d4f68c8b4cf75e0e80",
+      "mode": 420
+    },
+    "tests/unit/test_notification_history.cpp": {
+      "sha256": "cc290e4dc3b6e7cbf2de60b78864f61df4708bdec158cb9c6c532489196984cb",
+      "mode": 420
+    },
+    "tests/unit/test_notification_history_panel_refresh.cpp": {
+      "sha256": "b32ef67ec1462f81706043489edccd6b7f40f2e3e9bda10be64c3c1299ce48c3",
+      "mode": 420
+    },
+    "tests/unit/test_path_calibration_demo.cpp": {
+      "sha256": "48f95b2f7d9e8520aa06f64d35e94f21464f4da5cbcd3cf6e5a17710f1482362",
+      "mode": 420
+    },
+    "tests/unit/test_path_calibration_ui.cpp": {
+      "sha256": "0f7bec09d623622a3dff6d69b4f1e4c8f8787722984a2dfaa9c127eaf5abe1ee",
+      "mode": 420
+    },
+    "tests/unit/test_print_progress_arc_axis.cpp": {
+      "sha256": "0188d64509a7e20887d64c260de3e8a4d926fbb3491e8cdbe90700e9d232b4ee",
+      "mode": 420
+    },
+    "tests/unit/test_print_status_lazy_active_branch.cpp": {
+      "sha256": "4fb6e8d3d025ee33c8d1fb77cc17530cfb027428353f81e75c079da4f1df7181",
+      "mode": 420
+    },
+    "tests/unit/test_print_status_redesign.cpp": {
+      "sha256": "3beafcf5f7cffc1fb6162daeb7c090dc66e878d2ec0585e0bac34cfb37c60ece",
+      "mode": 420
+    },
+    "tests/unit/test_print_status_tile_layout.cpp": {
+      "sha256": "665a25f55acb404266bb56566fe4ab248d550f80353337c143550bc20165e6c3",
+      "mode": 420
+    },
+    "tests/unit/test_print_status_widget_active_thumb.cpp": {
+      "sha256": "586a6910d8f7a166816b19d408410253df4b04f5c76420be8e2c9a529354bfd0",
+      "mode": 420
+    },
+    "tests/unit/test_print_status_widget_tool_override.cpp": {
+      "sha256": "2881f84d2f1f2a416a6d236a436baa127aaf28d074f318f7c406f750383d6e2a",
+      "mode": 420
+    },
+    "tests/unit/test_temp_graph_overlay.cpp": {
+      "sha256": "d3abfd6f06d789b09629725ec4c1424dabbafa408df2768b3b4b27ac2fbec33f",
+      "mode": 420
+    },
+    "tests/unit/test_u1_home_layout.cpp": {
+      "sha256": "ae51ce42b735fe7f1b603eb22022cb28b9568886b69e83ab875cad609db7844a",
+      "mode": 420
+    },
+    "tests/unit/test_u1_home_source_color.cpp": {
+      "sha256": "3360a0eb4e358812bea3ecbf2927d1a5d038e4c2be94d4ef7b51c586196ac125",
+      "mode": 420
+    },
+    "tests/unit/test_u1_home_task_card.cpp": {
+      "sha256": "f3f2fea539c6c820f2ddae29cec1f4ac61687240a4589aedac1f3b70c5e4b9fd",
+      "mode": 420
+    },
+    "tests/unit/test_ui_card_tier_press.cpp": {
+      "sha256": "d11241229c732e68fb623807747ed2e688517f1d27595c27ed50e305d9cc0175",
+      "mode": 420
+    },
+    "tests/unit/test_widget_size_print_status.cpp": {
+      "sha256": "56a0bda24060477951729bffe70b2680651c2900a7c004a28d739fcbe7dcfa52",
+      "mode": 420
+    },
+    "tests/unit/test_workspace_control_priority.cpp": {
+      "sha256": "97656f0073aebf02319913097360fd2d74d3ab5485bbb2e6ca166f0242468fdd",
+      "mode": 420
+    },
+    "tools/xml-linter/schema/schema.json": {
+      "sha256": "404b07b968cd88339e31e4e4e0f43010d5b326b36b1de01d9b3e50623bec1ec6",
+      "mode": 420
+    },
+    "translations/en.yml": {
+      "sha256": "fe9acf21e5c0494d7b0ff095ff84f7e8e693f71bcff9ccaccaef52c59a0c6261",
+      "mode": 420
+    },
+    "translations/zh.yml": {
+      "sha256": "e7ce92949bb307e3bc862c7f28439ca5e40bdd46d1ad05b3dbdf35e6bd0dd6b8",
+      "mode": 420
+    },
+    "ui_xml/abort_progress_modal.xml": {
+      "sha256": "8f1b83ec254adae5b895ac7481ae0b4f6a6f49987538d823a980fa3ae28f042f",
+      "mode": 420
+    },
+    "ui_xml/about_settings_overlay.xml": {
+      "sha256": "330f551b0d301524814bccaf40bea2c9d339f663a137bf01bbd1f271e70f45cb",
+      "mode": 420
+    },
+    "ui_xml/action_prompt_modal.xml": {
+      "sha256": "519d91d75dd813860f4568ad34ddeb4f4eaba6dd43318deb648d966151b9c07c",
+      "mode": 420
+    },
+    "ui_xml/advanced_panel.xml": {
+      "sha256": "c636fbb7da8b5e57bee99e50f374cd887cbc477c1a61c212efa069783640c14d",
+      "mode": 420
+    },
+    "ui_xml/ams_context_menu.xml": {
+      "sha256": "12a746ad801dda08eac7d0fff345ef4b0ace64f5e33dadf91426524d7d769475",
+      "mode": 420
+    },
+    "ui_xml/ams_device_operations.xml": {
+      "sha256": "4a7299ab1362a42c43978c1ad10e1b5c531c9fa2b94a4e17e11ad34462d3b3f1",
+      "mode": 420
+    },
+    "ui_xml/ams_device_section_detail.xml": {
+      "sha256": "be525646b747af42815f8ca236f217f124f0de77d38e47492f6ccef38177c46b",
+      "mode": 420
+    },
+    "ui_xml/ams_edit_overlay.xml": {
+      "sha256": "5fae1b2671608e9c079f46bbe78225e7713c62a73d525be811e30d67aa146b84",
+      "mode": 420
+    },
+    "ui_xml/ams_environment_overlay.xml": {
+      "sha256": "5fd7ce2c68a1859e7ea14dbec9a2e59b66b0db725f803b850f550db5fca086e5",
+      "mode": 420
+    },
+    "ui_xml/ams_loading_error_modal.xml": {
+      "sha256": "9499ef892ea2c55e9ec05e13ea5c566c67fa2849dd091da654f7cdca79f30fa6",
+      "mode": 420
+    },
+    "ui_xml/ams_overview_panel.xml": {
+      "sha256": "70bf3f93ee35d63dbb562fcc40287ba658384cc30ff24f7da45cc5ef92ad16a7",
+      "mode": 420
+    },
+    "ui_xml/ams_panel.xml": {
+      "sha256": "67f267c126a513bc07b20d7791f645c11a0c45f8b78578287f0c66bf6b6d7527",
+      "mode": 420
+    },
+    "ui_xml/ams_recover_state_modal.xml": {
+      "sha256": "2b37acd2ca2198585426230d72e19684f08509aacb05c00c28d9ed875c14b17c",
+      "mode": 420
+    },
+    "ui_xml/ams_selector_menu.xml": {
+      "sha256": "db0d40ae72f2ba66e927025585a8fc43ede61d2157373d69aeb6dc64d4316150",
+      "mode": 420
+    },
+    "ui_xml/ams_slot_view.xml": {
+      "sha256": "6c16cd594dc2dd002b7f09065a4bfcb3037c77a0053b0c34817cd4af0f643ffa",
+      "mode": 420
+    },
+    "ui_xml/ams_unit_card.xml": {
+      "sha256": "eec3fdab0c6e084a007b6e455abd287b8241cfc2ab9ef8e64c7c3a3abc1136dd",
+      "mode": 420
+    },
+    "ui_xml/ams_zone_overview_overlay.xml": {
+      "sha256": "31a39a34523053676f3fda1288efd2bb6b36c7e98fa33560575c2663cf6383e4",
+      "mode": 420
+    },
+    "ui_xml/app_layout.xml": {
+      "sha256": "afde5e4a841eeb298924bbfda6c40f9e5cbe7e4fe97924c20f4eb6eeab340397",
+      "mode": 420
+    },
+    "ui_xml/barcode_scanner_settings.xml": {
+      "sha256": "03bd665b46d94dc327f50e84a7f2a52fabd87f31d6a227e4aeb7606aa2c453ae",
+      "mode": 420
+    },
+    "ui_xml/batch_filament_modal.xml": {
+      "sha256": "73c58a6bd1358aba39c5f6f0c19d6d787fb7f4f61f7372efcef6f0bcc3132ba6",
+      "mode": 420
+    },
+    "ui_xml/bed_drying_modal.xml": {
+      "sha256": "cd2d1e36c8e0c4098ab941e895e117fb7ff249411ee8093f74514c04d1396c3b",
+      "mode": 420
+    },
+    "ui_xml/bed_mesh_calibrate_modal.xml": {
+      "sha256": "8d3cc97180f41d53eccec93a0dc2008727c870150ba09f80e6eb3d61151a6fb4",
+      "mode": 420
+    },
+    "ui_xml/bed_mesh_panel.xml": {
+      "sha256": "3e5d6952cedc28300278709051ef4775178b86d5af7378d37560f06b45bf843c",
+      "mode": 420
+    },
+    "ui_xml/bed_mesh_rename_modal.xml": {
+      "sha256": "b0b33e84ef0d3d5258b7e46b18690ba6c1c9e9934496ea455f7eb6b0900e44e2",
+      "mode": 420
+    },
+    "ui_xml/bed_mesh_save_config_modal.xml": {
+      "sha256": "419c8d829a29f41032114b955b06f6be47674eac417fe7e9681e95ce867a171d",
+      "mode": 420
+    },
+    "ui_xml/belt_names_modal.xml": {
+      "sha256": "6e046b8d053706522a48654eb1fe75641a2c0618e0e6c5c6ef5c2646442ea606",
+      "mode": 420
+    },
+    "ui_xml/calibration_pa_panel.xml": {
+      "sha256": "f71aaa9ff7451b6c294a0de92b1fde0d833904c52341b1061bd158337d907a5b",
+      "mode": 420
+    },
+    "ui_xml/calibration_pid_panel.xml": {
+      "sha256": "1d770ab839dacc2ec4d240f3df898137de471cc0852668deff820c49c5d1c371",
+      "mode": 420
+    },
+    "ui_xml/calibration_tool_offset_panel.xml": {
+      "sha256": "cc7574033e5f3238fe1d5b9832308b4561850c65e9a44485c565cfa8f7039172",
+      "mode": 420
+    },
+    "ui_xml/calibration_zoffset_panel.xml": {
+      "sha256": "3aa85d4943729e978e9d3062017e77c4e13ddc45ef7100df827a35a850f566af",
+      "mode": 420
+    },
+    "ui_xml/cfs_chute_calibration_overlay.xml": {
+      "sha256": "1a0cd9ee5ba63667324f6b26ab5bbcc0f57ecca175f751e4b5fa2657ae0d31c6",
+      "mode": 420
+    },
+    "ui_xml/chamber_dryer_modal.xml": {
+      "sha256": "72855c9346d4368bacc3aa03dc1d42c0bcaf0a63218a63ce88e2c952559eb2b6",
+      "mode": 420
+    },
+    "ui_xml/change_host_modal.xml": {
+      "sha256": "6931593454c3790804f4f160a7b638c90d937ebec72cd211b0ed072c10b8555d",
+      "mode": 420
+    },
+    "ui_xml/cold_pull_overlay.xml": {
+      "sha256": "f2087f9e7eeac98495def031e2e55fb1cdd2b8ef7c446701a262a0edb8358cf8",
+      "mode": 420
+    },
+    "ui_xml/color_picker.xml": {
+      "sha256": "09e4f9a3cff30c2485f6fb49791841fa76e97a2466292931dc2abbc78b055e39",
+      "mode": 420
+    },
+    "ui_xml/components/ams_loaded_card.xml": {
+      "sha256": "65c4e09915e99c458dbd0bdc2ef15cfa3863bde297af2bb6a390e37e80499bd2",
+      "mode": 420
+    },
+    "ui_xml/components/ams_sidebar.xml": {
+      "sha256": "772cf7de565a6d2375c7d94ac883627ed5bbd8135de07fe7cf11a1297a3ee664",
+      "mode": 420
+    },
+    "ui_xml/components/ams_unit_detail.xml": {
+      "sha256": "2c5c8ecef657d432ba4c7cc8b6ef10c68711868c46f7013f554b77fe3a98410c",
+      "mode": 420
+    },
+    "ui_xml/components/api_key_field.xml": {
+      "sha256": "bc81b68eb0e5d1ef0793adf2403f9d7937b41c2baa1b97ee9ce96c38ce4610be",
+      "mode": 420
+    },
+    "ui_xml/components/bed_check_modal.xml": {
+      "sha256": "a888ecfc522bc53cb3d0119c1337f944670dbc1dc7ab4a6d9740dad7ac9cf49d",
+      "mode": 420
+    },
+    "ui_xml/components/bed_mesh_current_mesh_card.xml": {
+      "sha256": "9ae36c19c076d85c7da7fdcb133bf68bce6622ad8f4fdd2beb0e7ca48d248f57",
+      "mode": 420
+    },
+    "ui_xml/components/bed_mesh_profiles_card.xml": {
+      "sha256": "b72c00b4f44a37f433524fcad20bfb628a1208748fb089bc2676a4843117ea5a",
+      "mode": 420
+    },
+    "ui_xml/components/buffer_status_modal.xml": {
+      "sha256": "3a348c8153857342d9a1e7aa34d5a2246f5f98ece3d75dc96f175b1970655776",
+      "mode": 420
+    },
+    "ui_xml/components/camera_config_modal.xml": {
+      "sha256": "c3c7a27b27d8b3cf7548fdb112f0e28b4924c34ffa2f2a30d5533c50c1858af8",
+      "mode": 420
+    },
+    "ui_xml/components/camera_fullscreen.xml": {
+      "sha256": "18ea6319d7f0e92ead88ac792b1e5b76043f522935f6b005a0dcce8c0e4233a2",
+      "mode": 420
+    },
+    "ui_xml/components/chamber_stall_modal.xml": {
+      "sha256": "e130073fb954091667b40dd47312ec6021436362f2de10194ff193fa3a95d9a6",
+      "mode": 420
+    },
+    "ui_xml/components/clog_detection_config_modal.xml": {
+      "sha256": "889d7382acd1dd6c3576b12f0ee9cf665cc9052d63b4bf0aacfca4d9f0ed1fa0",
+      "mode": 420
+    },
+    "ui_xml/components/cold_pull_tip.xml": {
+      "sha256": "36a79c9bc108ecb1786df70cfb8f3285f6100f6c43d8711d7d1ef2403dd9d991",
+      "mode": 420
+    },
+    "ui_xml/components/context_menu_card.xml": {
+      "sha256": "86f192b722a7b4f5996a52aba44ab89e795fc4fad48c2b9f0876ca1077b1f956",
+      "mode": 420
+    },
+    "ui_xml/components/filament_catalog_add_row.xml": {
+      "sha256": "b0bda9e2439810f833e98b751e69c72e173da6099ea44560c670de19e1bab762",
+      "mode": 420
+    },
+    "ui_xml/components/filament_catalog_picker.xml": {
+      "sha256": "cb233153180452b615bcda797868d9e3c7b4fb060187099d64e3ecef9ab321a6",
+      "mode": 420
+    },
+    "ui_xml/components/filament_catalog_row.xml": {
+      "sha256": "831757c797cb53f64a83ce15c37dcdaafd903f9c2394b4b4cb4e3e489e9f7ea6",
+      "mode": 420
+    },
+    "ui_xml/components/filament_catalog_selector.xml": {
+      "sha256": "ca77d03e1e4c6abc08a406f25171ca645a977ffa80e84b070a9721c552515fc9",
+      "mode": 420
+    },
+    "ui_xml/components/filament_material_group.xml": {
+      "sha256": "78ce66f430288f85762c5ace270bb0be4800007095b24c345c95566f33818088",
+      "mode": 420
+    },
+    "ui_xml/components/filament_operations_group.xml": {
+      "sha256": "af6824c22483704e83e44a0dfbfe123d1715b7f218a62b637be6776d74cef746",
+      "mode": 420
+    },
+    "ui_xml/components/filament_slot_picker_choice.xml": {
+      "sha256": "925cf8ad5f8b12e62e8bba9cb20813579b22c794db47bb950d49bc4000900f8e",
+      "mode": 420
+    },
+    "ui_xml/components/filament_slot_picker_row.xml": {
+      "sha256": "85704bf95c57adc1b8f59d8a840121d11d52d5804debe7d09d407a744e925922",
+      "mode": 420
+    },
+    "ui_xml/components/filament_source_row.xml": {
+      "sha256": "1377620b841a6e749b01dd832b6c7fa1fd18ce6c592e379749c3ca56a2e3d2c2",
+      "mode": 420
+    },
+    "ui_xml/components/filament_spool_card.xml": {
+      "sha256": "2caeaf5fec667160f40f86d25ca81b0feb912a6dfbc1ac3e6000e2118dfa57d6",
+      "mode": 420
+    },
+    "ui_xml/components/home_page_container.xml": {
+      "sha256": "df507f833a9166d56003985a883bf4e0a3c2b95c9a295c168c22ff19ffde14a5",
+      "mode": 420
+    },
+    "ui_xml/components/ipp_print_modal.xml": {
+      "sha256": "470f9374c23e81effb69a36355e6a737ff3d0e3c9f63243948cf81b8623c3e1f",
+      "mode": 420
+    },
+    "ui_xml/components/job_queue_row.xml": {
+      "sha256": "b6344bd40ea770b4206b5eb4951418ffa41acb5dfe062627c0e27e5e8522462e",
+      "mode": 420
+    },
+    "ui_xml/components/material_temps_row.xml": {
+      "sha256": "481c88a3ccc2890ed5294044de61b59c72cb8094b4338fb6182419eb2c411c28",
+      "mode": 420
+    },
+    "ui_xml/components/motion_bed_map.xml": {
+      "sha256": "85dec5b29a4f7d43cc842c69168f903c2e24f45a03c20bb6e3d93d879b8297e9",
+      "mode": 420
+    },
+    "ui_xml/components/motion_jog_modes.xml": {
+      "sha256": "93e98720b0b126b0bddb7786e43e3748e3b3bf624ea503b1917d19cf3051ddda",
+      "mode": 420
+    },
+    "ui_xml/components/move_preset_grid.xml": {
+      "sha256": "0d4af896636357a0b356454bbb29cf06b7e1422396d7605a61462c6749c08de7",
+      "mode": 420
+    },
+    "ui_xml/components/navbar_drying.xml": {
+      "sha256": "4cf1fa8d0de8060f68592ddba3ab23b9dbd498b46a55ea1648e6828e38fbb533",
+      "mode": 420
+    },
+    "ui_xml/components/navbar_estop.xml": {
+      "sha256": "781e34ce1175df7f2bf07af77431cb8d9f2f9c222a6dcf05005eda6545ecd990",
+      "mode": 420
+    },
+    "ui_xml/components/option_tile.xml": {
+      "sha256": "7d7c9e5c98f88422ab0b88c7c30f9c81b72875473056c3c6d545b9342211ceea",
+      "mode": 420
+    },
+    "ui_xml/components/panel_widget_bed_temperature.xml": {
+      "sha256": "db31ca9603879bb3e8c1b23f2d4b20c9a6a2f5df97b5b8385ca820279bac4242",
+      "mode": 420
+    },
+    "ui_xml/components/panel_widget_print_status.xml": {
+      "sha256": "772e0d54cd196bc94206766e7de45a26f72843d9aeea31c4f4dbfc9ec2a9e660",
+      "mode": 420
+    },
+    "ui_xml/components/panel_widget_speed_flow.xml": {
+      "sha256": "0195c1e035ec9d18842d62c9d51b38ab18e20e7e86b52f31fad36825dd20af11",
+      "mode": 420
+    },
+    "ui_xml/components/panel_widget_tool_switcher.xml": {
+      "sha256": "a726babda39914675d3ee489d910d627c0c7c5d1418ca6ca8360d2b9cde45909",
+      "mode": 420
+    },
+    "ui_xml/components/preflight_check_modal.xml": {
+      "sha256": "59a8ed183c4b7f4664c63c08a7541aa2489240103f7adabdf64059bf7fc437d3",
+      "mode": 420
+    },
+    "ui_xml/components/preflight_check_tool_row.xml": {
+      "sha256": "bb4a16d842f43524833513485a58cbf4bc0a0aa2d85862fbeedce5ac82ef99b8",
+      "mode": 420
+    },
+    "ui_xml/components/print_status_body.xml": {
+      "sha256": "ed58c72a2cc7a0c6cfebd780cec276fd17fb6fe980261d4997c2275886676534",
+      "mode": 420
+    },
+    "ui_xml/components/print_status_detailed_active.xml": {
+      "sha256": "848e8ea4ec02b425de620fdc371dcf1f30c4fe805c1d5eab51ae91af0a14792d",
+      "mode": 420
+    },
+    "ui_xml/components/print_status_detailed_idle.xml": {
+      "sha256": "9c067b7825cc556f0afd22cfbf9878b33e2047ebf40b29c632de9a54def4b73c",
+      "mode": 420
+    },
+    "ui_xml/components/print_status_job_checklist.xml": {
+      "sha256": "5c7e75fa0b7ffec36f01af59e47947fd3ec0de3ff6fd482ec42528a57928f11f",
+      "mode": 420
+    },
+    "ui_xml/components/print_status_preview_card.xml": {
+      "sha256": "3de816217a8c937700a0a40ccc3f99b89e1e51bb84f1bafb20dc00ac890ac444",
+      "mode": 420
+    },
+    "ui_xml/components/print_status_printer_tile.xml": {
+      "sha256": "0d30022179605999141d8d528270c4b453fa341fa52189babe9dfebf7bd3b8dc",
+      "mode": 420
+    },
+    "ui_xml/components/print_status_strip.xml": {
+      "sha256": "1149c2c3f084b5ab0f6d2f9a5377394a5c02a76c98f753254d5381e76c742280",
+      "mode": 420
+    },
+    "ui_xml/components/spaghetti_detection_modal.xml": {
+      "sha256": "6c6cd4a187d5ceb18be4e4782a14974c9b5633576631509bdc09a9536350a689",
+      "mode": 420
+    },
+    "ui_xml/components/tool_switcher_segment.xml": {
+      "sha256": "e53bfb5f28fdd49bd4003d91513cb02970dc968bca406fdd0db0f93ecc69eb55",
+      "mode": 420
+    },
+    "ui_xml/components/tune_pa_row.xml": {
+      "sha256": "69f7c83e7754b44dc667b3ccb453a9816e6069a55cd7cf072880c7d2d2fffe0e",
+      "mode": 420
+    },
+    "ui_xml/components/u1_controls_overview.xml": {
+      "sha256": "83630494dc4b482de36cba5c1753a5bbffc3ade1a7c631ed7f0271e3d09dbb8e",
+      "mode": 420
+    },
+    "ui_xml/components/u1_home_nozzle_cell.xml": {
+      "sha256": "55ce1734f718dd9f11d937e3f53b1de80081299c9231823eaa4ab4bbc0dcca1c",
+      "mode": 420
+    },
+    "ui_xml/components/u1_home_overview.xml": {
+      "sha256": "f152e14b32aded225e48baee0cb2740fe949e7507f40c95079aef794f45ef7a4",
+      "mode": 420
+    },
+    "ui_xml/components/zone_row.xml": {
+      "sha256": "84ae3907b1ce6abafa86aebf0a96e8b26e3753a0113b4fcb070f728babb15527",
+      "mode": 420
+    },
+    "ui_xml/connecting_state.xml": {
+      "sha256": "6c097c51e4e0a1df6f17d68d3238982c85cbfdbfc3c62ee654807103236c30a2",
+      "mode": 420
+    },
+    "ui_xml/console_panel.xml": {
+      "sha256": "6ed76a2d7d414e7909bda44ac94dac78e465642aa43984fe60b12caf719a0ee6",
+      "mode": 420
+    },
+    "ui_xml/console_settings_overlay.xml": {
+      "sha256": "bd6dfb237f848c92778d8c58e514da41a624d993e5abef22b45f9c8b02dcd959",
+      "mode": 420
+    },
+    "ui_xml/controls_panel.xml": {
+      "sha256": "7f2a83e5ee9cc362a5c8692c7425f00a7b66bebcd11154732fe729179ae2b944",
+      "mode": 420
+    },
+    "ui_xml/crash_report_modal.xml": {
+      "sha256": "944cf9a988f32a0cf910c81c353e2719c2be56c37add0d51ae91aec4cf231ded",
+      "mode": 420
+    },
+    "ui_xml/create_filament_modal.xml": {
+      "sha256": "c7b073b49029ad88b1ccc24a21ff977b7ef397a218180f2b903b65ec8bb9b8d4",
+      "mode": 420
+    },
+    "ui_xml/create_vendor_modal.xml": {
+      "sha256": "1321baa7d0d24e10649ab735b933145448e3d8d188ebcbc38aac2b67d303a79b",
+      "mode": 420
+    },
+    "ui_xml/debug_bundle_modal.xml": {
+      "sha256": "f0ab98474f2ae0a80fd7115239c8de19d5d582f2df51e02b968301a8125e54fb",
+      "mode": 420
+    },
+    "ui_xml/empty_state.xml": {
+      "sha256": "fe97bb3e2ee769d4ccaf8b1ea55c524af7c59af0800e2e963df0f35f2b0aa200",
+      "mode": 420
+    },
+    "ui_xml/estop_confirmation_dialog.xml": {
+      "sha256": "73ab0e9fdfd4f60a43bbbc11d22ef9beeb373c28925cea0e9da0258272b3342b",
+      "mode": 420
+    },
+    "ui_xml/exclude_object_modal.xml": {
+      "sha256": "0a552f16d5dcd65d92174e9115863e7a4e9e9f4e4785f576a142c35d5b76fa56",
+      "mode": 420
+    },
+    "ui_xml/factory_reset_modal.xml": {
+      "sha256": "e737b2de1eb433d207791dd9d7c96c378ea1ed0a800446dac1a233ce7445d5dd",
+      "mode": 420
+    },
+    "ui_xml/fan_control_overlay.xml": {
+      "sha256": "84c6ade44c8d60683522d505f3aa6e27d38c71a69ca44d99eba78bce09de33e3",
+      "mode": 420
+    },
+    "ui_xml/fan_dial.xml": {
+      "sha256": "a36a4d340045e865277c0b4eaba7fdccf380cd2b52523821ea65aceb6496c079",
+      "mode": 420
+    },
+    "ui_xml/fan_rename_modal.xml": {
+      "sha256": "0828bf2fadfbb4f81d4c7d1a51885617287c8ffc34a123e2f580ffe8faba9f51",
+      "mode": 420
+    },
+    "ui_xml/fan_settings_overlay.xml": {
+      "sha256": "5f62424ebb458282fdbab89bf469a873a1ec4cadd59ddc43aea4cec3fc067bf5",
+      "mode": 420
+    },
+    "ui_xml/fan_settings_row.xml": {
+      "sha256": "6ff91062ba67162494b01d912544b14a6d9695e38ee1d1de3a88ab903f5eaca6",
+      "mode": 420
+    },
+    "ui_xml/fan_status_card.xml": {
+      "sha256": "bb0fd31cb3e1a5ce0226bb01ac2a33314ade284001c0b1dbdc12906163944ce2",
+      "mode": 420
+    },
+    "ui_xml/fan_stepper.xml": {
+      "sha256": "da6603a7db1c7c698fcad9cf9f6eb61bd4d4df077e6f1b8e34f428558e117746",
+      "mode": 420
+    },
+    "ui_xml/favorite_macro_config_modal.xml": {
+      "sha256": "e28b582154464304cf422bc757218ef2a8b32287e0af6d0a551f62691bcec312",
+      "mode": 420
+    },
+    "ui_xml/filament_mapping_modal.xml": {
+      "sha256": "f9adf59e3c31e851c360616e7a80b095807d2b096decbe3102c9069c7a446e7b",
+      "mode": 420
+    },
+    "ui_xml/filament_panel.xml": {
+      "sha256": "27c75c1cabb4cccbd4035cbd6c414c8809eae9fa30a01cdd5878c3a81133b9c1",
+      "mode": 420
+    },
+    "ui_xml/filament_product_edit_modal.xml": {
+      "sha256": "a951f0185d147660c94d608b495bde272f14b34ee9f0e3ea5414e117aa0c523a",
+      "mode": 420
+    },
+    "ui_xml/filament_source_picker.xml": {
+      "sha256": "c542f34de8b5d4e0ad2b95ced8d9d4e7fdabd75240660805b9eb08041c4dbc11",
+      "mode": 420
+    },
+    "ui_xml/firmware_settings.xml": {
+      "sha256": "8becc34f1c71a6d904c7595bc06bf1d7d587579ec6d8976392d0346ef8dd1726",
+      "mode": 420
+    },
+    "ui_xml/globals.xml": {
+      "sha256": "3549531e9c585259fcbd131ad65e957666cd938b47bdabbec0f0ced86b207371",
+      "mode": 420
+    },
+    "ui_xml/guided_load_modal.xml": {
+      "sha256": "1e40a08a380d444d6bf492d085a12f9aaefe95751bbd504e16a75c16173dcb71",
+      "mode": 420
+    },
+    "ui_xml/hardware_health_overlay.xml": {
+      "sha256": "75fdf0a9fa23177cf0112286ce93eba0486fcff61a213ae2c471ca5d8e2dc591",
+      "mode": 420
+    },
+    "ui_xml/head_inventory.xml": {
+      "sha256": "1ba1ee38ec741de73ef0e722f1359e6d2db69b5b02160e1b96446caacc9a7da5",
+      "mode": 420
+    },
+    "ui_xml/header_bar.xml": {
+      "sha256": "5cdcb2eb25ec49ef88b0fe0b5e5a775b0b604d4247714867750ffad37c11dcbe",
+      "mode": 420
+    },
+    "ui_xml/hidden_network_modal.xml": {
+      "sha256": "6addc811ce2584bcb7abef20f0aee0294bb586c1b224ba6e45af824f24e93054",
+      "mode": 420
+    },
+    "ui_xml/history_dashboard_panel.xml": {
+      "sha256": "6e75042a70eafaff30884850744263bd320f70003593f42309f5958b4bef6f0c",
+      "mode": 420
+    },
+    "ui_xml/history_detail_overlay.xml": {
+      "sha256": "b1e76453e9ee680a94d6c44e80d43bc687d6bc94503d950efecac51254015802",
+      "mode": 420
+    },
+    "ui_xml/history_list_panel.xml": {
+      "sha256": "b1162095f444c4de00f54509af2e7dcfbc7913f44cb5239e35839a59e755041c",
+      "mode": 420
+    },
+    "ui_xml/history_list_row.xml": {
+      "sha256": "a4842685c04db6b5fe6a3da693460ad584835dd6f9436329bb5f725898af79f3",
+      "mode": 420
+    },
+    "ui_xml/home_panel.xml": {
+      "sha256": "e6ac1e9901a83d5f6af348759db42a5ce3895dbd45e50689f7025fdb427bcf13",
+      "mode": 420
+    },
+    "ui_xml/info_qr_modal.xml": {
+      "sha256": "65045af5e1b684f3e73b6eb3cd43d1a9d1f1d4436808af00120c33b8b1f8ad4e",
+      "mode": 420
+    },
+    "ui_xml/input_shaper_panel.xml": {
+      "sha256": "24ea5f2fd6c5314e0947121fffac78bbaf957ede20c1b5c07c38a10926a818e0",
+      "mode": 420
+    },
+    "ui_xml/ipv4_keep_modal.xml": {
+      "sha256": "cff9d6e8a7bba1ddc47eea52f88a33fa3023ddad188889e833c34226ac71c75f",
+      "mode": 420
+    },
+    "ui_xml/ipv4_settings_overlay.xml": {
+      "sha256": "064cadfef01f2ac2d2ac436c4076c9d6d2eca759aee51cc9a1d9b5fb8ed7c851",
+      "mode": 420
+    },
+    "ui_xml/job_queue_modal.xml": {
+      "sha256": "4e045bf633b893f677642e5be79b1aa22305b79461b44300a99d5c36fe0b0691",
+      "mode": 420
+    },
+    "ui_xml/klipper_recovery_dialog.xml": {
+      "sha256": "06cabbe0600396d9e87483da800973f238d91686c1f649ede3422713f0b7081a",
+      "mode": 420
+    },
+    "ui_xml/label_printer_settings.xml": {
+      "sha256": "631620eecea39071d020dd2bf1c6ac086bdfcaee9a58d4a848149d0505a7b149",
+      "mode": 420
+    },
+    "ui_xml/layer_pause_modal.xml": {
+      "sha256": "1012215d41ee54d83c1b44689807c2c91e509ea8e802b5bf3c7d304751d4b4e7",
+      "mode": 420
+    },
+    "ui_xml/led_action_chip.xml": {
+      "sha256": "8aa2e59f5363d6d57ac118672990a05f49fe95b638eb00ca7c25ac35c01dd0e0",
+      "mode": 420
+    },
+    "ui_xml/led_control_overlay.xml": {
+      "sha256": "9bb7043e446549f12a6501b16832f0941a25003aed5b77e66239dd85165b5086",
+      "mode": 420
+    },
+    "ui_xml/led_list_chip.xml": {
+      "sha256": "cc164005fc6ee286dd0b90bc82772ae9a45799d26a2c520d559d0afaeb90a60f",
+      "mode": 420
+    },
+    "ui_xml/led_settings_overlay.xml": {
+      "sha256": "4deab7f1a5c0528c6e81c158f4c5927f4d8d3400716412eb612c86e2881bd89b",
+      "mode": 420
+    },
+    "ui_xml/machine_limits_overlay.xml": {
+      "sha256": "31f93db900a14ff1200b5afa91449cba26440cac3facb7f81cf8732213f977b5",
+      "mode": 420
+    },
+    "ui_xml/macro_buttons_overlay.xml": {
+      "sha256": "0be1bb3d0665d48544e42b85d92898183ca537b492edfde6ea8bff2d9517ecba",
+      "mode": 420
+    },
+    "ui_xml/macro_card.xml": {
+      "sha256": "c2403616e07f5ca4e894581d5c8e8017dc165bf53aaa7880f4d18aa4331799ef",
+      "mode": 420
+    },
+    "ui_xml/macro_panel.xml": {
+      "sha256": "c95546fce5f0dcfe584b362bf0881a8584b43456ca18f0a6d21c530547acc1bb",
+      "mode": 420
+    },
+    "ui_xml/macro_param_modal.xml": {
+      "sha256": "58a6b80b5e8d0e67e653a5d68b85ed999896d1394dd29fa49e2227c2c0a1807a",
+      "mode": 420
+    },
+    "ui_xml/maintenance_overlay.xml": {
+      "sha256": "596b43a1904691bbc452b422ca761ad43feff868f792da4ea7e6b43af1155cd7",
+      "mode": 420
+    },
+    "ui_xml/material_operation_banner.xml": {
+      "sha256": "05816243da5a1a53beef8ae51b3209e9d149a527030b8b6243b7d0c584961cdb",
+      "mode": 420
+    },
+    "ui_xml/material_temps_overlay.xml": {
+      "sha256": "05da1d6b1a04856676b71fd98bcd66c42c20fa0d9c46ec66ca479c50bd7643fc",
+      "mode": 420
+    },
+    "ui_xml/material_workspace.xml": {
+      "sha256": "aec4e561a38995df0d26dccedfbc9410dfaadfa8846e248f2bce666d9dd37983",
+      "mode": 420
+    },
+    "ui_xml/modal_button_row.xml": {
+      "sha256": "7beaa875031b6c24eee47515482900c826fbff961a2db50fb01e197ee588de24",
+      "mode": 420
+    },
+    "ui_xml/modal_dialog.xml": {
+      "sha256": "29305ea7db1ed37f62dd51eac9693c67d121795810cb424b78d44f25462b7f0d",
+      "mode": 420
+    },
+    "ui_xml/modal_header.xml": {
+      "sha256": "3ce6b83d310b83c1304fcb0fc2bbc98aabf64cead6a6bcec9a6a06d42f845292",
+      "mode": 420
+    },
+    "ui_xml/motion_panel.xml": {
+      "sha256": "3f38b2a4ad8ab001f11da6f31dcf240312a6c4f9f6d4842629ce30d28b5d47c0",
+      "mode": 420
+    },
+    "ui_xml/motion_settings_overlay.xml": {
+      "sha256": "32df7be92551a27a6ac2ff6a714f857e7e8ef971b528dd70f1308d01701d2cf1",
+      "mode": 420
+    },
+    "ui_xml/navigation_bar.xml": {
+      "sha256": "cb9707b3fa1a54972aea283bca531fc27cfdd837403c87985916a5783482fb3d",
+      "mode": 420
+    },
+    "ui_xml/network_settings_overlay.xml": {
+      "sha256": "46c121687a9f7cd8ccb78a4a35c92c4d5e541a7aa7c1abaa5d0391dcc89eb12d",
+      "mode": 420
+    },
+    "ui_xml/network_test_modal.xml": {
+      "sha256": "b44d0888a2e7b552ff87584ebac00cde4ea5bf97a7d8a6fd22c7e5a274d9cdbc",
+      "mode": 420
+    },
+    "ui_xml/notification_history_item.xml": {
+      "sha256": "1a179c204c3c3e6402218cee84a622a6f6e0185621fd7e624a8a41a10d628ea2",
+      "mode": 420
+    },
+    "ui_xml/notification_history_panel.xml": {
+      "sha256": "ffc92c6bf9fc4adbb46e0d9e956d744ec51498cd7eabf3323c252e3b20fce8f2",
+      "mode": 420
+    },
+    "ui_xml/numeric_keypad_panel.xml": {
+      "sha256": "b4682c88e28ee821523c36fde8c4a08f24577baa4e3682b34f3bafe3a5eac943",
+      "mode": 420
+    },
+    "ui_xml/overlay_panel.xml": {
+      "sha256": "c8df29512d5ca97b7670d5c27865360e2d0ae36cf664c33d1c5e0f035f9e3e1d",
+      "mode": 420
+    },
+    "ui_xml/pa_tuning_overlay.xml": {
+      "sha256": "bb607eb7592baf1d4eeb225a03611ec24e42c0dd4d1c27a10f36406748dc3dc2",
+      "mode": 420
+    },
+    "ui_xml/panel_belt_tension.xml": {
+      "sha256": "4046e097daf0c1417c49d29a5d8a6791c707981cf81190b8f054dfcdb5a7bc83",
+      "mode": 420
+    },
+    "ui_xml/path_calibration.xml": {
+      "sha256": "61a06d5ff9f62789ecbd1e70514e696fece4b67308098e539774a85ff2b9f021",
+      "mode": 420
+    },
+    "ui_xml/path_calibration_banner.xml": {
+      "sha256": "d0d3cdc37353ebb8e79420157df2459956946979be5a55bfcb739b399ab80e80",
+      "mode": 420
+    },
+    "ui_xml/performance_overlay.xml": {
+      "sha256": "b790f667de6b4f9328e1d5e83130cc3ee17117aa55fb72759df1b63bdcdc5896",
+      "mode": 420
+    },
+    "ui_xml/plr_wizard_overlay.xml": {
+      "sha256": "79f5ea9b8d2f1011a28c581e3060aa57dfbde9ea4897a08fd03a9b2aff7ea249",
+      "mode": 420
+    },
+    "ui_xml/plugin_install_modal.xml": {
+      "sha256": "a4ddae456b35730d723627f5133b8beb3b900201638a02640648b03ebd83f8f3",
+      "mode": 420
+    },
+    "ui_xml/plugin_overview_overlay.xml": {
+      "sha256": "9e7ab8957481bedcefe17af0844e361c374ef02649423818efb74b5f2c7ffd7b",
+      "mode": 420
+    },
+    "ui_xml/plugin_settings_overlay.xml": {
+      "sha256": "29d31690ada8c09c9f02b9f494299fc8b937cb499557de6015ec20c8a6eca8de",
+      "mode": 420
+    },
+    "ui_xml/plugins_overlay.xml": {
+      "sha256": "fd3f72ee97306f6353f432efe94a8ee0912fe012f099ca9eabcd81845588694e",
+      "mode": 420
+    },
+    "ui_xml/power_device_picker.xml": {
+      "sha256": "f3ff32f146ca652bcf953571b54c21eaf4958f1c57365bc32f6363fa09bd9d57",
+      "mode": 420
+    },
+    "ui_xml/power_device_row.xml": {
+      "sha256": "0e7fe4040bec7d2825ed829c0684f3148bae5ea2caf53418f8a9d3a261df845f",
+      "mode": 420
+    },
+    "ui_xml/power_panel.xml": {
+      "sha256": "ebc1cf83e8c45198602942b5e57570d6d95142b718930fc9ecd3456fcaa63082",
+      "mode": 420
+    },
+    "ui_xml/print_cancel_confirm_modal.xml": {
+      "sha256": "78c31e7f85de9b85ab9cc500a39febfd86fe7391e9da3c9321993661f72ba155",
+      "mode": 420
+    },
+    "ui_xml/print_completion_modal.xml": {
+      "sha256": "cc872b66429211eae8d3f3bb57a681316a56e3fce131e373164c4ccbcf8fb9cd",
+      "mode": 420
+    },
+    "ui_xml/print_file_card.xml": {
+      "sha256": "d2087f39a12fe922f4be4a874ca12059a39ed42ed707bba34fbf2f01a3080650",
+      "mode": 420
+    },
+    "ui_xml/print_file_detail.xml": {
+      "sha256": "bd1a85fc692f5b0fc5237794dd52fee5906704ebaf1db991706d8575de17c362",
+      "mode": 420
+    },
+    "ui_xml/print_file_list_row.xml": {
+      "sha256": "4f821ba76bc173dc2dc7b92db332671b248d7783118cbed0d7c16ece7f9ed96d",
+      "mode": 420
+    },
+    "ui_xml/print_select_panel.xml": {
+      "sha256": "584698b5b6c6af9639068402a9267ec53ff10bee9dfde17475cffffebbad2061",
+      "mode": 420
+    },
+    "ui_xml/print_status_panel.xml": {
+      "sha256": "8bcea0508cb37d792bbe7876a9c00a4c212cd3c127697fbb691351779169d54e",
+      "mode": 420
+    },
+    "ui_xml/print_tune_panel.xml": {
+      "sha256": "abd7c0b91871a1ddb9ecd721d4fe3c81e52d585c6c6bac28f37eb01c61eb7dd1",
+      "mode": 420
+    },
+    "ui_xml/printer_events_overlay.xml": {
+      "sha256": "8d77cc28e26563fc3868d6083396ce6cc1c115e4646be87797c335f4eadc2b40",
+      "mode": 420
+    },
+    "ui_xml/printer_image_list_item.xml": {
+      "sha256": "42809262fa1f803bacefc6b5b2dc0585e1300c78008980989dab0e784ff3c113",
+      "mode": 420
+    },
+    "ui_xml/printer_image_overlay.xml": {
+      "sha256": "5ccfd85779ecd85d043e9b25c7c4a3dc745c7fe1d09e845f41840b7cd8635988",
+      "mode": 420
+    },
+    "ui_xml/printer_image_tagger_overlay.xml": {
+      "sha256": "56834eb976291afccfacf36b3fecccc6af1c955a23131d527209ac283fa25f6a",
+      "mode": 420
+    },
+    "ui_xml/printer_list_item.xml": {
+      "sha256": "1314b11b779af068caf70cddac0bd36740085d5721c1ff3029e7480833550817",
+      "mode": 420
+    },
+    "ui_xml/printer_list_overlay.xml": {
+      "sha256": "41ba7f22fea230c73cabed461cf30f9dda2e7a8a40799d8f972db0c8e0a0b461",
+      "mode": 420
+    },
+    "ui_xml/printer_manager_overlay.xml": {
+      "sha256": "b96d66e5fa2c09cc14cdc2d5c290f3a0f785b4eeeb5425b2dc47a94c191248d5",
+      "mode": 420
+    },
+    "ui_xml/printer_type_overlay.xml": {
+      "sha256": "7d3b39cb068c531cfd99c0a83f5194f5c67df675d8ee5411c8093d8df8088f31",
+      "mode": 420
+    },
+    "ui_xml/probe_accuracy_modal.xml": {
+      "sha256": "405072f49e2ce79005dde308e5e8ff780ba5c9d8c30958f0ce346c6b3a21de08",
+      "mode": 420
+    },
+    "ui_xml/probe_beacon_panel.xml": {
+      "sha256": "7bbc5187fcafc143a3dc47a24863f19ec7fce891fd44c7f1f56dc1f67f08b6ef",
+      "mode": 420
+    },
+    "ui_xml/probe_bltouch_panel.xml": {
+      "sha256": "7ca95154372a9ce8262a3752e3ac992a69529e370f18aaca7c33205b16be92f3",
+      "mode": 420
+    },
+    "ui_xml/probe_cartographer_panel.xml": {
+      "sha256": "28851b7e89ef98f472b5cfc2b9377bce6949f4b80cdca0cb22c57bd28beb93d8",
+      "mode": 420
+    },
+    "ui_xml/probe_config_edit_modal.xml": {
+      "sha256": "a6f04884472434c1d9a914122fd3ba696846e7bc91d636ad618961e4b64f461e",
+      "mode": 420
+    },
+    "ui_xml/probe_eddy_panel.xml": {
+      "sha256": "6b30a44420ac22be8c6a54d97ad29fd435cf7455e67bd21534983d9697f89306",
+      "mode": 420
+    },
+    "ui_xml/probe_generic_panel.xml": {
+      "sha256": "c9b1a91349a875440177ad88b54ca8e7b0ec1176d8c9e5a49a334ddd743eca7e",
+      "mode": 420
+    },
+    "ui_xml/probe_overlay.xml": {
+      "sha256": "0d224166c120750310292c842a55f3f5fdf307d19a4b98f0abfeefceb75b0254",
+      "mode": 420
+    },
+    "ui_xml/recovery_fault_modal.xml": {
+      "sha256": "6cdef0e5dca48000988001939f5e9610077f1f7c8c59119add30484f4d18d974",
+      "mode": 420
+    },
+    "ui_xml/restart_prompt_dialog.xml": {
+      "sha256": "63e94df7dd2892e5103b8dc9298dd10d3147470dfff2c6e7fe53e149d0ee0a38",
+      "mode": 420
+    },
+    "ui_xml/retraction_settings_overlay.xml": {
+      "sha256": "9d085766be7cb51bc0ec88967bac854a84ae9f7222ab26239d96a725c8ab5af6",
+      "mode": 420
+    },
+    "ui_xml/runout_guidance_modal.xml": {
+      "sha256": "69457bac7f4d4ec79bbb76d550d616acee54c91cc4b7a601e81fce086fa27944",
+      "mode": 420
+    },
+    "ui_xml/screws_tilt_panel.xml": {
+      "sha256": "1abcf18383256daa94f3c377015a2028e70b7f40385070413359db6af5208c76",
+      "mode": 420
+    },
+    "ui_xml/screws_tilt_share_modal.xml": {
+      "sha256": "c8604f15f9881645f45f5bbbb76ec9901a13a126d98b2a89b74409b030aebc59",
+      "mode": 420
+    },
+    "ui_xml/security_settings_overlay.xml": {
+      "sha256": "d6ca2d86f8bbb44183d7100d495c23f77da16f03accbcb48042b604ecbd7808b",
+      "mode": 420
+    },
+    "ui_xml/sensor_row.xml": {
+      "sha256": "2314c228a6c2dc1ec34853c332e40aa5847505df1a7d8a42e8d90efd1971ad2d",
+      "mode": 420
+    },
+    "ui_xml/sensors_overlay.xml": {
+      "sha256": "1cd1a3f6cf5753fb99bc7622db044682a7fee9b86b0b4622fe45694ae7e24b61",
+      "mode": 420
+    },
+    "ui_xml/setting_action_row.xml": {
+      "sha256": "7c0daaf8af9eca26931524561b873455d4b0e4575c4e36e7991e1df896829e7e",
+      "mode": 420
+    },
+    "ui_xml/setting_detail_panel.xml": {
+      "sha256": "63863b3b7cdad8e85f2979ceeda681aa2ddfffd7ddaafcff2bfb91897c0c5634",
+      "mode": 420
+    },
+    "ui_xml/setting_dropdown_row.xml": {
+      "sha256": "370b0ca995bba130683170c74d0f7cd38e9c381d6ef5fdc0383836b14edf65b8",
+      "mode": 420
+    },
+    "ui_xml/setting_form_dropdown.xml": {
+      "sha256": "e7c9341247052b84f6eab600f57cf89391587e1347c86df2cb6f93d1fa526b59",
+      "mode": 420
+    },
+    "ui_xml/setting_form_input.xml": {
+      "sha256": "56cc64829e46af3d6acb57d76ecccfd9eca65373538efefff368cdc416a0aa30",
+      "mode": 420
+    },
+    "ui_xml/setting_group_header.xml": {
+      "sha256": "21e4ab4666c727205850b7194f8dde9e51609482153c023308df32ba3c055249",
+      "mode": 420
+    },
+    "ui_xml/setting_info_row.xml": {
+      "sha256": "3c6292620fd6804b2aabbc0f98d1e945ba2ba10d6e81c9984e26931ce1a16083",
+      "mode": 420
+    },
+    "ui_xml/setting_macro_card.xml": {
+      "sha256": "155bb3295250017708708816e3c13dfb8d6a45b8300ba97202709e08bb107a29",
+      "mode": 420
+    },
+    "ui_xml/setting_section_header.xml": {
+      "sha256": "67b40a4d1abc554977ea308bbbb0836b15f1eb950babbc457b49ef3dccd3ff03",
+      "mode": 420
+    },
+    "ui_xml/setting_slider_row.xml": {
+      "sha256": "eddd20eaead39a2f247c7d6e2af77c17165f718cc823c3afdc06d33c06945444",
+      "mode": 420
+    },
+    "ui_xml/setting_state_row.xml": {
+      "sha256": "307353de5cb984552cdf8e048a8b97e3103750a6bf743aa75e8e60440ad88993",
+      "mode": 420
+    },
+    "ui_xml/setting_text_row.xml": {
+      "sha256": "dd61a099baaf56bded0f730bff4472b44736255a65c74e9fc379a2fb6c2f36d4",
+      "mode": 420
+    },
+    "ui_xml/setting_toggle_row.xml": {
+      "sha256": "1c6ef0f789c2c2d9c27e8e74766367b47a560fec7691b14d934bbe4c44928579",
+      "mode": 420
+    },
+    "ui_xml/setting_value_field.xml": {
+      "sha256": "d0ffdf51ca859d21292f55e9426b51938968aaad3a35a9d497f5901c907ca5f7",
+      "mode": 420
+    },
+    "ui_xml/settings_appearance_overlay.xml": {
+      "sha256": "21319c23aba279afcb49e66a6c0c56101282795209b83569a0b43da7d97902bb",
+      "mode": 420
+    },
+    "ui_xml/settings_connection_overlay.xml": {
+      "sha256": "c886e6aa340551931d903264ce36a0f24ee9e652364e065050a6f548fdbb9ca7",
+      "mode": 420
+    },
+    "ui_xml/settings_display_overlay.xml": {
+      "sha256": "ebe0f0e075af4391a6487e9488c3a3b1835f842e1bd0a1cc750af5598296fe2a",
+      "mode": 420
+    },
+    "ui_xml/settings_hardware_overlay.xml": {
+      "sha256": "330373129e54d6dc06e4104874314d17004a25524632dba35e28925b504a27b4",
+      "mode": 420
+    },
+    "ui_xml/settings_help_overlay.xml": {
+      "sha256": "e2045081db0a8d4153c97a8e4c4b2882f3f07cc2ab74f52bb6057f8d9f581c4e",
+      "mode": 420
+    },
+    "ui_xml/settings_language_time_overlay.xml": {
+      "sha256": "084d5ae7bfe3fdb5e789e493beb4a461b4730f2f3a550a137d5599263d37c26a",
+      "mode": 420
+    },
+    "ui_xml/settings_panel.xml": {
+      "sha256": "6700e1710daa65713bed76bf625a867a299f791432f806c8be82f9cf5dfa4f07",
+      "mode": 420
+    },
+    "ui_xml/settings_printing_overlay.xml": {
+      "sha256": "1bba01d2322cac8ecff64b1c50c3b02712ba02073791290f635126c02f7b196a",
+      "mode": 420
+    },
+    "ui_xml/settings_safety_overlay.xml": {
+      "sha256": "39490a007c3b3ce973290278025a637fe32fca1157360f79f7e6d21af7bc255e",
+      "mode": 420
+    },
+    "ui_xml/settings_screen_sharing_overlay.xml": {
+      "sha256": "ca8985cb923ba8329a9d71cfd8ca5589ab8684b973be355887bb55d497139669",
+      "mode": 420
+    },
+    "ui_xml/settings_sound_overlay.xml": {
+      "sha256": "42acbed352816372b215287a3f0b6154ccba4576618b4d9114a58595bb288148",
+      "mode": 420
+    },
+    "ui_xml/settings_storage_overlay.xml": {
+      "sha256": "6b81741ebae8bf2a997639e0b321df0f5077714940960b5831e87825d63a79c0",
+      "mode": 420
+    },
+    "ui_xml/settings_system_overlay.xml": {
+      "sha256": "32654495737ad378b96bb3977a92d481aa5f2524d37631a51b8f6b7415b2bdb5",
+      "mode": 420
+    },
+    "ui_xml/settings_touch_overlay.xml": {
+      "sha256": "59e20579f8262e790dcf59c11c64f5a2cc43fa622cdccfe6d178ed7115df113e",
+      "mode": 420
+    },
+    "ui_xml/settings_updates_overlay.xml": {
+      "sha256": "dd01212b4f577958a016325be2db2e1d059fbcd71261db6b98c5e4837847bf15",
+      "mode": 420
+    },
+    "ui_xml/shutdown_modal.xml": {
+      "sha256": "968f15c7f387b76390e652e725b102ca748b4d1abc2598631e24fad8fc62fff1",
+      "mode": 420
+    },
+    "ui_xml/snapmaker_nozzle_offset_overlay.xml": {
+      "sha256": "0bd849aff7f6efd116f685b30e011dbd8d06e60067639f055348f36f0ae9357c",
+      "mode": 420
+    },
+    "ui_xml/sound_preview_overlay.xml": {
+      "sha256": "3ac5afe6c527f3b7f78c73030ab831485cbaf231ddcc1494be162312dc70f2e2",
+      "mode": 420
+    },
+    "ui_xml/spool_wizard.xml": {
+      "sha256": "99883fb7258a9eb6ab6f99dc00ab6450b3067fbd64d0cb26e20eab91cf904a9b",
+      "mode": 420
+    },
+    "ui_xml/spoolman_context_menu.xml": {
+      "sha256": "39ec9e757fac74f40a20538c094a1d49c50721272a5c1fa57a06b0382ed90f41",
+      "mode": 420
+    },
+    "ui_xml/spoolman_edit_modal.xml": {
+      "sha256": "596c65ecd960aca60a667f43b9dea6bf508450d8070415f945b744e55c3bc772",
+      "mode": 420
+    },
+    "ui_xml/spoolman_panel.xml": {
+      "sha256": "70778dc34e27b4b3aea5fe866db9a8f30f3dc0414f2dfc638687ab41d959b3ee",
+      "mode": 420
+    },
+    "ui_xml/spoolman_settings.xml": {
+      "sha256": "b36a0dc66540b706ad4773b333bc97c7698357dc806f32d93eda69f226225399",
+      "mode": 420
+    },
+    "ui_xml/stepper_resonance_cal_modal.xml": {
+      "sha256": "bb9a2d0270fd37edd5637dea4037cabafa59b88df83981aeb52ace4b8cb8e266",
+      "mode": 420
+    },
+    "ui_xml/styles.xml": {
+      "sha256": "79f14b9dc91edfad5429ea5951643211228ef4aa5448a716dbb2aeb14c8b02c1",
+      "mode": 420
+    },
+    "ui_xml/telemetry_data_overlay.xml": {
+      "sha256": "8ed73469b9c69e96a3b04e606d1451eb0e665c7d9c433a1525ae868965368725",
+      "mode": 420
+    },
+    "ui_xml/telemetry_info_modal.xml": {
+      "sha256": "5d759f646dd3ef28fd23b128841e69e4ebc3a6e5960844c06f58c08b5da16b2e",
+      "mode": 420
+    },
+    "ui_xml/temp_graph_overlay.xml": {
+      "sha256": "0251abfb69b6ebf53da0240ffda3920455fc4217bbe250be022911cddffc1441",
+      "mode": 420
+    },
+    "ui_xml/text_entry_modal.xml": {
+      "sha256": "2f1cbd9746ddb2400c515d6daa8a81fe6338d688980c5e1db24674f782f0767d",
+      "mode": 420
+    },
+    "ui_xml/theme_editor_overlay.xml": {
+      "sha256": "ed93ce73dc3414cf31363324f280d9c471f265ac16d98b859b97678ae871044b",
+      "mode": 420
+    },
+    "ui_xml/theme_preview_overlay.xml": {
+      "sha256": "096a5d3af1ce740d91e1506a00f017daa64517dd9e3e36a5eb557dcf30d8ba6e",
+      "mode": 420
+    },
+    "ui_xml/theme_save_as_modal.xml": {
+      "sha256": "5577491d20c8336c8bac09fe6e5b7797b730bd04fb74375869bc95ca9ac40cc6",
+      "mode": 420
+    },
+    "ui_xml/timelapse_install_overlay.xml": {
+      "sha256": "2a5ceca59666b56fea1f635cc0985f3fc57e9edb16410cb94ec99bab1ce2dc24",
+      "mode": 420
+    },
+    "ui_xml/timelapse_settings_overlay.xml": {
+      "sha256": "eee8e91b32abba9b5f1c92a2b97c600b261dd2250f93ce0b4d0498cc942fb77d",
+      "mode": 420
+    },
+    "ui_xml/timelapse_videos_overlay.xml": {
+      "sha256": "6f48c8733b3a50f274093b293bebde537c5898e56808215086f1a27d66ad8e6a",
+      "mode": 420
+    },
+    "ui_xml/toast_notification.xml": {
+      "sha256": "912df97776362bbd5cd21f61671c4bbe5a53b20a33a98d563729c05963b5f7d0",
+      "mode": 420
+    },
+    "ui_xml/toolhead_preset_config_modal.xml": {
+      "sha256": "3e906e510c180d3c971cc3285d6d46bd45d6c1053a753db77a9d26d48571c7ba",
+      "mode": 420
+    },
+    "ui_xml/touch_calibration_overlay.xml": {
+      "sha256": "9478046a5f5903bbfa808b0cb57bb2becc548f51730f9c9425e4463eebb52f4d",
+      "mode": 420
+    },
+    "ui_xml/tour_tooltip_card.xml": {
+      "sha256": "e5ea6fd195326653ab1f6703e87d2c87d667e4d089215048be5efe56aa1663d5",
+      "mode": 420
+    },
+    "ui_xml/translations/en.xml": {
+      "sha256": "19b368746b9b14a96ddec9a9075a54094bb40fcd5de416860d5f148b3d7a16e5",
+      "mode": 420
+    },
+    "ui_xml/translations/translations.xml": {
+      "sha256": "ca13ce7d31420922872ced3f3bba75ae849fec6a23933dc52823fffb6b054360",
+      "mode": 420
+    },
+    "ui_xml/translations/zh.xml": {
+      "sha256": "a400fd8e2051f3f44b02a566909bfcbe57861b8f5b7e464afbbf1675638cc3ef",
+      "mode": 420
+    },
+    "ui_xml/u1_dryer_content.xml": {
+      "sha256": "6812ec086cb39ffe4ebb6ee5706a398c576ce682b424df7d449b584ff8aef4a1",
+      "mode": 420
+    },
+    "ui_xml/u1_external_supply_title.xml": {
+      "sha256": "3c6e71be47bf0df75bea0053c3b4c53cf76e651d2f530afe900c92daa7fd59fc",
+      "mode": 420
+    },
+    "ui_xml/u1_material_edit.xml": {
+      "sha256": "22a400b0c970a428c8b85f5ec7f640c93b78d46dbafa1a24190bfb5dba2a947a",
+      "mode": 420
+    },
+    "ui_xml/u1_menu_tile.xml": {
+      "sha256": "b5f713053bf0066f0af0981111ff4537bb9e3afb4463fc5cdb0bceca6f33acff",
+      "mode": 420
+    },
+    "ui_xml/u1_settings_tile.xml": {
+      "sha256": "11d4306dd96a5da2cbd95783c515138cf5d753b4d017c6ad57ac8898b5d49151",
+      "mode": 420
+    },
+    "ui_xml/update_download_modal.xml": {
+      "sha256": "251e17afc28c931de522d54ee814fffb4d228cf7a46227fa6a287bac7f7e207d",
+      "mode": 420
+    },
+    "ui_xml/update_notify_modal.xml": {
+      "sha256": "34cbf90511bcb32d11f418e5c698f8c21c488468476a85597ae02db5da04001a",
+      "mode": 420
+    },
+    "ui_xml/widget_catalog_category_overlay.xml": {
+      "sha256": "80465cc826124af292039c3664c0b7a2491126e6e8faae62ede908737e4b1eb5",
+      "mode": 420
+    },
+    "ui_xml/widget_catalog_overlay.xml": {
+      "sha256": "2e72819a8e617934c84ca8107258a96b3a15cd49a5733fb85dbb6ad2b4393ab2",
+      "mode": 420
+    },
+    "ui_xml/wifi_network_item.xml": {
+      "sha256": "8a4ca6a10ff2e48823fc904113c842e591a0d89e9b7fc8837e2108fb5715c6ad",
+      "mode": 420
+    },
+    "ui_xml/wifi_password_modal.xml": {
+      "sha256": "acc135db30d7990888c8af89743f1496d2c9697e5de0c42adddb2ac3be068dfd",
+      "mode": 420
+    },
+    "ui_xml/wizard_ams_identify.xml": {
+      "sha256": "2ca030663972b70786e6c66fce031a5eeb4f48da21c40869a6dc5f1a10b5d1da",
+      "mode": 420
+    },
+    "ui_xml/wizard_appearance.xml": {
+      "sha256": "1aec80bf72f1ab8c9d8d87c14709a072119733a8cace07e78d302d93f9e88ce5",
+      "mode": 420
+    },
+    "ui_xml/wizard_catalog_row.xml": {
+      "sha256": "6d3f90bf0ef9a9656972a38b15926e3032a18d4e309bbde2821460e9ab029361",
+      "mode": 420
+    },
+    "ui_xml/wizard_connection.xml": {
+      "sha256": "ddb61fa49d9ae3d3ac8f95a1b7748695637ea7f462d112102bf497c671ed3a49",
+      "mode": 420
+    },
+    "ui_xml/wizard_container.xml": {
+      "sha256": "91eaace374b32f94ff48bb6d37c4cca0125f79c736e74c97d60305f31a696f39",
+      "mode": 420
+    },
+    "ui_xml/wizard_fan_select.xml": {
+      "sha256": "37caa0518ce6ef023ecbf03052d02cdf3d836ec6f31232eb5a1f3688c1aefd42",
+      "mode": 420
+    },
+    "ui_xml/wizard_filament_row.xml": {
+      "sha256": "64baac05adfced1b2578fc7f7c104c0b612db905f9092f99f8ab896d29ed1709",
+      "mode": 420
+    },
+    "ui_xml/wizard_filament_sensor_select.xml": {
+      "sha256": "525ff0505aba3a30edbd35e8ec8add7307356e56d45ee60edfd458fc79efae30",
+      "mode": 420
+    },
+    "ui_xml/wizard_header_bar.xml": {
+      "sha256": "6a268f871ff9b5cb9fd1808380c19886d3e3c621989181e1e1f042b1c1c7dcee",
+      "mode": 420
+    },
+    "ui_xml/wizard_heater_select.xml": {
+      "sha256": "7bf4e5c5d5d95a081ba8d2568e40dbc989a75e802667828e90cd3fa7753ebdc0",
+      "mode": 420
+    },
+    "ui_xml/wizard_input_shaper.xml": {
+      "sha256": "1c8cee51fc99fb7d1967aa42398a6018174f483882852ed5dfc0b9ddaf92fccf",
+      "mode": 420
+    },
+    "ui_xml/wizard_language_chooser.xml": {
+      "sha256": "f798ee0e4310931c9c385d1fb2116d60d569773f628550211480b1963b6e2f2a",
+      "mode": 420
+    },
+    "ui_xml/wizard_led_select.xml": {
+      "sha256": "87ca783301c4a0d5c5ac0a6a4ebab9162963bd6a92e794ac2907e16dfede8a77",
+      "mode": 420
+    },
+    "ui_xml/wizard_preferences.xml": {
+      "sha256": "0c555c8f5084618c48d20f6eda64939ae878c87913e09e8711b40419f75d70ab",
+      "mode": 420
+    },
+    "ui_xml/wizard_printer_identify.xml": {
+      "sha256": "fe99461414b0352e58d7172d21fe85638bd063894745a337448c22a9183b46af",
+      "mode": 420
+    },
+    "ui_xml/wizard_summary.xml": {
+      "sha256": "334b6c104c985019990cb380583402967f468861cd47e325501280be9f33f34d",
+      "mode": 420
+    },
+    "ui_xml/wizard_telemetry.xml": {
+      "sha256": "65ce265873f6ab3825cb696e479eb1e62281317ddbade75e5c04e127e6f69ad1",
+      "mode": 420
+    },
+    "ui_xml/wizard_touch_calibration.xml": {
+      "sha256": "e3d62414f4ea3bb268d3a54ddcfebab511261792cb8d5fddcd9d9d3fe64b385c",
+      "mode": 420
+    },
+    "ui_xml/wizard_vendor_row.xml": {
+      "sha256": "2e549f55a832def082ad0ea95e18eedebb77f0a65dedbbb13234056d51b5d217",
+      "mode": 420
+    },
+    "ui_xml/wizard_wifi_setup.xml": {
+      "sha256": "95a98641cfeb4d4c708e1dd9fc317e11cac6531fe19eb9715aecc1e641586632",
+      "mode": 420
+    }
+  },
+  "deleted_paths": [],
+  "installed_display_source_hashes": {
+    "src/printer/ams_backend_multiace.cpp": "527b5555487ae81f0fa3755a5c012afa6cbc2f711703615c8b33945f6e325f6c",
+    "src/ui/filament/u1_filament_overview.cpp": "0f53b71fc7d28c28bf64ff7cb7c5585ba9f1edb0ee49d23e4b0522ad91125488",
+    "src/ui/home/u1_home_overview.cpp": "0d4b4974e11472d27b2a1ebb10fc3ed9c04c09496fc5b5b0da62cf93ca705bd2",
+    "tests/unit/test_ams_backend_multiace.cpp": "04f18921cd4c347316bda5ca38faf1bc53d3d51d12476631b673b8c1263d157f"
+  },
+  "installed_display_binary_sha256": "84c961e7e9be16b2cda458ec291f1e2475e00bbe38a8bf0d5bb446536ddc9c2c"
+}

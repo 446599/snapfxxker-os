@@ -1,0 +1,32 @@
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -502,8 +502,9 @@
+                 if not hold.valid_marker or hold.active:
+                     raise RuntimeError("退出记录复核失败")
+                 a._location_hold = hold
+-            # Ejected is never evidence of a loaded filament park.
+-            a._normal_load_speed.park = None
++            # Only the calibrated 0/3 route owns this park reference.
++            if (idx, slot) == (0, 3):
++                a._normal_load_speed.park = None
+         except Exception:
+             if replaced and archive is not None:
+                 os.replace(archive, PATH)
+@@ -635,7 +636,7 @@
+     port, uid = identity if identity is not None else ace._location_identity(idx)
+     # Keep this route held in memory even if the durable write fails.
+     ace._location_hold.hold_route(port, uid, slot, heads, scope)
+-    if getattr(ace, '_normal_load_speed', None) is not None:
++    if (idx, slot) == (0, 3) and getattr(ace, '_normal_load_speed', None) is not None:
+         ace._normal_load_speed.park = None
+ 
+ 
+@@ -720,7 +721,7 @@
+         hold_error = None
+         try:
+             route = hold.hold_memory(original_identity[0], original_identity[1], slot, original_heads, original_scope)
+-            if getattr(actions.ace, '_normal_load_speed', None) is not None:
++            if (idx, slot) == (0, 3) and getattr(actions.ace, '_normal_load_speed', None) is not None:
+                 actions.ace._normal_load_speed.park = None
+         except Exception as exc:
+             hold_error = exc

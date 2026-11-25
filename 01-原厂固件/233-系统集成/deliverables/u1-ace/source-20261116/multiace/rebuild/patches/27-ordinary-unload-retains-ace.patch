@@ -1,0 +1,131 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -9809,6 +9809,10 @@
+                         idx, [GATE_UNKNOWN] * 4)
+                     _gate_prev = gate_list[i]
+                     gate_list[i] = GATE_EMPTY if self._is_empty_status(new_slot.get('status')) else GATE_AVAILABLE
++                    if _gate_prev != GATE_EMPTY and gate_list[i] == GATE_EMPTY:
++                        travel = getattr(self, '_head_travel', None)
++                        if travel is not None:
++                            travel.forget_park(idx, i)
+                     # Diagnostic (klippy.log only): every real gate flip, so an
+                     # "insert did nothing" can be told apart from "insert not
+                     # seen". Skips the UNKNOWN->x startup step (noise).
+@@ -10761,6 +10765,35 @@
+         self._travel_legacy_finish(idx, slot)
+         return self._head_travel.remaining(head, idx, slot)
+ 
++    def _verify_unload_park(self, idx, slot, head):
++        transport = self._serials.get(idx)
++
++        def check_route():
++            if (transport is None or self._serials.get(idx) is not transport
++                    or not self._connected_per_ace.get(idx)
++                    or self._reconnecting_per_ace.get(idx)):
++                raise RuntimeError('喷头已清空，但无法确认 ACE 槽口状态：连接已变化')
++
++        for attempt in range(2):
++            check_route()
++            if self._is_v2_idx(idx):
++                present = self._slot_actions._gate(idx, slot, monitor=check_route)
++            else:
++                response = self._tipform_send(idx, {'method': 'get_status'}, timeout=2.0)
++                slots = ((response or {}).get('result') or {}).get('slots') or []
++                state = slots[slot].get('status') if slot < len(slots) else None
++                if self._tipform_rejected(response) or not isinstance(state, str) or not state:
++                    raise RuntimeError('喷头已清空，但 ACE 槽口状态未确认')
++                present = not self._is_empty_status(state)
++            check_route()
++            if not present:
++                self._head_travel.forget_park(idx, slot)
++                raise RuntimeError('喷头已清空，但耗材已退过 ACE 槽口，请重新插入耗材')
++            if attempt == 0:
++                self.reactor.pause(self.reactor.monotonic() + 0.2)
++        if self._toolhead_filament_present(head) is not False:
++            raise RuntimeError('ACE 槽口仍有料，但喷头清空未确认')
++
+     def _resolve_retract_length(self, slot, head=None):
+         idx = self._active_device_index
+         if head is None:
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -2798,6 +2798,8 @@
+                             # Hardware-agnostic (V1+V2): the verify is the
+                             # toolhead motion sensor, no ACE device sensor.
+                             if _hot_park_context is not None: self.ace._hot_session.phase = 'short'
++                            keep_in_ace = (_hot_park_context is None
++                                           and not self.ace._swap_in_progress)
+                             _return_mm = self.ace._head_travel.begin_unload(
+                                 head_idx, self.ace._active_device_index, _ace_slot)
+                             _short_retract = (FEED_UNLOAD_PROBE_RETRACT if _return_mm is None
+@@ -3034,6 +3036,11 @@
+                                         # cleared the nozzle; the operator now ejects
+                                         # from ACE and reloads to establish a record.
+                                         raise RuntimeError('喷头已退出；请完全退出 ACE 后重新装入一次，建立送料距离记录')
++                                    if keep_in_ace:
++                                        _rest = self.ace._head_travel.park_distance(
++                                            head_idx, self.ace._active_device_index, _ace_slot)
++                                        if _rest is None:
++                                            raise RuntimeError('喷头已清空，但回停计距未确认')
+                                     if _rest > 0.5:
+                                         # Passive dock wait -> dwell-fan window
+                                         # (swap-gated inside the helper; OFF is
+@@ -3071,8 +3078,16 @@
+                                     raise RuntimeError('喷头清空未验证，未执行回停；保留耗材来源')
+ 
+                             if self.ace is not None:
+-                                self.ace._head_travel.finish_unload(
+-                                    head_idx, self.ace._active_device_index, _ace_slot, unload_ok)
++                                if unload_ok and keep_in_ace:
++                                    idx = self.ace._active_device_index
++                                    self.ace._verify_unload_park(idx, _ace_slot, head_idx)
++                                    self.ace._head_travel.finish_park(head_idx, idx, _ace_slot)
++                                else:
++                                    self.ace._head_travel.finish_unload(
++                                        head_idx, self.ace._active_device_index, _ace_slot, unload_ok)
++                                    if unload_ok and not keep_in_ace:
++                                        self.ace._head_travel.forget_park(
++                                            self.ace._active_device_index, _ace_slot)
+                                 self.ace._last_unload_ok = unload_ok
+                                 self.ace._last_unload_reason = unload_reason
+                                 # Tip-form rollback-assist window is over: release
+@@ -3259,6 +3274,8 @@
+                             # Hardware-agnostic (V1+V2): the verify is the
+                             # toolhead motion sensor, no ACE device sensor.
+                             if _hot_park_context is not None: self.ace._hot_session.phase = 'short'
++                            keep_in_ace = (_hot_park_context is None
++                                           and not self.ace._swap_in_progress)
+                             _return_mm = self.ace._head_travel.begin_unload(
+                                 head_idx, self.ace._active_device_index, _ace_slot)
+                             _short_retract = (FEED_UNLOAD_PROBE_RETRACT if _return_mm is None
+@@ -3495,6 +3512,11 @@
+                                         # cleared the nozzle; the operator now ejects
+                                         # from ACE and reloads to establish a record.
+                                         raise RuntimeError('喷头已退出；请完全退出 ACE 后重新装入一次，建立送料距离记录')
++                                    if keep_in_ace:
++                                        _rest = self.ace._head_travel.park_distance(
++                                            head_idx, self.ace._active_device_index, _ace_slot)
++                                        if _rest is None:
++                                            raise RuntimeError('喷头已清空，但回停计距未确认')
+                                     if _rest > 0.5:
+                                         # Passive dock wait -> dwell-fan window
+                                         # (swap-gated inside the helper; OFF is
+@@ -3531,8 +3553,16 @@
+                                 if _hot_park_context is not None:
+                                     raise RuntimeError('喷头清空未验证，未执行回停；保留耗材来源')
+                             if self.ace is not None:
+-                                self.ace._head_travel.finish_unload(
+-                                    head_idx, self.ace._active_device_index, _ace_slot, unload_ok)
++                                if unload_ok and keep_in_ace:
++                                    idx = self.ace._active_device_index
++                                    self.ace._verify_unload_park(idx, _ace_slot, head_idx)
++                                    self.ace._head_travel.finish_park(head_idx, idx, _ace_slot)
++                                else:
++                                    self.ace._head_travel.finish_unload(
++                                        head_idx, self.ace._active_device_index, _ace_slot, unload_ok)
++                                    if unload_ok and not keep_in_ace:
++                                        self.ace._head_travel.forget_park(
++                                            self.ace._active_device_index, _ace_slot)
+                                 self.ace._last_unload_ok = unload_ok
+                                 self.ace._last_unload_reason = unload_reason
+                                 # Tip-form rollback-assist window is over: release

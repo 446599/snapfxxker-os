@@ -1,0 +1,187 @@
+{
+  "rf_image_sha256": "1ffba30b853ece41509c79b885180447d52c8d591be9185e2849ef341a202e6b",
+  "rf_elf_sha256": "e4fbade558785e32b97341b6ee4c499c6f8925b73977450a79d7f717d1724286",
+  "input_set_sha256": "758335cb4071f5392d389ea21af560f2f577912d9959b78f2916285971fa08a3",
+  "files": {
+    "firmware/bounded_rc522.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/bounded_rc522.c",
+      "sha256": "bb1953ba49bcf0f825127423039080a59d65b4c1d7df1684b1ecb10fa852b896",
+      "bytes": 8255
+    },
+    "firmware/bounded_rc522.h": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/bounded_rc522.h",
+      "sha256": "c51897bae8e8dc372761d5c629d6e82bf7ea185bbd7c80528cdf7d36cb5c8a9a",
+      "bytes": 2831
+    },
+    "firmware/event_storage.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/event_storage.c",
+      "sha256": "bfe40d4adbd0ccf5761bf1aee03212b5ed3f7ae25e6e2776439d38b132307c6b",
+      "bytes": 4264
+    },
+    "firmware/experimental_binding.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/experimental_binding.c",
+      "sha256": "f90a10450c71272d1352271d15e1772a0470123c039d536da54f453fc0e7951b",
+      "bytes": 4823
+    },
+    "firmware/experimental_binding.h": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/experimental_binding.h",
+      "sha256": "23e49c93bd6fdbeb28c2e325beb0e4963983d8a1abc9c9c561a0ad9346e6be6b",
+      "bytes": 1847
+    },
+    "firmware/experimental_gate.S": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/experimental_gate.S",
+      "sha256": "0363ad7b8eb1e47ed86811451168ba834b6df261cc450d4d1b2d8cdac5aeb5bc",
+      "bytes": 963
+    },
+    "firmware/native_tag_decoder.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/native_tag_decoder.c",
+      "sha256": "4ce7672426cae3b7a68271faaf7aa8632c89c6cc83c624d9094424dba1abef5b",
+      "bytes": 41094
+    },
+    "firmware/pageread_gate_stub.s": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/pageread_gate_stub.s",
+      "sha256": "cf55aa4a5e1b2d035996e82131585bafe4c41adeae07c743297f248ebf47ce47",
+      "bytes": 245
+    },
+    "firmware/rawtag_cache_stub.s": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/rawtag_cache_stub.s",
+      "sha256": "9992b3db4c6d8f618d097b06e4a534ba50e556e7a19b7b62fb143923d43a9109",
+      "bytes": 311
+    },
+    "firmware/rawtag_extract_stub.s": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/rawtag_extract_stub.s",
+      "sha256": "c3474a390280e790cd00f0bf8db56ab0211fbf805e7aad183d31d34b07b242a5",
+      "bytes": 315
+    },
+    "firmware/rawtag_stub.s": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/rawtag_stub.s",
+      "sha256": "3e22782be6d88ea6733ff2200e15cc105b5d2ae6de929a363401268747b98137",
+      "bytes": 281
+    },
+    "firmware/rf_owner.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/rf_owner.c",
+      "sha256": "5d0c31bd2d4cefe506372e7267e6df5ccd47961377f5e652f98df415759e73f4",
+      "bytes": 6782
+    },
+    "firmware/rf_owner.h": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/rf_owner.h",
+      "sha256": "ab5d46b0a90e61127acc7c02f984db59d5b5699b614e4d13a01533a85568fe3e",
+      "bytes": 3065
+    },
+    "firmware/rf_stock_adapter.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/rf_stock_adapter.c",
+      "sha256": "db5c6170853086c19747712e92d087ef129eb1afb143e8a6f50059596c4d44a3",
+      "bytes": 4953
+    },
+    "firmware/rf_stock_adapter.h": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/rf_stock_adapter.h",
+      "sha256": "afcdf337ea48f8f777ddf7e9cb568f25e21acc55a127c71f0645575aec8aa266",
+      "bytes": 1863
+    },
+    "firmware/rf_stock_trampolines.S": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/rf_stock_trampolines.S",
+      "sha256": "b21e2dadd4527f3a906a4bac6576bfecbe0d92d05b3cbbdfcc22efc37855eb1b",
+      "bytes": 1276
+    },
+    "firmware/stock_bounded_bridge.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/stock_bounded_bridge.c",
+      "sha256": "155e8aede19f9966090d93e1c17de79786db03c428a4dc765b86948e490daf82",
+      "bytes": 3064
+    },
+    "firmware/stock_bounded_bridge.h": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/stock_bounded_bridge.h",
+      "sha256": "974fbb2b2b05acd0b3b7e415a05a6762e66ed938de6874cbeec75748c98df95e",
+      "bytes": 2154
+    },
+    "firmware/stock_bounded_thunks.S": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/stock_bounded_thunks.S",
+      "sha256": "e7673e2ce1fecbdd22f8fa525d7d0a7ba7ebef38773a7d55593389bf845e2521",
+      "bytes": 601
+    },
+    "firmware/uid_stub.s": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/firmware/uid_stub.s",
+      "sha256": "2c9bcfa7288cedb1af2afcb8af1ca8136abb6ca0593bc79dc11c1c066df34ed6",
+      "bytes": 275
+    },
+    "tests/event_mock.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/tests/event_mock.c",
+      "sha256": "c36ed98d0b02049853643c73f33a02536d69f6cbb28bd59eca2b9ddfde2f0b89",
+      "bytes": 2496
+    },
+    "tests/event_mock.h": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/tests/event_mock.h",
+      "sha256": "cdd9f053384ae826449b7880b7e3be299893a96f594550d6cbc47fc9b8957f72",
+      "bytes": 723
+    },
+    "tests/integration_peripherals.h": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/tests/integration_peripherals.h",
+      "sha256": "bb616ca35da029e5579d308b8f4794124e5e5f3a54f9b52c4a5ba2ab077ccac2",
+      "bytes": 2156
+    },
+    "tests/test_bounded_rc522.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/tests/test_bounded_rc522.c",
+      "sha256": "388fff2ce45070876754678583c44551d4d307cf93d73913ecdeb5e9f11a1567",
+      "bytes": 9286
+    },
+    "tests/test_event_storage.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/tests/test_event_storage.c",
+      "sha256": "3386a2c421d3e6a4363f3c0029aa83b687060a0ba6a4e82620b16b668b0cfba7",
+      "bytes": 4608
+    },
+    "tests/test_integration.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/tests/test_integration.c",
+      "sha256": "4dbcb438493aa04d526ce69942a60339b2df61d034f56b57e9605735bb9ccb51",
+      "bytes": 8608
+    },
+    "tests/test_rf_owner.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/tests/test_rf_owner.c",
+      "sha256": "843eddea4081aba1a0cd4ec75e1dff371d1bbe9c043cd4b29edc911628fce405",
+      "bytes": 8786
+    },
+    "tests/test_rf_stock_adapter.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/tests/test_rf_stock_adapter.c",
+      "sha256": "97c56d404a5719e1f4155ce3b9e9be36fabee54d7cd258019d0ff6da9828fdf6",
+      "bytes": 5765
+    },
+    "tests/test_stock_bridge.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/tests/test_stock_bridge.c",
+      "sha256": "5f5d56f0f4bca8849ab776780a89a58dca52b9f5d4eb9aa1f441c49038d88e77",
+      "bytes": 3159
+    },
+    "tests/verify_image.py": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/tests/verify_image.py",
+      "sha256": "625ce65c1a49963b141808d36922cb3ce1d62ba465ff4e28ea3c3306c8a84a03",
+      "bytes": 8777
+    },
+    "build_offline.py": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build_offline.py",
+      "sha256": "e54f2ac77ad3a01c9d034de92bae6f1d6b7fd250191c1949b86cff1b585b88cb",
+      "bytes": 9811
+    },
+    "analysis-manifest.json": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/output/analysis-manifest.json",
+      "sha256": "365c92390c907c1b6e8765123e0ad975babd41e59a627ad169742e4b672dd901",
+      "bytes": 9493
+    },
+    "original.elf": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-rf-spi/build/EXPERIMENTAL-DO-NOT-FLASH.elf",
+      "sha256": "e4fbade558785e32b97341b6ee4c499c6f8925b73977450a79d7f717d1724286",
+      "bytes": 55884
+    },
+    "preload/preload_hooks.c": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-preload/src/preload_hooks.c",
+      "sha256": "866e9ca742b5eb8bef9ba51244a820fd7f96e2492cd0d851ee06719ed70494a7",
+      "bytes": 1958
+    },
+    "preload/preload_hooks.h": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-preload/src/preload_hooks.h",
+      "sha256": "80a5138d8fc1ed92f35153393dcecfc936196c85ca9375d5f12ca95bdbc4ffdc",
+      "bytes": 1425
+    },
+    "preload/preload_hooks.S": {
+      "source": "/workspace/scratch/f283fdd55202/ace2-open-build/integration-preload/src/preload_hooks.S",
+      "sha256": "ec77e4f166d7aeb99d467ede31c3f4e093f8d21a2f20ad3e1718caaa370e4942",
+      "bytes": 6509
+    }
+  }
+}

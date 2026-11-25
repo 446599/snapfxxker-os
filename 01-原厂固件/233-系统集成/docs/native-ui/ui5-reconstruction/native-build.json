@@ -1,0 +1,11 @@
+{
+  "source_commit": "5866cbef15d0e5221e343eec37a7e6d8971334af",
+  "binary_sha256": "7a6b0e33bf80e56b8f1fcd7383dccb61b602046857abe59a8e5b1e5176a7bdba",
+  "binary_bytes": 126413920,
+  "native_build": "pass",
+  "build_log": "build-logs/native-ui5-rebuild.log",
+  "platform": "x86_64 SDL mock build, hardware USB omitted by local host configuration",
+  "real_device_tested": false,
+  "github_source_checkpoint": "a0057695acad0038c1171d3711f36f9550e92d3f",
+  "reconstructed_not_original_checkpoint": true
+}

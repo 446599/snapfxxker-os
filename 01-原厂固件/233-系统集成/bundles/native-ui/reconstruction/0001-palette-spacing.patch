@@ -1,0 +1,81 @@
+diff --git a/assets/config/themes/defaults/u1-warm.json b/assets/config/themes/defaults/u1-warm.json
+index eab762a..1c2499f 100644
+--- a/assets/config/themes/defaults/u1-warm.json
++++ b/assets/config/themes/defaults/u1-warm.json
+@@ -19,16 +19,16 @@
+     "focus": "#F5C842"
+   },
+   "light": {
+-    "screen_bg": "#F4F5F7",
+-    "overlay_bg": "#F4F5F7",
++    "screen_bg": "#F5F6F3",
++    "overlay_bg": "#F5F6F3",
+     "card_bg": "#FFFFFF",
+-    "elevated_bg": "#EFF1F4",
+-    "border": "#E5E7EB",
+-    "text": "#25282C",
+-    "text_muted": "#6B7078",
+-    "text_subtle": "#737983",
+-    "primary": "#F5C842",
+-    "secondary": "#68717D",
++    "elevated_bg": "#EDF0EA",
++    "border": "#E5E8E1",
++    "text": "#272C2A",
++    "text_muted": "#65706B",
++    "text_subtle": "#65706B",
++    "primary": "#F2C744",
++    "secondary": "#65706B",
+     "tertiary": "#B58A08",
+     "info": "#2B6C98",
+     "success": "#287A4B",
+diff --git a/ui_xml/globals.xml b/ui_xml/globals.xml
+index b5e0c49..efb2462 100644
+--- a/ui_xml/globals.xml
++++ b/ui_xml/globals.xml
+@@ -7,10 +7,28 @@
+     <!-- U1 touchscreen layout contract: shared by every screen family. -->
+     <px name="u1_touch_target" value="44"/>
+     <px name="u1_card_radius" value="12"/>
+-    <px name="u1_page_pad" value="8"/>
++    <px name="u1_page_pad" value="12"/>
+     <px name="u1_card_gap" value="8"/>
+-    <px name="u1_menu_tile_height" value="80"/>
+-    <px name="u1_header_height" value="48"/>
++    <px name="u1_menu_tile_height" value="64"/>
++    <px name="u1_header_height" value="44"/>
++    <px name="u1_status_height" value="32"/>
++    <px name="u1_nav_height" value="46"/>
++    <px name="u1_nav_pad" value="8"/>
++    <px name="u1_nav_gap" value="4"/>
++    <px name="u1_nav_icon_gap" value="6"/>
++    <px name="u1_nav_radius" value="10"/>
++    <px name="u1_brand_width" value="5"/>
++    <px name="u1_brand_height" value="16"/>
++    <px name="u1_brand_radius" value="3"/>
++    <px name="u1_status_dot" value="6"/>
++    <px name="u1_icon_badge" value="28"/>
++    <px name="u1_icon_badge_radius" value="8"/>
++    <px name="u1_emphasis_line" value="24"/>
++    <px name="u1_progress_line" value="30"/>
++    <px name="u1_progress_track" value="6"/>
++    <px name="u1_model_width" value="104"/>
++    <color name="u1_selection_light" value="#FFF5D4"/>
++    <color name="u1_selection_dark" value="#514522"/>
+     <px name="u1_keyboard_min_height" value="204"/>
+     <px name="u1_text_line" value="22"/>
+     <px name="u1_border" value="1"/>
+diff --git a/ui_xml/styles.xml b/ui_xml/styles.xml
+index 74fd1f2..e6a9054 100644
+--- a/ui_xml/styles.xml
++++ b/ui_xml/styles.xml
+@@ -15,6 +15,10 @@
+     <!-- U1 visual language; semantic colors preserve light/dark readability. -->
+     <style name="u1_page" bg_color="#screen_bg" bg_opa="255" border_width="0" pad_all="#u1_page_pad" pad_gap="#u1_card_gap"/>
+     <style name="u1_card" bg_color="#card_bg" bg_opa="255" border_width="#u1_border" border_color="#border" border_opa="255" radius="#u1_card_radius" shadow_width="0"/>
++    <style name="u1_flat_card" bg_color="#card_bg" bg_opa="255" border_width="0" radius="#u1_card_radius" shadow_width="0"/>
++    <style name="u1_icon_badge" bg_color="#elevated_bg" bg_opa="255" border_width="0" radius="#u1_icon_badge_radius" pad_all="0"/>
++    <style name="u1_selected_light" bg_color="#u1_selection_light" bg_opa="255" text_color="#text"/>
++    <style name="u1_selected_dark" bg_color="#u1_selection_dark" bg_opa="255" text_color="#text"/>
+     <style name="u1_section_label" text_color="#text_muted" text_font="#font_body_bold" text_letter_space="0"/>
+     <style name="u1_action_surface" bg_color="#card_bg" bg_opa="255" border_width="#u1_border" border_color="#border" radius="#u1_card_radius" min_height="#u1_touch_target" shadow_width="0"/>
+     <style name="u1_panel_content" bg_color="#screen_bg" bg_opa="255" pad_top="#u1_page_pad" pad_bottom="#u1_page_pad" pad_gap="#u1_card_gap"/>

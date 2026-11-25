@@ -1,0 +1,257 @@
+[
+  {
+    "check": "head_1_selected",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "head_1_ace_1_same_number_bay",
+    "passed": true,
+    "details": "ACE 1 · 1槽"
+  },
+  {
+    "check": "head_1_ace_2_same_number_bay",
+    "passed": true,
+    "details": "ACE 2 · 1槽"
+  },
+  {
+    "check": "head_1_view_preserves_source",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "head_2_selected",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "head_2_ace_1_same_number_bay",
+    "passed": true,
+    "details": "ACE 1 · 2槽"
+  },
+  {
+    "check": "head_2_ace_2_same_number_bay",
+    "passed": true,
+    "details": "ACE 2 · 2槽"
+  },
+  {
+    "check": "head_2_view_preserves_source",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "head_3_selected",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "head_3_ace_1_same_number_bay",
+    "passed": true,
+    "details": "ACE 1 · 3槽"
+  },
+  {
+    "check": "head_3_ace_2_same_number_bay",
+    "passed": true,
+    "details": "ACE 2 · 3槽"
+  },
+  {
+    "check": "head_3_view_preserves_source",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "head_4_selected",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "head_4_ace_1_same_number_bay",
+    "passed": true,
+    "details": "ACE 1 · 4槽"
+  },
+  {
+    "check": "head_4_ace_2_same_number_bay",
+    "passed": true,
+    "details": "ACE 2 · 4槽"
+  },
+  {
+    "check": "head_4_view_preserves_source",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "toolhead_centered",
+    "passed": true,
+    "details": {
+      "content_h": 52,
+      "content_w": 52,
+      "flex_grow": 0,
+      "h": 52,
+      "hidden": false,
+      "name": "inventory_toolhead",
+      "path": "inventory_toolhead",
+      "req_h": "52",
+      "req_w": "52",
+      "scroll": {
+        "bottom": 204,
+        "left": 0,
+        "right": 86,
+        "top": 0
+      },
+      "scrollable": true,
+      "w": 52,
+      "x": 241,
+      "y": 219
+    }
+  },
+  {
+    "check": "inventory_heads_fits_480x320",
+    "passed": true,
+    "details": {
+      "content_h": 42,
+      "content_w": 422,
+      "flex_grow": 0,
+      "h": 42,
+      "hidden": false,
+      "name": "inventory_heads",
+      "path": "inventory_heads",
+      "req_h": "42",
+      "req_w": "100%",
+      "scroll": {
+        "bottom": 0,
+        "left": 0,
+        "right": 0,
+        "top": 0
+      },
+      "scrollable": false,
+      "w": 422,
+      "x": 56,
+      "y": 43
+    }
+  },
+  {
+    "check": "inventory_cards_fits_480x320",
+    "passed": true,
+    "details": {
+      "content_h": 99,
+      "content_w": 422,
+      "flex_grow": 0,
+      "h": 99,
+      "hidden": false,
+      "name": "inventory_cards",
+      "path": "inventory_cards",
+      "req_h": "content",
+      "req_w": "100%",
+      "scroll": {
+        "bottom": 0,
+        "left": 0,
+        "right": -109,
+        "top": 0
+      },
+      "scrollable": false,
+      "w": 422,
+      "x": 56,
+      "y": 102
+    }
+  },
+  {
+    "check": "inventory_routes_fits_480x320",
+    "passed": true,
+    "details": {
+      "content_h": 14,
+      "content_w": 422,
+      "flex_grow": 0,
+      "h": 14,
+      "hidden": false,
+      "name": "inventory_routes",
+      "path": "inventory_routes",
+      "req_h": "14",
+      "req_w": "100%",
+      "scroll": {
+        "bottom": -14,
+        "left": 0,
+        "right": -422,
+        "top": 0
+      },
+      "scrollable": false,
+      "w": 422,
+      "x": 56,
+      "y": 202
+    }
+  },
+  {
+    "check": "inventory_output_fits_480x320",
+    "passed": true,
+    "details": {
+      "content_h": 72,
+      "content_w": 422,
+      "flex_grow": 1,
+      "h": 72,
+      "hidden": false,
+      "name": "inventory_output",
+      "path": "inventory_output",
+      "req_h": "0",
+      "req_w": "100%",
+      "scroll": {
+        "bottom": -3,
+        "left": 0,
+        "right": -185,
+        "top": 0
+      },
+      "scrollable": false,
+      "w": 422,
+      "x": 56,
+      "y": 217
+    }
+  },
+  {
+    "check": "inventory_footer_fits_480x320",
+    "passed": true,
+    "details": {
+      "content_h": 28,
+      "content_w": 422,
+      "flex_grow": 0,
+      "h": 28,
+      "hidden": false,
+      "name": "inventory_footer",
+      "path": "inventory_footer",
+      "req_h": "28",
+      "req_w": "100%",
+      "scroll": {
+        "bottom": 0,
+        "left": 0,
+        "right": 0,
+        "top": 0
+      },
+      "scrollable": false,
+      "w": 422,
+      "x": 56,
+      "y": 290
+    }
+  },
+  {
+    "check": "two_aces_visible",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "extra_card_hidden",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "disconnected_clears_inventory",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "disconnected_disables_operations",
+    "passed": true,
+    "details": null
+  },
+  {
+    "check": "operations_open_selected_ace",
+    "passed": true,
+    "details": null
+  }
+]

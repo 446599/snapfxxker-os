@@ -1,0 +1,56 @@
+{
+  "post_unexpected_insertion": {
+    "context": {
+      "0": 2143289344,
+      "1": 2143289344,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 1
+    },
+    "cmd13": {
+      "_code_absent": true,
+      "_code_present": false,
+      "_index_present": true,
+      "brand": "",
+      "code": 0,
+      "color": [
+        0,
+        0,
+        0
+      ],
+      "index": 2,
+      "rfid": 0,
+      "sku": "",
+      "type": ""
+    }
+  },
+  "guard": {
+    "state": "confirmed",
+    "reason": "motion after STOP",
+    "triggered": [],
+    "event_seq": 6,
+    "stop_count": 4,
+    "gate": true,
+    "lane_states": [
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ],
+    "rfid_flags": [
+      1,
+      1
+    ],
+    "timer_max_gap": 2.2315979599952698,
+    "selftest_active": false,
+    "selftest_max_gap": 0.05479454199667089,
+    "selftest_count": 1189
+  },
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ]
+}

@@ -1,0 +1,1506 @@
+{
+  "result": {
+    "gcode_store": [
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047814.6775901,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1400, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047814.7321234,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047815.1264288,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1401, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047815.181313,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047815.2865262,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1403, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047815.339927,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047815.4558783,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1404, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047815.5095804,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794047815.613984,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1405, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047815.667471,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047816.0264587,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1406, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047816.0802445,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047816.5834448,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1408, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047816.6382775,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047817.0204453,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1409, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047817.0744817,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794047817.27373,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1411, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047817.327276,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047817.542633,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1412, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047817.5969336,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047817.7305596,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1413, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047817.7849143,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047818.1696923,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1414, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047818.2232287,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047818.339363,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1416, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047818.3939283,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047818.5672812,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1417, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047818.6213686,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794047818.7449932,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1418, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047818.7993143,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047819.0176854,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1419, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047819.0709758,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047819.5534544,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1421, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047819.6072369,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047820.0240905,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1422, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047820.0785005,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794047820.3051763,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1424, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047820.3596413,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047820.5264034,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1425, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047820.5806675,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047820.681757,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1426, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047820.73604,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047821.1203377,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1427, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047821.1748638,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047821.307254,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1429, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047821.361315,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047821.4701118,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1430, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047821.5234704,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794047821.636141,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1431, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047821.6905928,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047822.0288658,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1432, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047822.082689,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047822.5499802,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1434, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047822.6031759,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047823.049776,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1435, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047823.1033375,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794047823.2975614,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1437, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047823.351561,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047823.5234985,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1438, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047823.5778162,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047823.7260895,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1439, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047823.7795904,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047824.1353226,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1440, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047824.189728,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047824.296667,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1442, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047824.3510325,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047824.4636955,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1443, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047824.5166461,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794047824.6843522,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1444, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047824.7378895,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047825.033995,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1445, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047825.087324,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047825.532875,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1447, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047825.5864594,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047826.0514545,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1448, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047826.1049314,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794047826.3383923,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1450, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047826.3923583,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047826.5399444,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1451, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047826.5937986,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047826.6904655,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1452, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047826.744968,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047827.1164215,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1453, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047827.1699026,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047827.3349812,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1455, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047827.3892345,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047827.5172656,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1456, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047827.5711746,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794047827.670564,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1457, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047827.724259,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047828.0415154,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1458, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047828.0956826,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047828.5406854,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1460, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047828.5945504,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047829.0852313,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1461, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047829.1392772,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794047829.3337452,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1463, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047829.387067,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047829.5643182,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1464, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047829.61883,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047829.7238379,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1465, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047829.7787132,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047830.171344,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1466, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047830.2263124,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047830.3259811,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1468, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047830.3799505,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047830.4839244,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1469, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047830.53831,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794047830.6403522,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1470, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047830.6942558,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047831.0986679,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1471, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047831.1523392,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047831.5701404,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1473, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047831.6234336,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047832.0520818,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1474, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047832.1058102,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794047832.3033178,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1476, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794047832.3571,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047832.5995939,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1477, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047832.6530542,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047832.769668,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1478, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047832.8236222,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047833.2203639,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] \u8d85\u65f6 (3.0s \u5185\u65e0\u54cd\u5e94)",
+        "time": 1794047836.2616673,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047860.1765366,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1507, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047860.229947,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047860.3691816,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1509, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047860.4234667,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794047861.0358782,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1510, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794047861.089866,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794047861.197344,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1511, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794047861.251085,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794047861.4260895,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1513, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794047861.4802854,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048105.0722194,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1757, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048105.126227,
+        "type": "response"
+      },
+      {
+        "message": "A_DISCOVER ACE=0",
+        "time": 1794048105.268419,
+        "type": "command"
+      },
+      {
+        "message": "// [A discover_device] {\"_v2_command\": 0, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1758, \"msg\": \"success\", \"result\": {\"uid1\": 808780566, \"uid2\": 17445170, \"uid3\": 942880330}}",
+        "time": 1794048105.322538,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048105.4307976,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1759, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048105.4842193,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048105.6098707,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1761, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048105.6638763,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048106.026201,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1762, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048106.0797448,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048106.353409,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1763, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048106.4071054,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794048106.5225425,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1765, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048106.5774148,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048106.8363562,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1766, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048106.8898468,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048107.3377876,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1767, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048107.3914397,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048107.878045,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1769, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048107.9317088,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794048108.1232002,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1770, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048108.1777227,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048108.335204,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1771, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048108.3891916,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048108.4904327,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1772, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048108.5445945,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048108.9301586,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1774, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048108.9838998,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048109.11166,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1775, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048109.1661618,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048109.3460555,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1776, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048109.399847,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794048109.5137017,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1777, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048109.5673933,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048109.8669567,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1779, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048109.9214854,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048110.3384025,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1780, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048110.3921998,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048110.8496432,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1782, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048110.9027104,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794048111.1321795,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1783, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048111.1855276,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048111.35918,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1784, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048111.4132862,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048111.5147743,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1785, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048111.5684404,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048111.921876,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1787, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048111.9756565,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048112.1374772,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1788, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048112.1917017,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048112.351615,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1789, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048112.4056919,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794048112.520872,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1791, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048112.5744338,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048112.8534803,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1792, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048112.906968,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048113.3942719,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1793, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048113.4477203,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048113.8540943,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1795, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048113.9076314,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794048114.114229,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1796, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048114.1678023,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048114.3721054,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1797, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048114.4266775,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048114.5851622,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1799, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048114.6388788,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048115.0022418,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1800, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048115.0558622,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048115.171447,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1801, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048115.2258735,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048115.4136376,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1802, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048115.4675188,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794048115.5870292,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1804, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048115.640603,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048115.8685033,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1805, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048115.9224372,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048116.3593416,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1806, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048116.413434,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048116.862324,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1808, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048116.9156709,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794048117.1399703,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1809, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048117.1932733,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048117.3809807,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1810, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048117.4345257,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048117.5413222,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1812, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048117.5948396,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048117.9508743,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1813, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048118.004928,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048118.1403477,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1814, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048118.193926,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048118.3651586,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1815, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048118.4186745,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794048118.5266957,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1816, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048118.5803738,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048118.8660169,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1818, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048118.9200823,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048119.3891654,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1819, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048119.4427626,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048119.869963,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1821, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048119.9256675,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794048120.1223333,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1822, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048120.1757045,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048120.3703794,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1823, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048120.4248836,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048120.55711,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1825, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048120.6114707,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048120.9777877,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1826, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 67}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048121.0322468,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048121.136409,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1827, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048121.1914618,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048121.3882635,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1828, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048121.4420397,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794048121.5453913,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1830, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048121.6000266,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048121.88985,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1831, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048121.944286,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048122.3733552,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1832, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048122.4273112,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048122.881187,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1834, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048122.9349475,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794048123.1652899,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1835, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048123.218579,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048123.3809469,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1836, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048123.4358459,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048123.5373273,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1837, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048123.5925214,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048123.9543686,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1839, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 4, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048124.0088305,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048124.1400352,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1840, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048124.194152,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048124.387631,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1841, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048124.4413202,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794048124.5592976,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] {\"_v2_command\": 8, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1843, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048124.61274,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048124.8988526,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1844, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048124.9524858,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048125.4115713,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1845, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048125.4658492,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048125.8887606,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1847, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048125.942838,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794048126.1324053,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1848, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048126.1863048,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048126.3944998,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1849, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048126.4479294,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048126.5795293,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1851, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048126.6331377,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048126.9908519,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1852, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048127.0446692,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048127.155306,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1853, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048127.209188,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048127.3994012,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1854, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048127.4535458,
+        "type": "response"
+      },
+      {
+        "message": "A_FEED ACE=0 SLOT=2 SPEED=5 LENGTH=5 MODE=0",
+        "time": 1794048127.565065,
+        "type": "command"
+      },
+      {
+        "message": "// [A feed_or_rollback_raw] \u8d85\u65f6 (3.0s \u5185\u65e0\u54cd\u5e94)",
+        "time": 1794048130.6017694,
+        "type": "response"
+      },
+      {
+        "message": "A_STOP ACE=0 SLOT=2",
+        "time": 1794048130.7103279,
+        "type": "command"
+      },
+      {
+        "message": "// [A stop_feed_assist] {\"_v2_command\": 9, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1860, \"msg\": \"success\", \"result\": {}}",
+        "time": 1794048130.7641914,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048143.984715,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1874, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048144.0388765,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048144.1559687,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1875, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048144.2098534,
+        "type": "response"
+      },
+      {
+        "message": "A_FEEDINFO ACE=0",
+        "time": 1794048144.8198547,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_feed_info] {\"_v2_command\": 76, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1877, \"msg\": \"success\", \"result\": {\"_feed_wire_valid\": true, \"feed_info\": [{\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 0, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 1, \"length\": 0, \"steps\": 6}, {\"_decoder_present\": true, \"_wire_valid\": true, \"decoder\": 5, \"index\": 2, \"length\": 5, \"steps\": 66}, {\"_decoder_present\": false, \"_wire_valid\": true, \"decoder\": 0, \"index\": 3, \"length\": 0, \"steps\": 6}]}}",
+        "time": 1794048144.873303,
+        "type": "response"
+      },
+      {
+        "message": "A_STATUS ACE=0",
+        "time": 1794048144.98953,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_status] {\"_v2_command\": 6, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1878, \"msg\": \"success\", \"result\": {\"_status_wire_valid\": true, \"cont_assist_time\": 0.0, \"dryer_status\": {\"duration\": 0, \"remain_time\": 0, \"status\": \"stop\", \"target_temp\": 0}, \"enable_rfid\": 1, \"fan_speed\": 0, \"feed_assist_count\": 0, \"humidity\": 47, \"slots\": [{\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 0, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 1, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 2, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"unknown\", \"type\": \"\"}, {\"_wire_valid\": true, \"brand\": \"\", \"color\": [0, 0, 0], \"index\": 3, \"rfid\": 0, \"sku\": \"\", \"slot_status\": \"ready\", \"status\": \"empty\", \"type\": \"\"}], \"status\": \"ready\", \"temp\": 25}}",
+        "time": 1794048145.0437758,
+        "type": "response"
+      },
+      {
+        "message": "A_KEYSTATE ACE=0",
+        "time": 1794048145.189,
+        "type": "command"
+      },
+      {
+        "message": "// [A get_key_state] {\"_v2_command\": 73, \"_v2_frame_valid\": true, \"_v2_payload_valid\": true, \"code\": 0, \"id\": 1879, \"msg\": \"success\", \"result\": {\"fields\": {\"1\": 17749}}}",
+        "time": 1794048145.2424831,
+        "type": "response"
+      }
+    ]
+  }
+}

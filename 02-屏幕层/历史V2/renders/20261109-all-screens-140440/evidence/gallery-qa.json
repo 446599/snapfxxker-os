@@ -1,0 +1,11 @@
+{
+  "all": 82,
+  "materials": 11,
+  "dark": 9,
+  "lightbox": true,
+  "keyboard": true,
+  "search": true,
+  "mobileWidth": 390,
+  "horizontalOverflow": false,
+  "errors": []
+}

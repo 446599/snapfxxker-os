@@ -1,0 +1,7 @@
+{
+  "error": "JSONDecodeError('Expecting value: line 1 column 1 (char 0)')",
+  "guard_left_armed": false,
+  "reader_restore_pending": false,
+  "confirmed": false,
+  "hold_cleanup": {}
+}

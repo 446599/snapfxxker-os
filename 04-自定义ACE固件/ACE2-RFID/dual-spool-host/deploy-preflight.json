@@ -1,0 +1,32 @@
+{
+  "uid": {
+    "uid1": 808780566,
+    "uid2": 17445170,
+    "uid3": 942880330
+  },
+  "firmware": "V1.1.97O",
+  "printer": "idle",
+  "heads": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "lanes": [
+    "ready",
+    "ready",
+    "ready",
+    "ready"
+  ],
+  "dryer": {
+    "status": "stop",
+    "target_temp": 0,
+    "duration": 0,
+    "remain_time": 0
+  },
+  "temp": 24,
+  "hold": false,
+  "tag_busy": false,
+  "swap": false,
+  "unload": false
+}

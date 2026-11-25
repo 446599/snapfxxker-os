@@ -1,0 +1,15 @@
+ERROR:root:[native-guard] STOP failed
+Traceback (most recent call last):
+  File "/Users/henry/Documents/ChatGPT/u1多色/ace2-rfid-dev-20261107/diagnostic95/native-guard/ace_native_guard.py", line 73, in stop
+    try: ok=self.ace._stop_feeding(slot,idx=0)
+            ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/henry/Documents/ChatGPT/u1多色/ace2-rfid-dev-20261107/diagnostic95/native-guard/test_guard.py", line 97, in <lambda>
+    g=self.guard();g.ace._stop_feeding=lambda *a,**k:(_ for _ in ()).throw(ValueError('lost ACK'))
+                                                     ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/henry/Documents/ChatGPT/u1多色/ace2-rfid-dev-20261107/diagnostic95/native-guard/test_guard.py", line 97, in <genexpr>
+    g=self.guard();g.ace._stop_feeding=lambda *a,**k:(_ for _ in ()).throw(ValueError('lost ACK'))
+ValueError: lost ACK
+----------------------------------------------------------------------
+Ran 22 tests in 0.003s
+
+OK

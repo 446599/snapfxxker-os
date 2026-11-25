@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="dryer_max_width" value="680"/>
+    <px name="dryer_readouts_height" value="72"/>
+    <px name="dryer_readouts_pad" value="2"/>
+  </consts>
+  <view name="u1_dryer_content" extends="lv_obj" width="100%" height="100%"
+        flex_flow="column" style_flex_cross_place="center" style_pad_hor="#u1_page_pad"
+        style_pad_top="0" style_pad_bottom="#u1_page_pad" style_pad_gap="#u1_card_gap"
+        style_bg_color="#screen_bg" style_bg_opa="255" style_border_width="0" style_radius="0" scrollable="false">
+    <lv_obj width="100%" height="#u1_header_height" flex_flow="row"
+            style_pad_all="0" style_flex_cross_place="center" scrollable="false">
+      <ui_button name="u1_dryer_back" text="返回" icon="chevron_left" width="#u1_header_back_width"
+                 height="100%" variant="ghost" style_text_font="#u1_aux_font" style_pad_all="0" style_shadow_width="0">
+        <event_cb trigger="clicked" callback="u1_dryer_back"/>
+      </ui_button>
+      <text_heading bind_text="u1_dryer_title" width="0" flex_grow="1" long_mode="dots"
+                    style_text_font="#u1_heading_font" style_text_color="#text" style_text_align="center"/>
+      <lv_obj width="#u1_header_back_width" height="1" style_pad_all="0" style_bg_opa="0"
+              style_border_width="0" scrollable="false" clickable="false"/>
+    </lv_obj>
+    <lv_obj width="100%" height="0" flex_grow="1" flex_flow="column"
+            style_flex_cross_place="center" style_pad_all="0" scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+      <bind_flag_if_eq subject="u1_dryer_confirming" ref_value="1" flag="hidden"/>
+      <lv_obj width="100%" style_max_width="#dryer_max_width" height="content" flex_flow="column"
+              style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <repeat count="5">
+            <lv_button name="u1_dryer_preset_${i}" width="0" flex_grow="1" height="100%" style_pad_all="0"
+                       style_radius="#u1_card_radius" style_border_width="#u1_border" style_border_color="#border" style_shadow_width="0" scrollable="false">
+              <bind_style_if name="styles.u1_selected_light" cond="u1_dryer_preset eq ${i} and settings_dark_mode eq 0"/>
+              <bind_style_if name="styles.u1_selected_dark" cond="u1_dryer_preset eq ${i} and settings_dark_mode eq 1"/>
+              <bind_style_if name="styles.u1_flat_card" cond="u1_dryer_preset ne ${i}"/>
+              <bind_state_if cond="not u1_dryer_can_start" state="disabled"/>
+              <text_small bind_text="u1_dryer_preset_${i}" width="100%" align="center" style_text_align="center"
+                          style_text_font="#u1_aux_font" clickable="false" event_bubble="true"/>
+              <event_cb trigger="clicked" callback="u1_dryer_preset" user_data="$i"/>
+            </lv_button>
+          </repeat>
+        </lv_obj>
+        <lv_obj width="100%" height="#dryer_readouts_height" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <lv_obj name="u1_dryer_readouts" width="32%" height="100%" flex_flow="column" style_pad_all="#dryer_readouts_pad"
+                  style_pad_gap="0" style_flex_main_place="space_between" style_border_width="#u1_border"
+                  style_border_color="#border" style_bg_color="#card_bg" style_bg_opa="255" style_radius="#u1_card_radius" scrollable="false">
+            <text_small name="u1_dryer_temperature" bind_text="u1_dryer_temperature" width="100%" height="#u1_text_line" style_text_align="center" style_text_font="#u1_aux_font"/>
+            <text_small name="u1_dryer_humidity" bind_text="u1_dryer_humidity" width="100%" height="#u1_text_line" style_text_align="center" style_text_font="#u1_aux_font"/>
+            <text_small name="u1_dryer_status" bind_text="u1_dryer_status" width="100%" height="#u1_text_line" long_mode="dots" style_text_align="center" style_text_font="#u1_aux_font" style_text_color="#text_muted"/>
+          </lv_obj>
+          <lv_obj name="u1_dryer_right" width="0" flex_grow="1" height="100%" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+            <lv_obj width="0" flex_grow="1" height="100%" flex_flow="column" style_flex_main_place="space_between" style_pad_all="0" style_pad_gap="0" scrollable="false">
+              <text_small text="温度 °C" width="100%" height="#u1_text_line" style_text_align="center" style_text_font="#u1_aux_font" style_text_color="#text_muted"/>
+              <ui_button name="u1_dryer_temp_field" bind_text="u1_dryer_temp_value" width="100%" height="#u1_touch_target" variant="secondary" style_radius="#u1_card_radius" style_shadow_width="0">
+                <bind_state_if cond="not u1_dryer_can_start" state="disabled"/>
+                <event_cb trigger="clicked" callback="u1_dryer_temp"/>
+              </ui_button>
+            </lv_obj>
+            <lv_obj width="0" flex_grow="1" height="100%" flex_flow="column" style_flex_main_place="space_between" style_pad_all="0" style_pad_gap="0" scrollable="false">
+              <text_small text="时长 h" width="100%" height="#u1_text_line" style_text_align="center" style_text_font="#u1_aux_font" style_text_color="#text_muted"/>
+              <ui_button name="u1_dryer_hours_field" bind_text="u1_dryer_hours_value" width="100%" height="#u1_touch_target" variant="secondary" style_radius="#u1_card_radius" style_shadow_width="0">
+                <bind_state_if cond="not u1_dryer_can_start" state="disabled"/>
+                <event_cb trigger="clicked" callback="u1_dryer_hours"/>
+              </ui_button>
+            </lv_obj>
+          </lv_obj>
+        </lv_obj>
+        <lv_obj name="u1_dryer_roll_row" width="100%" height="#u1_touch_target" flex_flow="row"
+                style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+          <bind_flag_if_eq subject="u1_dryer_roll_offer" flag="hidden" ref_value="0"/>
+          <text_small text="回卷（可选）" style_text_font="#u1_aux_font"/>
+          <repeat count="4">
+            <lv_button name="u1_roll_slot_${i}" width="0" flex_grow="1" height="100%" style_pad_all="0" style_radius="#u1_card_radius" style_shadow_width="0">
+              <bind_style_if name="styles.u1_selected_light" cond="u1_dryer_roll_selected eq ${i} and settings_dark_mode eq 0"/>
+              <bind_style_if name="styles.u1_selected_dark" cond="u1_dryer_roll_selected eq ${i} and settings_dark_mode eq 1"/>
+              <bind_style_if name="styles.u1_flat_card" cond="u1_dryer_roll_selected ne ${i}"/>
+              <bind_state_if_eq subject="u1_dryer_roll_allowed_${i}" state="disabled" ref_value="0"/>
+              <text_body text="${i + 1} 槽" align="center" style_text_font="#u1_aux_font" clickable="false"/>
+              <event_cb trigger="clicked" callback="u1_dryer_roll" user_data="$i"/>
+            </lv_button>
+          </repeat>
+        </lv_obj>
+        <text_small name="u1_dryer_cycle_detail" bind_text="u1_dryer_cycle_text" width="100%" long_mode="wrap" style_text_font="#u1_aux_font"/>
+      </lv_obj>
+    </lv_obj>
+    <lv_obj width="100%" style_max_width="#dryer_max_width" height="content" flex_flow="column" style_pad_all="#u1_card_pad" style_pad_gap="#u1_card_gap" scrollable="false">
+      <bind_flag_if_eq subject="u1_dryer_confirming" flag="hidden" ref_value="0"/>
+      <text_heading text="确认回卷条件" style_text_font="#u1_heading_font"/>
+      <text_body text="选中槽的料头已退出进料口并固定在盘上，料卷可自由转动。" width="100%" long_mode="wrap" style_text_font="#u1_body_font"/>
+      <lv_obj width="100%" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+        <ui_button name="u1_dryer_reselect" text="重新选择" width="0" flex_grow="1" height="100%" variant="secondary"><event_cb trigger="clicked" callback="u1_dryer_reselect"/></ui_button>
+        <ui_button name="u1_dryer_confirm_roll" text="确认并启动" width="0" flex_grow="1" height="100%" variant="primary" style_text_color="#text_on_primary"><event_cb trigger="clicked" callback="u1_dryer_confirm"/></ui_button>
+      </lv_obj>
+    </lv_obj>
+    <lv_obj width="100%" style_max_width="#dryer_max_width" height="#u1_touch_target" flex_flow="row" style_pad_all="0" style_pad_gap="#u1_card_gap" scrollable="false">
+      <bind_flag_if_eq subject="u1_dryer_confirming" flag="hidden" ref_value="1"/>
+      <ui_button name="u1_dryer_auto" text="自动烘干" width="0" flex_grow="1" height="100%" variant="secondary" style_radius="#u1_card_radius" style_shadow_width="0">
+        <bind_state_if cond="not u1_dryer_ready or u1_dryer_pending" state="disabled"/>
+        <event_cb trigger="clicked" callback="u1_dryer_auto"/>
+      </ui_button>
+      <ui_button name="u1_dryer_start" text="开始" width="0" flex_grow="1" height="100%" variant="primary" style_text_color="#text_on_primary" style_radius="#u1_card_radius" style_shadow_width="0">
+        <bind_state_if cond="not u1_dryer_can_start" state="disabled"/>
+        <event_cb trigger="clicked" callback="u1_dryer_start"/>
+      </ui_button>
+      <ui_button name="u1_dryer_stop" text="停止" width="0" flex_grow="1" height="100%" variant="secondary" style_radius="#u1_card_radius" style_shadow_width="0">
+        <bind_state_if cond="not u1_dryer_ready or u1_dryer_pending eq 2 or (not u1_dryer_active and u1_dryer_pending eq 0)" state="disabled"/>
+        <event_cb trigger="clicked" callback="u1_dryer_stop"/>
+      </ui_button>
+    </lv_obj>
+  </view>
+</component>

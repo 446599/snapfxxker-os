@@ -1,0 +1,67 @@
+--- dual-spool-host/live/ace.py	2026-11-07 21:50:22
++++ dual-spool-host/ace.py	2026-11-07 21:53:34
+@@ -7316,7 +7316,19 @@
+         slots = result.get('slots') or []
+         if slots and self._v2_rfid_rescan_pending.pop(idx, False):
+             self._v2_rfid_boot_rescan(idx, slots)
++        if not hasattr(self, '_v2_cmd13_slot_epochs'):
++            self._v2_cmd13_slot_epochs = {}
+         for i, slot in enumerate(slots):
++            _key = (idx, i)
++            _present = not self._is_empty_status(slot.get('status', ''))
++            _prev = self._v2_cmd13_slot_epochs.get(_key)
++            if _prev is None:
++                _epoch = 0
++            elif _prev[0] != _present:
++                _epoch = _prev[1] + 1
++            else:
++                _epoch = _prev[1]
++            self._v2_cmd13_slot_epochs[_key] = (_present, _epoch)
+             cached = cache.get(i)
+             host_read = bool(cached and cached.get('host'))
+             # A UID-only read (MIFARE/Bambu, or a tag with no decodable
+@@ -7341,6 +7353,12 @@
+                     (idx, i))
+                 if _f:
+                     slot['tag_format'] = _f
++            if not host_read and self._is_empty_status(slot.get('status', '')):
++                # Invalidate a device-read request as soon as this slot leaves.
++                cache.pop(i, None)
++                pending.pop(i, None)
++                empty.pop(i, None)
++                continue
+             if host_read and self._is_empty_status(slot.get('status', '')):
+                 # The spool left - a host read is evicted by the EMPTY
+                 # slot, not by the device's rfid flag (which never
+@@ -7394,9 +7412,28 @@
+                             '[multiACE] V2 cmd13 pending stale (%.1fs) ACE %d slot %d - re-issuing',
+                             now - pending_ts, idx, i)
+                     pending[i] = now
+-                    def _store(self, response, _idx=idx, _slot=i):
+-                        self._v2_filament_info_pending.get(
+-                            _idx, {}).pop(_slot, None)
++                    _token = object()
++                    if not hasattr(self, '_v2_cmd13_tokens'):
++                        self._v2_cmd13_tokens = {}
++                    self._v2_cmd13_tokens[(idx, i)] = _token
++                    _generation = _epoch
++                    _transport = self._serials.get(idx)
++                    def _store(self, response, _idx=idx, _slot=i,
++                               _token=_token, _generation=_generation,
++                               _transport=_transport):
++                        _pending = self._v2_filament_info_pending.get(_idx, {})
++                        # A late reply must neither clear a newer request nor
++                        # bind a removed/reinserted slot or replaced transport.
++                        if (_slot not in _pending
++                                or self._v2_cmd13_tokens.get((_idx, _slot)) is not _token
++                                or self._v2_cmd13_slot_epochs.get((_idx, _slot)) != (True, _generation)
++                                or self._serials.get(_idx) is not _transport):
++                            return
++                        _pending.pop(_slot, None)
++                        # A verified manual host read wins over an earlier
++                        # asynchronous device query for the same slot.
++                        if (self._v2_filament_info_per_ace.get(_idx, {}).get(_slot) or {}).get('host'):
++                            return
+                         if response is None:
+                             self._fa_log.info(
+                                 '[multiACE] V2 cmd13 response NONE ACE %d slot %d',

@@ -1,0 +1,17 @@
+[
+  {
+    "url": "/filament/",
+    "icon": "🏷️",
+    "label": "Filament Manager"
+  },
+  {
+    "url": "/",
+    "icon": "🌐",
+    "label": "Web Interface"
+  },
+  {
+    "url": "/webcam",
+    "icon": "📷",
+    "label": "Internal Camera"
+  }
+]

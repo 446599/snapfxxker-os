@@ -1,0 +1,1019 @@
+[
+  {
+    "lanes": [
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ],
+    "decoder": {
+      "_decoder_present": true,
+      "_wire_valid": true,
+      "decoder": 852,
+      "index": 2,
+      "length": 915,
+      "steps": 11305
+    },
+    "heads": [
+      false,
+      false,
+      false,
+      false
+    ],
+    "key": {
+      "1": 17749
+    },
+    "guard": {
+      "state": "fault",
+      "reason": "native completed",
+      "triggered": [],
+      "event_seq": 4,
+      "stop_count": 1,
+      "gate": false,
+      "lane_states": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "rfid_flags": [
+        0,
+        1
+      ],
+      "timer_max_gap": 0.06331995900836773,
+      "selftest_active": false,
+      "selftest_max_gap": null,
+      "selftest_count": 0,
+      "poll_timeouts": 11,
+      "poll_requests": 1947,
+      "poll_replies": 1936,
+      "last_request_id": 2183,
+      "last_reply_id": 2183,
+      "key_age": 51.861670900005265,
+      "status_age": 51.76045848301146,
+      "writer_queue": 0,
+      "callback_count": 24,
+      "poll_events": [
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1929,
+          "id": 2162,
+          "time": 91379.97435199
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1929,
+          "id": 2162,
+          "time": 91379.983354281
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1930,
+          "id": 2163,
+          "time": 91380.075560906
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1930,
+          "id": 2163,
+          "time": 91380.085477281
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1931,
+          "id": 2164,
+          "time": 91380.177194781
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1931,
+          "id": 2164,
+          "time": 91380.186075448
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1932,
+          "id": 2165,
+          "time": 91380.277986031
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1932,
+          "id": 2165,
+          "time": 91380.28716449
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1933,
+          "id": 2166,
+          "time": 91380.379180073
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1933,
+          "id": 2166,
+          "time": 91380.388212115
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1934,
+          "id": 2168,
+          "time": 91380.47943349
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1934,
+          "id": 2168,
+          "time": 91380.489526323
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1935,
+          "id": 2169,
+          "time": 91380.580460698
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1935,
+          "id": 2169,
+          "time": 91380.589332031
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1936,
+          "id": 2170,
+          "time": 91380.681509782
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1936,
+          "id": 2170,
+          "time": 91380.691177365
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1937,
+          "id": 2171,
+          "time": 91380.782530573
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1937,
+          "id": 2171,
+          "time": 91380.791247615
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1938,
+          "id": 2172,
+          "time": 91380.88321624
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1938,
+          "id": 2172,
+          "time": 91380.893538032
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1939,
+          "id": 2173,
+          "time": 91380.98441524
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1939,
+          "id": 2173,
+          "time": 91380.993610615
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1940,
+          "id": 2174,
+          "time": 91381.085855157
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1940,
+          "id": 2174,
+          "time": 91381.096505657
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1941,
+          "id": 2175,
+          "time": 91381.18724549
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1941,
+          "id": 2175,
+          "time": 91381.19657124
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1942,
+          "id": 2176,
+          "time": 91381.288421157
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1942,
+          "id": 2176,
+          "time": 91381.298324115
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1943,
+          "id": 2177,
+          "time": 91381.389929907
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1943,
+          "id": 2177,
+          "time": 91381.398267782
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1945,
+          "id": 2179,
+          "time": 91381.503835365
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1945,
+          "id": 2179,
+          "time": 91381.513648199
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1946,
+          "id": 2180,
+          "time": 91381.605263615
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1946,
+          "id": 2180,
+          "time": 91381.614002532
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1947,
+          "id": 2181,
+          "time": 91381.706738532
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1947,
+          "id": 2181,
+          "time": 91381.716670074
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1948,
+          "id": 2182,
+          "time": 91381.80799499
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1948,
+          "id": 2182,
+          "time": 91381.816882365
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1949,
+          "id": 2183,
+          "time": 91381.908401532
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1949,
+          "id": 2183,
+          "time": 91381.918194532
+        }
+      ],
+      "telemetry_result": null
+    }
+  },
+  {
+    "lanes": [
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ],
+    "decoder": {
+      "_decoder_present": true,
+      "_wire_valid": true,
+      "decoder": 852,
+      "index": 2,
+      "length": 915,
+      "steps": 11305
+    },
+    "heads": [
+      false,
+      false,
+      false,
+      false
+    ],
+    "key": {
+      "1": 17749
+    },
+    "guard": {
+      "state": "fault",
+      "reason": "native completed",
+      "triggered": [],
+      "event_seq": 4,
+      "stop_count": 1,
+      "gate": false,
+      "lane_states": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "rfid_flags": [
+        0,
+        1
+      ],
+      "timer_max_gap": 0.06331995900836773,
+      "selftest_active": false,
+      "selftest_max_gap": null,
+      "selftest_count": 0,
+      "poll_timeouts": 11,
+      "poll_requests": 1947,
+      "poll_replies": 1936,
+      "last_request_id": 2183,
+      "last_reply_id": 2183,
+      "key_age": 53.36480802600272,
+      "status_age": 53.26359560900892,
+      "writer_queue": 0,
+      "callback_count": 24,
+      "poll_events": [
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1929,
+          "id": 2162,
+          "time": 91379.97435199
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1929,
+          "id": 2162,
+          "time": 91379.983354281
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1930,
+          "id": 2163,
+          "time": 91380.075560906
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1930,
+          "id": 2163,
+          "time": 91380.085477281
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1931,
+          "id": 2164,
+          "time": 91380.177194781
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1931,
+          "id": 2164,
+          "time": 91380.186075448
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1932,
+          "id": 2165,
+          "time": 91380.277986031
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1932,
+          "id": 2165,
+          "time": 91380.28716449
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1933,
+          "id": 2166,
+          "time": 91380.379180073
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1933,
+          "id": 2166,
+          "time": 91380.388212115
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1934,
+          "id": 2168,
+          "time": 91380.47943349
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1934,
+          "id": 2168,
+          "time": 91380.489526323
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1935,
+          "id": 2169,
+          "time": 91380.580460698
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1935,
+          "id": 2169,
+          "time": 91380.589332031
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1936,
+          "id": 2170,
+          "time": 91380.681509782
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1936,
+          "id": 2170,
+          "time": 91380.691177365
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1937,
+          "id": 2171,
+          "time": 91380.782530573
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1937,
+          "id": 2171,
+          "time": 91380.791247615
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1938,
+          "id": 2172,
+          "time": 91380.88321624
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1938,
+          "id": 2172,
+          "time": 91380.893538032
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1939,
+          "id": 2173,
+          "time": 91380.98441524
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1939,
+          "id": 2173,
+          "time": 91380.993610615
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1940,
+          "id": 2174,
+          "time": 91381.085855157
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1940,
+          "id": 2174,
+          "time": 91381.096505657
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1941,
+          "id": 2175,
+          "time": 91381.18724549
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1941,
+          "id": 2175,
+          "time": 91381.19657124
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1942,
+          "id": 2176,
+          "time": 91381.288421157
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1942,
+          "id": 2176,
+          "time": 91381.298324115
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1943,
+          "id": 2177,
+          "time": 91381.389929907
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1943,
+          "id": 2177,
+          "time": 91381.398267782
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1945,
+          "id": 2179,
+          "time": 91381.503835365
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1945,
+          "id": 2179,
+          "time": 91381.513648199
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1946,
+          "id": 2180,
+          "time": 91381.605263615
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1946,
+          "id": 2180,
+          "time": 91381.614002532
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1947,
+          "id": 2181,
+          "time": 91381.706738532
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1947,
+          "id": 2181,
+          "time": 91381.716670074
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1948,
+          "id": 2182,
+          "time": 91381.80799499
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1948,
+          "id": 2182,
+          "time": 91381.816882365
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1949,
+          "id": 2183,
+          "time": 91381.908401532
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1949,
+          "id": 2183,
+          "time": 91381.918194532
+        }
+      ],
+      "telemetry_result": null
+    }
+  },
+  {
+    "lanes": [
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ],
+    "decoder": {
+      "_decoder_present": true,
+      "_wire_valid": true,
+      "decoder": 852,
+      "index": 2,
+      "length": 915,
+      "steps": 11305
+    },
+    "heads": [
+      false,
+      false,
+      false,
+      false
+    ],
+    "key": {
+      "1": 17749
+    },
+    "guard": {
+      "state": "fault",
+      "reason": "native completed",
+      "triggered": [],
+      "event_seq": 4,
+      "stop_count": 1,
+      "gate": false,
+      "lane_states": [
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ],
+      "rfid_flags": [
+        0,
+        1
+      ],
+      "timer_max_gap": 0.06331995900836773,
+      "selftest_active": false,
+      "selftest_max_gap": null,
+      "selftest_count": 0,
+      "poll_timeouts": 11,
+      "poll_requests": 1947,
+      "poll_replies": 1936,
+      "last_request_id": 2183,
+      "last_reply_id": 2183,
+      "key_age": 54.86892777700268,
+      "status_age": 54.76771536000888,
+      "writer_queue": 0,
+      "callback_count": 24,
+      "poll_events": [
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1929,
+          "id": 2162,
+          "time": 91379.97435199
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1929,
+          "id": 2162,
+          "time": 91379.983354281
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1930,
+          "id": 2163,
+          "time": 91380.075560906
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1930,
+          "id": 2163,
+          "time": 91380.085477281
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1931,
+          "id": 2164,
+          "time": 91380.177194781
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1931,
+          "id": 2164,
+          "time": 91380.186075448
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1932,
+          "id": 2165,
+          "time": 91380.277986031
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1932,
+          "id": 2165,
+          "time": 91380.28716449
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1933,
+          "id": 2166,
+          "time": 91380.379180073
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1933,
+          "id": 2166,
+          "time": 91380.388212115
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1934,
+          "id": 2168,
+          "time": 91380.47943349
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1934,
+          "id": 2168,
+          "time": 91380.489526323
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1935,
+          "id": 2169,
+          "time": 91380.580460698
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1935,
+          "id": 2169,
+          "time": 91380.589332031
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1936,
+          "id": 2170,
+          "time": 91380.681509782
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1936,
+          "id": 2170,
+          "time": 91380.691177365
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1937,
+          "id": 2171,
+          "time": 91380.782530573
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1937,
+          "id": 2171,
+          "time": 91380.791247615
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1938,
+          "id": 2172,
+          "time": 91380.88321624
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1938,
+          "id": 2172,
+          "time": 91380.893538032
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1939,
+          "id": 2173,
+          "time": 91380.98441524
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1939,
+          "id": 2173,
+          "time": 91380.993610615
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1940,
+          "id": 2174,
+          "time": 91381.085855157
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1940,
+          "id": 2174,
+          "time": 91381.096505657
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1941,
+          "id": 2175,
+          "time": 91381.18724549
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1941,
+          "id": 2175,
+          "time": 91381.19657124
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1942,
+          "id": 2176,
+          "time": 91381.288421157
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1942,
+          "id": 2176,
+          "time": 91381.298324115
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1943,
+          "id": 2177,
+          "time": 91381.389929907
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1943,
+          "id": 2177,
+          "time": 91381.398267782
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1945,
+          "id": 2179,
+          "time": 91381.503835365
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1945,
+          "id": 2179,
+          "time": 91381.513648199
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1946,
+          "id": 2180,
+          "time": 91381.605263615
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1946,
+          "id": 2180,
+          "time": 91381.614002532
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1947,
+          "id": 2181,
+          "time": 91381.706738532
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1947,
+          "id": 2181,
+          "time": 91381.716670074
+        },
+        {
+          "kind": "request",
+          "method": "get_key_state",
+          "token": 1948,
+          "id": 2182,
+          "time": 91381.80799499
+        },
+        {
+          "kind": "reply",
+          "method": "get_key_state",
+          "token": 1948,
+          "id": 2182,
+          "time": 91381.816882365
+        },
+        {
+          "kind": "request",
+          "method": "get_status",
+          "token": 1949,
+          "id": 2183,
+          "time": 91381.908401532
+        },
+        {
+          "kind": "reply",
+          "method": "get_status",
+          "token": 1949,
+          "id": 2183,
+          "time": 91381.918194532
+        }
+      ],
+      "telemetry_result": null
+    }
+  }
+]
