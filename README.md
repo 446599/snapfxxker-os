@@ -2,6 +2,7 @@
 
 面向 **Snapmaker U1 + Anycubic ACE Pro / ACE 2 Pro** 的集成固件工程。以 **PAXX 12 Extended Firmware** 为系统底座，深度整合 **MultiACE（233 定制分支）** 与 **自制 480×320 原生触屏界面（HelixScreen 233）**，支持多台 ACE 混插（含原厂 / OpenACE / `ace2k` Klipper-MCU 固件）与最多 16 槽多色供料管理。
 
+> **官网介绍页**：[https://446599.github.io/snapfxxker-os/](https://446599.github.io/snapfxxker-os/)（含实机 480×320 界面交互预览与原厂功能对比）  
 > **最新预发布固件**：`2.1.2-233-paxx8d8af0d.2`（[前往 Releases 下载](https://github.com/446599/snapfxxker-os/releases)）
 
 ---
