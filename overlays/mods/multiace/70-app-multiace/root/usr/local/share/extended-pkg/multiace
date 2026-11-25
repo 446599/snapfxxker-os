@@ -5,10 +5,13 @@
 
 # This definition intentionally pins the provider release. Updating multiACE
 # requires a reviewed firmware change with a new version and checksum.
+# Keep the archive in the firmware image, outside PKG_APP_DIR. Disabling the
+# integration removes the installed copy only; reboot or firmware upgrade must
+# load this embedded definition, without requiring /oem/.debug or a live cache.
 PKG_LABEL="multiACE"
-PKG_VERSION="1.27b"
-PKG_URL="https://github.com/decay71/multiACE/releases/download/v1.27b/multiace-managed-1.27b.tar.gz"
-PKG_SHA256="aedc432f1ca56854ae3da98e28d6a947a9b4adc2bdb88e7feb760be472968556"
+PKG_VERSION="1.27b-233.20261122-flow.15.112"
+PKG_URL="file:///usr/local/share/233-firmware/multiace-managed-1.27b-233.20261122-flow.15.112.tar.gz"
+PKG_SHA256="0d21c8d2d4b4477c68588c075a68c9b645d3892e72b4b6befa44ccd4f6957b25"
 PKG_APP_DIR="/oem/apps/multiace"
 PKG_PREFIX="multiace"
 PKG_BINARIES="web/backend/vendor/.paxx-dependencies-ready"
@@ -18,13 +21,19 @@ PKG_BINARIES="web/backend/vendor/.paxx-dependencies-ready"
 # moves the staging directory into the active application tree.
 pkg_post_install() {
     local staging="$1"
-    # Ensure directories are traversable by non-root Klipper user (lava) even under root umask 0077.
     find "$staging" -type d -exec chmod 755 {} + || return 1
     local required
     for required in \
         klipper/extras/ace.py \
+        klipper/extras/ace_controlled_motion.py \
+        klipper/extras/ace_print_assist.py \
+        klipper/extras/ace_print_drying.py \
+        klipper/extras/ace_path_store.py \
+        klipper/extras/ace_path_calibration.py \
+        klipper/extras/ace_path_operations.py \
         klipper/extras/ace_gen1_tunnel.py \
         klipper/extras/ace_protocol.py \
+        klipper/extras/ace_protocol_ace2k.py \
         klipper/extras/filament_feed_ace.py \
         klipper/kinematics/extruder_ace.py \
         config/extended/ace.cfg \
@@ -40,24 +49,9 @@ pkg_post_install() {
         fi
     done
 
-    # The web head is optional at build time but required when ACE is enabled.
-    # Keep its dependencies inside the versioned package.  /home/lava is
-    # overlay-backed on stock U1 firmware and is wiped on reboot unless debug
-    # persistence is enabled; the package root is the durable PAXX boundary.
-    if [[ ! -x /usr/bin/python3 ]] || ! /usr/bin/python3 -m pip --version >/dev/null 2>&1; then
-        echo "multiACE web dependencies are unavailable (python3/pip missing)" >&2
-        return 1
-    fi
-
     local vendor="$staging/web/backend/vendor"
-    echo "Installing constrained multiACE web dependencies..."
-    mkdir -p "$vendor" || return 1
-    /usr/bin/python3 -m pip install --no-input --no-compile --no-cache-dir \
-        --target "$vendor" \
-        -r "$staging/web/backend/requirements.txt" || return 1
     PYTHONPATH="$vendor" /usr/bin/python3 -c \
         'import fastapi, uvicorn, httpx, pydantic, websockets, multipart, serial' || return 1
-    printf '%s\n' "multiACE web dependencies installed" \
-        > "$vendor/.paxx-dependencies-ready" || return 1
+    printf '%s\n' 'multiACE bundled web dependencies verified' > "$vendor/.paxx-dependencies-ready" || return 1
     chmod 755 "$vendor/.paxx-dependencies-ready" || return 1
 }

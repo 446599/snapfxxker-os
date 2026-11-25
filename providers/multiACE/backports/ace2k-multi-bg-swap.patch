@@ -15,7 +15,7 @@ diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多�
  # (CH340 is a generic chip and would match unrelated devices).
 diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace.py
 --- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace.py	1970-01-01 08:00:00
-+++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace.py	2026-11-25 10:50:59
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace.py	2026-11-25 11:27:57
 @@ -42,6 +42,7 @@
  from .ace_stop_guard import (StopFaultLatch, StopGuardGCode, StopUnconfirmedError,
                               stop_response_accepted)
@@ -250,6 +250,15 @@ diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多�
  
              lock = self._cb_locks.get(idx)
              if lock is not None:
+@@ -7694,7 +7819,7 @@
+                            and recovery.allows_unload_command(head, idx, slot))
+         if not original_unload and not self._source_insertion_matches(source, idx, slot):
+             return '重启、重连或插料状态已改变；请在原槽确认原来源后再启用助送'
+-        if source.get('load_failed'):
++        if not for_stock_unload and source.get('load_failed'):
+             return '原装料尚未成功，未自动重新送料'
+         if raw_head_state(self, head) is not True:
+             return '原喷头到料开关未确认有料'
 @@ -8342,8 +8467,11 @@
      def _merge_v2_filament_info(self, idx, result):
  
@@ -984,9 +993,38 @@ diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多�
              crc = calc_crc(payload)
              attempts += 1
          data = bytes([FRAME_START[0], FRAME_START[1]])
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_ready_wait.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_ready_wait.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_ready_wait.py	2026-11-25 11:27:56
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_ready_wait.py	2026-11-25 11:28:10
+@@ -73,13 +73,14 @@
+                for route in (source_route(source),))
+ 
+ 
+-def unload_source_matches(ace, idx, slot, head):
++def unload_source_matches(ace, idx, slot, head, *, allow_load_failed=False):
+     # A retry belongs to the original spool on this physical device, not just
+     # the active ACE or a cached slot number.
+     source = getattr(ace, '_head_source', {}).get(head)
+     identity = _identity(ace, idx)
+     return (identity is not None and source_route(source) == (idx, slot)
+-            and source.get('load_failed') is False
++            and (source.get('load_failed') is False
++                 or (allow_load_failed and source.get('load_failed') is True))
+             and source.get('connection_identity') ==
+                 {'port': identity[0], 'uid': list(identity[1])}
+             and configured_route_heads(ace, idx, slot) == (head,)
 diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/filament_feed_ace.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/filament_feed_ace.py
 --- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/filament_feed_ace.py	1970-01-01 08:00:00
-+++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/filament_feed_ace.py	2026-11-25 09:25:07
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/filament_feed_ace.py	2026-11-25 11:28:00
+@@ -1128,7 +1128,7 @@
+                 return True
+             if not unload_source_matches(ace, idx, slot, head):
+                 return False
+-        if foreground and (not unload_source_matches(ace, idx, slot, head)
++        if foreground and (not unload_source_matches(ace, idx, slot, head, allow_load_failed=True)
+                 or not ace._source_insertion_matches(ace._head_source[head], idx, slot)):
+             raise RuntimeError('换料回停的原来源或插料代次未确认')
+         motion = ParkMotion(ace, idx, slot, head, foreground=True) if foreground else ParkMotion(ace, idx, slot, head)
 @@ -3529,14 +3529,15 @@
                                          _short_total, _retract_speed, retry_motion=retry_motion):
                                      fixed_parked = True
