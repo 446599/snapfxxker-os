@@ -1,0 +1,76 @@
+{
+  "source_commit": "91ba652f6896f22cecb4cf779ee5db06ee8e7840",
+  "blobs": {
+    "ace_protocol.py": "f9f30014c06bc68cd4b418b9115eba86f39b3e30",
+    "ace_protocol_ace2k.py": "f3001c4c2ce2e6ab56cf08478d2050b1baa4e1da",
+    "ace_protocol_v2.py": "5c47bfd8cb3641d14672405a4dc742e797c561a6"
+  },
+  "edits": {
+    "ace_protocol_ace2k.py": [
+      [
+        "from .ace_protocol import AceProtocol\n",
+        "from .ace_protocol import AceProtocol, native_sample\n"
+      ],
+      [
+        "    b = bytes(bytearray(uid or b''))\n    if len(b) < UID_LEN:\n        return ()\n    return struct.unpack('<3I', b[:UID_LEN])\n",
+        "    b = bytes(bytearray(uid or b''))\n    if len(b) != UID_LEN:\n        return ()\n    words = struct.unpack('<3I', b)\n    return words if any(words) else ()\n"
+      ],
+      [
+        "        self._enc = None           # (time, [encoder_um x 4])\n",
+        "        self._enc = None           # (time, [encoder_um x 4])\n        self._evidence_sensors = None\n        self._evidence_enc = None\n        self._fg = None            # (time, [motor FG pulses x 4])\n"
+      ],
+      [
+        "            self._sensors = (now, sw)\n",
+        "            self._sensors = (now, sw)\n            self._evidence_sensors = ((now, sw) if 0 <= vals.get('age_ms', 255) <= 100 else None)\n"
+      ],
+      [
+        "            raw = bytes(bytearray(vals.get('encoder_um', b'')))\n",
+        "            raw = bytes(bytearray(vals.get('encoder_um', b'')))\n            fg = bytes(bytearray(vals.get('fg', b'')))\n            self._evidence_enc = ((now, list(struct.unpack('<4i', raw))) if len(raw) == 16 else None)\n            self._fg = ((now, list(struct.unpack('<4I', fg))) if len(fg) == 16 else None)\n"
+      ],
+      [
+        "        if method not in ('get_info', 'get_status', 'tag_read_motion',\n",
+        "        if method not in ('get_info', 'get_status', 'discover_device', 'get_lane_state', 'tag_read_motion',\n"
+      ],
+      [
+        "        try:\n            self._tick()\n            self._tag_tick()\n            self._dryer_tick()\n",
+        "        # STOP takes precedence over queued busy retries in _tick.\n        if method in ('stop_feed_filament', 'stop_unwind_filament', 'stop_feed_assist'):\n            return self._motion(method, request.get('params') or {}, rid)\n        try:\n            self._tick()\n            self._tag_tick()\n            self._dryer_tick()\n"
+      ],
+      [
+        "        if method == 'tag_read_motion':\n            return self._tag_read_motion(request.get('params') or {}, rid)\n",
+        "        if method == 'discover_device':\n            ans = self._call('ace2k_uid_query', 'ace2k_uid_response')\n            raw = (ans or {}).get('uid', b'')\n            words = chip_words(raw)\n            if not words:\n                self.uid = b''\n                return None\n            self.uid = bytes(raw)\n            return ok({'uid1': words[0], 'uid2': words[1], 'uid3': words[2],\n                       'firmware': 'ace2k %s' % (self.version or '?')})\n        if method == 'get_lane_state':\n            slot = (request.get('params') or {}).get('index')\n            sample = native_sample(self._evidence_sensors, self._feed,\n                                   self._evidence_enc, self._fg, slot, self._now())\n            if sample is None:\n                return None\n            # Keep pending host work distinct from actual idle telemetry.\n            state = sample.state\n            if state == 'ready' and slot in self._jobs:\n                state = ('rollback' if self._jobs[slot]['kind'] == 'retract' else 'feeding')\n            return ok({'index': slot, 'present': sample.present, 'state': state,\n                       'encoder': sample.encoder, 'motor': sample.motor,\n                       'stamp': list(sample.stamp)})\n        if method == 'tag_read_motion':\n            return self._tag_read_motion(request.get('params') or {}, rid)\n"
+      ],
+      [
+        "    def _stop_lane(self, lane):\n        if self.dictionary.has('ace2k_feed_stop'):\n            self._send('ace2k_feed_stop', lane=lane)\n",
+        "    def _stop_lane(self, lane):\n        return self._send('ace2k_feed_stop', lane=lane) is not None\n"
+      ],
+      [
+        "            if job.get('waiting'):\n                # A start the unit refused as busy (its tie-break).\n",
+        "            if job.get('waiting'):\n                if job.get('stopping'):\n                    self._follow_want.discard(lane)\n                    job['stopped'] = True\n                    self._end_job(lane, 'cancelled before start', stop='stopped')\n                    continue\n                # A start the unit refused as busy (its tie-break).\n"
+      ],
+      [
+        "        if 0 <= lane <= 3:\n            self._yield_auto(lane)\n        if method in ('update_feeding_speed', 'update_unwinding_speed'):\n            return reply(0)\n        if method in ('stop_feed_filament', 'stop_unwind_filament'):\n            lanes = [lane] if 0 <= lane <= 3 else list(self._jobs)\n            for ln in lanes:\n                job = self._jobs.get(ln)\n                if job is None:\n                    continue\n                job['stopping'] = True\n                self._stop_lane(ln)\n            if any(ln in self._jobs for ln in lanes):\n                self._pump(STOP_EVENT_WAIT_S)\n                self._work_events()\n            return reply(0)\n",
+        "        if method in ('stop_feed_filament', 'stop_unwind_filament'):\n            if 'index' in params and not 0 <= lane <= 3:\n                return reply(FAILED, 'bad index')\n            lanes = [lane] if 0 <= lane <= 3 else list(self._jobs)\n            acknowledged = True\n            for ln in lanes:\n                job = self._jobs.get(ln)\n                if job is not None:\n                    job['stopping'] = True\n                    if job.get('waiting'):\n                        self._follow_want.discard(ln)\n                        job['stopped'] = True\n                        self._end_job(ln, 'cancelled before start', stop='stopped')\n                        continue\n                # Feed STOP does not tear down an unrelated following mode.\n                if job is not None or ln not in self._follow:\n                    acknowledged = self._stop_lane(ln) and acknowledged\n            if any(ln in self._jobs for ln in lanes):\n                self._pump(STOP_EVENT_WAIT_S)\n                self._work_events()\n            return reply(0) if acknowledged else reply(FAILED, 'unanswered')\n        if 0 <= lane <= 3:\n            self._yield_auto(lane)\n        if method in ('update_feeding_speed', 'update_unwinding_speed'):\n            job = self._jobs.get(lane)\n            if job is None:\n                # The follow's speed is fixed by its own mode.\n                return reply(0)\n            try:\n                speed = self._speed_um(params.get('speed'))\n            except (TypeError, ValueError, OverflowError):\n                return reply(FAILED, 'bounds')\n            if not job.get('waiting'):\n                ans = self._call('ace2k_feed_speed_set', 'ace2k_feed_speed_set_response',\n                                 lane=lane, speed_um_s=speed)\n                if not ans or not ans.get('accepted') or ans.get('lane') != lane:\n                    return reply(FAILED, 'speed not accepted')\n            job['speed'] = speed / 1000.0\n            if not job.get('waiting'):\n                job['deadline'] = self._now() + 1.5 * job['piece'] / job['speed'] + DEADLINE_EXTRA_S\n            return reply(0)\n"
+      ],
+      [
+        "        if method == 'stop_feed_assist':\n            lanes = [lane] if 0 <= lane <= 3 else list(self._follow)\n",
+        "        if method == 'stop_feed_assist':\n            if 'index' in params and not 0 <= lane <= 3:\n                return reply(FAILED, 'bad index')\n            lanes = [lane] if 0 <= lane <= 3 else list(self._follow)\n"
+      ]
+    ],
+    "ace_protocol_v2.py": [
+      [
+        "def _unparsed_fields(fields, known):\n",
+        "def _evidence_fields(data):\n    \"\"\"Strict wire walk for optional motion evidence; normal UI decoding stays unchanged.\"\"\"\n    fields, pos = {}, 0\n\n    def varint():\n        nonlocal pos\n        value = 0\n        for i in range(10):\n            if pos >= len(data):\n                raise ValueError()\n            b = data[pos]\n            pos += 1\n            value |= (b & 127) << (7 * i)\n            if not b & 128:\n                if i == 9 and b > 1:\n                    raise ValueError()\n                return value\n        raise ValueError()\n\n    try:\n        while pos < len(data):\n            tag = varint()\n            number, wire = tag >> 3, tag & 7\n            if number == 0:\n                return None\n            if wire == 0:\n                value = varint()\n            elif wire in (1, 2, 5):\n                size = varint() if wire == 2 else (8 if wire == 1 else 4)\n                if size > len(data) - pos:\n                    return None\n                value = data[pos:pos + size]\n                pos += size\n            else:\n                return None\n            fields.setdefault(number, []).append((wire, value))\n    except ValueError:\n        return None\n    return fields\n\n\ndef _mark_motion_evidence(ret, cmd, payload):\n    # Called only after CRC, frame length and response flag passed.\n    if cmd not in (6, 73, 76):\n        return\n    fields = _evidence_fields(payload)\n    result = ret.get('result') or {}\n    ret.update(_v2_frame_valid=True, _v2_command=cmd, _v2_payload_valid=False)\n    if fields is None:\n        return\n    if cmd == 73:\n        raw = fields.get(1, [])\n        ret['_v2_payload_valid'] = len(raw) == 1 and raw[0][0] == 0\n        return\n    records = fields.get(9 if cmd == 6 else 1, [])\n    key = 'slots' if cmd == 6 else 'feed_info'\n    rows = result.get(key) or []\n    if len(records) != 4 or len(rows) != 4:\n        return\n    for row, (wire, data) in zip(rows, records):\n        sub = _evidence_fields(data) if wire == 2 else None\n        if sub is None:\n            return\n        # Protobuf defaults can omit zero steps/length/state; the row\n        # itself must be real. An absent decoder is not a measurement.\n        if cmd == 6:\n            state = sub.get(1, [(0, 0)])\n            row['_wire_valid'] = (len(state) == 1 and state[0][0] == 0\n                                  and state[0][1] in SLOT_STATES)\n        else:\n            row['_wire_valid'] = all(len(sub.get(n, [])) <= 1\n                and all(w == 0 for w, _ in sub.get(n, [])) for n in (1, 2, 3))\n            row['_decoder_present'] = len(sub.get(3, [])) == 1 and sub[3][0][0] == 0\n    valid = all(row.get('_wire_valid') is True for row in rows)\n    result['_status_wire_valid' if cmd == 6 else '_feed_wire_valid'] = valid\n    ret['_v2_payload_valid'] = valid\n\n\ndef _unparsed_fields(fields, known):\n"
+      ],
+      [
+        "            ret = self._v2_response_to_v1(cmd, seq, payload)\n            results.append(ret)\n",
+        "            ret = self._v2_response_to_v1(cmd, seq, payload)\n            _mark_motion_evidence(ret, cmd, payload)\n            results.append(ret)\n"
+      ]
+    ],
+    "ace_protocol.py": [
+      [
+        "    'get_status', 'get_feed_info', 'get_filament_info',\n",
+        "    'get_status', 'get_feed_info', 'get_filament_info', 'get_lane_state', 'discover_device',\n"
+      ]
+    ]
+  }
+}
