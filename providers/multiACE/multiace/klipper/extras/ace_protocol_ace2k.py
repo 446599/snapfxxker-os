@@ -494,10 +494,14 @@ def chip_words(uid):
     """The 12-byte device id as three little-endian 32-bit words: the
     word order and value a stock ACE 2 reports in discover_device (uid1..3).
     () when the id is short."""
-    b = bytes(bytearray(uid or b''))
-    if len(b) < UID_LEN:
+    try:
+        b = bytes(bytearray(uid or b''))
+    except (TypeError, ValueError, OverflowError):
         return ()
-    return struct.unpack('<3I', b[:UID_LEN])
+    if len(b) != UID_LEN:
+        return ()
+    words = struct.unpack('<3I', b)
+    return words if any(words) else ()
 
 
 def uid_key(words):
@@ -1467,9 +1471,20 @@ class Ace2kLink(object):
         except Exception:
             logging.exception(self._lp + 'motion step failed')
         if method == 'discover_device':
-            words = chip_words(self.uid) or (0, 0, 0)
-            return ok({'uid1': words[0], 'uid2': words[1], 'uid3': words[2],
-                       'firmware': 'ace2k %s' % (self.version or '?')})
+            # The UID must be a real reply from this live native link, not a
+            # cached connection-time value or an all-zero placeholder.
+            ans = self._call('ace2k_uid_query', 'ace2k_uid_response')
+            raw = (ans or {}).get('uid', b'')
+            words = chip_words(raw)
+            if not words:
+                self.uid = b''
+                return {'id': rid, 'code': FAILED, 'msg': 'ace2k UID unavailable',
+                        'result': {}}
+            self.uid = bytes(raw)
+            response = ok({'uid1': words[0], 'uid2': words[1], 'uid3': words[2],
+                           'firmware': 'ace2k %s' % (self.version or '?')})
+            response['_ace2k_uid_verified'] = True
+            return response
         if method == 'tag_read_motion':
             return self._tag_read_motion(request.get('params') or {}, rid)
         if method == 'tag_read_load':
@@ -1911,6 +1926,11 @@ class Ace2kLink(object):
         for lane in list(self._jobs):
             job = self._jobs[lane]
             if job.get('waiting'):
+                # A cancelled pending move must never be started by a later tick.
+                if job.get('stopping'):
+                    job['stopped'] = True
+                    self._end_job(lane, 'cancelled before start', stop='stopped')
+                    continue
                 # A start the unit refused as busy (its tie-break).
                 limit = job['deadline']
                 res = self._start_piece(job)
@@ -2158,6 +2178,12 @@ class Ace2kLink(object):
                 if job is None:
                     continue
                 job['stopping'] = True
+                if job.get('waiting'):
+                    # No move was accepted by the unit. Cancel the queued
+                    # retry rather than letting _tick start it after STOP.
+                    job['stopped'] = True
+                    self._end_job(ln, 'cancelled before start', stop='stopped')
+                    continue
                 self._stop_lane(ln)
             if any(ln in self._jobs for ln in lanes):
                 self._pump(STOP_EVENT_WAIT_S)

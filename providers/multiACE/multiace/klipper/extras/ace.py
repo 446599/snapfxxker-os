@@ -6644,11 +6644,42 @@ class MultiAce:
         except Exception:
             pass
 
+    def _discovery_uid(self, idx, response):
+        """Return an identity only from the selected protocol's verified reply."""
+        if (not isinstance(response, dict)
+                or type(response.get('code')) is not int
+                or response['code'] != 0
+                or str(response.get('msg', '')).upper() == 'FORBIDDEN'):
+            return None
+        if self._is_ace2k_idx(idx):
+            if response.get('_ace2k_uid_verified') is not True:
+                return None
+        elif self._is_v2_idx(idx):
+            if (response.get('_v2_frame_valid') is not True
+                    or response.get('_v2_payload_valid') is not True
+                    or type(response.get('_v2_command')) is not int
+                    or response['_v2_command'] != 0):
+                return None
+        else:
+            return None
+        result = response.get('result')
+        if not isinstance(result, dict):
+            return None
+        uid = tuple(result.get('uid%d' % n) for n in (1, 2, 3))
+        if not all(type(v) is int and 0 <= v <= 0xffffffff for v in uid) or not any(uid):
+            return None
+        return uid
+
     def _location_identity(self, idx):
         try:
             port = str(self._ace_devices[idx]) if type(idx) is int and 0 <= idx < len(self._ace_devices) else None
             entry = self._location_uid_by_idx.get(idx)
-            uid = entry[1] if entry and entry[0] is self._serials.get(idx) else None
+            transport = self._serials.get(idx)
+            uid = entry[1] if transport is not None and entry and entry[0] is transport else None
+            if (not isinstance(uid, tuple) or len(uid) != 3
+                    or not all(type(v) is int and 0 <= v <= 0xffffffff for v in uid)
+                    or not any(uid)):
+                uid = None
             return port, uid
         except Exception:
             return None, None
@@ -7265,15 +7296,13 @@ class MultiAce:
                     travel_item['accepted'] = (
                         response.get('code') == 0
                         and str(response.get('msg', '')).upper() != 'FORBIDDEN')
-            if (method == 'discover_device' and isinstance(response,dict)
-                    and response.get('code') == 0
-                    and (self._is_ace2k_idx(idx) or
-                         (response.get('_v2_frame_valid') is True and response.get('_v2_payload_valid') is True
-                          and response.get('_v2_command') == 0))):
-                result = response.get('result') or {}
-                uid = tuple(result.get('uid%d' % n) for n in (1,2,3))
-                if all(type(v) is int for v in uid):
+            if method == 'discover_device':
+                uid = self._discovery_uid(idx, response)
+                if uid is not None:
                     self._location_uid_by_idx[idx] = (request_transport, uid)
+                elif self._is_ace2k_idx(idx):
+                    # Never retain an identity after a failed native UID query.
+                    self._location_uid_by_idx.pop(idx, None)
             if trace_request:
                 try:
                     self._fa_log.info(
@@ -25330,13 +25359,14 @@ class MultiAce:
         reactor = self.printer.get_reactor()
         deadline = reactor.monotonic() + timeout
         while reactor.monotonic() < deadline:
+            if self._serials.get(idx) is not transport:
+                return None                 # 期间重连了，视为未确认
             status = self._rfid_identity_status(idx)
             if status is not None:
                 return status
-            if self._serials.get(idx) is not transport:
-                return None                 # 期间重连了，视为未确认
             reactor.pause(reactor.monotonic() + 0.05)
-        return self._rfid_identity_status(idx)
+        return (self._rfid_identity_status(idx)
+                if self._serials.get(idx) is transport else None)
 
     def _rfid_route_status(self):
         self._location_hold.refresh_routes()
