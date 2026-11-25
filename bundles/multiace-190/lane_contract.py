@@ -1,5 +1,6 @@
 """Protocol-neutral evidence for existing slot operations, no new alarm codes."""
 from dataclasses import dataclass
+from math import isfinite
 
 
 @dataclass(frozen=True)
@@ -33,20 +34,27 @@ def native_sample(sensors, feed, counters, fg, slot, now, *, after=None):
     if type(slot) is not int or not 0 <= slot < 4:
         return None
     reports = (sensors, feed, counters, fg)
-    if any(r is None or not 0 <= now - r[0] <= 3.5 for r in reports):
+    if any(not isinstance(r, (tuple, list)) or len(r) != 2
+           or type(r[0]) not in (int, float) or not isfinite(r[0])
+           or not 0 <= now - r[0] <= 3.5 for r in reports):
         return None
     if after is not None and any(r[0] <= after for r in reports):
         return None
+    if not isinstance(feed[1], dict):
+        return None
     modes = feed[1].get('mode', ())
-    if len(modes) != 4 or len(counters[1]) != 4 or len(fg[1]) != 4:
+    if any(not isinstance(x, (tuple, list, bytes, bytearray)) or len(x) != 4
+           for x in (modes, counters[1], fg[1])):
         return None
     states = {0: 'ready', 1: 'feeding', 2: 'rollback', 3: 'rollback',
               4: 'preloading', 5: 'assisting', 6: 'rollback_assisting',
               7: 'feed_error', 8: 'assisting'}
-    if modes[slot] not in states or type(sensors[1]) is not int:
+    if (type(modes[slot]) is not int or modes[slot] not in states
+            or type(sensors[1]) is not int or not 0 <= sensors[1] <= 0xffff):
         return None
     enc, motor = counters[1][slot], fg[1][slot]
-    if type(enc) is not int or type(motor) is not int or motor < 0:
+    if (type(enc) is not int or not -(2**31) <= enc < 2**31
+            or type(motor) is not int or not 0 <= motor < 2**32):
         return None
     return LaneSample(bool(sensors[1] & (1 << slot)), states[modes[slot]], enc, motor,
                       tuple(r[0] for r in reports))
@@ -65,10 +73,13 @@ def stock_sample(status, gates, feed, slot):
     status, gates, feed = (r['result'] for r in (status, gates, feed))
     if status.get('_status_wire_valid') is not True or feed.get('_feed_wire_valid') is not True:
         return None
-    slots = [x for x in status.get('slots', []) if x.get('index') == slot]
-    rows = [x for x in feed.get('feed_info', []) if x.get('index') == slot]
-    mask = gates.get('fields', {}).get('1')
-    if len(slots) != 1 or len(rows) != 1 or type(mask) is not int:
+    slots, rows, fields = status.get('slots'), feed.get('feed_info'), gates.get('fields')
+    if not isinstance(slots, list) or not isinstance(rows, list) or not isinstance(fields, dict):
+        return None
+    slots = [x for x in slots if isinstance(x, dict) and type(x.get('index')) is int and x['index'] == slot]
+    rows = [x for x in rows if isinstance(x, dict) and type(x.get('index')) is int and x['index'] == slot]
+    mask = fields.get('1')
+    if len(slots) != 1 or len(rows) != 1 or type(mask) is not int or not 0 <= mask < 2**64:
         return None
     s, r = slots[0], rows[0]
     if s.get('_wire_valid') is not True or r.get('_wire_valid') is not True or r.get('_decoder_present') is not True:

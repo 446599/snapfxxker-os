@@ -24,6 +24,7 @@ python -m unittest discover -s bundles/multiace-190 -v
 git clone https://github.com/decay71/multiACE.git /tmp/multiace-upstream
 git -C /tmp/multiace-upstream checkout --detach 91ba652f6896f22cecb4cf779ee5db06ee8e7840
 python bundles/multiace-190/prepare.py /tmp/multiace-upstream /tmp/multiace-233-stage
+MULTIACE_STAGED=/tmp/multiace-233-stage python -m unittest discover -s bundles/multiace-190 -v
 cd /tmp/multiace-233-stage
 python -m pip install -r multiace/web/backend/requirements.txt pytest
 python -m pytest tests -q
@@ -31,8 +32,15 @@ python -m unittest discover -s multiace/managed/tests -v
 python multiace/managed/build_package.py --output /tmp/multiace-190-candidate.tar.gz
 ```
 
-Local tests: 24 isolated evidence/dispatch unit tests passed (Python unittest);
-the source anchors were checked against the upstream GitHub source. Full
+Local regression (2026-11-25): 54 tests collected, 53 passed, 1 skipped
+(full staged-checkout AST comparison). Eight native motion methods were
+extracted from the pinned upstream source with the candidate patches applied;
+the locally executed fixture has identical Git blob content. All replacement
+anchors were checked against upstream. The added tests cover deadline ordering,
+late DONE events, bounded STOP retry, RFID stop, auto-buffer ownership, invalid
+slot indexes, speed deadline bounds, and neighboring-lane isolation. A single
+lost STOP acknowledgement is retried; a real unresolved STOP uses the existing
+LinkDead/reconnect path. No new alarm category was introduced. Full
 upstream tests, managed build, old 233 UI, custom slot-exit, config/data
 migration and physical tests are not yet verified. The running .116 bundle
 is not in this branch; do not copy old .116 ace.py over 1.90.2. The official

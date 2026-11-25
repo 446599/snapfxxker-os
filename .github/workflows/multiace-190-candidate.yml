@@ -27,8 +27,8 @@ jobs:
           python-version: '3.11'
       - name: Focused regression and stage exact upstream
         run: |
-          python -m unittest discover -s bundles/multiace-190 -v
           python bundles/multiace-190/prepare.py upstream-190 candidate
+          MULTIACE_STAGED="$GITHUB_WORKSPACE/candidate" python -m unittest discover -s bundles/multiace-190 -v
       - name: Install upstream test dependencies
         run: python -m pip install -r candidate/multiace/web/backend/requirements.txt pytest
       - name: Upstream regression

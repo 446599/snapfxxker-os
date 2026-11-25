@@ -63,6 +63,86 @@
       [
         "            for ln in lanes:\n                self._follow_want.discard(ln)\n                self._follow_lost.pop(ln, None)\n                self._stop_follow(ln)\n            return reply(0)\n",
         "            acknowledged = True\n            for ln in lanes:\n                self._follow_want.discard(ln)\n                self._follow_lost.pop(ln, None)\n                acknowledged = self._stop_follow(ln) and acknowledged\n            return reply(0) if acknowledged else reply(FAILED, 'unanswered')\n"
+      ],
+      [
+        "import logging\n",
+        "import logging\nimport math\n"
+      ],
+      [
+        "        return self._send('ace2k_feed_stop', lane=lane) is not None\n",
+        "        return self._send('ace2k_feed_stop', lane=lane) is True\n"
+      ],
+      [
+        "                limit = job['deadline']\n                res = self._start_piece(job)\n",
+        "                limit = job['deadline']\n                if now >= limit:\n                    self._follow_want.discard(lane)\n                    self._end_job(lane, 'start refused (busy)', stop='busy')\n                    continue\n                res = self._start_piece(job)\n"
+      ],
+      [
+        "                    and modes[lane] not in MOVING_MODES\n                    and self._feed[0] >= job['t0'] + LOST_EVENT_S)\n            if idle or now >= job['deadline']:\n                if not idle:\n                    self._stop_lane(lane)\n",
+        "                    and modes[lane] in (0, 7)\n                    and self._feed[0] >= job['t0'] + LOST_EVENT_S)\n            if idle or now >= job['deadline']:\n                if not idle:\n                    # Keep ownership until an end event or fresh stopped report.\n                    # Reuse the connection recovery path if STOP cannot settle.\n                    job['stopping'] = True\n                    self._follow_want.discard(lane)\n                    if now >= job['deadline'] + 3.0 or not self._stop_lane(lane):\n                        raise LinkDead('feed STOP unconfirmed')\n                    continue\n"
+      ],
+      [
+        "        job['stopping'] = True\n        self._stop_lane(lane)\n        self._pump(STOP_EVENT_WAIT_S)\n        self._work_events()\n        if lane in self._jobs:\n            self._end_job(lane, 'gave way to the host')\n",
+        "        job['stopping'] = True\n        if self._stop_lane(lane):\n            self._pump(STOP_EVENT_WAIT_S)\n            self._work_events()\n        # Leave an unsettled job owned by the lane; the existing tick\n        # completes it from an event or fresh idle telemetry.\n"
+      ],
+      [
+        "                        self._end_job(ln, 'cancelled before start', stop='stopped')\n                        continue\n                # Feed STOP",
+        "                        self._end_job(ln, 'cancelled before start', stop='stopped')\n                # Feed STOP"
+      ],
+      [
+        "        if 0 <= lane <= 3:\n            self._yield_auto(lane)\n        if method in ('update_feeding_speed', 'update_unwinding_speed'):\n",
+        "        if method in ('update_feeding_speed', 'update_unwinding_speed'):\n"
+      ],
+      [
+        "            if job is None:\n                # The follow's speed is fixed by its own mode.\n                return reply(0)\n            try:\n                speed = self._speed_um(params.get('speed'))\n",
+        "            if job is None or job.get('auto'):\n                # The follow's speed is fixed by its own mode.\n                return reply(0)\n            if job.get('stopping'):\n                return reply(1, 'FORBIDDEN')\n            try:\n                speed = self._speed_um(params.get('speed'))\n"
+      ],
+      [
+        "            job['speed'] = speed / 1000.0\n            if not job.get('waiting'):\n                job['deadline'] = self._now() + 1.5 * job['piece'] / job['speed'] + DEADLINE_EXTRA_S\n",
+        "            new_speed = speed / 1000.0\n            if not job.get('waiting') and new_speed != job['speed']:\n                floor = self.dictionary.constant('ACE2K_LANE_SPEED_MIN_UM_S',\n                                                 int(SPEED_MIN_MM_S * 1000)) / 1000.0\n                cap = job['t0'] + 1.5 * job['piece'] / floor + DEADLINE_EXTRA_S\n                job['deadline'] = min(cap, self._now() + 1.5 * job['piece'] / new_speed + DEADLINE_EXTRA_S)\n            job['speed'] = new_speed\n"
+      ],
+      [
+        "            lanes = [lane] if 0 <= lane <= 3 else list(self._follow)\n            acknowledged = True\n",
+        "            lanes = [lane] if 0 <= lane <= 3 else sorted(set(self._follow) | self._follow_want)\n            acknowledged = True\n"
+      ],
+      [
+        "        if not 0 <= lane <= 3:\n            return reply(FAILED, 'bad index')\n        if method == 'start_feed_assist':\n",
+        "        if not 0 <= lane <= 3:\n            return reply(FAILED, 'bad index')\n        self._yield_auto(lane)\n        if method == 'start_feed_assist':\n"
+      ],
+      [
+        "        if length <= 0:\n            return reply(FAILED, 'bad length')\n        kind = 'retract'",
+        "        if not math.isfinite(length) or length <= 0 or not math.isfinite(speed):\n            return reply(FAILED, 'bad length')\n        kind = 'retract'"
+      ],
+      [
+        "        if lane in self._follow:\n            # A move on a following lane: the follow gives way (back after\n            # a feed when still wanted, not after a retract).\n            self._stop_follow(lane)\n            if kind == 'retract':\n                self._follow_want.discard(lane)\n                self._follow_lost.pop(lane, None)\n",
+        "        if kind == 'retract':\n            self._follow_want.discard(lane)\n            self._follow_lost.pop(lane, None)\n        if lane in self._follow:\n            # Do not start a competing move if the follow STOP is unanswered.\n            if not self._stop_follow(lane):\n                return reply(1, 'FORBIDDEN')\n"
+      ],
+      [
+        "               'speed': speed if speed > 0 else SPEED_MAX_MM_S,\n               'free_tip': kind == 'feed' and length > FREE_TIP_MIN_MM,\n",
+        "               'speed': self._speed_um(speed if speed > 0 else SPEED_MAX_MM_S) / 1000.0,\n               'free_tip': kind == 'feed' and length > FREE_TIP_MIN_MM,\n"
+      ],
+      [
+        "            idle = (fresh and lane < len(modes) and modes[lane] != 4\n                    and self._feed[0] >= job['t0'] + LOST_EVENT_S)\n            if idle or now >= job['deadline']:\n                if not idle:\n                    self._stop_lane(lane)\n                self._end_tag_read(lane, 'lost_event' if idle else 'timeout')\n",
+        "            idle = (fresh and lane < len(modes) and modes[lane] in (0, 7)\n                    and self._feed[0] >= job['t0'] + LOST_EVENT_S)\n            if idle or now >= job['deadline']:\n                if not idle:\n                    if now >= job['deadline'] + 3.0 or not self._stop_lane(lane):\n                        raise LinkDead('tag STOP unconfirmed')\n                    continue\n                self._end_tag_read(lane, 'lost_event')\n"
+      ],
+      [
+        "                    if now >= job['deadline'] + 3.0 or not self._stop_lane(lane):\n                        raise LinkDead('feed STOP unconfirmed')\n",
+        "                    self._stop_lane(lane)\n                    if now >= job['deadline'] + 3.0:\n                        raise LinkDead('feed STOP unconfirmed')\n"
+      ],
+      [
+        "                    if now >= job['deadline'] + 3.0 or not self._stop_lane(lane):\n                        raise LinkDead('tag STOP unconfirmed')\n",
+        "                    self._stop_lane(lane)\n                    if now >= job['deadline'] + 3.0:\n                        raise LinkDead('tag STOP unconfirmed')\n"
+      ],
+      [
+        "        try:\n            lane = int(params.get('index', -1))\n        except (TypeError, ValueError):\n            lane = -1\n        if method in ('stop_feed_filament', 'stop_unwind_filament'):\n",
+        "        raw_lane = params.get('index', -1)\n        lane = raw_lane if type(raw_lane) is int else -1\n        if method in ('stop_feed_filament', 'stop_unwind_filament'):\n"
+      ],
+      [
+        "        except (TypeError, ValueError):\n            length = 0.0\n        try:\n            speed = float(params.get('speed', 0) or 0)\n        except (TypeError, ValueError):\n            speed = 0.0\n        if not math.isfinite(length)",
+        "        except (TypeError, ValueError, OverflowError):\n            length = 0.0\n        try:\n            speed = float(params.get('speed', 0) or 0)\n        except (TypeError, ValueError, OverflowError):\n            speed = float('nan')\n        if not math.isfinite(length)"
+      ],
+      [
+        "            if job['target'] - job['done'] > REMAIN_MIN_MM:\n                res = self._start_piece(job)\n",
+        "            if job['target'] - job['done'] > REMAIN_MIN_MM:\n                if self._now() >= job['deadline']:\n                    self._follow_want.discard(lane)\n                    self._end_job(lane, 'deadline', stop='timeout')\n                    return\n                res = self._start_piece(job)\n"
       ]
     ],
     "ace_protocol_v2.py": [
