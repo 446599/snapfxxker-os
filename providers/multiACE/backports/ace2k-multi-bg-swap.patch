@@ -1,0 +1,1427 @@
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/config/extended/ace.cfg /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/config/extended/ace.cfg
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/config/extended/ace.cfg	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/config/extended/ace.cfg	2026-11-25 03:34:12
+@@ -6,6 +6,11 @@
+ enable_ace_v2: true
+ v2_order: first
+ 
++# Optional ace2k Klipper-MCU firmware driver (coexists with stock V2 boxes).
++# List only the specific USB serial paths flashed with ace2k firmware.
++#enable_ace2k: false
++#ace2k_ports: /dev/serial/by-path/platform-fed00000.usb-usb-0:1.3:1.0
++
+ # Extra USB vid:pid accepted as an ACE 2 - only for a generic USB-RS485
+ # adapter in place of the genuine CH343 cable. Leave unset otherwise
+ # (CH340 is a generic chip and would match unrelated devices).
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace.py	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace.py	2026-11-25 10:50:59
+@@ -42,6 +42,7 @@
+ from .ace_stop_guard import (StopFaultLatch, StopGuardGCode, StopUnconfirmedError,
+                              stop_response_accepted)
+ from .ace_protocol_v1 import AceProtocolV1
++from .ace_protocol_ace2k import AceProtocolAce2k
+ from .ace_protocol_v2 import AceProtocolV2
+ from .ace_native_buffer import NativeBufferControl
+ from .ace_dry_cycle import DryCycles
+@@ -55,7 +56,7 @@
+                              dynamic_route_blocked, wire_rejection, stop_targets,
+                              isolated_assist_stop_generation)
+ 
+-KNOWN_PROTOCOLS = (AceProtocolV1, AceProtocolV2)
++KNOWN_PROTOCOLS = (AceProtocolV1, AceProtocolAce2k, AceProtocolV2)
+ 
+ MULTIACE_VERSION = "1.27b"
+ 
+@@ -1373,6 +1374,13 @@
+             'homing_flag_path', '/tmp/multiace_homing_active')
+ 
+         self._enable_ace_v2 = config.getboolean('enable_ace_v2', False)
++        self._enable_ace2k = config.getboolean('enable_ace2k', False)
++        self._ace2k_ports_cfg = [
++            x.strip() for x in (config.get('ace2k_ports', '') or '').replace(',', ' ').split()
++            if x.strip()
++        ]
++        AceProtocolAce2k.PORTS = tuple(self._ace2k_ports_cfg)
++        self._ace2k_tag_seen = {}
+ 
+         self._v2_order = config.getchoice('v2_order',
+                                           {'usb': 'usb', 'first': 'first',
+@@ -2439,9 +2447,9 @@
+         proto = self._ace_path_protocol.get(path)
+         proto_name = getattr(proto, 'NAME', '') if proto else ''
+         if self._v2_order == 'first':
+-            proto_bucket = 0 if proto_name == 'v2' else 1
++            proto_bucket = 0 if proto_name in ('v2', 'ace2k') else 1
+         elif self._v2_order == 'last':
+-            proto_bucket = 1 if proto_name == 'v2' else 0
++            proto_bucket = 1 if proto_name in ('v2', 'ace2k') else 0
+         else:
+             proto_bucket = 0
+         return (proto_bucket, len(port_tuple), port_tuple, path)
+@@ -2478,16 +2486,34 @@
+         self._usb_stats['scans'] += 1
+ 
+         ace_devices = []
++        ace2k_reserved = set()
++        for p in getattr(self, '_ace2k_ports_cfg', ()):
++            ace2k_reserved.add(p)
++            try:
++                ace2k_reserved.add(os.path.realpath(p))
++            except OSError:
++                pass
++        claimed_real = set()
+ 
+-        active_protocols = KNOWN_PROTOCOLS if self._enable_ace_v2 \
+-            else tuple(p for p in KNOWN_PROTOCOLS if p is not AceProtocolV2)
++        active_protocols = []
++        for p in KNOWN_PROTOCOLS:
++            if p is AceProtocolV2 and not self._enable_ace_v2:
++                continue
++            if p is AceProtocolAce2k and not self._enable_ace2k:
++                continue
++            active_protocols.append(p)
+         for protocol_cls in active_protocols:
+             for path in protocol_cls.discover():
+-                if path in ace_devices:
++                real_path = os.path.realpath(path)
++                if path in ace_devices or real_path in claimed_real:
+                     continue
++                if protocol_cls is not AceProtocolAce2k and (
++                        path in ace2k_reserved or real_path in ace2k_reserved):
++                    continue
+                 self._ace_path_protocol[path] = protocol_cls
+                 ace_devices.append(path)
+-                real_dev = os.path.basename(os.path.realpath(path))
++                claimed_real.add(real_path)
++                real_dev = os.path.basename(real_path)
+                 logging.info('[multiACE] Found device %s (%s) protocol=%s' % (
+                     path, real_dev, protocol_cls.NAME))
+ 
+@@ -3593,6 +3619,97 @@
+         proto = self._protocols.get(idx)
+         return proto is not None and getattr(proto, 'NAME', None) == 'v2'
+ 
++    def _is_ace2k_idx(self, idx):
++        proto = self._protocols.get(idx)
++        return proto is not None and getattr(proto, 'NAME', None) == 'ace2k'
++
++    def _cap(self, idx, name, default=None):
++        proto = self._protocols.get(idx)
++        if proto is None:
++            return default
++        if name == 'lanes_concurrent':
++            info = self._info_per_ace.get(idx) or {}
++            if 'lanes_concurrent' in info:
++                return bool(info['lanes_concurrent'])
++        caps = getattr(proto, 'CAPS_STATIC', None)
++        if isinstance(caps, dict) and name in caps:
++            return caps[name]
++        if getattr(proto, 'NAME', '') == 'v2':
++            return {'has_dryer': True, 'has_humidity': True,
++                    'lanes_concurrent': False}.get(name, default)
++        return default
++
++    def _caps_for(self, idx):
++        return {
++            'lanes_concurrent': bool(self._cap(idx, 'lanes_concurrent', False)),
++            'has_dryer': bool(self._cap(idx, 'has_dryer', self._is_v2_idx(idx))),
++            'has_humidity': bool(self._cap(idx, 'has_humidity', self._is_v2_idx(idx))),
++            'host_tag_session': bool(self._cap(idx, 'host_tag_session', False)),
++            'buffer_relax': bool(self._cap(idx, 'buffer_relax', False)),
++            'fa_stop_rollback': bool(self._cap(idx, 'fa_stop_rollback', not self._is_ace2k_idx(idx))),
++            'flash_engine': str(self._cap(idx, 'flash_engine', 'ota_v2' if self._is_v2_idx(idx) else 'iap_v1')),
++        }
++
++    def _ace2k_insert_load(self, idx, slot):
++        """Trigger ace2k's built-in insert load + RFID sweep (mode 5: settle,
++        pull to 300mm park, search for tag, return to 300mm park) when a slot
++        transitions from empty to occupied while idle."""
++        try:
++            if (not self._is_ace2k_idx(idx)
++                    or not self._connected_per_ace.get(idx, False)
++                    or idx in getattr(self, '_fw_update_hold', ())
++                    or self._swap_in_progress
++                    or self._is_actively_printing()):
++                return
++            if self._gate_status_per_ace.get(idx, [GATE_UNKNOWN] * 4)[slot] == GATE_EMPTY:
++                return
++            resp = self._tipform_send(
++                idx, {'method': 'tag_read_load', 'params': {'index': slot}},
++                timeout=5.0)
++            if self._tipform_rejected(resp):
++                logging.info('[multiACE] ace2k insert auto-load refused ACE %d slot %d: %s',
++                             idx, slot, (resp or {}).get('msg', 'no response'))
++            else:
++                logging.info('[multiACE] ace2k insert auto-load started ACE %d slot %d',
++                             idx, slot)
++        except Exception as exc:
++            logging.info('[multiACE] ace2k insert auto-load failed ACE %d slot %d: %s',
++                         idx, slot, exc)
++
++    def _ace2k_ingest_tags(self, idx, result):
++        if not self._is_ace2k_idx(idx) or not isinstance(result, dict):
++            return
++        seen = self._ace2k_tag_seen.setdefault(idx, {})
++        for i, slot in enumerate(result.get('slots') or []):
++            if not isinstance(slot, dict):
++                continue
++            if self._is_empty_status(slot.get('status', '')):
++                seen.pop(i, None)
++                continue
++            rec = slot.get('tag_read')
++            if not isinstance(rec, dict):
++                continue
++            n = rec.get('n')
++            if seen.get(i) == n:
++                continue
++            seen[i] = n
++            uid = str(rec.get('uid') or '').strip().upper()
++            fmt = str(rec.get('fmt') or '')
++            try:
++                if rec.get('type'):
++                    color = list(rec.get('color') or [0, 0, 0])
++                    res = {
++                        'type': rec['type'],
++                        'color': color,
++                        'brand': rec.get('brand', '') or '',
++                        'sku': (rec.get('sku') or '') if fmt == 'anycubic' else uid,
++                    }
++                    self._v2_store_filament_read(idx, i, res, host=True, uid=uid, fmt=fmt)
++                elif uid:
++                    self._spool_bind_by_tag(idx, i, uid)
++            except Exception:
++                logging.exception('[multiACE] ace2k tag ingest failed ACE %d slot %d' % (idx, i))
++
+     def _v2_get_slot_status(self, idx, slot):
+         """Return the device's real slot_status for (idx, slot), or None if
+         unknown. Source of truth for whether FA is actually running on the
+@@ -6245,7 +6362,7 @@
+             self._usb_stats['connects'] += 1
+             self._usb_log.info('CONNECT success idx=%d serial=%s time=%.1fms', idx, serial_path, connect_ms)
+             logging.info('[multiACE] Connected to ACE %d (%s)' % (idx, serial_path))
+-            use_threads = (protocol.NAME == 'v2')
++            use_threads = (protocol.NAME in ('v2', 'ace2k'))
+             if use_threads:
+ 
+                 self._cb_locks[idx] = threading.Lock()
+@@ -6718,7 +6835,9 @@
+                     data = protocol.encode_request(
+                         request,
+                         next_id=lambda: self._next_request_id_for(idx))
+-                    ticket = self._slot_flight_begin(idx, ser, data) if self._slot_flight_active(idx) else None
++                    ticket = (self._slot_flight_begin(idx, ser, data)
++                              if (protocol.NAME == 'v2' and self._slot_flight_active(idx))
++                              else None)
+                     try:
+                         if ((stop_transport is not None and (ser is not stop_transport or self._serials.get(idx) is not stop_transport))
+                                 or (wire is not None and not self._insert_wire_valid(idx, ser, wire))):
+@@ -7107,12 +7226,18 @@
+                     buffer_token, request_transport, self._location_identity(idx)[1],
+                     response, self.reactor.monotonic()):
+                 return
+-            if (travel_item is not None and isinstance(response, dict)
+-                    and response.get('_v2_frame_valid') is True
+-                    and response.get('_v2_payload_valid') is True
+-                    and response.get('_v2_command') == 8):
+-                travel_item['accepted'] = (response.get('code') == 0
+-                    and str(response.get('msg', '')).upper() != 'FORBIDDEN')
++            if travel_item is not None and isinstance(response, dict):
++                if self._is_v2_idx(idx):
++                    if (response.get('_v2_frame_valid') is True
++                            and response.get('_v2_payload_valid') is True
++                            and response.get('_v2_command') == 8):
++                        travel_item['accepted'] = (
++                            response.get('code') == 0
++                            and str(response.get('msg', '')).upper() != 'FORBIDDEN')
++                else:
++                    travel_item['accepted'] = (
++                        response.get('code') == 0
++                        and str(response.get('msg', '')).upper() != 'FORBIDDEN')
+             if (method == 'discover_device' and isinstance(response,dict)
+                     and response.get('_v2_frame_valid') is True and response.get('_v2_payload_valid') is True
+                     and response.get('_v2_command') == 0 and response.get('code') == 0):
+@@ -7149,7 +7274,7 @@
+ 
+         request['id'] = msg_id
+         protocol = self._protocols.get(idx)
+-        if protocol is not None and protocol.NAME == 'v2':
++        if protocol is not None and protocol.NAME in ('v2', 'ace2k'):
+ 
+             lock = self._cb_locks.get(idx)
+             if lock is not None:
+@@ -8342,8 +8467,11 @@
+     def _merge_v2_filament_info(self, idx, result):
+ 
+         protocol = self._protocols.get(idx)
+-        if protocol is None or getattr(protocol, 'NAME', None) != 'v2':
++        if protocol is None:
+             return
++        is_v2 = (getattr(protocol, 'NAME', None) == 'v2')
++        if not is_v2 and not self._cap(idx, 'host_tag_session', False):
++            return
+         cache = self._v2_filament_info_per_ace.setdefault(idx, {})
+         pending = self._v2_filament_info_pending.setdefault(idx, {})
+         empty = self._v2_filament_info_empty.setdefault(idx, {})
+@@ -8372,7 +8500,7 @@
+                     if not _targets:
+                         self._rescan_bind_targets.pop(idx, None)
+                         self._rescan_bind_pending.pop(idx, None)
+-        if slots and self._v2_rfid_rescan_pending.pop(idx, False):
++        if is_v2 and slots and self._v2_rfid_rescan_pending.pop(idx, False):
+             self._v2_rfid_boot_rescan(idx, slots)
+         for i, slot in enumerate(slots):
+             _epoch = self._v2_cmd13_slot_epochs[(idx, i)][1]
+@@ -8442,6 +8570,8 @@
+                     # webhooks encoder answers with a shutdown).
+                     if cached.get('tag'):
+                         slot['tag'] = cached['tag']
++                elif not is_v2:
++                    continue
+                 else:
+                     slot['rfid'] = 1
+                     # Negative cache: get_filament_info already returned
+@@ -10030,8 +10160,10 @@
+                     and result.get('_status_wire_valid') is True
+                 )
+                 self._dry_cycles.observe(idx, ser, result, valid_motor_status or (
+-                    self._is_v1(idx) and not self._tipform_rejected(response)
++                    (self._is_v1(idx) or self._is_ace2k(idx)) and not self._tipform_rejected(response)
+                     and isinstance(result.get('dryer_status'), dict)), issued_at=eventtime)
++                if self._is_ace2k(idx):
++                    self._ace2k_ingest_tags(idx, result)
+                 result['_slot_status_frame_valid'] = valid_motor_status
+                 if not hasattr(self, '_slot_status_provenance'):
+                     self._slot_status_provenance = {}
+@@ -10107,7 +10239,11 @@
+                             and not self._swap_in_progress
+                             and not self._is_actively_printing()):
+                         self.log_always(self._t('msg.auto_feed'))
+-                        if (self._is_v2_idx(idx)
++                        if self._is_ace2k_idx(idx):
++                            self.reactor.register_async_callback(
++                                (lambda et, a=idx, g=i:
++                                 self._ace2k_insert_load(a, g)))
++                        elif (self._is_v2_idx(idx)
+                                 and self._is_open_fw_idx(idx)):
+                             # C flow (O-firmware only): abort the firmware
+                             # procedure, UID-first park read, stock net
+@@ -10132,6 +10268,15 @@
+                             self.reactor.register_async_callback(
+                                 (lambda et, a=idx, g=i:
+                                  self._insert_abort_and_queue(a, g)))
++                    elif (self._is_ace2k_idx(idx)
++                            and not is_active
++                            and self._gate_status_per_ace.get(idx, [GATE_UNKNOWN] * 4)[i] == GATE_EMPTY
++                            and not self._is_empty_status(new_slot.get('status'))
++                            and not self._swap_in_progress
++                            and not self._is_actively_printing()):
++                        self.reactor.register_async_callback(
++                            (lambda et, a=idx, g=i:
++                             self._ace2k_insert_load(a, g)))
+                     elif (self._is_v2_idx(idx)
+                             and self._is_open_fw_idx(idx)
+                             and not is_active
+@@ -10670,6 +10815,8 @@
+         if self._is_v2_idx(idx):
+             from .ace_ready_wait import wait_ready
+             return wait_ready(self, idx, timeout, slot, unload_stop=unload_stop)
++        if self._cap(idx, 'busy_wait_floor', False):
++            timeout = max(timeout, 90.0)
+         info = self._info_per_ace.get(idx)
+         if info is None:
+             return
+@@ -10819,7 +10966,10 @@
+ 
+         if self._feed_assist_index != -1 and self._feed_assist_index != index:
+             self.wait_ace_ready()
+-            self._retract(self._feed_assist_index, 5, 80)
++            if self._cap(self._active_device_index, 'fa_stop_rollback', True):
++                self._retract(self._feed_assist_index, 5, 80)
++            else:
++                self._disarm_fa_for(self._active_device_index)
+         self.wait_ace_ready()
+         self._arm_fa_for(self._active_device_index, index)
+         self.wait_ace_ready()
+@@ -10854,8 +11004,9 @@
+         self.wait_ace_ready()
+         self._disarm_fa_for(self._active_device_index)
+         self.wait_ace_ready()
+-        self._retract(rt_index, 5, 80)
+-        self.dwell(0.3)
++        if self._cap(self._active_device_index, 'fa_stop_rollback', True):
++            self._retract(rt_index, 5, 80)
++            self.dwell(0.3)
+ 
+     cmd_ACE_DISABLE_FEED_ASSIST_help = 'Disables ACE feed assist'
+ 
+@@ -10914,7 +11065,7 @@
+             normal_load.wait_before_feed()
+         else:
+             self.wait_ace_ready_on(idx, slot=index)
+-        self._travel_legacy_start(idx, index, head, 'feed')
++        self._travel_legacy_start(idx, index, head, 'feed', length=length)
+         request={"method": "feed_filament", "params": {"index": index, "length": length, "speed": speed}}
+         if normal_load is not None:
+             normal_load.feed_request(request)
+@@ -11046,7 +11197,7 @@
+             self.wait_ace_ready_on(idx, slot=index)
+         else:
+             self.wait_ace_ready_on(idx, slot=index, unload_stop=unload_stop)
+-        self._travel_legacy_start(idx, index, head, 'retract')
++        self._travel_legacy_start(idx, index, head, 'retract', length=length)
+         self.send_request_to(
+             idx,
+             request={"method": "unwind_filament", "params": {"index": index, "length": length, "speed": speed}},
+@@ -11138,7 +11289,7 @@
+                 return s
+         return head
+ 
+-    def _travel_legacy_start(self, idx, slot, head, kind):
++    def _travel_legacy_start(self, idx, slot, head, kind, length=0.0):
+         travel = getattr(self, '_head_travel', None)
+         if travel is None or head is None:
+             return
+@@ -11153,11 +11304,40 @@
+         pending = getattr(self, '_travel_pending', None)
+         if pending is None:
+             self._travel_pending = pending = {}
++        try:
++            cmd_len = abs(float(length or 0.0))
++        except (TypeError, ValueError):
++            cmd_len = 0.0
+         pending[(idx, slot)] = {'token': token, 'head': head,
+             'transport': self._serials.get(idx), 'accepted': None, 'sent': False,
+             'method': 'feed_filament' if kind == 'feed' else 'unwind_filament',
+-            'direction': 1 if kind == 'feed' else -1}
++            'direction': 1 if kind == 'feed' else -1,
++            'length': cmd_len}
+ 
++    def _travel_non_v2_distance(self, idx, slot, commanded_length):
++        if self._is_ace2k_idx(idx):
++            info = None
++            if hasattr(self, '_tipform_send'):
++                try:
++                    resp = self._tipform_send(idx, {'method': 'get_status'}, timeout=2.0)
++                    if resp and not self._tipform_rejected(resp) and isinstance(resp.get('result'), dict):
++                        info = resp['result']
++                except Exception:
++                    info = None
++            if info is None:
++                info = self._info_per_ace.get(idx) or {}
++            slots = info.get('slots') or []
++            slot_motion = (slots[slot].get('motion')
++                           if slot < len(slots) and isinstance(slots[slot], dict)
++                           else None)
++            if isinstance(slot_motion, dict):
++                actual = slot_motion.get('mm')
++                if not isinstance(actual, (int, float)) or actual <= 0:
++                    actual = slot_motion.get('actual_mm')
++                if isinstance(actual, (int, float)) and actual > 0:
++                    return float(actual)
++        return float(commanded_length or 0.0)
++
+     def _travel_stopped_decoder(self, idx, slot, transport):
+         # STOP ACK is acceptance, and cached ready can predate this move.
+         # Use fresh per-slot status/encoder pairs until the counter is still.
+@@ -11185,11 +11365,28 @@
+         try:
+             self.wait_ace_ready_on(idx, slot=slot)
+             valid = (item['accepted'] is not None and self._serials.get(idx) is item['transport'])
+-            distance = (self._travel_stopped_decoder(idx, slot, item['transport'])
+-                        if item['accepted'] else 0) if valid else None
++            if not valid:
++                distance = None
++            elif not item['accepted']:
++                distance = 0
++            elif self._is_v2_idx(idx):
++                distance = self._travel_stopped_decoder(idx, slot, item['transport'])
++            else:
++                distance = self._travel_non_v2_distance(idx, slot, item.get('length', 0.0))
++            receipt = None
++            if (valid and distance is not None and not self._is_v2_idx(idx)
++                    and item['direction'] > 0 and distance > 0):
++                receipt = {
++                    'basis': 'ace2k_encoder' if self._is_ace2k_idx(idx) else 'legacy_commanded',
++                    'ace': idx, 'slot': slot, 'head': item['head'],
++                    'distance_mm': float(abs(distance)),
++                }
++            logging.info('[multiACE] travel_legacy_finish ACE %d slot %d head %s dir=%d dist=%s valid=%s accepted=%s',
++                         idx, slot, item.get('head'), item['direction'], distance, valid, item['accepted'])
+             self._head_travel.motion_finished(item['token'],
+                 None if distance is None else item['direction'] * abs(distance),
+-                confirmed=valid and distance is not None)
++                confirmed=valid and distance is not None,
++                receipt=receipt)
+         except Exception:
+             self._head_travel.motion_finished(item['token'], None, False)
+             raise
+@@ -11197,10 +11394,27 @@
+             if pending.get((idx, slot)) is item:
+                 del pending[(idx, slot)]
+ 
+-    def _head_return_remaining(self, idx, slot, head):
++    def _non_v2_fallback_retract_length(self, idx, slot, keep_in_ace=False, short_done=0.0):
++        base = 0.0
++        if keep_in_ace:
++            base = float(self.get_swap_retract_length(idx, slot) or 0.0)
++        if base <= 0.0:
++            base = float(self.get_retract_length(idx, slot) or 0.0)
++        return max(0.0, base - max(0.0, float(short_done or 0.0)))
++
++    def _head_return_remaining(self, idx, slot, head, short_done=0.0):
+         self._travel_legacy_finish(idx, slot)
+-        return self._head_travel.remaining(head, idx, slot)
++        rem = self._head_travel.remaining(head, idx, slot)
++        if rem is None and not self._is_v2_idx(idx):
++            return self._non_v2_fallback_retract_length(idx, slot, keep_in_ace=False, short_done=short_done)
++        return rem
+ 
++    def _head_park_distance(self, idx, slot, head, short_done=0.0):
++        dist = self._head_travel.park_distance(head, idx, slot)
++        if dist is None and not self._is_v2_idx(idx):
++            return self._non_v2_fallback_retract_length(idx, slot, keep_in_ace=True, short_done=short_done)
++        return dist
++
+     def _verify_unload_park(self, idx, slot, head):
+         transport = self._serials.get(idx)
+ 
+@@ -16923,6 +17137,10 @@
+         p = self._protocols.get(idx)
+         return bool(p is not None and getattr(p, 'NAME', '') == 'v1')
+ 
++    def _is_ace2k(self, idx):
++        p = self._protocols.get(idx)
++        return bool(p is not None and getattr(p, 'NAME', '') == 'ace2k')
++
+     def _ace_internal_humidity(self, idx):
+         """The unit's OWN sensor reading (ACE 2 only - a Pro has none)."""
+         try:
+@@ -17352,7 +17570,7 @@
+             # live deadline waits it out; user-started cycles are not ours
+             # and stay untouched.
+             for f in list(self._auto_dry_started):
+-                if self._is_v2(f) or f in self._auto_dry_follow_until:
++                if self._cap(f, 'has_humidity', self._is_v2(f)) or f in self._auto_dry_follow_until:
+                     continue
+                 if not self._connected_per_ace.get(f, False):
+                     continue
+@@ -17757,24 +17975,34 @@
+         path = getattr(self, '_path_calibration', None)
+         if path is not None and path.task.get('active'):
+             raise gcmd.error('后台料管校准正在进行，请稍后识别标签')
+-        self._insert_policy.options.require('rfid', gcmd.error,
+-                                            idx=gcmd.get_int('ACE', self._active_device_index, minval=0, maxval=3))
+         self._require_slot_eject_idle(gcmd)
+-        _hold_idx = gcmd.get_int('ACE', self._active_device_index, minval=0, maxval=3)
+-        _hold_slot = gcmd.get_int('SLOT', 3, minval=0, maxval=3)
+-        self._require_location_clear(gcmd,idx=_hold_idx,slot=_hold_slot)
+-        if any(gcmd.get_int(name, 0, minval=0, maxval=1)
+-               for name in ('REVERSE_DOCK', 'EXPLORE', 'GUARDED')):
+-            raise gcmd.error('耗材高级选项仅开放标准 RFID 流程')
+         ace_idx = gcmd.get_int('ACE', self._active_device_index,
+                                minval=0, maxval=3)
+         slot = gcmd.get_int('SLOT', minval=0, maxval=3)
++        self._require_location_clear(gcmd, idx=ace_idx, slot=slot)
++        if any(gcmd.get_int(name, 0, minval=0, maxval=1)
++               for name in ('REVERSE_DOCK', 'EXPLORE', 'GUARDED')):
++            raise gcmd.error('耗材高级选项仅开放标准 RFID 流程')
++        if self._is_ace2k_idx(ace_idx):
++            if not self._connected_per_ace.get(ace_idx):
++                raise self._ace_error(gcmd, 'ACE %d is not connected'
++                                      % self._disp(ace_idx), code=208)
++            resp = self._tipform_send(
++                ace_idx, {'method': 'tag_read_motion', 'params': {'index': slot}},
++                timeout=15.0)
++            if self._tipform_rejected(resp):
++                raise self._ace_error(
++                    gcmd, 'ACE %d slot %d ace2k tag read failed: %s'
++                    % (self._disp(ace_idx), self._disp(slot),
++                       (resp or {}).get('msg', 'no response')), code=200)
++            return
+         if not self._is_v2_idx(ace_idx):
+             # Gen-1 (ACE Pro): the community firmware's RC522 tunnel is the
+             # only reader route (docs/GEN1_TAG_TUNNEL.md). Read-only, no
+             # lane motion - allowed on a printing printer too.
+             self._cmd_ace_tag_read_gen1(gcmd, ace_idx, slot)
+             return
++        self._insert_policy.options.require('rfid', gcmd.error, idx=ace_idx)
+         max_mm = gcmd.get_int('MAX_MM', 600, minval=50, maxval=600)
+         debug = gcmd.get_int('DEBUG', 0, minval=0, maxval=1)
+         dump = gcmd.get_int('DUMP', 0, minval=0, maxval=1)
+@@ -21390,7 +21618,8 @@
+         if manual_retry:
+             ps = self.printer.lookup_object('print_stats', None)
+             operations = getattr(self, '_path_operations', None)
+-            if (load_identity is None or head_present is not False or not isinstance(old_source, dict)
++            if ((self._is_v2_idx(ace_index) and load_identity is None)
++                    or head_present is not False or not isinstance(old_source, dict)
+                     or old_source.get('load_failed') is not True or source_route(old_source) != (ace_index, slot)
+                     or getattr(ps, 'state', '') not in ('standby', 'complete', 'cancelled')
+                     or self._swap_in_progress
+@@ -25132,6 +25361,7 @@
+                 'connect_error': (getattr(self, '_connect_error_per_ace', {})
+                                   .get(i, '')),
+                 'protocol':     getattr(protocol, 'NAME', '') if protocol else '',
++                'caps':         self._caps_for(i),
+                 # Model + firmware from the connect handshake (get_info) -
+                 # captured in _ace_models since ever, now surfaced so the
+                 # web can show which FW each unit runs (actionable with the
+@@ -25185,7 +25415,7 @@
+         # the rule.
+         auto_dry_masters = [i for i in range(len(self._ace_devices))
+                             if self._connected_per_ace.get(i, False)
+-                            and (self._is_v2(i)
++                            and (self._is_v2(i) or self._is_ace2k(i)
+                                  or i in getattr(self, '_external_rh', {}))]
+         return {
+             'insert_policy': (self._insert_policy.status() if getattr(self, '_insert_policy', None) else {}),
+@@ -25194,9 +25424,11 @@
+             'feed_operations': [owner.snapshot() for owner in list(getattr(self, '_feed_supervisors', {}).values()) if owner.active],
+             'feed_results': list(getattr(self, '_feed_supervisor_results', {}).values()),
+             'auto_dry_masters': auto_dry_masters,
+-            'status': self._info['status'],
+-            'temp': self._info['temp'],
+-            'dryer_status': self._info['dryer_status'],
++            'status': self._info.get('status', 'disconnected'),
++            'temp': self._info.get('temp', 0),
++            'dryer_status': self._info.get('dryer_status') or {
++                'status': 'stop', 'target_temp': 0, 'duration': 0, 'remain_time': 0
++            },
+             'gate_status': self.gate_status,
+             'active_device': self._active_device_index,
+             'device_count': len(self._ace_devices),
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_bg_swap.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_bg_swap.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_bg_swap.py	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_bg_swap.py	2026-11-25 03:43:54
+@@ -222,6 +222,7 @@
+         # {head: state string} - IDLE/HEAT/PULL/RETRACT/DONE/FAILED:<reason>
+         self.state = {}
+         self._busy = set()
++        self._bg_lanes = {}
+         self._pick_requested = set()
+         self._pick_wait_installed = False
+         # {head: previous fan value 0..1} while the bg dwell fan runs
+@@ -446,7 +447,7 @@
+         BEFORE the finally releases _busy, so the waiting arrival sees a
+         quiesced unit. Never raises."""
+         try:
+-            ace._feed_assist_per_ace[ace_idx] = -1
++            self._fa_cache_clear(ace, ace_idx, slot)
+         except Exception:
+             pass
+         for method in ('stop_feed_assist', 'stop_feed_filament'):
+@@ -483,12 +484,65 @@
+             resp = self._ace_send(ace, ace_idx, {
+                 'method': 'start_feed_assist', 'params': {'index': slot}})
+             if not self._resp_rejected(resp):
+-                ace._feed_assist_per_ace[ace_idx] = slot
++                self._fa_cache_mark(ace, ace_idx, slot)
+                 return True
+             if attempt < retries - 1:
+                 self._pause(backoff)
+         return False
+ 
++    def _cap(self, ace, ace_idx, name):
++        fn = getattr(ace, '_cap', None)
++        if fn is not None:
++            return bool(fn(ace_idx, name))
++        return False
++
++    def _fa_cache_mark(self, ace, ace_idx, slot):
++        if self._cap(ace, ace_idx, 'lanes_concurrent'):
++            return
++        ace._feed_assist_per_ace[ace_idx] = slot
++
++    def _fa_cache_clear(self, ace, ace_idx, slot):
++        try:
++            if (self._cap(ace, ace_idx, 'lanes_concurrent')
++                    and ace._feed_assist_per_ace.get(ace_idx, -1) != slot):
++                return
++            ace._feed_assist_per_ace[ace_idx] = -1
++        except Exception:
++            pass
++
++    def _multi_units_ok(self, ace, units):
++        """Multi mode requires every unit involved in a bg op to support
++        concurrent lanes (e.g. ace2k) so one lane can move while another
++        feeds the printing head. Returns None if all qualify, else the
++        first disqualifying ace_idx."""
++        for idx in units:
++            if idx is None:
++                continue
++            if not self._cap(ace, idx, 'lanes_concurrent'):
++                return idx
++        return None
++
++    def lanes_in_use(self, ace_idx=None):
++        """Set of (ace_idx, slot) pairs (or slot ints if ace_idx given)
++        currently owned by an active background op."""
++        out = set()
++        for lanes in getattr(self, '_bg_lanes', {}).values():
++            for a, s in lanes:
++                if ace_idx is None:
++                    out.add((a, s))
++                elif a == ace_idx:
++                    out.add(s)
++        return out
++
++    def _relax_buffer_if_supported(self, ace, ace_idx, slot):
++        if not self._cap(ace, ace_idx, 'buffer_relax'):
++            return
++        try:
++            self._ace_send(ace, ace_idx, {
++                'method': 'relax_buffer', 'params': {'index': int(slot)}})
++        except Exception:
++            pass
++
+     def _check_docked(self, toolhead, ext, head):
+         # Toolchange interlock, engine-side: if a T picked this head while
+         # the bg op runs, ABORT immediately - the choreography must never
+@@ -1050,8 +1104,9 @@
+                            'serialized (shared move queue), one at a time'
+                            % ', '.join(str(self._dh(h))
+                                        for h in sorted(self._busy)))
+-        if getattr(ace, '_ace_mode', 'multi') != 'head':
+-            return _refuse('v0 requires head mode (1:1 ACE per head)')
++        mode = getattr(ace, '_ace_mode', 'multi')
++        if mode not in ('head', 'multi'):
++            return _refuse('requires head or multi mode')
+         if not ace.head_uses_ace(head):
+             return _refuse('head %d is not ACE-driven' % self._dh(head))
+         if getattr(ace, '_swap_in_progress', False):
+@@ -1071,18 +1126,33 @@
+         slot = source.get('slot')
+         if ace_idx is None or slot is None:
+             return _refuse('head %d head_source incomplete' % self._dh(head))
+-        # The bg ACE must not be the ACE of the currently printing head.
++        if mode == 'multi':
++            bad = self._multi_units_ok(ace, [ace_idx])
++            if bad is not None:
++                return _refuse('multi mode needs lane-concurrent MMUs - '
++                               'ACE %d cannot move one lane while another feeds'
++                               % self._dh(bad))
++        # In head mode, the bg ACE must not be the ACE of the printing head.
++        # In multi mode, concurrent MMUs may share a box across different lanes,
++        # but never the exact same (ace_index, slot).
++        act_head = None
++        act_src = None
+         try:
+             act_name = toolhead.get_extruder().get_name()
+             act_head = (0 if act_name == 'extruder'
+                         else int(act_name.replace('extruder', '')))
+             act_src = ace._head_source.get(act_head)
+-            if act_src and act_src.get('ace_index') == ace_idx:
++        except Exception:
++            act_src = None
++        if act_src and act_src.get('ace_index') == ace_idx:
++            if mode == 'head':
+                 return _refuse(
+                     'ACE %d also feeds the printing head %d (1:1 wiring '
+                     'violated?)' % (self._dh(ace_idx), self._dh(act_head)))
+-        except Exception:
+-            pass
++            if act_src.get('slot') == slot:
++                return _refuse(
++                    'ACE %d slot %d is actively feeding printing head %d'
++                    % (self._dh(ace_idx), self._dh(slot), self._dh(act_head)))
+         if ace._serial_failed_per_ace.get(ace_idx, False) or \
+                 ace._reconnecting_per_ace.get(ace_idx, False):
+             return _refuse('ACE %d comms not healthy' % self._dh(ace_idx))
+@@ -1177,8 +1247,12 @@
+                            'serialized (shared move queue), one at a time'
+                            % ', '.join(str(self._dh(h))
+                                        for h in sorted(self._busy)))
+-        if getattr(ace, '_ace_mode', 'multi') != 'head':
+-            return _refuse('requires head mode (1:1 ACE per head)')
++        mode = getattr(ace, '_ace_mode', 'multi')
++        if mode not in ('head', 'multi'):
++            return _refuse('requires head or multi mode')
++        if mode == 'multi' and (ace_ld < 0 or slot_ld != head):
++            return _refuse('multi mode needs ACE= and SLOT=%d for head %d'
++                           % (head, self._dh(head)))
+         if not ace.head_uses_ace(head):
+             return _refuse('head %d is not ACE-driven' % self._dh(head))
+         if getattr(ace, '_swap_in_progress', False):
+@@ -1212,18 +1286,39 @@
+                            'nothing to do'
+                            % (self._dh(head), self._dh(ace_ld),
+                               self._dh(slot_ld)))
+-        # The bg ACE must not be the ACE of the currently printing head.
++        if mode == 'multi':
++            bad = self._multi_units_ok(ace, [un[0] if un else None, ace_ld])
++            if bad is not None:
++                return _refuse('multi mode needs lane-concurrent MMUs - '
++                               'ACE %d cannot move one lane while another feeds'
++                               % self._dh(bad))
++            if un is not None and (
++                    ace._serial_failed_per_ace.get(un[0], False) or
++                    ace._reconnecting_per_ace.get(un[0], False)):
++                return _refuse('ACE %d comms not healthy' % self._dh(un[0]))
++        # In head mode, the bg ACE must not be the ACE of the printing head.
++        # In multi mode, concurrent MMUs may share a box on different lanes,
++        # but never the exact same (ace_index, slot) as the printing head.
++        act_head = None
++        act_src = None
+         try:
+             act_name = toolhead.get_extruder().get_name()
+             act_head = (0 if act_name == 'extruder'
+                         else int(act_name.replace('extruder', '')))
+             act_src = ace._head_source.get(act_head)
+-            if act_src and act_src.get('ace_index') == ace_ld:
+-                return _refuse(
+-                    'ACE %d also feeds the printing head %d (1:1 wiring '
+-                    'violated?)' % (self._dh(ace_ld), self._dh(act_head)))
+         except Exception:
+-            pass
++            act_src = None
++        if act_src:
++            for check_ace, check_slot in ([un] if un is not None else []) + [(ace_ld, slot_ld)]:
++                if act_src.get('ace_index') == check_ace:
++                    if mode == 'head':
++                        return _refuse(
++                            'ACE %d also feeds the printing head %d (1:1 wiring '
++                            'violated?)' % (self._dh(check_ace), self._dh(act_head)))
++                    if act_src.get('slot') == check_slot:
++                        return _refuse(
++                            'ACE %d slot %d is actively feeding printing head %d'
++                            % (self._dh(check_ace), self._dh(check_slot), self._dh(act_head)))
+         if ace._serial_failed_per_ace.get(ace_ld, False) or \
+                 ace._reconnecting_per_ace.get(ace_ld, False):
+             return _refuse('ACE %d comms not healthy' % self._dh(ace_ld))
+@@ -1298,9 +1393,11 @@
+         pheaters = self.printer.lookup_object('heaters')
+         retract_done = {'v': False}
+         try:
++            self._bg_lanes[head] = {(ace_idx, slot)}
+             self._unload_core(head, ace, toolhead, ext, heater, pheaters,
+                               ace_idx, slot, temp, soft, retract_done)
+             require_printer_clear(self.printer, head=head)
++            self._relax_buffer_if_supported(ace, ace_idx, slot)
+             self.state[head] = 'DONE'
+             self._say('head %d: BACKGROUND UNLOAD COMPLETE - next '
+                       'ACE_SWAP_HEAD/load on this head is load-only'
+@@ -1310,6 +1407,7 @@
+             self._fail_unload(head, heater, pheaters, e, retract_done['v'])
+         finally:
+             self._dwell_fan(ace, head, False)
++            self._bg_lanes.pop(head, None)
+             self._busy.discard(head)
+ 
+     def _fail_unload(self, head, heater, pheaters, e, retract_done):
+@@ -1366,17 +1464,26 @@
+             # runout PAUSE for this head mid-print.
+             ace._runout_suppress_heads.add(head)
+ 
+-            # 1. Stop FA on the bg ACE (it is NOT the printing head's ACE -
+-            # guarded above), mirror the cache convention.
++            # 1. Stop FA on the bg lane. On a lane-concurrent unit (ace2k in
++            # multi mode), stop ONLY this bg slot and leave any other printing
++            # lane's feed assist untouched.
+             self.state[head] = 'FA_STOP'
+-            armed = ace._feed_assist_per_ace.get(ace_idx, -1)
+-            if isinstance(armed, int) and 0 <= armed <= 3:
++            if self._cap(ace, ace_idx, 'lanes_concurrent'):
+                 self._ace_stop(ace, ace_idx, {
+-                    'method': 'stop_feed_assist', 'params': {'index': armed}})
+-                ace._feed_assist_per_ace[ace_idx] = -1
+-                self._say('head %d: FA stopped on ACE %d slot %d'
++                    'method': 'stop_feed_assist', 'params': {'index': slot}})
++                self._fa_cache_clear(ace, ace_idx, slot)
++                self._say('head %d: FA stopped on concurrent ACE %d slot %d'
+                           % (self._dh(head), self._dh(ace_idx),
+-                             self._dh(armed)))
++                             self._dh(slot)))
++            else:
++                armed = ace._feed_assist_per_ace.get(ace_idx, -1)
++                if isinstance(armed, int) and 0 <= armed <= 3:
++                    self._ace_stop(ace, ace_idx, {
++                        'method': 'stop_feed_assist', 'params': {'index': armed}})
++                    ace._feed_assist_per_ace[ace_idx] = -1
++                    self._say('head %d: FA stopped on ACE %d slot %d'
++                              % (self._dh(head), self._dh(ace_idx),
++                                 self._dh(armed)))
+ 
+             # 2. Heat (async target set, greenlet-poll - never blocks gcode).
+             self.state[head] = 'HEAT'
+@@ -1671,11 +1778,13 @@
+         retract_done = {'v': False}
+         try:
+             if un is not None:
++                self._bg_lanes[head] = {un}
+                 self._unload_core(head, ace, toolhead, ext, heater,
+                                   pheaters, un[0], un[1],
+                                   (unload_temp or temp), soft,
+                                   retract_done)
+                 require_printer_clear(self.printer, head=head)
++                self._relax_buffer_if_supported(ace, un[0], un[1])
+                 if self.load_enabled:
+                     self._say('head %d: unload half done - loading ACE %d '
+                               'slot %d in the background'
+@@ -1684,6 +1793,7 @@
+         except Exception as e:
+             self._ace_quiesce(ace, un[0], un[1], 'bg swap unload abort')
+             self._fail_unload(head, heater, pheaters, e, retract_done['v'])
++            self._bg_lanes.pop(head, None)
+             self._busy.discard(head)
+             return
+         if not self.load_enabled:
+@@ -1697,12 +1807,15 @@
+                       % (self._dh(head),
+                          'BACKGROUND UNLOAD COMPLETE' if un is not None
+                          else 'already empty, nothing to do'))
++            self._bg_lanes.pop(head, None)
+             self._busy.discard(head)
+             return
+         try:
++            self._bg_lanes[head] = {ld}
+             self._load_core(head, ace, toolhead, ext, heater, pheaters,
+                             ld[0], ld[1], temp, anti_ooze, purge=purge)
+             require_printer_clear(self.printer, head=head)
++            self._relax_buffer_if_supported(ace, ld[0], ld[1])
+             self.state[head] = 'DONE'
+             # A grip/prime pick-abort returns normally (the head IS loaded)
+             # but may have recorded a prime deficit - say so instead of
+@@ -1740,6 +1853,7 @@
+             logging.exception('[multiACE] [bg-load] head %d failed' % head)
+         finally:
+             self._dwell_fan(ace, head, False)
++            self._bg_lanes.pop(head, None)
+             self._busy.discard(head)
+ 
+     def _load_bookkeeping(self, head, ace, ace_idx, slot):
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_dry_cycle.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_dry_cycle.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_dry_cycle.py	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_dry_cycle.py	2026-11-25 09:25:03
+@@ -192,7 +192,8 @@
+                     roll_slots=[s for s in range(4) if self.eligible(idx, s)]
+                                if exhaust and phase in ('idle', 'complete') else [],
+                     roll_slot=c.get('roll_slot'), roll_count=c.get('roll_count', 0),
+-                    max_temp=self.ace.max_dryer_temperature)
++                    max_temp=(min(self.ace.max_dryer_temperature, 55)
++                              if self.ace._is_v1(idx) else self.ace.max_dryer_temperature))
+ 
+     def _new(self, idx, phase, message, slot=None):
+         c = dict(cycle_id=uuid.uuid4().hex, phase=phase, message=message, transport=self.ace._serials.get(idx),
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_gen1_tunnel.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_gen1_tunnel.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_gen1_tunnel.py	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_gen1_tunnel.py	2026-11-25 09:25:01
+@@ -245,7 +245,7 @@
+     # -- plumbing ----------------------------------------------------------
+ 
+     def _pause(self, seconds):
+-        self.ace.reactor.pause(seconds)
++        self.ace.reactor.pause(self.ace.reactor.monotonic() + seconds)
+ 
+     def _req(self, packed, timeout=None):
+         """One tunnel request: send + poll the reply box. Returns the raw
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_location_hold.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_location_hold.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_location_hold.py	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_location_hold.py	2026-11-25 09:32:44
+@@ -199,13 +199,21 @@
+         target = sorted(set([head] + (heads or []))) if head is not None else heads
+         for r in self.routes:
+             saved = r.get('heads')
+-            same_ace = (port is None or uid is None or port == r['port'] or tuple(uid)==tuple(r['uid']))
++            uid_match = (uid is not None and r.get('uid') is not None
++                         and tuple(uid) == tuple(r['uid']))
++            same_ace = (
++                (port is None and uid is None)
++                or (port is not None and port == r.get('port'))
++                or uid_match
++            )
+             if slot is not None and r.get('scope','ace') == 'ace' and same_ace:return True
+-            exact = (slot is not None and slot == r['slot'] and
+-                     (port is None or uid is None or port == r['port'] or tuple(uid)==tuple(r['uid'])))
++            exact = (slot is not None and slot == r['slot'] and same_ace)
+             if exact:return True
+-            if saved is None or target is None:return True
+-            if set(saved).intersection(target):return True
++            if target is not None:
++                if saved is None:return True
++                if set(saved).intersection(target):return True
++            elif slot is None and same_ace:
++                return True
+         return False
+ 
+     def blocks_route(self, *, head=None, idx=None, slot=None, port=None, ace_uid=None, heads=None):
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_print_drying.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_print_drying.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_print_drying.py	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_print_drying.py	2026-11-25 03:34:10
+@@ -363,7 +363,7 @@
+             return None
+         a = self.ace
+         inventory = self.inventories.get(idx)
+-        if not inventory or not a._is_v2(idx):
++        if not inventory or not (a._is_v2(idx) or getattr(a, '_is_ace2k', lambda _i: False)(idx)):
+             return 0
+         info = self.dryer._observation(idx)
+         lanes = info.get('slots') or []
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_protocol_v1.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_protocol_v1.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/ace_protocol_v1.py	2026-11-25 09:57:20
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/ace_protocol_v1.py	2026-11-25 09:57:39
+@@ -53,7 +53,9 @@
+         return ace_devices
+ 
+     def encode_request(self, request, next_id=None):
+-        payload = json.dumps(request).encode('utf-8')
++        wire = {k: v for k, v in request.items()
++                if not (isinstance(k, str) and k.startswith('_'))}
++        payload = json.dumps(wire).encode('utf-8')
+         if len(payload) > MAX_REQUEST_LEN:
+             raise ValueError(
+                 'request payload too large: %d bytes' % len(payload))
+@@ -62,8 +64,10 @@
+         while crc == CRC_COLLISION and attempts < 10:
+             if next_id is None:
+                 break
+-            request['id'] = next_id()
+-            payload = json.dumps(request).encode('utf-8')
++            new_id = next_id()
++            request['id'] = new_id
++            wire['id'] = new_id
++            payload = json.dumps(wire).encode('utf-8')
+             crc = calc_crc(payload)
+             attempts += 1
+         data = bytes([FRAME_START[0], FRAME_START[1]])
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/filament_feed_ace.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/filament_feed_ace.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/klipper/extras/filament_feed_ace.py	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/klipper/extras/filament_feed_ace.py	2026-11-25 09:25:07
+@@ -3529,14 +3529,15 @@
+                                         _short_total, _retract_speed, retry_motion=retry_motion):
+                                     fixed_parked = True
+                                 else:
++                                    idx_act = self.ace._active_device_index
+                                     _rest = self.ace._head_return_remaining(
+-                                        self.ace._active_device_index, _ace_slot, head_idx)
++                                        idx_act, _ace_slot, head_idx, short_done=_short_total)
+                                     if _rest is None:
+                                         self.ace._last_unload_reason = 'distance_unknown'
+                                         raise RuntimeError('喷头已退出；请核对原料路和回停配置')
+                                     if keep_in_ace:
+-                                        _rest = self.ace._head_travel.park_distance(
+-                                            head_idx, self.ace._active_device_index, _ace_slot)
++                                        _rest = self.ace._head_park_distance(
++                                            idx_act, _ace_slot, head_idx, short_done=_short_total)
+                                         if _rest is None:
+                                             self.ace._last_unload_reason = 'distance_unknown'
+                                             raise RuntimeError('喷头已清空，但回停计距未确认')
+@@ -3565,7 +3566,11 @@
+                                     if not fixed_parked:
+                                         idx = self.ace._active_device_index
+                                         self.ace._verify_unload_park(idx, _ace_slot, head_idx)
+-                                        self.ace._head_travel.finish_park(head_idx, idx, _ace_slot)
++                                        if (self.ace._is_v2_idx(idx)
++                                                or self.ace._head_travel.park_distance(head_idx, idx, _ace_slot) is not None):
++                                            self.ace._head_travel.finish_park(head_idx, idx, _ace_slot)
++                                        else:
++                                            self.ace._head_travel.finish_unload(head_idx, idx, _ace_slot, True)
+                                 else:
+                                     self.ace._head_travel.finish_unload(
+                                         head_idx, self.ace._active_device_index, _ace_slot, unload_ok)
+@@ -4010,14 +4015,15 @@
+                                         _short_total, _retract_speed, retry_motion=retry_motion):
+                                     fixed_parked = True
+                                 else:
++                                    idx_act = self.ace._active_device_index
+                                     _rest = self.ace._head_return_remaining(
+-                                        self.ace._active_device_index, _ace_slot, head_idx)
++                                        idx_act, _ace_slot, head_idx, short_done=_short_total)
+                                     if _rest is None:
+                                         self.ace._last_unload_reason = 'distance_unknown'
+                                         raise RuntimeError('喷头已退出；请核对原料路和回停配置')
+                                     if keep_in_ace:
+-                                        _rest = self.ace._head_travel.park_distance(
+-                                            head_idx, self.ace._active_device_index, _ace_slot)
++                                        _rest = self.ace._head_park_distance(
++                                            idx_act, _ace_slot, head_idx, short_done=_short_total)
+                                         if _rest is None:
+                                             self.ace._last_unload_reason = 'distance_unknown'
+                                             raise RuntimeError('喷头已清空，但回停计距未确认')
+@@ -4045,7 +4051,11 @@
+                                     if not fixed_parked:
+                                         idx = self.ace._active_device_index
+                                         self.ace._verify_unload_park(idx, _ace_slot, head_idx)
+-                                        self.ace._head_travel.finish_park(head_idx, idx, _ace_slot)
++                                        if (self.ace._is_v2_idx(idx)
++                                                or self.ace._head_travel.park_distance(head_idx, idx, _ace_slot) is not None):
++                                            self.ace._head_travel.finish_park(head_idx, idx, _ace_slot)
++                                        else:
++                                            self.ace._head_travel.finish_unload(head_idx, idx, _ace_slot, True)
+                                 else:
+                                     self.ace._head_travel.finish_unload(
+                                         head_idx, self.ace._active_device_index, _ace_slot, unload_ok)
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/tools/post_process_virtual_toolheads.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/tools/post_process_virtual_toolheads.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/tools/post_process_virtual_toolheads.py	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/tools/post_process_virtual_toolheads.py	2026-11-25 03:35:11
+@@ -1097,7 +1097,7 @@
+     return total
+ 
+ def head_mode_bg_stats(events, assignment, event_times=None, bg_heads=None,
+-                       copies=None):
++                       copies=None, bg_units=None):
+     """Background-unload balance of a head-mode assignment: for every unload
+     the rewrite WOULD stamp (same conditions as rewrite_head_mode_to_file -
+     a released ACE head whose next arrival needs a different slot), classify
+@@ -1163,6 +1163,10 @@
+         if head not in bg_set:
+             verdict = 'disabled'
+             stats['bg_disabled'] += 1
++        elif (bg_units is not None
++              and not (loaded_now[0] in bg_units and nxt[0] in bg_units)):
++            verdict = 'unit'
++            stats['bg_disabled'] += 1
+         elif window is None:
+             verdict = 'unknown'
+             stats['bg_unknown'] += 1
+@@ -1778,7 +1782,8 @@
+ 
+ def rewrite_head_mode_to_file(in_path, out_path, assignment, ace_head=None,
+                               progress=None, pickup_cleaning=False,
+-                              copies=None, bg_heads=None, bg_stamps=True):
++                              copies=None, bg_heads=None, bg_stamps=True,
++                              bg_units=None):
+     """Streaming head-mode rewrite of the ORIGINAL slicer gcode. Each slicer
+     T<n> is rewritten per `assignment` (compute_head_mode_layout):
+       - 'pin' -> T<pin_head>                       (feeder head, no swap)
+@@ -2009,53 +2014,61 @@
+                                     nxt_j = j
+                                     break
+                             if nxt is not None and nxt != loaded_now:
+-                                # M73 window look-ahead: only stamp when the
+-                                # released head stays parked long enough (see
+-                                # BG_UNLOAD_MIN_WINDOW_MIN; the overlap with
+-                                # the arrival swap comes on top of the M73
+-                                # window, so this stays conservative).
+-                                r_now = body_times[bt_idx]
+-                                r_nxt = body_times[nxt_j]
+-                                window = None
+-                                if r_now is not None and r_nxt is not None:
+-                                    window = r_now - r_nxt
+-                                if (window is not None
+-                                        and window < BG_UNLOAD_MIN_WINDOW_MIN):
++                                if (bg_units is not None
++                                        and not (loaded_now[0] in bg_units
++                                                 and nxt[0] in bg_units)):
+                                     fout.write(
+-                                        '; multiACE bg-swap HEAD=%d '
+-                                        'skipped: parked window ~%dmin < '
+-                                        '%dmin\n'
+-                                        % (ae_rel[0], int(window),
+-                                           BG_UNLOAD_MIN_WINDOW_MIN))
++                                        '; multiACE bg-swap HEAD=%d skipped: '
++                                        'MMU %d -> MMU %d not lane-concurrent\n'
++                                        % (ae_rel[0], loaded_now[0], nxt[0]))
+                                 else:
+-                                    # Full background SWAP (BG-Load v1):
+-                                    # unload + feed/grip/prime of the NEXT
+-                                    # slot; the arrival no-ops. ANTI_OOZE =
+-                                    # the FUTURE arrival's own un-retract
+-                                    # (post_t_unret keyed by its raw line
+-                                    # number) so the bg prime's end retract
+-                                    # matches what the slicer pushes back
+-                                    # (the arrival line's
+-                                    # stamp never runs - it no-ops).
+-                                    ao = post_t_unret.get(
+-                                        body_lines[nxt_j])
+-                                    if ao is None:
+-                                        ao = ANTI_OOZE_NO_UNRETRACT
+-                                    # Per-pair purge as an ON-LINE param:
+-                                    # the bg prime reads it minutes later
+-                                    # (async), a global ACE_SET_PURGE
+-                                    # stamped here would race with later
+-                                    # inline stamps (PURGE_MATRIX_* note).
+-                                    _bgp = _matrix_purge_mm(
+-                                        flush_matrix, rel_tool,
+-                                        body_tools[nxt_j])
+-                                    fout.write(
+-                                        'ACE_BG_SWAP HEAD=%d ACE=%d '
+-                                        'SLOT=%d ANTI_OOZE=%s%s QUIET=1\n'
+-                                        % (ae_rel[0], nxt[0], nxt[1],
+-                                           _fmt_anti_ooze(ao),
+-                                           (' PURGE=%d' % _bgp)
+-                                           if _bgp is not None else ''))
++                                    # M73 window look-ahead: only stamp when the
++                                    # released head stays parked long enough (see
++                                    # BG_UNLOAD_MIN_WINDOW_MIN; the overlap with
++                                    # the arrival swap comes on top of the M73
++                                    # window, so this stays conservative).
++                                    r_now = body_times[bt_idx]
++                                    r_nxt = body_times[nxt_j]
++                                    window = None
++                                    if r_now is not None and r_nxt is not None:
++                                        window = r_now - r_nxt
++                                    if (window is not None
++                                            and window < BG_UNLOAD_MIN_WINDOW_MIN):
++                                        fout.write(
++                                            '; multiACE bg-swap HEAD=%d '
++                                            'skipped: parked window ~%dmin < '
++                                            '%dmin\n'
++                                            % (ae_rel[0], int(window),
++                                               BG_UNLOAD_MIN_WINDOW_MIN))
++                                    else:
++                                        # Full background SWAP (BG-Load v1):
++                                        # unload + feed/grip/prime of the NEXT
++                                        # slot; the arrival no-ops. ANTI_OOZE =
++                                        # the FUTURE arrival's own un-retract
++                                        # (post_t_unret keyed by its raw line
++                                        # number) so the bg prime's end retract
++                                        # matches what the slicer pushes back
++                                        # (the arrival line's
++                                        # stamp never runs - it no-ops).
++                                        ao = post_t_unret.get(
++                                            body_lines[nxt_j])
++                                        if ao is None:
++                                            ao = ANTI_OOZE_NO_UNRETRACT
++                                        # Per-pair purge as an ON-LINE param:
++                                        # the bg prime reads it minutes later
++                                        # (async), a global ACE_SET_PURGE
++                                        # stamped here would race with later
++                                        # inline stamps (PURGE_MATRIX_* note).
++                                        _bgp = _matrix_purge_mm(
++                                            flush_matrix, rel_tool,
++                                            body_tools[nxt_j])
++                                        fout.write(
++                                            'ACE_BG_SWAP HEAD=%d ACE=%d '
++                                            'SLOT=%d ANTI_OOZE=%s%s QUIET=1\n'
++                                            % (ae_rel[0], nxt[0], nxt[1],
++                                               _fmt_anti_ooze(ao),
++                                               (' PURGE=%d' % _bgp)
++                                               if _bgp is not None else ''))
+                     ae = ace_entry_at(bt_idx)
+                     bt_idx += 1
+                 else:
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/web/backend/main.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/web/backend/main.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/web/backend/main.py	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/web/backend/main.py	2026-11-25 03:35:00
+@@ -1398,6 +1398,14 @@
+     # /api/preflight/context hands the identical dict to the browser worker.
+     # A separate channel would have had to be plumbed twice and could drift.
+     # Not mode-specific despite the function name: multi needs it just as much.
++    connected_aces = []
++    concurrent_aces = []
++    for a in parsed.get("aces", []) or []:
++        if a.get("connected") is True and a.get("idx") is not None:
++            connected_aces.append(int(a.get("idx")))
++            caps = a.get("caps") or {}
++            if caps.get("lanes_concurrent") is True:
++                concurrent_aces.append(int(a.get("idx")))
+     return {"mode": mode, "ace_head": ace_head, "ace_heads": ace_heads,
+             "head_ace": head_ace, "feeders": feeders,
+             "manual_heads": manual_heads,
+@@ -1414,6 +1422,8 @@
+             "max_copies": _int_or(parsed.get("preflight_max_copies", 1), 1),
+             "copies_strict": bool(parsed.get("preflight_copies_strict")),
+             "empty_slots": empty_slots,
++            "connected_aces": connected_aces,
++            "concurrent_aces": concurrent_aces,
+             "bg_available": bool(bgs.get("available")),
+             "bg_heads": [int(h) for h in (bgs.get("enabled_heads") or [])]}
+ 
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/web/backend/preflight_core.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/web/backend/preflight_core.py
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/web/backend/preflight_core.py	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/web/backend/preflight_core.py	2026-11-25 03:36:23
+@@ -439,14 +439,43 @@
+     return out
+ 
+ 
++def connected_aces(head_ctx) -> set:
++    return {int(a) for a in ((head_ctx or {}).get("connected_aces") or [])}
++
++
++def multi_bg_units(head_ctx):
++    """In multi mode, the set of connected ACE indices that support concurrent
++    lanes (e.g. ace2k). Returns None outside multi mode (head mode allows bg
++    on every wired ACE)."""
++    if not is_multi_ctx(head_ctx):
++        return None
++    cc = {int(a) for a in ((head_ctx or {}).get("concurrent_aces") or [])}
++    conn = connected_aces(head_ctx)
++    return (cc & conn) if conn else cc
++
++
++def multi_bg_possible(head_ctx) -> bool:
++    """Multi mode can background-swap when at least two connected MMUs support
++    concurrent lanes and at least one open-dock bg head is enabled."""
++    if not is_multi_ctx(head_ctx):
++        return False
++    if not (head_ctx or {}).get("bg_available"):
++        return False
++    if not ((head_ctx or {}).get("bg_heads") or []):
++        return False
++    units = multi_bg_units(head_ctx)
++    return bool(units) and len(units) >= 2
++
++
+ def multi_assignment_shape(head_ctx) -> bool:
+     """Multi mode uses the head-mode assignment pipeline (one target per
+-    colour, copies, pins) once colour copies are allowed or a hand-fed head
+-    exists; otherwise the classic synthetic-T pipeline runs, byte-identical
+-    to before."""
++    colour, copies, pins) once colour copies are allowed, a hand-fed head
++    exists, or multi-mode background swaps are possible; otherwise the classic
++    synthetic-T pipeline runs, byte-identical to before."""
+     if not is_multi_ctx(head_ctx):
+         return False
+-    return max_copies(head_ctx) > 1 or bool(manual_head_list(head_ctx))
++    return (max_copies(head_ctx) > 1 or bool(manual_head_list(head_ctx))
++            or multi_bg_possible(head_ctx))
+ 
+ 
+ def head_maps(head_ctx: dict, pp=None) -> tuple:
+@@ -719,9 +748,8 @@
+     like before)."""
+     bg_heads = [int(h) for h in ((head_ctx or {}).get("bg_heads") or [])]
+     bg_available = bool((head_ctx or {}).get("bg_available"))
+-    if is_multi_ctx(head_ctx):
+-        # No background swaps in multi (one ACE feeds several heads), even
+-        # when the persisted bg head list still carries ticks.
++    if is_multi_ctx(head_ctx) and not multi_bg_possible(head_ctx):
++        # Multi mode needs >=2 connected lane-concurrent MMUs (ace2k) for bg swaps.
+         bg_heads, bg_available = [], False
+     parse_t = getattr(pp, "parse_toolchanges_with_times", None)
+     event_times = None
+@@ -737,7 +765,7 @@
+ 
+ 
+ def _bg_stats_for(pp, events, assignment, event_times, bg_heads,
+-                  copies=None):
++                  copies=None, bg_units=None):
+     """head_mode_bg_stats, soft-degrading (older pp -> None). Details are
+     dropped from the wire format (the counts drive the UI line). With
+     copies the stats follow the dynamic plan (an older pp without the
+@@ -748,10 +776,14 @@
+     try:
+         try:
+             st = fn(events, assignment, event_times=event_times,
+-                    bg_heads=bg_heads, copies=copies)
++                    bg_heads=bg_heads, copies=copies, bg_units=bg_units)
+         except TypeError:
+-            st = fn(events, assignment, event_times=event_times,
+-                    bg_heads=bg_heads)
++            try:
++                st = fn(events, assignment, event_times=event_times,
++                        bg_heads=bg_heads, copies=copies)
++            except TypeError:
++                st = fn(events, assignment, event_times=event_times,
++                        bg_heads=bg_heads)
+         st.pop("details", None)
+         return st
+     except Exception:
+@@ -824,7 +856,8 @@
+         m.get("head") if m.get("head") is not None else 99,
+         m.get("t", 0)))
+     out = {"feasible": feasible, "swaps": swaps, "mapping": mapping}
+-    bg = _bg_stats_for(pp, events, assignment, event_times, bg_heads, copies)
++    bg = _bg_stats_for(pp, events, assignment, event_times, bg_heads, copies,
++                       bg_units=multi_bg_units(head_ctx))
+     if bg is not None:
+         out["bg"] = bg
+     # Same-nozzle transition volume (colour objective) for plan comparison:
+@@ -898,7 +931,7 @@
+             "mapping": loadout_mapping},
+     }
+     bg_loadout = _bg_stats_for(pp, events, assignment, event_times, bg_heads,
+-                               copies)
++                               copies, bg_units=multi_bg_units(head_ctx))
+     if bg_loadout is not None:
+         plans["loadout"]["bg"] = bg_loadout
+ 
+@@ -1196,10 +1229,13 @@
+         hm_slots = (getattr(ace_head_of_ace, "num_aces", 4) if hm_multi
+                     else 4)
+         targets = head_mode_targets(pp, feeders, live_slots, ace_head_of_ace)
+-        # bg-enabled heads (for the optimizer AND the bg initial-load) - defined
+-        # for every head plan so the inject_auto_load call below always has it.
+-        hm_bg_heads = ([] if hm_multi else
+-                       [int(h) for h in ((head_ctx or {}).get("bg_heads") or [])])
++        # bg-enabled heads (for the optimizer AND the bg stamps) - in multi
++        # mode enabled only when >=2 connected lane-concurrent MMUs exist.
++        hm_bg_units = multi_bg_units(head_ctx) if hm_multi else None
++        hm_bg_possible = multi_bg_possible(head_ctx) if hm_multi else True
++        hm_bg_heads = ([int(h) for h in ((head_ctx or {}).get("bg_heads") or [])]
++                       if hm_bg_possible else [])
++        hm_bg_stamps = (not hm_multi) or (hm_bg_possible and bool(hm_bg_heads))
+         if head_plan in ("optimize", "layer", "color"):
+             set_stage(head_plan, 1.0)
+             hm_result = pp.plan_loadout_from_file(str(src_path), num_aces) or {}
+@@ -1303,9 +1339,9 @@
+                         str(src_path), str(tmp_a), assignment, None,
+                         stage_cb(10.0, 60.0), pickup_cleaning=_pc,
+                         copies=copies, bg_heads=hm_bg_heads,
+-                        bg_stamps=not hm_multi)
++                        bg_stamps=hm_bg_stamps, bg_units=hm_bg_units)
+                 except TypeError:
+-                    # Older post-processor: plan without the bg tie-break.
++                    # Older post-processor: plan without bg_units or bg tie-break.
+                     pp.rewrite_head_mode_to_file(
+                         str(src_path), str(tmp_a), assignment, None,
+                         stage_cb(10.0, 60.0), pickup_cleaning=_pc,
+@@ -1315,7 +1351,7 @@
+                     pp.rewrite_head_mode_to_file(
+                         str(src_path), str(tmp_a), assignment, None,
+                         stage_cb(10.0, 60.0), pickup_cleaning=_pc,
+-                        bg_stamps=not hm_multi)
++                        bg_stamps=hm_bg_stamps, bg_units=hm_bg_units)
+                 except TypeError:
+                     pp.rewrite_head_mode_to_file(
+                         str(src_path), str(tmp_a), assignment, None,
+@@ -1329,10 +1365,12 @@
+         cur, nxt = tmp_a, tmp_b
+ 
+         set_stage("inject_auto_load", 70.0)
++        # Initial-load backgrounding stays head-mode only (upstream behavior).
++        _init_bg_heads = set() if hm_multi else set(hm_bg_heads)
+         try:
+             pp.inject_auto_load_to_file(
+                 str(cur), str(nxt), stage_cb(70.0, 12.0), set(ace_heads),
+-                bg_heads=set(hm_bg_heads))
++                bg_heads=_init_bg_heads)
+         except TypeError:
+             # Older post-processor without the bg_heads param (bg initial-load
+             # not available on this build) - soft-degrade to the inline block.
+diff -ruN --exclude=ace_protocol_ace2k.py /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/web/frontend/app.js /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/web/frontend/app.js
+--- /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/orig/web/frontend/app.js	1970-01-01 08:00:00
++++ /Users/henry/Documents/ChatGPT/u1多色/verification/multiace-ace2k-driver-20261125/work/web/frontend/app.js	2026-11-25 09:26:07
+@@ -3590,9 +3590,9 @@
+         (kind !== "eject" && slotStopBlocked(row)) ||
+         (held && !recovery && !heldLoadedSource) || slotActionPending.value || cmdQueue.value.length > 0 || cmdQueueRunning || ace.connected !== true ||
+         !displayedSlotStateOk ||
+-        (state.flow_version >= 14 && slot.slot_status !== "ready" && !heldEmptyFaultEject &&
++        (state.flow_version >= 14 && ["v2", "V2"].includes(ace.protocol) && slot.slot_status !== "ready" && !heldEmptyFaultEject &&
+           !(recovery && slot.slot_status === "feed_error")) ||
+-        !["v2", "V2"].includes(ace.protocol) || slotActionHeadBlocked(ace, slot, kind) ||
++        !(["v2", "V2"].includes(ace.protocol) || (ace.protocol === "ace2k" && kind === "rfid")) || slotActionHeadBlocked(ace, slot, kind) ||
+         (!["idle", "ready", "standby", "complete", "cancelled", "error"].includes(state.printer_state) &&
+           !(kind === "eject" && slot.can_eject_while_printing === true)) ||
+         state.swap_in_progress || slotOperationsBusy() ||
+@@ -3606,7 +3606,7 @@
+         return `当前料槽状态：${row.detail}；请复核停止或尝试恢复`;
+       if (rfidHoldForRoute(ace.idx, slot.idx)) return rfidHoldMessage(ace.idx, slot.idx);
+       if (ace.connected !== true) return "设备离线";
+-      if (!["v2", "V2"].includes(ace.protocol)) return "目前仅支持 ACE 2";
++      if (!["v2", "V2", "ace2k"].includes(ace.protocol)) return "目前仅支持 ACE 2";
+       if (slot.state !== "ready") return slot.state === "empty" ? "料槽为空" : "料槽状态未知";
+       if (slotActionHeadBlocked(ace, slot, "eject"))
+         return "目标料路或喷头来源尚未确认，暂不能退出此槽";
+@@ -3625,7 +3625,10 @@
+       delete slotOperationMessages[slotOperationKey(ace.idx, slot.idx)];
+       slotActionPending.value = true;
+       try {
+-        const ok = await spoolMacro(kind === "eject" ? "ACE_SLOT_EXIT" : "ACE_SLOT_RFID", {ACE: ace.idx, SLOT: slot.idx});
++        const macroName = kind === "eject"
++          ? "ACE_SLOT_EXIT"
++          : (ace.protocol === "ace2k" ? "ACE_TAG_READ" : "ACE_SLOT_RFID");
++        const ok = await spoolMacro(macroName, {ACE: ace.idx, SLOT: slot.idx});
+         if (!ok) slotOperationMessages[slotOperationKey(ace.idx, slot.idx)] = {
+           error: true, message: macroLog.value || "料槽动作结果未确认，请查看当前状态"};
+       }
+@@ -5167,7 +5170,7 @@
+     function dryMaxTemp(ace) {
+       const max = ace.dry_cycle?.max_temp;
+       if (Number.isInteger(max) && max >= 35) return max;
+-      return ace.protocol === 'v2' ? 65 : 55;
++      return ["v2", "V2", "ace2k"].includes(ace.protocol) ? 65 : 55;
+     }
+     function dryBlock(ace) {
+       const cfg = dryerCfg[ace.idx];

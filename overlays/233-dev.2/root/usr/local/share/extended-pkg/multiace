@@ -18,6 +18,8 @@ PKG_BINARIES="web/backend/vendor/.paxx-dependencies-ready"
 # moves the staging directory into the active application tree.
 pkg_post_install() {
     local staging="$1"
+    # Ensure directories are traversable by non-root Klipper user (lava) even under root umask 0077.
+    find "$staging" -type d -exec chmod 755 {} + || return 1
     local required
     for required in \
         klipper/extras/ace.py \
