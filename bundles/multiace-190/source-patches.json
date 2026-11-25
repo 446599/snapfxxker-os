@@ -3,7 +3,8 @@
   "blobs": {
     "ace_protocol.py": "f9f30014c06bc68cd4b418b9115eba86f39b3e30",
     "ace_protocol_ace2k.py": "f3001c4c2ce2e6ab56cf08478d2050b1baa4e1da",
-    "ace_protocol_v2.py": "5c47bfd8cb3641d14672405a4dc742e797c561a6"
+    "ace_protocol_v2.py": "5c47bfd8cb3641d14672405a4dc742e797c561a6",
+    "tests/units/contract.py": "94f8864032f1a466eebf6e7a6532d5d72ccf06a5"
   },
   "edits": {
     "ace_protocol_ace2k.py": [
@@ -37,7 +38,7 @@
       ],
       [
         "        if method == 'tag_read_motion':\n            return self._tag_read_motion(request.get('params') or {}, rid)\n",
-        "        if method == 'discover_device':\n            ans = self._call('ace2k_uid_query', 'ace2k_uid_response')\n            raw = (ans or {}).get('uid', b'')\n            words = chip_words(raw)\n            if not words:\n                self.uid = b''\n                return None\n            self.uid = bytes(raw)\n            return ok({'uid1': words[0], 'uid2': words[1], 'uid3': words[2],\n                       'firmware': 'ace2k %s' % (self.version or '?')})\n        if method == 'get_lane_state':\n            slot = (request.get('params') or {}).get('index')\n            sample = native_sample(self._evidence_sensors, self._feed,\n                                   self._evidence_enc, self._fg, slot, self._now())\n            if sample is None:\n                return None\n            # Keep pending host work distinct from actual idle telemetry.\n            state = sample.state\n            if state == 'ready' and slot in self._jobs:\n                state = ('rollback' if self._jobs[slot]['kind'] == 'retract' else 'feeding')\n            return ok({'index': slot, 'present': sample.present, 'state': state,\n                       'encoder': sample.encoder, 'motor': sample.motor,\n                       'stamp': list(sample.stamp)})\n        if method == 'tag_read_motion':\n            return self._tag_read_motion(request.get('params') or {}, rid)\n"
+        "        if method == 'discover_device':\n            ans = self._call('ace2k_uid_query', 'ace2k_uid_response')\n            raw = (ans or {}).get('uid', b'')\n            words = chip_words(raw)\n            if not words:\n                self.uid = b''\n                return None\n            self.uid = bytes(raw)\n            return ok({'uid1': words[0], 'uid2': words[1], 'uid3': words[2],\n                       'firmware': 'ace2k %s' % (self.version or '?')})\n        if method == 'get_lane_state':\n            slot = (request.get('params') or {}).get('index')\n            sample = native_sample(self._evidence_sensors, self._feed,\n                                   self._evidence_enc, self._fg, slot, self._now())\n            if sample is None:\n                return None\n            # Keep pending host work distinct from actual idle telemetry.\n            state = sample.state\n            if state == 'ready' and slot in self._jobs:\n                state = ('rollback' if self._jobs[slot]['kind'] == 'retract' else 'feeding')\n            if state == 'ready' and slot in self._tag_reads:\n                state = 'preloading'\n            if state == 'ready' and (slot in self._follow or slot in self._follow_want):\n                state = 'assisting'\n            return ok({'index': slot, 'present': sample.present, 'state': state,\n                       'encoder': sample.encoder, 'motor': sample.motor,\n                       'stamp': list(sample.stamp)})\n        if method == 'tag_read_motion':\n            return self._tag_read_motion(request.get('params') or {}, rid)\n"
       ],
       [
         "    def _stop_lane(self, lane):\n        if self.dictionary.has('ace2k_feed_stop'):\n            self._send('ace2k_feed_stop', lane=lane)\n",
@@ -54,6 +55,14 @@
       [
         "        if method == 'stop_feed_assist':\n            lanes = [lane] if 0 <= lane <= 3 else list(self._follow)\n",
         "        if method == 'stop_feed_assist':\n            if 'index' in params and not 0 <= lane <= 3:\n                return reply(FAILED, 'bad index')\n            lanes = [lane] if 0 <= lane <= 3 else list(self._follow)\n"
+      ],
+      [
+        "        if lane not in self._follow:\n            return\n        self._stop_lane(lane)\n        self._pump(STOP_EVENT_WAIT_S)\n        self._work_events()\n        self._follow.pop(lane, None)\n",
+        "        if lane not in self._follow:\n            return True\n        if not self._stop_lane(lane):\n            return False\n        self._pump(STOP_EVENT_WAIT_S)\n        self._work_events()\n        self._follow.pop(lane, None)\n        return True\n"
+      ],
+      [
+        "            for ln in lanes:\n                self._follow_want.discard(ln)\n                self._follow_lost.pop(ln, None)\n                self._stop_follow(ln)\n            return reply(0)\n",
+        "            acknowledged = True\n            for ln in lanes:\n                self._follow_want.discard(ln)\n                self._follow_lost.pop(ln, None)\n                acknowledged = self._stop_follow(ln) and acknowledged\n            return reply(0) if acknowledged else reply(FAILED, 'unanswered')\n"
       ]
     ],
     "ace_protocol_v2.py": [
@@ -69,7 +78,17 @@
     "ace_protocol.py": [
       [
         "    'get_status', 'get_feed_info', 'get_filament_info',\n",
-        "    'get_status', 'get_feed_info', 'get_filament_info', 'get_lane_state', 'discover_device',\n"
+        "    'get_status', 'get_feed_info', 'get_filament_info', 'get_lane_state', 'get_key_state', 'discover_device',\n"
+      ]
+    ],
+    "tests/units/contract.py": [
+      [
+        "'set_lanes')\nKNOWN_METHODS",
+        "'set_lanes', 'get_lane_state')\nKNOWN_METHODS"
+      ],
+      [
+        "'set_lanes'))\nHOST_KEYS",
+        "'set_lanes', 'get_lane_state', 'get_key_state', 'discover_device'))\nHOST_KEYS"
       ]
     ]
   }

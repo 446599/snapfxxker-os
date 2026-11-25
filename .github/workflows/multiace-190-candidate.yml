@@ -1,0 +1,50 @@
+name: MultiACE 1.90.2 candidate regression
+on:
+  push:
+    branches: [codex/ace4-slot-exit-discover-frame]
+    paths:
+      - bundles/multiace-190/**
+      - .github/workflows/multiace-190-candidate.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: decay71/multiACE
+          ref: 91ba652f6896f22cecb4cf779ee5db06ee8e7840
+          path: upstream-190
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Focused regression and stage exact upstream
+        run: |
+          python -m unittest discover -s bundles/multiace-190 -v
+          python bundles/multiace-190/prepare.py upstream-190 candidate
+      - name: Install upstream test dependencies
+        run: python -m pip install -r candidate/multiace/web/backend/requirements.txt pytest
+      - name: Upstream regression
+        working-directory: candidate
+        run: |
+          python -m pytest tests -q
+          python -m unittest discover -s multiace/managed/tests -v
+          bash multiace/managed/tests/test_managed_guards.sh
+          bash multiace/managed/tests/test_updater_asset_selection.sh
+      - name: Build test artifact only
+        working-directory: candidate
+        run: |
+          mkdir -p dist
+          python multiace/managed/build_package.py --output dist/multiace-190-candidate.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: multiace-190-candidate
+          path: candidate/dist/*
+          if-no-files-found: error

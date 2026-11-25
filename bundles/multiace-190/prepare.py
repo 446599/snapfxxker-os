@@ -23,7 +23,8 @@ def stage(source, target):
         raise ValueError('use a new empty staging destination')
     changes = {}
     for name, digest in SPEC['blobs'].items():
-        path = source / EXTRAS / name
+        relative = Path(name) if '/' in name else EXTRAS / name
+        path = source / relative
         if git_blob(path) != digest:
             raise ValueError('modified upstream source: ' + name)
         text = path.read_text(encoding='utf-8')
@@ -34,10 +35,10 @@ def stage(source, target):
         if name == 'ace_protocol.py':
             text += '\n\n' + (HERE / 'lane_contract.py').read_text() + '\n\n' + (HERE / 'lane_io.py').read_text()
         compile(text, name, 'exec')
-        changes[name] = text
+        changes[relative] = text
     shutil.copytree(source, target, ignore=shutil.ignore_patterns('.git', '__pycache__', '*.pyc'))
-    for name, content in changes.items():
-        (target / EXTRAS / name).write_text(content, encoding='utf-8')
+    for relative, content in changes.items():
+        (target / relative).write_text(content, encoding='utf-8')
     print('Prepared 1.90.2 source candidate; existing firmware packages unchanged.')
 
 if __name__ == '__main__':
