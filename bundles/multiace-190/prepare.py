@@ -34,7 +34,9 @@ def stage(source, target):
             text = text.replace(old, new, 1)
         if name == 'ace_protocol.py':
             text += '\n\n' + (HERE / 'lane_contract.py').read_text() + '\n\n' + (HERE / 'lane_io.py').read_text()
-        compile(text, name, 'exec')
+            text += '\n\n' + (HERE / 'ace2k_discovery.py').read_text()
+        if relative.suffix == '.py':
+            compile(text, name, 'exec')
         changes[relative] = text
     shutil.copytree(source, target, ignore=shutil.ignore_patterns('.git', '__pycache__', '*.pyc'))
     for relative, content in changes.items():

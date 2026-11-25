@@ -1,5 +1,7 @@
 # multiACE+ 1.90.2 candidate / 233 migration
 
+**ACE2K auto-detection test branch:** see [ACE2K-AUTO-DISCOVERY.md](ACE2K-AUTO-DISCOVERY.md). The archive already in `artifacts/` predates this fix; rebuild the staged candidate before testing it. The production overlay pins have not been changed.
+
 Pinned upstream: decay71/multiACE V1.90.2, 91ba652f6896f22cecb4cf779ee5db06ee8e7840.
 Use the upstream driver registry (ACE V1, ACE V2, ACE2K, CFS) rather
 than porting the old monolithic 1.27b engine. This is a **staged candidate**:

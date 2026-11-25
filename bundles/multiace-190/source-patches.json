@@ -4,7 +4,9 @@
     "ace_protocol.py": "f9f30014c06bc68cd4b418b9115eba86f39b3e30",
     "ace_protocol_ace2k.py": "f3001c4c2ce2e6ab56cf08478d2050b1baa4e1da",
     "ace_protocol_v2.py": "5c47bfd8cb3641d14672405a4dc742e797c561a6",
-    "tests/units/contract.py": "94f8864032f1a466eebf6e7a6532d5d72ccf06a5"
+    "tests/units/contract.py": "94f8864032f1a466eebf6e7a6532d5d72ccf06a5",
+    "ace.py": "c9612506a3e65f33b0508f8e7de755cca9ecfd8a",
+    "multiace/config/extended/ace.cfg": "4cba2210984ede29974881fec147190e1710e8e6"
   },
   "edits": {
     "ace_protocol_ace2k.py": [
@@ -169,6 +171,34 @@
       [
         "'set_lanes'))\nHOST_KEYS",
         "'set_lanes', 'get_lane_state', 'get_key_state', 'discover_device'))\nHOST_KEYS"
+      ]
+    ],
+    "ace.py": [
+      [
+        "                           TELEMETRY_METHODS)\n",
+        "                           TELEMETRY_METHODS, SharedAce2Discovery)\n"
+      ],
+      [
+        "        AceProtocolAce2k.PORTS = tuple(self._ace2k_ports_cfg)\n",
+        "        AceProtocolAce2k.PORTS = tuple(self._ace2k_ports_cfg)\n        self._ace2k_auto_detect = config.getboolean('ace2k_auto_detect', True)\n        self._shared_ace2 = SharedAce2Discovery()\n"
+      ],
+      [
+        "        active_paths = set()\n        for idx, ser in self._serials.items():\n            if (ser is not None and getattr(ser, 'is_open', False)\n                    and idx < len(self._ace_devices)):\n                active_paths.add(os.path.realpath(self._ace_devices[idx]))\n",
+        "        active_paths = set()\n        live_protocols = {}\n        for idx, ser in self._serials.items():\n            if (ser is not None and getattr(ser, 'is_open', False)\n                    and idx < len(self._ace_devices)):\n                real = os.path.realpath(self._ace_devices[idx])\n                active_paths.add(real)\n                live_protocols[real] = type(self._protocols.get(idx))\n"
+      ],
+      [
+        "                if protocol_cls is AceProtocolV2:\n                    if real_path not in active_paths:\n                        official = AceProtocolV2.is_official_usb_path(path)\n                        real_dev = os.path.basename(real_path)\n                        usb_ids = AceProtocolV2._read_usb_ids(real_dev)\n                        explicitly_configured = (\n                            usb_ids in self._v2_extra_usb_ids)\n                        if not (official or explicitly_configured) and (\n                                not self._v2_probe_generic_usb\n                                or not self._probe_v2_generic_candidate(\n                                    path, active_paths, probe_budget)):\n                            continue\n                elif getattr(protocol_cls, 'PROBE_BEFORE_CLAIM', False):\n                    if (real_path not in active_paths\n                            and not self._probe_claim(\n                                protocol_cls, path, probe_budget)):\n                        continue\n                self._ace_path_protocol[path] = protocol_cls\n",
+        "                selected_cls = protocol_cls\n                if protocol_cls is AceProtocolV2:\n                    official = AceProtocolV2.is_official_usb_path(path)\n                    auto_shared = (\n                        official and self._ace2k_auto_detect\n                        and AceProtocolAce2k in active_protocols\n                        and not getattr(AceProtocolAce2k, 'UNAVAILABLE', None))\n                    if auto_shared:\n                        if real_path in active_paths:\n                            self._shared_ace2.forget(path)\n                            selected_cls = live_protocols.get(real_path)\n                        elif self._is_printer_idle_for_generic_probe():\n                            if real_path in self._configured_serial_path_set():\n                                continue\n                            match = self._shared_ace2.identify(\n                                path, self.reactor, probe_budget,\n                                AceProtocolV2, AceProtocolAce2k)\n                            if match is None:\n                                continue\n                            selected_cls, reply = match\n                            self._unit_uid_by_path[path] = selected_cls.uid_key(\n                                reply.get('uid') or ())\n                        elif (path in (self._ace_canonical or ())\n                              and self._unit_uid_by_path.get(path)):\n                            # During a print retain the already verified\n                            # canonical protocol; never actively identify.\n                            selected_cls = self._ace_path_protocol.get(path)\n                        else:\n                            continue\n                        if selected_cls not in (AceProtocolV2, AceProtocolAce2k):\n                            continue\n                    elif real_path not in active_paths:\n                        real_dev = os.path.basename(real_path)\n                        usb_ids = AceProtocolV2._read_usb_ids(real_dev)\n                        explicitly_configured = (\n                            usb_ids in self._v2_extra_usb_ids)\n                        if not (official or explicitly_configured) and (\n                                not self._v2_probe_generic_usb\n                                or not self._probe_v2_generic_candidate(\n                                    path, active_paths, probe_budget)):\n                            continue\n                elif getattr(protocol_cls, 'PROBE_BEFORE_CLAIM', False):\n                    if (real_path not in active_paths\n                            and not self._probe_claim(\n                                protocol_cls, path, probe_budget)):\n                        continue\n                self._ace_path_protocol[path] = selected_cls\n"
+      ],
+      [
+        "                    logging.info('[multiACE] Found device %s (%s) protocol=%s'\n                                 % (path, real_dev, protocol_cls.NAME))\n        self._excluded_ace_present = excluded_ace\n",
+        "                    logging.info('[multiACE] Found device %s (%s) protocol=%s'\n                                 % (path, real_dev, selected_cls.NAME))\n        self._excluded_ace_present = excluded_ace\n"
+      ]
+    ],
+    "multiace/config/extended/ace.cfg": [
+      [
+        "#enable_ace2k: false\n#ace2k_ports: /dev/serial/by-path/usb-foo\n",
+        "enable_ace2k: true\n# Auto-identify the shared official ACE 2 adapter when both drivers are enabled.\nace2k_auto_detect: true\n#ace2k_ports: /dev/serial/by-path/usb-foo\n"
       ]
     ]
   }
