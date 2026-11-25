@@ -1,0 +1,70 @@
+diff --git a/firmware/src/ace2k/feed/feed_cmds.c b/firmware/src/ace2k/feed/feed_cmds.c
+index f1cb469..c0be526 100644
+--- a/firmware/src/ace2k/feed/feed_cmds.c
++++ b/firmware/src/ace2k/feed/feed_cmds.c
+@@ -50,6 +50,8 @@
+ // Klipper's DECL_CONSTANT encodes its value with signed literals inside the macro.  So the lint's
+ // signed-bitwise check is off for these declarations only.
+ // NOLINTBEGIN(bugprone-signed-bitwise)
++// One following lane can overlap a finite move on a different lane. STOP is lane-scoped.
++DECL_CONSTANT("ACE2K_LANES_CONCURRENT", 1);
+ // The host bounds the comparator's windows by this value (the thresholds command, below), without a
+ // copy of its own.
+ DECL_CONSTANT("ACE2K_FEED_ASSIST_BURST_UM", ACE2K_FEED_ASSIST_BURST_UM);
+diff --git a/firmware/tests/feed/test_feed.c b/firmware/tests/feed/test_feed.c
+index 312cf77..5a3f271 100644
+--- a/firmware/tests/feed/test_feed.c
++++ b/firmware/tests/feed/test_feed.c
+@@ -604,6 +604,52 @@ TEST(stopped_and_runout_echo_the_seq_of_the_start_of_their_lane)
+     ASSERT_TRUE(!pop(&w, &e));
+ }
+ 
++static void follow_with_finite_move(uint8_t follower, uint8_t mover, bool reverse)
++{
++    struct world w;
++    world_init(&w);
++    uint8_t follower_bit = (uint8_t)(1u << follower);
++    w.in.insert = (uint8_t)(follower_bit | (1u << mover));
++    w.in.rest = (uint8_t)(0x0Fu ^ follower_bit);
++    w.in.pushed = follower_bit;
++    step(&w, 0, 0);
++    ASSERT_EQ(ace2k_feed_start(&w.feed, follower, ACE2K_FEED_CMD_ASSIST_BOTH, 0, 50000,
++                               22, w.now),
++              ACE2K_FEED_ACCEPTED);
++    step(&w, 0, 0);
++    ASSERT_TRUE(w.run[follower] && !w.reverse[follower]);
++    uint8_t command = reverse ? ACE2K_FEED_CMD_ROLLBACK : ACE2K_FEED_CMD_FEED;
++    ASSERT_EQ(ace2k_feed_start(&w.feed, mover, command, 40000, 30000, 37, w.now),
++              ACE2K_FEED_ACCEPTED);
++    step(&w, 0, 0);
++    ASSERT_TRUE(w.run[follower] && !w.reverse[follower]);
++    ASSERT_TRUE(w.run[mover] && w.reverse[mover] == reverse);
++    ace2k_feed_stop(&w.feed, mover, w.now);
++    ASSERT_TRUE(!w.run[mover]);
++    ASSERT_TRUE(w.run[follower] && !w.reverse[follower]);
++    ASSERT_EQ(ace2k_feed_mode(&w.feed, follower), ACE2K_FEED_FOLLOWING);
++    ASSERT_EQ(ace2k_feed_seq(&w.feed, follower), 22);
++    struct ace2k_feed_event event;
++    ASSERT_TRUE(pop(&w, &event));
++    ASSERT_EQ(event.lane, mover);
++    ASSERT_EQ(event.seq, 37);
++    ASSERT_EQ(event.kind, ACE2K_FEED_STOPPED);
++    ASSERT_TRUE(!pop(&w, &event));
++    ace2k_feed_stop(&w.feed, follower, w.now);
++}
++
++TEST(all_distinct_lane_pairs_keep_following_through_finite_feed_and_rollback)
++{
++    for (uint8_t follower = 0; follower < ACE2K_LANE_COUNT; follower++) {
++        for (uint8_t mover = 0; mover < ACE2K_LANE_COUNT; mover++) {
++            if (follower != mover) {
++                follow_with_finite_move(follower, mover, false);
++                follow_with_finite_move(follower, mover, true);
++            }
++        }
++    }
++}
++
+ TEST(the_event_ring_drops_and_counts_beyond_sixteen)
+ {
+     struct world w;

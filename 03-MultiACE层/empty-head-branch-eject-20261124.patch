@@ -1,0 +1,19 @@
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -654,7 +654,15 @@
+             source = a._head_source.get(head)
+             travel = getattr(getattr(a, '_head_travel', None), 'records', {}).get(str(head))
+             if isinstance(travel, dict) and (travel.get('ace'), travel.get('slot')) != (peer or (idx, slot)):
+-                raise RuntimeError('共用管保留另一料槽的计距记录，需先核对占用')
++                # A completed sibling measurement is not a route hold.
++                # Preserve it when reversing only the selected inlet branch.
++                completed_peer_travel = (
++                    allow_peer and a._ace_mode == 'multi' and present is False and source is None
++                    and travel.get('ace') != idx and travel.get('slot') == slot
++                    and travel.get('phase') in ('head_empty', 'parked')
++                    and travel.get('pending') is False and travel.get('reason') != 'interrupted_move')
++                if not completed_peer_travel:
++                    raise RuntimeError('共用管保留另一料槽的计距记录，需先核对占用')
+             if peer is not None:
+                 continue
+             if present and (not isinstance(source, dict)

@@ -1,0 +1,13 @@
+diff --git a/firmware/src/ace2k/dryer/dryer.h b/firmware/src/ace2k/dryer/dryer.h
+index 03ec2b8..ec1e607 100644
+--- a/firmware/src/ace2k/dryer/dryer.h
++++ b/firmware/src/ace2k/dryer/dryer.h
+@@ -87,7 +87,7 @@
+ #define ACE2K_DRYER_RISE_SAMPLE_MS        1000U
+ #define ACE2K_DRYER_RISE_MAX_MC_S_PER_PCT 35 /* from tools/thermal_fit.py; re-tune on the bench */
+ #define ACE2K_DRYER_RISE_MARGIN_PCT                                                                \
+-    100 /* the ceiling above already carries the fit's 1.5x; re-tune on the bench */
++    200 /* 2x for 220V/50Hz cold-start rise headroom while keeping blocked-duct < 85 °C */
+ #define ACE2K_DRYER_RISE_FLOOR_MC  2000   /* initial value; re-tune on the bench */
+ #define ACE2K_DRYER_SIDES_APART_MC 15000  /* initial value */
+ #define ACE2K_DRYER_SIDES_MS       60000U /* initial value; re-tune on the bench */

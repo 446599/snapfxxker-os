@@ -1,0 +1,14 @@
+--- a/klipper/extras/ace_flow_guard.py
++++ b/klipper/extras/ace_flow_guard.py
+@@ -77,9 +77,10 @@
+         return None
+     identity = ace._rfid_identity_status(other)
+     gates = ace._gate_status_per_ace.get(other) or ()
++    # Only the selected branch moves. An old insertion stamp on the loaded
++    # branch cannot change which ACE owns the occupied head.
+     if (identity is None or source.get('connection_identity') != identity
+             or tuple(identity['uid']) == ace._location_identity(idx)[1]
+-            or not ace._source_insertion_matches(source, other, other_slot)
+             or other_slot >= len(gates) or gates[other_slot] != 1):
+         return None
+     return route

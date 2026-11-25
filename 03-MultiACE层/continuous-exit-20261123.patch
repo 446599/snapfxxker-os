@@ -1,0 +1,140 @@
+diff --git a/klipper/extras/ace_slot_actions.py b/klipper/extras/ace_slot_actions.py
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -1040,10 +1040,20 @@
+                 or (self.state.get('ace'), self.state.get('slot')) != (idx, slot)):
+             return False
+         sequence, _, _, _, transport, identity = prepared
+-        # The native tip pull may already have crossed the head switch. Let
+-        # the stock unload path finish, without claiming or issuing motion.
+-        if raw_head_state(a, head) is False:
+-            return False
++        # The same prepared EXIT saw this source loaded before the native hot
++        # tip pull. Its switch can already have cleared before ACE takes over.
++        tip_released = False
++
++        def read_head():
++            nonlocal tip_released
++            pin = raw_head_state(a, head)
++            if type(pin) is not bool:
++                raise RuntimeError('喷头传感器不可用')
++            if pin and tip_released:
++                raise RuntimeError('喷头到料信号重新触发')
++            tip_released = not pin
++            return pin
++
+         recovery = getattr(a, '_error_recovery', None)
+         owner = None
+         self._motor_pending = False
+@@ -1066,8 +1076,7 @@
+                 raise RuntimeError('原 ACE 已断开或更换')
+             self._check(idx, slot, transport, own=True, for_eject=True,
+                         allow_target_loaded=True)
+-            if raw_head_state(a, head) is not True:
+-                raise RuntimeError('连续退出前喷头到料信号未知或已释放')
++            read_head()
+             owner = recovery.begin(idx, slot)
+             self._recovery_owner = owner
+             self._bind_legacy_route(idx, slot, transport, allow_loaded=True)
+@@ -1076,6 +1085,7 @@
+             deadline = a.reactor.monotonic() + MAX_SECONDS
+             def preflight_monitor():
+                 self._original_monitor(idx, slot, transport, deadline, allow_target_loaded=True)
++                read_head()
+             proof = stop_and_verify(a, idx, slot, transport=transport, identity=identity,
+                                     monitor=preflight_monitor, stock_unload=True,
+                                     assist_handoff=True, ready_without_decoder=True,
+@@ -1084,19 +1094,16 @@
+                 raise RuntimeError('原槽 STOP 或 assist 状态不允许连续退出')
+             a._require_no_stop_fault(idx=idx, slot=slot)
+             preflight_monitor()
+-            if raw_head_state(a, head) is False:
+-                return False
+             if self._gate(idx, slot, monitor=preflight_monitor) is not True:
+                 raise RuntimeError('连续退出前原槽入口无料')
+-            if raw_head_state(a, head) is False:
+-                return False
++            read_head()
+             self._arm_route_hold(idx, slot)
+             self.state.update(state='running', message='正在连续退出喷头和 ACE', limit=MAX_MM)
+             self._continuous_head = head
+             motion_start = a.reactor.monotonic()
+             head_deadline = motion_start + min(float(short_mm), 140.0) / SPEED_MM_S
+             motion_deadline = min(deadline, motion_start + MAX_MM / SPEED_MM_S + 15.0)
+-            head_clear_at = None
++            head_clear_at = motion_start if tip_released else None
+             head_clear = False
+ 
+             def motion_check():
+@@ -1104,9 +1111,7 @@
+                 self._original_monitor(idx, slot, transport, motion_deadline,
+                                        allow_removal=True, allow_target_loaded=True)
+                 now = a.reactor.monotonic()
+-                pin = raw_head_state(a, head)
+-                if type(pin) is not bool:
+-                    raise RuntimeError('喷头传感器不可用')
++                pin = read_head()
+                 if not head_clear:
+                     if now >= head_deadline:
+                         raise RuntimeError('喷头未在短退时限内稳定释放')
+@@ -1115,10 +1120,6 @@
+                             head_clear_at = now
+                         elif now - head_clear_at >= .04:
+                             head_clear = True
+-                    elif head_clear_at is not None:
+-                        raise RuntimeError('喷头到料信号抖动，连续退出已停止')
+-                elif pin is not False:
+-                    raise RuntimeError('喷头到料信号重新触发')
+                 if not head_clear and (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot)) != self._eject_epoch:
+                     raise RuntimeError('喷头释放前原槽插料代次改变')
+ 
+diff --git a/tests/test_continuous_exit.py b/tests/test_continuous_exit.py
+--- a/tests/test_continuous_exit.py
++++ b/tests/test_continuous_exit.py
+@@ -230,15 +230,23 @@
+             self.run_exit()
+         self.assertEqual((self.moves, self.commit), (0, 0))
+ 
+-    def test_already_clear_returns_false_without_ownership_or_motion(self):
++    def test_tip_already_cleared_runs_once_to_empty_gate(self):
+         self.pin = False
+-        self.assertFalse(self.run_exit())
+-        self.assertEqual((self.moves, self.stops), (0, 0))
+-        self.assertEqual(self.action.state['state'], 'preparing')
+-        self.assertFalse(self.action._continuous_attempted)
+-        self.ace._error_recovery.end.assert_not_called()
+-
+-    def test_clear_during_stop_returns_false_before_motion(self):
++        self.assertTrue(self.run_exit())
++        self.assertEqual((self.moves, self.commit, self.stops), (1, 1, 2))
++        self.assertTrue(self.action.state['ejected'])
++
++    def test_switch_reappearing_during_preflight_rejects_before_motion(self):
++        self.pin = False
++        def unexpected(ace, idx, slot, **kw):
++            self.pin = True
++            kw['monitor']()
++        self.stop_handoff.side_effect = unexpected
++        with self.assertRaisesRegex(RuntimeError, '重新触发'):
++            self.run_exit()
++        self.assertEqual((self.moves, self.commit), (0, 0))
++
++    def test_clear_during_stop_runs_once_to_empty_gate(self):
+         def clear_during_stop(ace, idx, slot, **kw):
+             kw['monitor']()
+             self.pin = False
+@@ -246,11 +254,9 @@
+             self.stops += 1
+             return {'slot_status': 'assist_error'}
+         self.stop_handoff.side_effect = clear_during_stop
+-        self.assertFalse(self.run_exit())
+-        self.assertEqual((self.moves, self.commit), (0, 0))
+-        self.assertEqual(self.action.state['state'], 'preparing')
+-        self.assertFalse(self.action._continuous_attempted)
+-        self.action._arm_route_hold.assert_not_called()
++        self.assertTrue(self.run_exit())
++        self.assertEqual((self.moves, self.commit), (1, 1))
++        self.action._arm_route_hold.assert_called_once()
+ 
+     def test_stock_assist_handoff_uses_real_wire_proof_without_decoder(self):
+         from test_unload_assist_handoff import Fixture

@@ -1,0 +1,56 @@
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -74,6 +74,20 @@
+             and raw_head_state(ace, head) is True
+             and isinstance(source, dict)
+             and (source.get('ace_index'), source.get('slot')) == (idx, slot))
++
++
++def stopped_assist_eject_allowed(ace, idx, slot, heads, proof):
++    """Permit a sensor-ended reverse of the same source after verified STOP."""
++    if (proof.get('status') != 'assist_error' or proof.get('gate') is not True
++            or proof.get('assist_keys') != 1 << (slot * 4)
++            or proof.get('samples') != 3 or len(heads) != 1):
++        return False
++    head = heads[0]
++    source = ace._head_source.get(head) or {}
++    return (raw_head_state(ace, head) is False
++            and (source.get('ace_index'), source.get('slot')) == (idx, slot)
++            and source.get('load_failed') is False
++            and source_conflict(ace, head, idx, slot) is None)
+ 
+ 
+ class _DecoderUnavailable(RuntimeError):
+@@ -1303,6 +1317,8 @@
+                     message=('原槽停止已确认；喷头仍有料且位置待核，请核对原料路；来源和占用仍保留'
+                              if held else '原槽停止已确认；喷头仍有料，请继续热端卸料，来源和共用管占用保留'))
+                 return
++            assist_exit = (not recovery_only and not background and not self._eject_peers
++                           and stopped_assist_eject_allowed(a, idx, slot, self._eject_heads, proof))
+             if (proof['status'] == 'feed_error' and gate and allow_probe
+                     and not allow_empty_head_held):
+                 if not clear_latch and a._stop_message(idx, slot):
+@@ -1311,7 +1327,7 @@
+                 proof = self._recover_feed_error(idx, slot, transport, proof, learn_direction=recovery_only)
+                 gate = proof['gate']
+             elif proof['status'] != 'ready' and (not recovery_only or allow_probe):
+-                if gate and not allow_empty_head_held:
++                if gate and not allow_empty_head_held and not assist_exit:
+                     raise RuntimeError('目标槽实际错误不可盲退: %s；来源仍保留' % proof['status'])
+             self.state.update(stopped=True, gate=gate, slot_status=proof['status'])
+             if recovery_only:
+@@ -1340,10 +1356,12 @@
+                         break
+                     if (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot)) != self._eject_epoch:
+                         raise RuntimeError('退料期间原槽插料代次改变且入口仍有料')
+-                    if (state not in ('ready', 'rollback')
++                    startup = a.reactor.monotonic() - motion_start <= MOTION_STARTUP_SECONDS
++                    settling_assist = (assist_exit and startup and not seen_motion
++                                       and state == 'assist_error')
++                    if (state not in ('ready', 'rollback') and not settling_assist
+                             and not (allow_empty_head_held and state in STOPPED_STATES)):
+                         raise RuntimeError('目标槽退料实际错误: %s' % state)
+-                    startup = a.reactor.monotonic() - motion_start <= MOTION_STARTUP_SECONDS
+                     row = self._feed_row(idx, slot, check, allow_missing_decoder=True)
+                     seen_motion = seen_motion or state == 'rollback'
+                     if previous is not None:

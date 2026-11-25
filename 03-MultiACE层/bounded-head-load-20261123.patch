@@ -1,0 +1,1130 @@
+--- a/klipper/extras/ace_feed_supervisor.py
++++ b/klipper/extras/ace_feed_supervisor.py
+@@ -3,10 +3,11 @@
+ This is a live integration helper, not a second transport or a position oracle.
+ One CMD76 request is outstanding at most; a sensor poll never waits on serial.
+ The writer checks ``allows_wire`` before sending queued motion. A failed load
+-does not automatically issue another full-length feed or infer a clear Y tube.
++reports its own outcome before the caller can start a bounded same-route retry.
+ """
+ import logging
+ import math
++from time import monotonic as status_clock
+ 
+ from .ace_stop_guard import StopUnconfirmedError
+ from .ace_v2_standstill import stop_and_verify
+@@ -24,21 +25,15 @@
+ 
+ 
+ class FeedSupervisor:
+-    # ACE2's preload routine uses this CMD8 length to run until a stop event.
+-    CONTINUOUS_LENGTH = 0xFFFFFFFF
+     # These are conservative software observation limits, not pipe calibration.
+     POLL_S = 0.25
+     PRECHECK_TIMEOUT_S = 3.0
+     ACK_TIMEOUT_S = 2.0
+     TELEMETRY_TIMEOUT_S = 1.5
+-    NO_PROGRESS_S = 2.0
+     WINDOW_MOTOR_MM = 30.0
+     MIN_PROGRESS_RATIO = 0.5
+     BAD_WINDOWS = 2
+-    SLOW_CHECK_SPEED = 20
+-    SLOW_CHECK_MM = 55
+-    SLOW_CHECK_S = 3.0
+-    SPEED_ACK_S = .5
++    READY_GUARD_S = 4.0
+     STARTUP_RESET_S = 1.0
+     STARTUP_ZERO_MOTOR_MM = 8
+     STOP_VERIFY_S = 3.0
+@@ -63,6 +58,8 @@
+         self.length, self.speed = float(length), float(speed)
+         if not all(math.isfinite(x) and x > 0 for x in (self.length, self.speed)):
+             raise FeedSupervisionError('invalid_motion_budget', '送料长度或速度无效')
++        if self.length != int(self.length) or self.length >= 0xFFFFFFFF:
++            raise FeedSupervisionError('invalid_motion_budget', '请为原槽设置有限的送料长度')
+         self.transport = ace._serials.get(idx)
+         self.identity = ace._location_identity(idx)
+         self.insertion_epoch = getattr(ace, '_insert_epochs', {}).get((idx, slot))
+@@ -77,6 +74,7 @@
+         self.backoff_admitted = False
+         self.retry_backoff_mm = None
+         self.prior_observed_mm = 0.0
++        self.after_retry = False
+         self.error = None
+         self.pending = None
+         self.pending_since = None
+@@ -92,10 +90,6 @@
+             self.decoder_sign = direction[2]
+         self.known_decoder_sign = self.decoder_sign
+         self.bad_windows = 0
+-        self.slow_start = None
+-        self.slow_request = None
+-        self.slow_ack = False
+-        self.slow_recovered = False
+         self.startup_rebases = 0
+         self.terminal_sample = None
+         self.terminal_slot_status = None
+@@ -147,9 +141,11 @@
+     def _decode(self, response):
+         if not self._ok(response, 76):
+             raise FeedSupervisionError('telemetry_invalid', '送料编码器响应无效')
+-        result = response.get('result') or {}
+-        rows = [row for row in result.get('feed_info', [])
+-                if isinstance(row, dict) and row.get('index') == self.slot]
++        result = response.get('result')
++        if not isinstance(result, dict) or not isinstance(result.get('feed_info'), list):
++            raise FeedSupervisionError('telemetry_invalid', '送料计数格式无效')
++        rows = [row for row in result['feed_info']
++                if isinstance(row, dict) and type(row.get('index')) is int and row['index'] == self.slot]
+         if (result.get('_feed_wire_valid') is not True or len(rows) != 1
+                 or rows[0].get('_wire_valid') is not True):
+             raise FeedSupervisionError('decoder_unavailable', '送料编码器未提供有效数值')
+@@ -178,10 +174,11 @@
+         # Preflight can wait for the old assist to stop. Its budget is separate
+         # from the subsequent command ACK and movement observation windows.
+         now = self.ace.reactor.monotonic()
+-        self.started_at = self.last_valid_at = self.last_progress_at = now
++        self.started_at = now
++        # Heartbeat provenance in ace.py uses Python's monotonic clock.
++        self.status_started_at = status_clock()
+         self.next_poll_at = now
+-        self.deadline = (None if self.length == self.CONTINUOUS_LENGTH
+-                         else now + self.length / self.speed + 5.0)
++        self.deadline = now + self.length / self.speed + 30.
+ 
+     def wait_before_feed(self):
+         """Fresh, bounded CMD6 admission, without legacy reconnect/wait loops."""
+@@ -240,12 +237,6 @@
+                     and request.get('_feed_supervisor_token') is self.token
+                     and self.sensor() is False and self.gate() is True):
+                 return False
+-            if method == 'update_feeding_speed':
+-                if request is not self.slow_request or params != {'index': self.slot,
+-                        'speed': int(min(self.speed, self.SLOW_CHECK_SPEED))}:
+-                    return False
+-                self.slow_request = None
+-                return True
+             if self.backoff_params is not None:
+                 if (method != 'unwind_filament' or params != self.backoff_params
+                         or self.backoff_admitted):
+@@ -281,12 +272,10 @@
+     def _observe(self, sample, now):
+         current = sample + (now,)
+         previous = self.last_sample
+-        self.last_valid_at = now
+         if previous is None:
+             self.last_sample = self.window = current
+             self.origin_sample = current
+             self.observed_samples = 1
+-            self.last_progress_at = now
+             return
+         motor = sample[0] - previous[0]
+         decoder = sample[1] - previous[1]
+@@ -310,7 +299,6 @@
+             if self.decoder_sign is not None and sign != self.decoder_sign:
+                 raise FeedSupervisionError('decoder_reversed', '同一次前送中编码器方向反转')
+             self.decoder_sign = sign
+-            self.last_progress_at = now
+         self.last_sample = current
+         self.observed_samples += 1
+         motor_window = current[0] - self.window[0]
+@@ -322,49 +310,19 @@
+                          self.idx, self.slot, self.head, motor_window, material_window,
+                          ratio, self.bad_windows)
+             self.window = current
+-            if self.slow_ack and self.bad_windows == 0 and not self.stopping and not self.slow_recovered:
+-                start_motor, start_time = self.slow_start
+-                self.slow_recovered = (current[0] - start_motor <= self.SLOW_CHECK_MM
+-                                       and now - start_time <= self.SLOW_CHECK_S)
+-
+-    def _check_slow_progress(self, now):
+-        if self.slow_start is None:
+-            if self.bad_windows < self.BAD_WINDOWS:
+-                return
+-            motor = self.last_sample[0]
+-            self.slow_start = (motor, now)
+-            speed = min(self.speed, self.SLOW_CHECK_SPEED)
+-            request = {'method': 'update_feeding_speed', 'params': {'index': self.slot, 'speed': int(speed)},
+-                       '_feed_supervisor': self, '_feed_supervisor_token': self.token,
+-                       '_insert_stop_transport': self.transport}
+-            self.slow_request = request
+-            def reply(*args, **kwargs):
+-                if not self.active or self.stopping or self.cancelled:
+-                    return
+-                response = kwargs.get('response', args[-1] if args else None)
+-                if (not self._ok(response, 10) or type(request.get('id')) is not int
+-                        or type(response.get('id')) is not int or response['id'] != request['id']):
+-                    self.error = FeedSupervisionError('speed_unconfirmed', 'ACE 未确认本次降速')
+-                    return
+-                self.slow_ack = True
+-                self.window = self.last_sample
+-                self.bad_windows = 0
+-            request['_insert_reject'] = reply
+-            logging.info('[multiACE] slowdown ACE=%d slot=%d head=%d motor=%.0f speed=%d',
+-                         self.idx, self.slot, self.head, motor, speed)
+-            if self.ace.send_request_to(self.idx, request, reply) is False:
+-                raise FeedSupervisionError('speed_unconfirmed', 'ACE 未受理本次降速')
+-        motor, started = self.slow_start
+-        if not self.slow_ack and now - started >= self.SPEED_ACK_S:
+-            raise FeedSupervisionError('speed_unconfirmed', 'ACE 未确认本次降速')
+-        if self.slow_recovered:
+-            exhausted = self.bad_windows >= self.BAD_WINDOWS
+-        else:
+-            exhausted = now - started >= self.SLOW_CHECK_S or self.last_sample[0] - motor >= self.SLOW_CHECK_MM
+-        if exhausted:
+-            raise FeedSupervisionError('filament_slip', '低速复核后送料距离仍异常，喷头尚未检测到料')
++            if self.bad_windows >= self.BAD_WINDOWS:
++                self._measurement_issue('测量轮读数偏低，本次距离未确认')
++
++    def _measurement_issue(self, detail):
++        if self.measurement_error is None:
++            logging.info('[multiACE] ACE=%d slot=%d head=%d distance unavailable: %s',
++                         self.idx, self.slot, self.head, detail)
++            self.measurement_error = detail
+ 
+     def _poll(self, now):
++        if self.pending is not None and now - self.pending_since >= self.TELEMETRY_TIMEOUT_S:
++            self._measurement_issue('送料计距响应超时')
++            self.pending = None
+         if self.pending is not None or now < self.next_poll_at or not self.ack:
+             return
+         marker = object()
+@@ -379,7 +337,6 @@
+             self.pending = None
+             response = kwargs.get('response', args[-1] if args else None)
+             try:
+-                self._check_identity()
+                 if (not isinstance(response, dict) or type(request.get('id')) is not int
+                         or type(response.get('id')) is not int
+                         or response['id'] != request['id']):
+@@ -387,18 +344,16 @@
+                 sample = self._decode(response)
+                 if sample is not None:
+                     self._observe(sample, self.ace.reactor.monotonic())
+-            except FeedSupervisionError as exc:
+-                self.error = exc
+-            except Exception as exc:
+-                self.error = FeedSupervisionError('telemetry_invalid', '送料遥测处理失败：%s' % exc)
++            except (FeedSupervisionError, TypeError, ValueError) as exc:
++                self._measurement_issue(str(exc))
+         try:
+             accepted = self.ace.send_request_to(self.idx, request, callback)
+             if accepted is False:
+                 self.pending = None
+-                self.error = FeedSupervisionError('telemetry_rejected', '送料遥测请求被拒绝')
++                self._measurement_issue('送料遥测请求被拒绝')
+         except Exception as exc:
+             self.pending = None
+-            self.error = FeedSupervisionError('telemetry_unavailable', '送料遥测请求失败：%s' % exc)
++            self._measurement_issue('送料遥测请求失败：%s' % exc)
+ 
+     def check(self):
+         self._check_identity()
+@@ -410,6 +365,12 @@
+             raise FeedSupervisionError('head_sensor_unknown', '喷头原始到料信号未知')
+         if self.error is not None:
+             raise self.error
++        lane = None
++        stamp = getattr(self.ace, '_slot_status_provenance', {}).get(self.idx)
++        if self.ack and stamp and stamp[0] is self.transport and stamp[1] >= self.status_started_at:
++            lane = self.ace._v2_get_slot_status(self.idx, self.slot)
++            if lane in self.STOPPED and lane != 'ready':
++                raise FeedSupervisionError('feed_device_error', '原槽报告送料故障：%s' % lane)
+         if value is True:
+             return True
+         gate = self.gate()
+@@ -418,14 +379,10 @@
+                                        'ACE 入口已无料' if gate is False else 'ACE 入口状态未知')
+         if not self.ack and now - self.started_at >= self.ACK_TIMEOUT_S:
+             raise FeedSupervisionError('feed_ack_timeout', '送料指令确认超时')
+-        if self.ack and now - self.last_valid_at >= self.TELEMETRY_TIMEOUT_S:
+-            raise FeedSupervisionError('telemetry_timeout', '送料遥测超时，已停止后续长推')
+-        if self.deadline is not None and now >= self.deadline:
+-            raise FeedSupervisionError('head_not_reached', '已到本次送料限程，喷头仍未确认到料')
+-        self._check_slow_progress(now)
+-        if (self.ack and (self.slow_start is None or self.slow_recovered)
+-                and now - self.last_progress_at >= self.NO_PROGRESS_S):
+-            raise FeedSupervisionError('no_progress', '送料编码器持续无进展')
++        if lane == 'ready' and stamp[1] - self.status_started_at > self.READY_GUARD_S:
++            raise FeedSupervisionError('head_not_reached', '本段送料已结束，喷头仍未到料')
++        if now >= self.deadline:
++            raise FeedSupervisionError('head_not_reached', '本次送料已超时，喷头仍未到料')
+         self._poll(now)
+         if self.error is not None:
+             raise self.error
+@@ -466,19 +423,25 @@
+         """Original transport STOP ACK plus fresh per-slot stationary samples."""
+         self.stopping = True
+         self.pending = None  # Late in-flight feeding polls cannot mutate evidence.
++        self.terminal_sample = self.terminal_slot_status = None
+         try:
+             receipt = stop_and_verify(self.ace, self.idx, self.slot,
+-                transport=self.transport, identity=self.identity, timeout=self.STOP_VERIFY_S)
++                transport=self.transport, identity=self.identity, timeout=self.STOP_VERIFY_S,
++                ready_status_only=self.feed_admitted)
+             self.terminal_sample = receipt['sample']
+             self.terminal_slot_status = receipt['slot_status']
+             self.result = 'stopped'
+-            if self.feed_admitted and self.ack:
++            if self.feed_admitted and self.ack and self.terminal_slot_status == 'ready':
++                # STOP and slot READY already established completion. Sample once
++                # for the unload ledger; a missing counter cannot veto arrival.
+                 try:
+-                    # Include the final coasting distance. A counter reset here
+-                    # invalidates measurement, not the independent STOP receipt.
+-                    self._observe(self.terminal_sample, receipt['at'])
+-                except FeedSupervisionError as exc:
+-                    self.measurement_error = str(exc)
++                    reply = self._query('get_feed_info', 76)
++                    self.terminal_sample = self._decode(reply)
++                    if self.terminal_sample is not None:
++                        self._observe(self.terminal_sample, self.ace.reactor.monotonic())
++                except Exception as exc:
++                    self._measurement_issue(str(exc))
++                self._check_identity()
+             return
+         except StopUnconfirmedError:
+             self.result = 'stop_unconfirmed'
+@@ -496,27 +459,35 @@
+         distance = min(distance, self.terminal_sample[1] * self.decoder_sign)
+         return distance if math.isfinite(distance) and 0 < distance <= self.length else None
+ 
+-    def short_backoff(self):
+-        """One owner-bound reverse; return only measured, verified travel."""
++    def short_backoff(self, configured_mm=None):
++        """Return measured travel only for explicit manual recovery."""
+         a = self.ace
+         before = self.terminal_sample
+-        if (before is None or self.terminal_slot_status != 'ready'
+-                or before[0] <= self.BACKOFF_MM + 1
+-                or self.retry_backoff_mm is not None or self.sensor() is not False
++        manual = configured_mm is None
++        length = self.BACKOFF_MM if manual else configured_mm
++        self._check_identity()
++        if (self.terminal_slot_status != 'ready' or self.sensor() is not False
+                 or self.gate() is not True or self.cancelled):
++            raise FeedSupervisionError('backoff_unavailable', '原槽状态改变，已结束重试')
++        if manual and (before is None or before[0] <= length + 1 or self.retry_backoff_mm is not None):
+             raise FeedSupervisionError('backoff_unavailable', '原槽短退条件不足，请检查卡点')
++        if length == 0:
++            return None
++        speed = self.BACKOFF_SPEED if manual else a.get_retract_speed(self.idx)
++        if not 0 < length < 0xFFFFFFFF or not math.isfinite(speed) or speed <= 0:
++            raise FeedSupervisionError('invalid_motion_budget', '原槽短退长度或速度无效')
+         polarity = self.decoder_sign
+-        deadline = a.reactor.monotonic() + 6.0
++        deadline = a.reactor.monotonic() + length / speed + 4.0
+         self.pending = None
+         self.stopping = False
+         self.result = 'retry_backoff'
+-        self.backoff_params = {'index': self.slot, 'length': self.BACKOFF_MM,
+-                               'speed': self.BACKOFF_SPEED}
++        self.backoff_params = {'index': self.slot, 'length': length, 'speed': speed}
+         self.terminal_sample = self.terminal_slot_status = None
+         seen_rollback = False
+         try:
+             self._query('unwind_filament', 8, dict(self.backoff_params), deadline=deadline,
+                         cancellable=True, require_insertion=True, owned_motion=True)
++            ready_after = a.reactor.monotonic() + length / speed + .3
+             while a.reactor.monotonic() < deadline:
+                 if self.sensor() is not False or self.gate() is not True:
+                     raise FeedSupervisionError('backoff_changed', '短退期间原槽入口或到料状态改变')
+@@ -531,7 +502,7 @@
+                 lane = rows[0].get('slot_status')
+                 if lane == 'rollback':
+                     seen_rollback = True
+-                elif lane == 'ready' and seen_rollback:
++                elif lane == 'ready' and (seen_rollback or (not manual and a.reactor.monotonic() >= ready_after)):
+                     break
+                 elif lane != 'ready':
+                     raise FeedSupervisionError('backoff_fault', '短退原槽状态异常：%s' % lane)
+@@ -545,21 +516,24 @@
+             # measurement using the post-reverse STOP samples.
+             try:
+                 receipt = stop_and_verify(a, self.idx, self.slot, transport=self.transport,
+-                                          identity=self.identity, timeout=self.STOP_VERIFY_S)
++                                          identity=self.identity, timeout=self.STOP_VERIFY_S,
++                                          ready_status_only=not manual)
+             except StopUnconfirmedError:
+                 self.result = 'stop_unconfirmed'
+                 raise
+             self.terminal_sample = receipt['sample']
+             self.terminal_slot_status = receipt['slot_status']
+         self._check_identity()
++        if (not self.backoff_admitted or self.cancelled or self.sensor() is not False
++                or self.gate() is not True or self.terminal_slot_status != 'ready'):
++            raise FeedSupervisionError('backoff_unverified', '短退后原槽状态未确认')
++        if not manual:
++            return None
+         motor, decoder, steps = self.terminal_sample
+         if polarity is None and decoder:
+             polarity = 1 if decoder < 0 else -1
+         backoff = -decoder * polarity if polarity is not None else 0
+-        if (not self.backoff_admitted or self.cancelled
+-                or self.sensor() is not False or self.gate() is not True
+-                or self.terminal_slot_status != 'ready'
+-                or not 0 < motor <= self.BACKOFF_MM + 1 or not 0 < steps < before[2]
++        if (not 0 < motor <= self.BACKOFF_MM + 1 or not 0 < steps < before[2]
+                 or not 8 <= backoff <= self.BACKOFF_MM + 1):
+             raise FeedSupervisionError('backoff_unverified', '短退后实际反向位移或停稳未确认')
+         self.retry_backoff_mm = backoff
+@@ -572,7 +546,7 @@
+         distance = self.observed_forward_mm()
+         if self.error is not None or distance is None:
+             return None
+-        zero_origin = not self.prior_observed_mm and self.origin_sample[:3] == (0.0, 0.0, 0)
++        zero_origin = not self.after_retry and self.origin_sample[:3] == (0.0, 0.0, 0)
+         return {'distance_mm': self.prior_observed_mm + distance,
+                 'basis': 'observed_zero_origin' if zero_origin else 'observed_span_lower_bound',
+                 'samples': self.observed_samples, 'seq': self.seq,
+@@ -595,7 +569,7 @@
+                 'travel_receipt': self.travel_receipt(),
+                 'measurement_error': self.measurement_error,
+                 'terminal_slot_status': self.terminal_slot_status,
+-                'stop_verified': self.terminal_sample is not None}
++                'stop_verified': self.terminal_slot_status is not None}
+ 
+     def close(self):
+         self.active = False
+--- a/klipper/extras/ace_v2_standstill.py
++++ b/klipper/extras/ace_v2_standstill.py
+@@ -66,7 +66,8 @@
+ def stop_and_verify(ace, idx, slot, *, transport=None, identity=None,
+                     timeout=3.0, monitor=None, ready_zero_mm=None,
+                     ready_without_decoder=False, stopped_assist_without_decoder=False,
+-                    trace_failure=False, stock_unload=False, assist_handoff=False):
++                    trace_failure=False, stock_unload=False, assist_handoff=False,
++                    ready_status_only=False):
+     """Return a target-lane stillness receipt; retain a fault on uncertainty.
+ 
+ Other slots may keep assisting their own toolheads. This receipt says nothing
+@@ -208,9 +209,9 @@
+                 motor_counters = None
+                 keys = None
+                 sample = None
+-                # Ordinary unload follows stock STOP + stable READY. This is
+-                # not an encoder receipt and cannot certify a parked distance.
+-                if stock_unload and state == 'ready':
++                # A confirmed STOP followed by stable READY can release
++                # this slot without providing a distance receipt.
++                if (stock_unload or ready_status_only) and state == 'ready':
+                     pass
+                 elif stock_unload and assist_handoff and state == 'assist_error':
+                     # Only the trusted source's handoff to a finite rollback
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -1315,35 +1315,43 @@
+                                              confirmed=True, receipt=receipt)
+         return True
+ 
+-    def _retry_ace_load_after_backoff(self, supervisor):
++    def _retry_ace_load_after_backoff(self, supervisor, configured_mm=None):
+         a = self.ace
+-        ps = a.printer.lookup_object('print_stats', None)
+-        if (getattr(ps, 'state', '') not in ('standby', 'complete', 'cancelled')
+-                or a._swap_in_progress or supervisor.terminal_sample is None):
+-            raise FeedSupervisionError('retry_unavailable', '当前设备状态不允许短退重试')
+-        forward = supervisor.observed_forward_mm()
+-        reverse = supervisor.short_backoff()
++        manual = configured_mm is None
++        if manual:
++            ps = a.printer.lookup_object('print_stats', None)
++            if (getattr(ps, 'state', '') not in ('standby', 'complete', 'cancelled')
++                    or a._swap_in_progress or supervisor.terminal_sample is None):
++                raise FeedSupervisionError('retry_unavailable', '当前设备状态不允许短退重试')
++        forward = supervisor.observed_forward_mm() if manual else None
++        route = (supervisor.idx, supervisor.slot)
++        if source_route(a._head_source.get(supervisor.head)) != route:
++            raise FeedSupervisionError('source_conflict', '重试时原槽来源已改变')
++        reverse = supervisor.short_backoff(configured_mm)
++        if source_route(a._head_source.get(supervisor.head)) != route:
++            raise FeedSupervisionError('source_conflict', '短退后原槽来源已改变')
+         self._forget_unconfirmed_load_travel(supervisor.idx, supervisor.slot)
+         supervisor.close()
++        speed = min(supervisor.speed, supervisor.RETRY_SPEED) if manual else supervisor.speed
+         retry = FeedSupervisor(a, supervisor.idx, supervisor.slot, supervisor.head, supervisor.sensor,
+-                               supervisor.length, min(supervisor.speed, supervisor.RETRY_SPEED))
++                               supervisor.length, speed)
+         if (retry.transport is not supervisor.transport or retry.identity != supervisor.identity
+                 or retry.insertion_epoch != supervisor.insertion_epoch):
+             retry.close()
+             raise FeedSupervisionError('retry_source_changed', '短退后原槽连接或插料代次改变')
+-        retry.prior_observed_mm = max(0.0, (forward or 0.0) - reverse)
+-        retry.retry_backoff_mm = reverse
+-        logging.info('[multiACE] manual load retry ACE=%d slot=%d: reverse=%.1f speed=%.0f',
+-                     retry.idx, retry.slot, reverse, retry.speed)
+-        self.gcode.respond_info('原槽已短退 %.0f mm 并停稳，低速重试一次' % reverse)
++        retry.after_retry = True
++        if manual:
++            retry.prior_observed_mm = max(0.0, (forward or 0.0) - reverse)
++            retry.retry_backoff_mm = reverse
++            self.gcode.respond_info('原槽已短退 %.0f mm 并停稳，低速重试一次' % reverse)
+         return retry
+ 
+     def _run_supervised_ace_load(self, channel, ace_idx, slot, head):
+-        """Send one feed command and stop on the physical head sensor."""
+-        speed = self.ace.get_feed_speed(ace_idx)
+-        supervisor = FeedSupervisor(self.ace, ace_idx, slot, head,
++        """Load a configured finite distance, stopping on physical head arrival."""
++        a = self.ace
++        supervisor = FeedSupervisor(a, ace_idx, slot, head,
+                                     lambda: self._toolhead_filament_present(channel),
+-                                    FeedSupervisor.CONTINUOUS_LENGTH, speed)
++                                    a.get_load_length(ace_idx, slot), a.get_feed_speed(ace_idx))
+         active = getattr(self, '_active_load_supervisors', None)
+         if active is None:
+             self._active_load_supervisors = active = {}
+@@ -1396,25 +1404,37 @@
+                 motion_requested = True
+                 supervisor = self._retry_ace_load_after_backoff(supervisor)
+                 active[channel] = supervisor
+-            try:
+-                self.ace._feed(slot, supervisor.length, supervisor.speed, 0, ace=ace_idx,
+-                               normal_load=supervisor, head=head)
+-                while not supervisor.check():
+-                    self.reactor.pause(self.reactor.monotonic() + 0.105)
+-            except Exception as exc:
+-                supervisor.error = (exc if isinstance(exc, FeedSupervisionError) else
+-                                    FeedSupervisionError('feed_failed', str(exc)))
+-                raise
+-            finally:
+-                # Keep ownership until STOP is verified on the original slot.
+-                if supervisor.feed_enqueued:
+-                    motion_requested = True
+-                    supervisor.stop_bound()
++            retries = 0 if manual_retry else max(0, a.head_load_retry[head])
++            for attempt in range(retries + 1):
++                missed = None
++                try:
++                    a._feed(slot, supervisor.length, supervisor.speed, 0, ace=ace_idx,
++                            normal_load=supervisor, head=head)
++                    while not supervisor.check():
++                        self.reactor.pause(self.reactor.monotonic() + 0.105)
++                except FeedSupervisionError as exc:
++                    if exc.code != 'head_not_reached' or not supervisor.ack or not supervisor.feed_admitted:
++                        raise
++                    missed = exc
++                finally:
++                    if supervisor.feed_enqueued:
++                        motion_requested = True
++                        supervisor.stop_bound()
++                if supervisor.cancelled:
++                    raise FeedSupervisionError('cancelled', '已取消本次进料')
++                if supervisor.terminal_slot_status != 'ready':
++                    raise FeedSupervisionError('feed_terminal_error',
++                        '送料结束后原槽状态异常：%s' % supervisor.terminal_slot_status)
++                if missed is None or supervisor.sensor() is True:
++                    break
++                if attempt == retries:
++                    raise missed
++                logging.info('[multiACE] head %d ACE %d slot %d load retry %d/%d: %s',
++                             head, ace_idx, slot, attempt + 1, retries, missed)
++                supervisor = self._retry_ace_load_after_backoff(supervisor, a.head_load_retry_retract[head])
++                active[channel] = supervisor
+             if not supervisor.ack:
+                 raise FeedSupervisionError('feed_ack_unconfirmed', '到料已停止，但本次送料确认仍不完整')
+-            if supervisor.terminal_slot_status != 'ready':
+-                raise FeedSupervisionError('feed_terminal_error',
+-                    '送料已静止，但 ACE 槽仍报告 %s，请先复核原槽' % supervisor.terminal_slot_status)
+             if self._toolhead_filament_present(channel) is not True:
+                 raise FeedSupervisionError('head_sensor_unknown', '停止后喷头真实到料未确认')
+             # STOP supplied fresh stillness proof. Preserve the observed span
+@@ -1436,14 +1456,14 @@
+                 self.ace._save_head_source()
+             if motion_requested:
+                 self._forget_unconfirmed_load_travel(ace_idx, slot)
+-                if supervisor.terminal_sample is not None:
++                if supervisor.terminal_slot_status is not None:
+                     try:
+                         self._hang_neutral(channel)
+                     except Exception as neutral_exc:
+                         logging.warning('[feed] stopped-load neutral cleanup failed: %s', neutral_exc)
+             code = getattr(exc, 'code', 'stop_unconfirmed' if isinstance(exc, StopUnconfirmedError) else 'feed_failed')
+             self.channel_error[channel] = code
+-            self.exception_code[channel] = 32 if code in ('filament_slip', 'no_progress') else 34
++            self.exception_code[channel] = 32 if code in ('filament_slip', 'no_progress', 'head_not_reached') else 34
+             if supervisor.error is not exc:
+                 supervisor.error = FeedSupervisionError(code, str(exc))
+             if supervisor.result != 'stop_unconfirmed':
+@@ -4332,7 +4352,7 @@
+             return None, None
+         try:
+             result = getattr(self, '_last_load_supervision', {}).get(channel) or {}
+-            if (self.channel_error[channel] in ('filament_slip', 'speed_unconfirmed')
++            if (self.channel_error[channel] in ('head_not_reached', 'feed_device_error', 'feed_terminal_error')
+                     and result.get('code') == self.channel_error[channel]
+                     and (result.get('head'), result.get('ace'), result.get('slot')) == (head, a, s)):
+                 return ('喷头 %d · ACE %d 槽 %d：%s' %
+--- a/tests/test_feed_handoff.py
++++ b/tests/test_feed_handoff.py
+@@ -7,6 +7,7 @@
+ import sys
+ import types
+ import unittest
++from unittest.mock import patch
+ 
+ 
+ ROOT = Path(__file__).resolve().parents[1]
+@@ -41,6 +42,8 @@
+         self._gate_status_per_ace = {0: [1, 1, 1, 1]}
+         self._insert_epochs = {(0, 0): 7}
+         self._insert_session = 'current-session'
++        self.head_load_retry = {0: 3, 1: 3}
++        self.head_load_retry_retract = {0: 50, 1: 50}
+         self.uid = (1, 2, 3)
+         self.calls = []
+         self.faults = []
+@@ -62,6 +65,9 @@
+         self.key_wire_valid = True
+         self.change_uid = False
+         self.armed = set()
++
++    def get_load_length(self, idx, slot):
++        return 2100
+ 
+     def _location_identity(self, idx):
+         return '/dev/ace0', self.uid
+@@ -326,27 +332,18 @@
+ 
+ 
+ class FeedTests(unittest.TestCase):
+-    def test_continuous_feed_crosses_previous_limit_and_stops_on_head_switch(self):
+-        a = Wire()
+-        owner = feed.FeedSupervisor(a, 0, 0, 0, lambda: a.head,
+-                                    feed.FeedSupervisor.CONTINUOUS_LENGTH, 80)
++    def test_wire_accepts_only_the_configured_finite_length_once(self):
++        a = Wire()
++        with self.assertRaises(feed.FeedSupervisionError):
++            feed.FeedSupervisor(a, 0, 0, 0, lambda: a.head, 0xFFFFFFFF, 80)
++        owner = feed.FeedSupervisor(a, 0, 0, 0, lambda: a.head, 1250, 80)
+         request = {'method': 'feed_filament',
+                    'params': {'index': 0, 'length': 0xFFFFFFFF, 'speed': 80}}
+         owner.feed_request(request)
++        self.assertFalse(owner.allows_wire(0, request, owner.transport))
++        request['params']['length'] = 1250
+         self.assertTrue(owner.allows_wire(0, request, owner.transport))
+         self.assertFalse(owner.allows_wire(0, request, owner.transport))
+-        owner.ack = True
+-        for tick in range(129):
+-            a.reactor.now = tick * .25
+-            a.motor = a.decoder = 1 + tick * 20
+-            a.steps = a.motor * 2
+-            self.assertFalse(owner.check())
+-        self.assertGreater(a.motor, 2100)
+-        a.head = True
+-        self.assertTrue(owner.check())
+-        owner.stop_bound()
+-        self.assertEqual(a.state, 'ready')
+-        self.assertIsNotNone(owner.terminal_sample)
+ 
+     def short_reverse_fixture(self, final_decoder=-18):
+         a, owner = observer()
+@@ -417,7 +414,7 @@
+         s.check()
+         self.assertIsNone(s.error)
+         self.assertEqual(s.observed_samples, 1)
+-        self.assertEqual(s.last_valid_at, .1)
++        self.assertEqual(s.last_sample[3], .1)
+         a.reactor.now = .6
+         a.motor = a.decoder = 10
+         a.steps = 120
+@@ -425,7 +422,7 @@
+         s.check()
+         self.assertEqual(s.observed_samples, 2)
+ 
+-    def test_omitted_decoder_past_startup_still_aborts(self):
++    def test_omitted_decoder_past_startup_only_invalidates_distance(self):
+         for time, motor in ((1.1, 0), (.3, 9)):
+             with self.subTest(time=time, motor=motor):
+                 a, s = observer()
+@@ -433,9 +430,12 @@
+                 a.motor = motor
+                 a.decoder = 0
+                 a.decoder_present = False
+-                with self.assertRaises(feed.FeedSupervisionError) as caught:
+-                    s.check()
+-                self.assertEqual(caught.exception.code, 'decoder_unavailable')
++                self.assertFalse(s.check())
++                self.assertIsNotNone(s.measurement_error)
++                a.head = True
++                self.assertTrue(s.check())
++                s.stop_bound()
++                self.assertIsNone(s.travel_receipt())
+ 
+     def test_delayed_origin_is_only_measured_span(self):
+         a, s = observer()
+@@ -627,7 +627,7 @@
+         h._hang_neutral(1)
+         self.assertEqual(writes, [(1, 0)], 'reverse on the left feeder belongs to nozzle 1')
+ 
+-    def test_obstruction_stops_without_automatically_restarting_continuous_feed(self):
++    def test_device_fault_does_not_automatically_restart_feed(self):
+         h = self.harness({'_run_supervised_ace_load', '_retry_ace_load_after_backoff',
+                           '_forget_unconfirmed_load_travel', '_commit_supervised_load_travel'})
+         a = Wire()
+@@ -648,7 +648,7 @@
+                 reverses.append(20)
+                 return 18.
+             normal_load.short_backoff = reverse
+-            raise feed.FeedSupervisionError('filament_slip','observed obstruction')
++            raise feed.FeedSupervisionError('feed_device_error','real device fault')
+         a._feed = slip
+         h.ace = a
+         h.printer = a.printer
+@@ -660,150 +660,156 @@
+         h.gcode = types.SimpleNamespace(respond_info=lambda _: None)
+         with self.assertRaises(feed.FeedSupervisionError):
+             h._run_supervised_ace_load(0, 0, 0, 0)
+-        self.assertEqual(legs, [(0xFFFFFFFF, 80.)])
++        self.assertEqual(legs, [(2100, 80.)])
+         self.assertEqual(reverses, [])
+         self.assertTrue(a._head_source[0]['load_failed'])
+ 
+-    def test_no_progress_retries_three_times_on_the_same_route(self):
+-        h = self.harness({'_run_supervised_ace_load'})
+-        a = Wire()
+-        a._head_source = {}
+-        a._head_travel = travel.FilamentTravel()
++    def bounded_load(self, success_attempt=None, retry_count=3, backoff=37):
++        # Use the installed ACE._feed entry point and supervisor. Only the
++        # serial device, heartbeat timing and physical switch are simulated.
++        h = self.harness({'_run_supervised_ace_load', '_retry_ace_load_after_backoff',
++                          '_forget_unconfirmed_load_travel', '_commit_supervised_load_travel'})
++        a = Wire()
++        a._head_source, a._head_travel = {}, travel.FilamentTravel()
++        a._head_travel.begin_load(1, 0, 0)
+         a._save_head_source = lambda: None
+-        a.get_feed_speed = lambda _idx: 80
+-        a._swap_in_progress = False
+-        a.printer = types.SimpleNamespace(
+-            lookup_object=lambda *_args: types.SimpleNamespace(state='standby'))
+-        sensor = [False]
+-        feeds = []
+-        stops = []
+-
+-        class RetrySupervisor:
+-            CONTINUOUS_LENGTH = 0xFFFFFFFF
+-            RETRY_SPEED = 40
+-
+-            def __init__(self, ace, idx, slot, head, read_sensor, length, speed):
+-                self.ace, self.idx, self.slot, self.head = ace, idx, slot, head
+-                self.sensor, self.length, self.speed = read_sensor, length, speed
+-                self.transport = ace._serials[idx]
+-                self.identity = ace._location_identity(idx)
+-                self.insertion_epoch = ace._insert_epochs[(idx, slot)]
+-                self.feed_enqueued = False
+-                self.ack = True
+-                self.error = None
+-                self.result = 'feeding'
+-                self.terminal_sample = None
+-                self.terminal_slot_status = None
+-
+-            def feed_request(self, _request):
+-                self.feed_enqueued = True
+-
+-            def check(self):
+-                return self.sensor() is True
+-
+-            def stop_bound(self):
+-                stops.append((self.idx, self.slot))
+-                self.terminal_sample = (1., 1., 1)
+-                self.terminal_slot_status = 'ready'
+-                self.result = 'stopped'
+-
+-            def close(self):
+-                self.result = 'closed' if self.result == 'feeding' else self.result
+-
+-            def snapshot(self):
+-                return {'state': self.result}
+-
+-        a._feed = lambda _slot, _length, _speed, _wait, *, ace, normal_load, head: (
+-            feeds.append((ace, normal_load.slot, head, normal_load.speed)),
+-            normal_load.feed_request({}),
+-            (_ for _ in ()).throw(feed.FeedSupervisionError('no_progress', 'no movement'))
+-            if len(feeds) < 4 else sensor.__setitem__(0, True))
++        a.head_load_retry[1], a.head_load_retry_retract[1] = retry_count, backoff
++        a.get_load_length = lambda idx, slot: {(0, 0): 320}[(idx, slot)]
++        a.get_feed_speed = lambda idx: 80
++        a.get_retract_speed = lambda idx: 60
++        a._require_no_stop_fault = lambda **kw: None
++        a._travel_legacy_start = lambda *args: None
++        a.dwell = lambda delay: a.reactor.pause(a.reactor.now + delay)
++        a._v2_get_slot_status = lambda idx, slot: a.state
++        a.armed = {1}
++        a.decoder_present, a.decoder = False, 0
++        a.state = 'ready'
++        a.motion = []
++        a.started = 0
++        a.attempts = 0
++        a.physical_fault = None
++        a._slot_status_provenance = {}
++        clock = patch.object(feed, 'status_clock', a.reactor.monotonic)
++        clock.start()
++        self.addCleanup(clock.stop)
++        tree = ast.parse((ROOT/'runtime/klipper/extras/ace.py').read_text())
++        method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == '_feed')
++        env = {}
++        exec(compile(ast.Module(body=[method], type_ignores=[]), 'real-ace-feed', 'exec'), env)
++        a._feed = types.MethodType(env['_feed'], a)
++        original_send, original_pause = a.send_request_to, a.reactor.pause
++
++        def send(idx, request, callback):
++            name = request['method']
++            if name not in ('feed_filament', 'unwind_filament'):
++                return original_send(idx, request, callback)
++            owner = request['_feed_supervisor']
++            self.assertTrue(owner.allows_wire(idx, request, a._serials[idx]))
++            self.assertFalse(owner.allows_wire(idx, request, a._serials[idx]))
++            params = request['params']
++            a.motion.append((name, idx, params['index'], owner.head, params['length'], params['speed']))
++            a.started = a.reactor.now
++            a.state = 'feeding' if name == 'feed_filament' else 'rollback'
++            a.attempts += int(name == 'feed_filament')
++            if getattr(a, '_manual_load_retry', None):
++                if name == 'feed_filament':
++                    a.decoder_present = False
++                else:
++                    a.motor, a.decoder, a.steps = 20, -18, 35
++            request['id'] = 1000 + len(a.motion)
++            callback(a, dict(id=request['id'], code=0, _v2_command=8,
++                             _v2_frame_valid=True, _v2_payload_valid=True))
++            return True
++
++        def pause(target):
++            original_pause(target)
++            elapsed = a.reactor.now - a.started
++            if a.state == 'feeding':
++                if a.physical_fault and elapsed > .3:
++                    a.state = a.physical_fault
++                elif a.attempts == success_attempt and elapsed > .3:
++                    a.head = True
++                elif elapsed >= 4.0:
++                    a.state = 'ready'
++            elif a.state == 'rollback' and elapsed > .6:
++                a.state = 'ready'
++            a._slot_status_provenance[0] = (a._serials[0], a.reactor.now)
++
++        a.send_request_to, a.reactor.pause = send, pause
+         h.ace, h.reactor = a, a.reactor
+         h.channel_error, h.exception_code = ['ok'], [0]
+-        h._toolhead_filament_present = lambda _channel: sensor[0]
+-        h._hang_neutral = lambda _channel: None
+-        h._forget_unconfirmed_load_travel = lambda *_args: None
+-        h._commit_supervised_load_travel = lambda _supervisor: True
+-        h.gcode = types.SimpleNamespace(respond_info=lambda _message: None)
+-
+-        function_globals = h.__class__.__dict__['_run_supervised_ace_load'].__globals__
+-        original_supervisor = function_globals['FeedSupervisor']
+-        function_globals['FeedSupervisor'] = RetrySupervisor
+-        try:
+-            h._run_supervised_ace_load(0, 0, 0, 0)
+-        finally:
+-            function_globals['FeedSupervisor'] = original_supervisor
+-
+-        self.assertEqual(feeds, [(0, 0, 0, 80)] * 4)
+-        self.assertEqual(stops, [(0, 0)] * 4)
++        h._toolhead_filament_present = lambda _: a.head
++        h._hang_neutral = lambda _: None
++        return h, a
++
++    def test_three_retries_follow_configured_route_without_encoder(self):
++        h, a = self.bounded_load(success_attempt=4)
++        h._run_supervised_ace_load(0, 0, 0, 1)
++        forward = ('feed_filament', 0, 0, 1, 320, 80)
++        reverse = ('unwind_filament', 0, 0, 1, 37, 60)
++        self.assertEqual(a.motion, [forward, reverse] * 3 + [forward])
+         self.assertEqual(h.channel_error, ['ok'])
+-
+-    def test_no_progress_stops_after_three_retries(self):
+-        h = self.harness({'_run_supervised_ace_load'})
+-        a = Wire()
+-        a._head_source = {}
+-        a._head_travel = travel.FilamentTravel()
+-        a._save_head_source = lambda: None
+-        a.get_feed_speed = lambda _idx: 80
++        self.assertIsNone(h._last_load_supervision[0]['travel_receipt'])
++        self.assertTrue(h._last_load_supervision[0]['stop_verified'])
++        self.assertEqual(a.armed, {1})
++
++    def test_no_head_arrival_stops_after_three_retries(self):
++        h, a = self.bounded_load()
++        with self.assertRaises(feed.FeedSupervisionError) as caught:
++            h._run_supervised_ace_load(0, 0, 0, 1)
++        self.assertEqual(caught.exception.code, 'head_not_reached')
++        self.assertEqual(a.attempts, 4)
++        self.assertEqual(len(a.motion), 7)
++        self.assertFalse(h._active_load_supervisors)
++        self.assertTrue(a._head_source[1]['load_failed'])
++
++    def test_installed_manual_retry_entry_can_reach_head_with_missing_forward_counts(self):
++        h, a = self.bounded_load(success_attempt=1)
++        a._head_source[1] = dict(ace_index=0, slot=0, load_failed=True,
++                                 **a._capture_source_origin(0, 0))
++        a._manual_load_retry = (1, 0, 0)
++        a.decoder_present, a.decoder = True, 100
++        a.printer = types.SimpleNamespace(lookup_object=lambda *args: types.SimpleNamespace(state='standby'))
+         a._swap_in_progress = False
+-        a.printer = types.SimpleNamespace(
+-            lookup_object=lambda *_args: types.SimpleNamespace(state='standby'))
+-        feeds = []
+-
+-        class RetrySupervisor:
+-            CONTINUOUS_LENGTH = 0xFFFFFFFF
+-
+-            def __init__(self, ace, idx, slot, head, sensor, length, speed):
+-                self.sensor, self.length, self.speed = sensor, length, speed
+-                self.idx, self.slot = idx, slot
+-                self.transport = ace._serials[idx]
+-                self.identity = ace._location_identity(idx)
+-                self.insertion_epoch = ace._insert_epochs[(idx, slot)]
+-                self.feed_enqueued = False
+-                self.ack = True
+-                self.error = None
+-                self.result = 'feeding'
+-                self.terminal_sample = None
+-                self.terminal_slot_status = None
+-
+-            def feed_request(self, _request):
+-                self.feed_enqueued = True
+-
+-            def stop_bound(self):
+-                self.terminal_sample = (1., 1., 1)
+-                self.terminal_slot_status = 'ready'
+-                self.result = 'stopped'
+-
+-            def close(self):
+-                pass
+-
+-            def snapshot(self):
+-                return {'state': self.result}
+-
+-        def fail_feed(_slot, _length, _speed, _wait, *, ace, normal_load, head):
+-            feeds.append((ace, normal_load.slot, head))
+-            normal_load.feed_request({})
+-            raise feed.FeedSupervisionError('no_progress', 'no movement')
+-
+-        a._feed = fail_feed
+-        h.ace, h.reactor = a, a.reactor
+-        h.channel_error, h.exception_code = ['ok'], [0]
+-        h._toolhead_filament_present = lambda _channel: False
+-        h._hang_neutral = lambda _channel: None
+-        h._forget_unconfirmed_load_travel = lambda *_args: None
+-        h.gcode = types.SimpleNamespace(respond_info=lambda _message: None)
+-
+-        function_globals = h.__class__.__dict__['_run_supervised_ace_load'].__globals__
+-        original_supervisor = function_globals['FeedSupervisor']
+-        function_globals['FeedSupervisor'] = RetrySupervisor
+-        try:
+-            with self.assertRaises(feed.FeedSupervisionError) as caught:
+-                h._run_supervised_ace_load(0, 0, 0, 0)
+-        finally:
+-            function_globals['FeedSupervisor'] = original_supervisor
+-
+-        self.assertEqual(caught.exception.code, 'no_progress')
+-        self.assertEqual(feeds, [(0, 0, 0)] * 4)
++        h.gcode = types.SimpleNamespace(respond_info=lambda msg: None)
++        h._run_supervised_ace_load(0, 0, 0, 1)
++        self.assertEqual(a.motion, [('unwind_filament', 0, 0, 1, 20, 10),
++                                    ('feed_filament', 0, 0, 1, 320, 40)])
++        self.assertEqual(h.channel_error, ['ok'])
++        self.assertIsNone(h._last_load_supervision[0]['travel_receipt'])
++
++    def test_different_source_during_backoff_never_receives_the_next_feed(self):
++        h, a = self.bounded_load()
++        pause = a.reactor.pause
++
++        def change_source(target):
++            if a.state == 'rollback':
++                a._head_source[1]['slot'] = 2
++            pause(target)
++        a.reactor.pause = change_source
++        with self.assertRaises(feed.FeedSupervisionError) as caught:
++            h._run_supervised_ace_load(0, 0, 0, 1)
++        self.assertEqual(caught.exception.code, 'source_conflict')
++        self.assertEqual([row[0] for row in a.motion], ['feed_filament', 'unwind_filament'])
++
++    def test_zero_retries_stops_after_first_attempt(self):
++        h, a = self.bounded_load(retry_count=0)
++        with self.assertRaisesRegex(feed.FeedSupervisionError, '喷头仍未到料'):
++            h._run_supervised_ace_load(0, 0, 0, 1)
++        self.assertEqual(len(a.motion), 1)
++
++    def test_zero_configured_backoff_does_not_send_reverse(self):
++        h, a = self.bounded_load(success_attempt=2, backoff=0)
++        h._run_supervised_ace_load(0, 0, 0, 1)
++        self.assertEqual([row[0] for row in a.motion], ['feed_filament'] * 2)
++
++    def test_fresh_hardware_error_does_not_start_another_feed(self):
++        h, a = self.bounded_load()
++        a.physical_fault = 'feed_error'
++        a.decoder_present = True
++        with self.assertRaisesRegex(feed.FeedSupervisionError, 'feed_error'):
++            h._run_supervised_ace_load(0, 0, 0, 1)
++        self.assertEqual(len(a.motion), 1)
+ 
+     def test_zero_length_default_encoder_does_not_block_stable_ready_handoff(self):
+         h = self.harness({'_wait_before_unload_retract'})
+--- a/tests/test_slow_progress.py
++++ b/tests/test_slow_progress.py
+@@ -1,86 +1,87 @@
++"""Replay measured motor/encoder windows from the two November 23 loads."""
+ import unittest
+ 
+ from test_feed_handoff import feed, observer
+ 
+ 
+-class SlowProgressTests(unittest.TestCase):
+-    def setUp(self):
+-        self.a, self.s = observer()
+-        self.sent = []
+-        self.reply = True
+-        original = self.a.send_request_to
++class BoundedFeedTests(unittest.TestCase):
++    def replay(self, windows):
++        a, owner = observer()
++        a.motor = a.decoder = a.steps = 0
++        self.assertFalse(owner.check())
++        for dt, motor, decoder in windows:
++            a.reactor.now += dt
++            a.motor += motor
++            a.decoder += decoder
++            a.steps = a.motor * 10
++            self.assertFalse(owner.check())
++        # Simulate the switch firing after the old stop point.
++        a.reactor.now += 4
++        self.assertFalse(owner.check())
++        self.assertIsNotNone(owner.measurement_error)
++        self.assertEqual({name for name, _, _ in a.calls}, {'get_feed_info'})
++        a.head = True
++        self.assertTrue(owner.check())
++        owner.stop_bound()
++        self.assertEqual(owner.terminal_slot_status, 'ready')
++        self.assertIsNone(owner.travel_receipt())
+ 
+-        def send(idx, request, callback):
+-            if request['method'] != 'update_feeding_speed':
+-                return original(idx, request, callback)
+-            self.assertIsNone(request.get('length'))
+-            self.assertEqual(request['params'], {'index': 0, 'speed': 20})
+-            self.assertFalse(self.s.allows_wire(1, request, self.s.transport))
+-            self.assertTrue(self.s.allows_wire(idx, request, self.s.transport))
+-            self.assertFalse(self.s.allows_wire(idx, request, self.s.transport))
+-            self.sent.append(request)
+-            request['id'] = 123
+-            if self.reply:
+-                callback(self.a, dict(id=123, code=0, _v2_command=10,
+-                                      _v2_frame_valid=True, _v2_payload_valid=True))
+-            return True
++    def test_1225_underreading_before_old_stop(self):
++        self.replay([(.646, 51, 46), (.646, 53, 9), (.648, 52, 0)])
+ 
+-        self.a.send_request_to = send
++    def test_1231_underreading_before_old_slowdown_and_stop(self):
++        self.replay([(.7, 35, 12), (.982, 31, 0), (1.276, 38, 1)])
+ 
+-    def observe(self, t, motor, material):
+-        self.a.reactor.now = t
+-        self.a.motor, self.a.decoder, self.a.steps = motor, material, motor * 10
+-        return self.s.check()
++    def test_missing_or_malformed_telemetry_keeps_head_switch_active(self):
++        for payload in (None, {'feed_info': None}, 42):
++            with self.subTest(payload=payload):
++                a, owner = observer()
++                original = a.send_request_to
+ 
+-    def reproduce(self):
+-        self.observe(0, 0, 0)
+-        self.observe(.64, 51, 46)
+-        self.observe(1.28, 104, 55)
+-        self.observe(1.92, 156, 55)
+-        self.assertFalse(self.observe(2.03, 156, 55))
+-        self.assertEqual(len(self.sent), 1)
+-        self.assertFalse(self.observe(2.4, 161, 55))
++                def send(idx, request, callback):
++                    if request['method'] != 'get_feed_info':
++                        return original(idx, request, callback)
++                    request['id'] = 123
++                    if payload is not None:
++                        callback(a, dict(id=123, code=0, _v2_command=76,
++                                         _v2_frame_valid=True, _v2_payload_valid=True,
++                                         result=payload))
++                    return True
++                a.send_request_to = send
++                for t in (0, 1, 3, 5):
++                    a.reactor.now = t
++                    self.assertFalse(owner.check())
++                a.head = True
++                self.assertTrue(owner.check())
++                owner.stop_bound()
++                self.assertIsNone(owner.travel_receipt())
++                self.assertEqual(owner.terminal_slot_status, 'ready')
+ 
+-    def test_latest_trace_then_head_triggers_during_slow_check(self):
+-        self.reproduce()
+-        self.a.head = True
+-        self.assertTrue(self.observe(2.4, 162, 55))
++    def test_stale_ready_cannot_end_the_feed(self):
++        a, owner = observer()
++        a._v2_get_slot_status = lambda idx, slot: 'ready'
++        a._slot_status_provenance = {0: (a._serials[0], owner.status_started_at + .3)}
++        a.reactor.now = 5
++        self.assertFalse(owner.check())
++        a._slot_status_provenance[0] = (a._serials[0], owner.status_started_at + 5)
++        with self.assertRaisesRegex(feed.FeedSupervisionError, '喷头仍未到料'):
++            owner.check()
+ 
+-    def test_recovered_progress_keeps_slow_feed_until_the_head(self):
+-        self.reproduce()
+-        self.assertFalse(self.observe(3.55, 187, 81))
+-        self.assertTrue(self.s.slow_recovered)
+-        self.a.head = True
+-        self.assertTrue(self.observe(6.5, 236, 122))
+-        self.assertEqual(len(self.sent), 1)
++    def test_deadline_stops_even_with_no_heartbeat_or_encoder(self):
++        a, owner = observer()
++        a.reactor.now = owner.length / owner.speed + 30
++        with self.assertRaisesRegex(feed.FeedSupervisionError, '超时'):
++            owner.check()
+ 
+-    def test_persistent_low_readings_stop_on_distance(self):
+-        self.reproduce()
+-        self.observe(3.5, 188, 58)
+-        self.observe(4.78, 213, 59)
+-        with self.assertRaisesRegex(feed.FeedSupervisionError, '低速复核后'):
+-            self.observe(4.88, 213, 59)
+-        self.assertEqual(len(self.sent), 1)
+-
+-    def test_zero_motion_stops_on_time(self):
+-        self.reproduce()
+-        for t in (2.5, 3.2, 4.1, 4.8):
+-            self.observe(t, 161, 55)
+-        with self.assertRaisesRegex(feed.FeedSupervisionError, '低速复核后'):
+-            self.observe(5.1, 161, 55)
+-
+-    def test_lost_speed_reply_stops_without_resending(self):
+-        self.reply = False
+-        self.reproduce()
+-        with self.assertRaisesRegex(feed.FeedSupervisionError, '降速'):
+-            self.observe(2.6, 180, 55)
+-        self.assertEqual(len(self.sent), 1)
+-
+-    def test_new_slip_after_recovery_has_no_second_budget(self):
+-        self.reproduce()
+-        self.observe(3.6, 187, 82)
+-        self.observe(4.6, 218, 85)
+-        self.observe(5.6, 249, 86)
+-        with self.assertRaisesRegex(feed.FeedSupervisionError, '低速复核后'):
+-            self.observe(5.7, 249, 86)
+-        self.assertEqual(len(self.sent), 1)
++    def test_real_interruptions_still_stop(self):
++        for change, code in [
++                (lambda a, s: s.cancel(), 'cancelled'),
++                (lambda a, s: setattr(a, 'head', None), 'head_sensor_unknown'),
++                (lambda a, s: a._gate_status_per_ace[0].__setitem__(0, 0), 'inlet_empty'),
++                (lambda a, s: a._serials.update({0: object()}), 'connection_changed')]:
++            with self.subTest(code=code):
++                a, owner = observer()
++                change(a, owner)
++                with self.assertRaises(feed.FeedSupervisionError) as caught:
++                    owner.check()
++                self.assertEqual(caught.exception.code, code)

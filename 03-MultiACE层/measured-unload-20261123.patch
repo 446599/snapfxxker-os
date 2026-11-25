@@ -1,0 +1,231 @@
+--- a/klipper/extras/ace_print_assist.py
++++ b/klipper/extras/ace_print_assist.py
+@@ -524,7 +524,6 @@
+         self.stop_failed = False
+         self.retry_initial_assist = controller.retry_head == head
+         self.stopped_fault = False
+-        self.recoveries = 0
+         if self.is_armed(2):
+             self.mode = 2
+ 
+@@ -585,10 +584,6 @@
+         state = proof['slot_status']
+         if state == 'assist_error':
+             self.stopped_fault = True
+-            if not self.retry_initial_assist:
+-                self.recoveries += 1
+-            if self.recoveries > 1:
+-                raise ReadyWaitError('拉尖期间原槽再次触发助送保护')
+         elif state == 'ready':
+             self.stopped_fault = False
+         else:
+@@ -709,5 +704,5 @@
+                 self.ace.toolhead.wait_moves()
+             finally:
+                 self.stop()
+-        if self.stopped_fault:
+-            raise ReadyWaitError('拉尖结束时原槽仍处于助送保护')
++        # The next finite retract owns the stopped-assist handoff. A verified
++        # STOP may still carry the same assist notification on every segment.
+--- a/klipper/extras/ace_fixed_park.py
++++ b/klipper/extras/ace_fixed_park.py
+@@ -95,7 +95,8 @@
+         self.receipt = stop_and_verify(
+             self.ace, self.idx, self.slot, transport=self.transport,
+             identity=self.identity, timeout=5.0, ready_zero_mm=0 if allow_zero else None,
+-            ready_without_decoder=ready_without_decoder)
++            ready_without_decoder=ready_without_decoder,
++            stopped_assist_without_decoder=ready_without_decoder)
+ 
+     def _gate(self):
+         if not self.actions._gate(self.idx, self.slot, monitor=self.check):
+@@ -278,7 +279,7 @@
+                      length, speed, observed, distance, motor)
+         return distance
+ 
+-    def run(self, target, short_commanded_mm, speed, *, direct=False):
++    def run(self, target, short_commanded_mm, speed, *, direct=False, measured=False):
+         a = self.ace
+         if getattr(a, '_fixed_park_motion', None) is not None:
+             raise RuntimeError('另一料路正在回停')
+@@ -290,12 +291,18 @@
+             a._clear_fa_cache_for(self.idx, self.slot)
+             self._stop(allow_zero=True, ready_without_decoder=True)
+             self._gate()
++            if self.receipt['slot_status'] == 'assist_error':
++                raise ParkEncoderUnavailable('原槽已停止助送，转普通有限回退')
+             if self.receipt['slot_status'] != 'ready':
+                 raise RuntimeError('原槽未就绪，未开始回停')
+             if self.receipt['sample'] is None and (not direct or self.forward_decoder_sign is None
+                     or self.receipt.get('motor_counters') is None):
+                 raise ParkEncoderUnavailable('固定回停缺少初始计数记录')
+-            if direct:
++            if measured:
++                if self.check() is not False or self.forward_decoder_sign is None:
++                    raise RuntimeError('按实测距离回退前喷头或编码器方向未确认')
++                forward = reverse_edge = 0.0
++            elif direct:
+                 if self.check() is not True:
+                     raise ParkEdgeMissed(0)
+                 forward = 0.0
+@@ -309,7 +316,7 @@
+                 reverse_edge = self._move(35, 6, reverse=True, edge=False)
+             # The legacy motor length can undershoot in filament units.
+             # Measure the coarse move before sizing each fast correction.
+-            coarse = target - 100
++            coarse = math.floor(target - 100)
+             moves = []
+             distance = 0.0
+             fast_speed = min(speed, self.FAST_APPROACH_SPEED)
+@@ -348,7 +355,7 @@
+             logging.info('[multiACE] fixed park ACE=%d slot=%d head=%d target=%.1f '
+                          'decoder=%.1f reference=%s edge_feed=%.1f edge_retract=%.1f moves=%s',
+                          self.idx + 1, self.slot + 1, self.head + 1,
+-                         target, distance, 'direct' if direct else 'reseek',
++                         target, distance, 'measured' if measured else 'direct' if direct else 'reseek',
+                          forward, reverse_edge, moves)
+             return distance, forward - reverse_edge - distance
+         finally:
+--- a/klipper/extras/ace_filament_travel.py
++++ b/klipper/extras/ace_filament_travel.py
+@@ -168,15 +168,37 @@
+         # sample was delayed. An older park reference must not enlarge it.
+         return min(wanted, max(0.0, row['remaining_mm']))
+ 
+-    def finish_park(self, head, ace, slot):
+-        row = self._row(head, ace, slot)
++    def measured_park_distance(self, head, ace, slot):
++        """Remaining measured return after a finite short retract on this load."""
++        row = self._row(head, ace, slot)
++        remaining = self.park_distance(head, ace, slot)
++        if remaining is None or row.get('phase') != 'unloading':
++            return None
++        withdrawn = row['loaded_mm'] - row['remaining_mm']
++        reference = self._park_reference(row, head, ace, slot)
++        if withdrawn <= 0 or reference > row['loaded_mm'] or not 0 < remaining <= self.MAX_FIXED_PARK_MM:
++            return None
++        return remaining
++
++    def finish_park(self, head, ace, slot, *, measured_mm=None):
++        row = self._row(head, ace, slot)
++        if measured_mm is not None:
++            if (not row or not row.get('pending') or not row.get('known')
++                    or not self._valid(measured_mm) or measured_mm < 0):
++                raise ValueError('回停计距未确认')
++            row['remaining_mm'] -= measured_mm
++            row['samples'] += 1
++            row.update(pending=False, park_reference_basis='measured_travel')
+         if self.park_distance(head, ace, slot) is None:
+             raise ValueError('回停计距未确认')
+         key = self._park_key(head, ace, slot)
+         self.park_references.setdefault(key, self._park_reference(row, head, ace, slot))
+         retracted = max(0.0, row['loaded_mm'] - row['remaining_mm'])
+         reference = self._park_reference(row, head, ace, slot)
+-        row['park_reference_reached'] = retracted >= reference - 2.0
++        row['park_reference_reached'] = (abs(reference - retracted) <= 3.0 if measured_mm is not None
++                                         else retracted >= reference - 2.0)
++        if measured_mm is not None and not row['park_reference_reached']:
++            raise ValueError('实测回退未到停泊距离')
+         row['phase'] = 'parked' if row['park_reference_reached'] else 'head_empty'
+         self._save()
+ 
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -1131,19 +1131,26 @@
+             head, idx, slot, motion.scope, source.get('insert_epoch'))
+         if direct and motion.forward_decoder_sign is None:
+             return False
++        measured_target = None
++        if not direct and motion.forward_decoder_sign is not None:
++            measured_target = tracking.measured_park_distance(head, idx, slot)
+         tracking.begin_fixed_park(head, idx, slot)
+         try:
+-            distance, net = motion.run(target, short_commanded_mm, speed, direct=direct)
+-            tracking.finish_fixed_park(head, idx, slot, motion.scope, target,
+-                                       distance, net)
++            if measured_target is not None:
++                distance, _ = motion.run(measured_target, short_commanded_mm, speed, measured=True)
++                tracking.finish_park(head, idx, slot, measured_mm=distance)
++            else:
++                distance, net = motion.run(target, short_commanded_mm, speed, direct=direct)
++                tracking.finish_fixed_park(head, idx, slot, motion.scope, target,
++                                           distance, net)
+         except ParkEdgeMissed as exc:
+             tracking.finish_fixed_park_probe(head, idx, slot, exc.retracted_mm)
+             logging.info('[multiACE] direct park probe stopped after %.1f mm; using native probe',
+                          exc.retracted_mm)
+             return False
+-        except ParkEncoderUnavailable:
++        except ParkEncoderUnavailable as exc:
+             tracking.finish_fixed_park_probe(head, idx, slot, 0)
+-            logging.info('[multiACE] 原槽已就绪但编码器未返回，继续普通退料')
++            logging.info('[multiACE] 继续普通退料：%s', exc)
+             return False
+         except ParkAckUnavailable:
+             # The head switch is already clear, but the ACE did not return a
+--- a/tests/test_fixed_park.py
++++ b/tests/test_fixed_park.py
+@@ -178,6 +178,41 @@
+             results.append(a.position)
+         self.assertLessEqual(max(results) - min(results), 3)
+ 
++    def test_measured_clear_head_never_seeks_the_sensor(self):
++        a = ParkWire(-320)
++        motion = park.ParkMotion(a, 0, 0, 0)
++        motion.forward_decoder_sign = 1
++        ledger = travel.FilamentTravel()
++        ledger.begin_load(0, 0, 0)
++        ledger.motion_started('load', 0, 0, 0, 'feed')
++        ledger.motion_finished('load', 1728)
++        ledger.finish_load(0, 0, 0)
++        ledger.begin_unload(0, 0, 0)
++        self.assertIsNone(ledger.measured_park_distance(0, 0, 0))
++        ledger.motion_started('short', 0, 0, 0, 'retract')
++        ledger.motion_finished('short', -137)
++        target = ledger.measured_park_distance(0, 0, 0)
++        self.assertEqual(target, 1341)
++        ledger.begin_fixed_park(0, 0, 0)
++        distance, _ = motion.run(target, 150, 80, measured=True)
++        ledger.finish_park(0, 0, 0, measured_mm=distance)
++        row = ledger.status()['0']
++        self.assertAlmostEqual(row['remaining_mm'], 250, delta=3)
++        self.assertEqual(row['phase'], 'parked')
++        self.assertEqual(row['park_reference_basis'], 'measured_travel')
++        self.assertFalse(ledger.fixed_park_references)
++        self.assertEqual(a.motion_commands[0]['method'], 'unwind_filament')
++        self.assertFalse(any(cmd['method'] == 'feed_filament' for cmd in a.motion_commands))
++        self.assertTrue(a._gate(0, 0))
++
++    def test_measured_park_refuses_a_loaded_head_before_motion(self):
++        a = ParkWire(10)
++        motion = park.ParkMotion(a, 0, 0, 0)
++        motion.forward_decoder_sign = 1
++        with self.assertRaisesRegex(RuntimeError, '清空'):
++            motion.run(1341, 150, 80, measured=True)
++        self.assertEqual(a.motion_commands, [])
++
+     def test_closed_loop_trim_compensates_for_a_motor_deadband(self):
+         a = ParkWire(-140)
+         a.trim_deadband = 10
+--- a/tests/test_stock_tip_assist.py
++++ b/tests/test_stock_tip_assist.py
+@@ -290,6 +290,19 @@
+         self.assertEqual([x for x in self.events if x in PLA_STOCK], list(PLA_STOCK))
+         self.assertIsNone(self.control.stock_tip)
+ 
++    def test_repeated_stopped_assist_notice_including_final_stop_finishes(self):
++        arm = self.ace._tipform_send
++
++        def arm_with_notice(*args, **kwargs):
++            result = arm(*args, **kwargs)
++            self.stop_state = 'assist_error'
++            return result
++
++        self.ace._tipform_send = arm_with_notice
++        self.control.run_stock_tipform(2, 'INNER_FILAMENT_UNLOAD', soft=False)
++        self.assertEqual([event for event in self.events if event in PLA_STOCK], list(PLA_STOCK))
++        self.assertEqual(self.events[-1], ('verified_stop', 0, 2))
++
+     def test_reported_firmware_fault_aborts_before_extrusion(self):
+         self.stop_state = 'motor_error'
+         with self.assertRaisesRegex(RuntimeError, 'motor_error'):

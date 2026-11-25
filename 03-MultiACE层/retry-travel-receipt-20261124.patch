@@ -1,0 +1,120 @@
+--- a/klipper/extras/ace_feed_supervisor.py
++++ b/klipper/extras/ace_feed_supervisor.py
+@@ -403,7 +403,7 @@
+             raise FeedSupervisionError('stop_evidence_unavailable', '停止确认遥测不可用')
+         return box[0]
+ 
+-    def stop_bound(self):
++    def stop_bound(self, *, before_retry=False):
+         """Original transport STOP ACK plus fresh per-slot stationary samples."""
+         self.stopping = True
+         self.pending = None  # Late in-flight feeding polls cannot mutate evidence.
+@@ -426,7 +426,7 @@
+                         now = self.ace.reactor.monotonic()
+                         self._observe(self.terminal_sample, now)
+                         if self.observed_samples == 1:
+-                            self._use_terminal_counter(now)
++                            self._use_terminal_counter(now, before_retry=before_retry)
+                 except Exception as exc:
+                     self._measurement_issue(str(exc))
+                 self._check_identity()
+@@ -444,14 +444,16 @@
+             self.result = 'stop_unconfirmed'
+             raise
+ 
+-    def _use_terminal_counter(self, now):
++    def _use_terminal_counter(self, now, *, before_retry=False):
+         # The ACE resets this counter for each finite feed. With no usable
+         # start frame, require observed native forward motion on this slot and
+-        # a real head arrival before crediting the fresh, post-STOP reading.
++        # a real head arrival, or a stopped attempt that will be retried.
+         motor, decoder, steps = self.terminal_sample
+         direction = 1 if decoder > 0 else -1
+         limit = min(self.length, self.speed * max(0., now - self.started_at) * 1.25 + 25.)
+-        if (not self.forward_status_seen or self.sensor() is not True or self.gate() is not True
++        head = self.sensor()
++        if (not self.forward_status_seen or self.gate() is not True
++                or (head is not True and (not before_retry or head is not False))
+                 or steps <= 0 or not 0 < motor <= limit or not 0 < abs(decoder) <= limit
+                 or abs(decoder) < motor * self.MIN_PROGRESS_RATIO
+                 or self.known_decoder_sign not in (None, direction)):
+@@ -475,7 +477,7 @@
+         return distance if math.isfinite(distance) and 0 < distance <= self.length else None
+ 
+     def short_backoff(self, configured_mm=None):
+-        """Return measured travel only for explicit manual recovery."""
++        """Return measured reverse travel when a fresh endpoint is available."""
+         a = self.ace
+         before = self.terminal_sample
+         manual = configured_mm is None
+@@ -543,6 +545,18 @@
+                 or self.gate() is not True or self.terminal_slot_status != 'ready'):
+             raise FeedSupervisionError('backoff_unverified', '短退后原槽状态未确认')
+         if not manual:
++            # Slot status already proved completion. This optional endpoint
++            # read is for distance accounting only and cannot veto the retry.
++            try:
++                sample = self._decode(self._query('get_feed_info', 76))
++            except Exception as exc:
++                logging.debug('[multiACE] optional retry reverse sample unavailable: %s', exc)
++                sample = None
++            if sample is not None and polarity in (-1, 1):
++                motor, decoder, steps = sample
++                backoff = -decoder * polarity
++                if steps > 0 and 0 < motor <= length + 1 and 0 < backoff <= length + 1:
++                    return backoff
+             return None
+         motor, decoder, steps = self.terminal_sample
+         if polarity is None and decoder:
+@@ -566,7 +580,10 @@
+             basis = 'observed_feed_end'
+         elif not self.after_retry and self.origin_sample[:3] == (0.0, 0.0, 0):
+             basis = 'observed_zero_origin'
+-        return {'distance_mm': self.prior_observed_mm + distance,
++        distance += self.prior_observed_mm
++        if distance <= 0:
++            return None
++        return {'distance_mm': distance,
+                 'basis': basis,
+                 'samples': self.observed_samples, 'seq': self.seq,
+                 'ace': self.idx, 'slot': self.slot, 'head': self.head,
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -1352,7 +1352,7 @@
+             if (getattr(ps, 'state', '') not in ('standby', 'complete', 'cancelled')
+                     or a._swap_in_progress or supervisor.terminal_sample is None):
+                 raise FeedSupervisionError('retry_unavailable', '当前设备状态不允许短退重试')
+-        forward = supervisor.observed_forward_mm() if manual else None
++        forward = supervisor.observed_forward_mm()
+         route = (supervisor.idx, supervisor.slot)
+         if source_route(a._head_source.get(supervisor.head)) != route:
+             raise FeedSupervisionError('source_conflict', '重试时原槽来源已改变')
+@@ -1373,6 +1373,19 @@
+             retry.prior_observed_mm = max(0.0, (forward or 0.0) - reverse)
+             retry.retry_backoff_mm = reverse
+             self.gcode.respond_info('原槽已短退 %.0f mm 并停稳，低速重试一次' % reverse)
++        else:
++            # Each retry resets the ACE counter. Carry the signed material
++            # balance, and debit the whole bounded short retreat if its
++            # encoder was unavailable. Never credit a commanded forward move.
++            debit = reverse if reverse is not None else configured_mm
++            retry.prior_observed_mm = supervisor.prior_observed_mm + (forward or 0.0) - debit
++            retry.retry_backoff_mm = reverse
++            if forward is not None:
++                retry.decoder_sign = retry.known_decoder_sign = supervisor.decoder_sign
++            logging.info('[multiACE] load retry ACE=%d slot=%d forward=%s reverse=%.1f (%s) net=%.1f mm',
++                         retry.idx + 1, retry.slot + 1, forward, debit,
++                         'encoder' if reverse is not None else 'command bound',
++                         retry.prior_observed_mm)
+         return retry
+ 
+     def _run_supervised_ace_load(self, channel, ace_idx, slot, head):
+@@ -1448,7 +1461,7 @@
+                 finally:
+                     if supervisor.feed_enqueued:
+                         motion_requested = True
+-                        supervisor.stop_bound()
++                        supervisor.stop_bound(before_retry=missed is not None and attempt < retries)
+                 if supervisor.cancelled:
+                     raise FeedSupervisionError('cancelled', '已取消本次进料')
+                 if supervisor.terminal_slot_status != 'ready':

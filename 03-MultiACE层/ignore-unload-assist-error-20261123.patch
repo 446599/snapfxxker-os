@@ -1,0 +1,427 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -10695,7 +10695,7 @@
+                 id=525, index=0, code=210, oneshot=1, level=2)
+         raise self.printer.command_error(text)
+ 
+-    def wait_ace_ready_on(self, idx, timeout=30.0, max_reconnects=2, slot=None):
++    def wait_ace_ready_on(self, idx, timeout=30.0, max_reconnects=2, slot=None, *, unload_stop=None):
+         operations = getattr(self, '_path_operations', None)
+         if operations is not None and operations.handles(idx):
+             try:
+@@ -10705,7 +10705,7 @@
+             return
+         if self._is_v2_idx(idx):
+             from .ace_ready_wait import wait_ready
+-            return wait_ready(self, idx, timeout, slot)
++            return wait_ready(self, idx, timeout, slot, unload_stop=unload_stop)
+         info = self._info_per_ace.get(idx)
+         if info is None:
+             return
+@@ -10999,7 +10999,7 @@
+ 
+         self._feed(index, length, speed, ace=ace)
+ 
+-    def _retract(self, index, length, speed, head=None, ace=None, hot_owner=None, bulk=False):
++    def _retract(self, index, length, speed, head=None, ace=None, hot_owner=None, bulk=False, *, unload_stop=None):
+         def callback(self, response):
+             if response.get('code', 0) != 0:
+                 self.log_error(self._t('msg.ace_error_generic', error=response.get('msg')))
+@@ -11078,7 +11078,10 @@
+                 if idx == self._active_device_index:
+                     self._feed_assist_index = -1
+ 
+-        self.wait_ace_ready_on(idx, slot=index)
++        if unload_stop is None:
++            self.wait_ace_ready_on(idx, slot=index)
++        else:
++            self.wait_ace_ready_on(idx, slot=index, unload_stop=unload_stop)
+         self._travel_legacy_start(idx, index, head, 'retract')
+         self.send_request_to(
+             idx,
+--- a/klipper/extras/ace_ready_wait.py
++++ b/klipper/extras/ace_ready_wait.py
+@@ -4,6 +4,7 @@
+ accept the next command while its motor remains active. This helper neither
+ stops that owner nor clears a source, physical hold, or STOP fault.
+ """
++import logging
+ import math
+ 
+ from .ace_flow_guard import source_route
+@@ -72,10 +73,32 @@
+                for route in (source_route(source),))
+ 
+ 
+-def _classify(response, request, assist_slot, isolated=()):
++def unload_source_matches(ace, idx, slot, head):
++    # A retry belongs to the original spool on this physical device, not just
++    # the active ACE or a cached slot number.
++    source = getattr(ace, '_head_source', {}).get(head)
++    identity = _identity(ace, idx)
++    return (identity is not None and source_route(source) == (idx, slot)
++            and source.get('load_failed') is False
++            and source.get('connection_identity') ==
++                {'port': identity[0], 'uid': list(identity[1])}
++            and configured_route_heads(ace, idx, slot) == (head,)
++            and sum(source_route(value) == (idx, slot)
++                    for value in ace._head_source.values()) == 1)
++
++
++def _classify(response, request, assist_slot, isolated=(), *, stopped_unload_slot=None):
+     states, status = status_rows(response, request)
+     if states is None:
+         return False, status
++    # 0x83 can be left over from assist during tip forming. The verified
++    # source may issue its explicit rollback, but no actual moving state is
++    # translated into READY and no other fault is changed.
++    if stopped_unload_slot is not None and states.get(stopped_unload_slot) == 'assist_error':
++        states[stopped_unload_slot] = 'ready'
++        retried_assist = True
++    else:
++        retried_assist = False
+     faults = [(slot, state) for slot, state in sorted(states.items())
+               if slot not in isolated and (state.endswith('_error') or state == 'error')]
+     if faults:
+@@ -93,10 +116,13 @@
+             for slot, state in busy)
+     if status != 'ready':
+         return False, '设备聚合状态=%s' % status
++    if retried_assist:
++        logging.info('[multiACE] source slot %d: assist error does not block verified unload handoff',
++                     stopped_unload_slot + 1)
+     return True, 'ready'
+ 
+ 
+-def _wait_ready(ace, idx, timeout, slot=None):
++def _wait_ready(ace, idx, timeout, slot=None, *, unload_stop=None):
+     if (type(idx) is not int or not 0 <= idx < 4 or type(timeout) not in (int, float)
+             or not math.isfinite(timeout) or timeout <= 0):
+         raise ReadyWaitError('等待目标或总时限无效')
+@@ -117,6 +143,13 @@
+                 or getattr(ace, '_serial_failed_per_ace', {}).get(idx)
+                 or _identity(ace, idx) != identity):
+             raise ReadyWaitError('原 ACE 连接或 UID 已变化；等待已结束，未重连或改写来源')
++        if unload_stop is not None and (
++                unload_stop['ace'] != idx or unload_stop['slot'] != slot
++                or unload_stop['transport'] is not transport
++                or unload_stop['identity'] != ace._location_identity(idx)
++                or unload_stop['slot_status'] not in ('ready', 'assist_error')
++                or not unload_source_matches(ace, idx, slot, unload_stop['head'])):
++            raise ReadyWaitError('退料原槽或连接已改变')
+         if reactor.monotonic() >= deadline:
+             raise ReadyWaitError('等待 ready 达到总时限 %g 秒；%s；连接和来源保留' % (timeout, last))
+ 
+@@ -144,7 +177,8 @@
+             assist_slot = ({slot for slot in range(4) if armed(idx, slot)} if armed is not None
+                            else getattr(ace, '_feed_assist_per_ace', {}).get(idx, -1))
+             if box['done']:
+-                ready, last = _classify(box['response'], request, assist_slot, isolated)
++                ready, last = _classify(box['response'], request, assist_slot, isolated,
++                                        stopped_unload_slot=slot if unload_stop is not None else None)
+                 if ready:
+                     return
+             else:
+@@ -155,7 +189,7 @@
+         reactor.pause(min(deadline, reactor.monotonic() + POLL_SECONDS))
+ 
+ 
+-def wait_ready(ace, idx, timeout=30.0, slot=None):
++def wait_ready(ace, idx, timeout=30.0, slot=None, *, unload_stop=None):
+     """Wait on fresh CMD6 within one deadline and preserve resumable errors.
+ 
+     Wire into ``wait_ace_ready_on`` only after its controlled-motion branch,
+@@ -164,7 +198,7 @@
+     No cached status is written or accepted as evidence by this function.
+     """
+     try:
+-        return _wait_ready(ace, idx, timeout, slot)
++        return _wait_ready(ace, idx, timeout, slot, unload_stop=unload_stop)
+     except ReadyWaitError as exc:
+         display = idx + 1 if type(idx) is int else repr(idx)
+         ace._raise_ace_gone(idx, '[multiACE] ACE %s: %s' % (display, exc))
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -24,6 +24,7 @@
+ from .ace_feed_supervisor import FeedSupervisor, FeedSupervisionError, FeedChannelBusy
+ from .ace_v2_standstill import STOP_DEFAULT_ZERO_MM, stop_and_verify
+ from .ace_flow_guard import raw_head_state, source_route
++from .ace_ready_wait import unload_source_matches
+ from .ace_fixed_park import (ParkAckUnavailable, ParkEdgeMissed,
+                              ParkEncoderUnavailable, ParkMotion)
+ 
+@@ -1085,8 +1086,9 @@
+             return max(floor, int(ref) - SWAP_PROBE_COOL_DELTA)
+         return floor
+ 
+-    def _wait_before_unload_retract(self, idx, slot, hot_owner=None):
++    def _wait_before_unload_retract(self, idx, slot, hot_owner=None, *, head=None):
+         ace = self.ace
++        unload_stop = None
+         operations = getattr(ace, '_path_operations', None)
+         if (hot_owner is None and ace._is_v2_idx(idx)
+                 and (operations is None or not operations.handles(idx, slot))):
+@@ -1094,10 +1096,18 @@
+             # host lease is lost. Stop this exact source before waiting READY.
+             # This STOP receipt only gates the handoff. The following
+             # finite retract is still measured with real encoder feedback.
+-            stop_and_verify(ace, idx, slot, ready_zero_mm=STOP_DEFAULT_ZERO_MM,
+-                            ready_without_decoder=True, stock_unload=True)
++            original = type(head) is int and unload_source_matches(ace, idx, slot, head)
++            receipt = stop_and_verify(ace, idx, slot, ready_zero_mm=STOP_DEFAULT_ZERO_MM,
++                                      ready_without_decoder=True, stock_unload=True,
++                                      stopped_assist_without_decoder=original)
+             ace._clear_fa_cache_for(idx, slot)
+-        ace.wait_ace_ready_on(idx, slot=slot)
++            if original and receipt['slot_status'] in ('ready', 'assist_error'):
++                unload_stop = dict(receipt, ace=idx, slot=slot, head=head)
++        if unload_stop is None:
++            ace.wait_ace_ready_on(idx, slot=slot)
++        else:
++            ace.wait_ace_ready_on(idx, slot=slot, unload_stop=unload_stop)
++        return unload_stop
+ 
+     def _finish_fixed_unload(self, ch, idx, slot, short_commanded_mm, speed, *, direct=False):
+         ace = self.ace
+@@ -3291,8 +3301,8 @@
+                                 # span window covered the whole wait).
+                                 # End source-side reverse assist before the
+                                 # explicit move or its measurement timer.
+-                                self._wait_before_unload_retract(
+-                                    self.ace._active_device_index, _ace_slot, _hot_park_context)
++                                _unload_stop = self._wait_before_unload_retract(
++                                    self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
+                                 _remaining = self.ace._head_return_remaining(
+                                     self.ace._active_device_index, _ace_slot, head_idx)
+                                 if _remaining is not None:
+@@ -3303,7 +3313,8 @@
+                                     self.ace._active_device_index, _ace_slot,
+                                     lambda: self.ace._retract(
+                                         _ace_slot, _short_retract,
+-                                        _retract_speed, head=head_idx, hot_owner=_hot_park_context))
++                                        _retract_speed, head=head_idx, hot_owner=_hot_park_context,
++                                        unload_stop=_unload_stop))
+                                 self.ace.wait_ace_ready(slot=_ace_slot)
+                                 self.ace._check_calibration_unload_cancel()
+                                 self._unload_dec_log(
+@@ -3508,13 +3519,14 @@
+                                         # Wait ready BEFORE the span wrapper (see
+                                         # the short-retract note above - this rest
+                                         # site is where the 60s stall actually hit).
+-                                        self._wait_before_unload_retract(
+-                                            self.ace._active_device_index, _ace_slot, _hot_park_context)
++                                        _unload_stop = self._wait_before_unload_retract(
++                                            self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
+                                         _rsp = self.ace._retract_with_decoder_span(
+                                             self.ace._active_device_index, _ace_slot,
+                                             lambda: self.ace._retract(
+                                                 _ace_slot, _rest,
+-                                                _retract_speed, head=head_idx, hot_owner=_hot_park_context, bulk=True))
++                                                _retract_speed, head=head_idx, hot_owner=_hot_park_context,
++                                                bulk=True, unload_stop=_unload_stop))
+                                         self.ace.wait_ace_ready(slot=_ace_slot)
+                                         self.ace._check_calibration_unload_cancel()
+                                         self.ace._dwell_fan(False)
+@@ -3792,8 +3804,8 @@
+                                 # span window covered the whole wait).
+                                 # End source-side reverse assist before the
+                                 # explicit move or its measurement timer.
+-                                self._wait_before_unload_retract(
+-                                    self.ace._active_device_index, _ace_slot, _hot_park_context)
++                                _unload_stop = self._wait_before_unload_retract(
++                                    self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
+                                 _remaining = self.ace._head_return_remaining(
+                                     self.ace._active_device_index, _ace_slot, head_idx)
+                                 if _remaining is not None:
+@@ -3804,7 +3816,8 @@
+                                     self.ace._active_device_index, _ace_slot,
+                                     lambda: self.ace._retract(
+                                         _ace_slot, _short_retract,
+-                                        _retract_speed, head=head_idx, hot_owner=_hot_park_context))
++                                        _retract_speed, head=head_idx, hot_owner=_hot_park_context,
++                                        unload_stop=_unload_stop))
+                                 self.ace.wait_ace_ready(slot=_ace_slot)
+                                 self.ace._check_calibration_unload_cancel()
+                                 self._unload_dec_log(
+@@ -4009,13 +4022,14 @@
+                                         # Wait ready BEFORE the span wrapper (see
+                                         # the short-retract note above - this rest
+                                         # site is where the 60s stall actually hit).
+-                                        self._wait_before_unload_retract(
+-                                            self.ace._active_device_index, _ace_slot, _hot_park_context)
++                                        _unload_stop = self._wait_before_unload_retract(
++                                            self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
+                                         _rsp = self.ace._retract_with_decoder_span(
+                                             self.ace._active_device_index, _ace_slot,
+                                             lambda: self.ace._retract(
+                                                 _ace_slot, _rest,
+-                                                _retract_speed, head=head_idx, hot_owner=_hot_park_context, bulk=True))
++                                                _retract_speed, head=head_idx, hot_owner=_hot_park_context,
++                                                bulk=True, unload_stop=_unload_stop))
+                                         self.ace.wait_ace_ready(slot=_ace_slot)
+                                         self.ace._check_calibration_unload_cancel()
+                                         self.ace._dwell_fan(False)
+--- /dev/null
++++ b/tests/test_unload_assist_handoff.py
+@@ -0,0 +1,161 @@
++"""Exercise the reported ACE 1 / slot 4 handoff with the real CMD6/STOP code."""
++import ast
++import logging
++from pathlib import Path
++from types import SimpleNamespace
++from importlib import import_module
++import unittest
++
++from test_print_assist_recovery import Reactor, response, ready, PACKAGE
++
++standstill = import_module(PACKAGE + '.ace_v2_standstill')
++EXTRAS = Path(__file__).resolve().parents[1] / 'runtime/klipper/extras'
++
++
++def actual(file, method):
++    root = ast.parse((EXTRAS / file).read_text())
++    node = next(n for n in ast.walk(root) if isinstance(n, ast.FunctionDef)
++                and n.name == method)
++    env = dict(logging=logging, stop_and_verify=standstill.stop_and_verify,
++               STOP_DEFAULT_ZERO_MM=standstill.STOP_DEFAULT_ZERO_MM,
++               unload_source_matches=getattr(ready, 'unload_source_matches', None))
++    exec(compile(ast.Module(body=[node], type_ignores=[]), file, 'exec'), env)
++    return env[method]
++
++
++wait_before = actual('filament_feed_ace.py', '_wait_before_unload_retract')
++retract = actual('ace.py', '_retract')
++
++
++class Fixture:
++    def __init__(self, decoder=True):
++        self.reactor = Reactor()
++        self.uid = (1, 2, 3)
++        self.transport = object()
++        self.states = {3: 'assist_error'}
++        self.decoder = decoder
++        self.clear_on_move = True
++        self.cmds = []
++        self.gate = True
++        self.mask_flip = False
++        self.ace = SimpleNamespace(
++            reactor=self.reactor, host='u1', _ace_mode='multi',
++            _serials={0: self.transport}, _connected_per_ace={0: True},
++            _reconnecting_per_ace={}, _gate_status_per_ace={0: [1]*4},
++            _location_identity=lambda idx: ('port', self.uid),
++            _latch_stop_fault=lambda *a, **k: self.cmds.append(('latched', a[1])),
++            _raise_ace_gone=lambda idx, msg: self.fail(msg),
++            _is_v2_idx=lambda idx: True, head_uses_ace=lambda h: True,
++            _active_device_index=0, _protocols={0: SimpleNamespace(NAME='v2')},
++            _head_source={3: dict(ace_index=0, slot=3, load_failed=False,
++                                  connection_identity=dict(port='port', uid=list(self.uid)))},
++            _feed_assist_per_ace={0: -1}, head_is_manual=lambda head: False,
++            _clear_fa_cache_for=lambda idx, slot: None, send_request_to=self.send,
++            wait_ace_ready_on=lambda idx, slot=None, **kw: ready.wait_ready(
++                self.ace, idx, timeout=2, slot=slot, **kw),
++            _require_no_stop_fault=lambda **kw: None,
++            _travel_legacy_start=lambda *args: None, _travel_legacy_finish=lambda *args: None,
++            _fa_trace=lambda *args: None, dwell=lambda delay: None)
++
++    @staticmethod
++    def fail(msg):
++        raise ready.ReadyWaitError(msg)
++
++    def send(self, idx, request, callback):
++        req = request
++        req['id'] = len(self.cmds) + 1
++        method = req['method']
++        self.cmds.append((method, req['params'].get('index')))
++        if method == 'get_status':
++            data = response(req, self.states)
++            if 'feeding' in self.states.values():
++                data['result']['status'] = 'busy'
++        elif method == 'get_feed_info':
++            data = response(req, {}, command=76)
++            data['result'] = dict(_feed_wire_valid=True, feed_info=[
++                dict(index=3, steps=100, length=8,
++                     decoder=8 if self.decoder else 0,
++                     _decoder_present=self.decoder, _wire_valid=True)])
++        elif method == 'get_key_state':
++            data = response(req, {}, command=73)
++            self.mask_flip = not self.mask_flip
++            data['result'] = dict(_key_wire_valid=True, buffer_keys=dict(
++                raw_mask=((1 << 12) if self.gate else 0) |
++                         (((1 << 14) | (1 << 16)) if self.mask_flip else 0)))
++        elif method == 'unwind_filament':
++            if self.clear_on_move:
++                self.states[3] = 'ready'
++            data = response(req, {}, command=4)
++        else:
++            data = response(req, {}, command=9)
++        callback(self.ace, data)
++        return True
++
++
++class UnloadAssistHandoffTest(unittest.TestCase):
++    def test_reported_131_can_handoff_to_original_slot_rollback(self):
++        f = Fixture()
++        stop = wait_before(f, 0, 3, head=3)
++        retract(f.ace, 3, 150, 50, head=3, unload_stop=stop)
++        f.ace.wait_ace_ready_on(0, slot=3)
++        self.assertEqual([c for c in f.cmds if c[0] == 'unwind_filament'],
++                         [('unwind_filament', 3)])
++
++    def test_buffer_bits_do_not_affect_inlet_fallback(self):
++        f = Fixture(decoder=False)
++        stop = wait_before(f, 0, 3, head=3)
++        self.assertEqual(stop['slot_status'], 'assist_error')
++        self.assertIn(('get_key_state', None), f.cmds)
++        self.assertNotIn(('latched', 3), f.cmds)
++
++    def test_load_or_completion_still_reports_131(self):
++        f = Fixture()
++        f.clear_on_move = False
++        stop = wait_before(f, 0, 3, head=3)
++        retract(f.ace, 3, 150, 50, head=3, unload_stop=stop)
++        with self.assertRaisesRegex(ready.ReadyWaitError, '槽 4=assist_error'):
++            f.ace.wait_ace_ready_on(0, slot=3)
++
++    def test_other_errors_on_same_slot_remain_faults(self):
++        for state in ('motor_error', 'tangled_error', 'stuck_error', 'rollback_error'):
++            with self.subTest(state=state):
++                f = Fixture()
++                f.states[3] = state
++                with self.assertRaisesRegex(ready.ReadyWaitError, state):
++                    wait_before(f, 0, 3, head=3)
++
++    def test_unload_receipt_does_not_apply_to_new_transport_or_source(self):
++        for change in ('connection', 'source', 'slot'):
++            with self.subTest(change=change):
++                f = Fixture()
++                stop = wait_before(f, 0, 3, head=3)
++                if change == 'connection':
++                    f.ace._serials[0] = object()
++                elif change == 'source':
++                    f.ace._head_source[3]['slot'] = 2
++                with self.assertRaisesRegex(ready.ReadyWaitError, '退料原槽或连接已改变'):
++                    f.ace.wait_ace_ready_on(0, slot=2 if change == 'slot' else 3,
++                                            unload_stop=stop)
++
++    def test_still_feeding_is_not_ready(self):
++        f = Fixture()
++        stop = wait_before(f, 0, 3, head=3)
++        f.states[3] = 'feeding'
++        with self.assertRaisesRegex(ready.ReadyWaitError, '等待 ready 达到总时限'):
++            f.ace.wait_ace_ready_on(0, slot=3, unload_stop=stop)
++
++    def test_unproven_source_is_not_exempted(self):
++        f = Fixture()
++        f.ace._head_source[3]['connection_identity']['uid'] = [4, 5, 6]
++        with self.assertRaisesRegex(ready.ReadyWaitError, '槽 4=assist_error'):
++            wait_before(f, 0, 3, head=3)
++
++    def test_no_decoder_no_inlet_still_requires_recovery(self):
++        f = Fixture(decoder=False)
++        f.gate = False
++        with self.assertRaisesRegex(standstill.StopUnconfirmedError, '原槽入口无料'):
++            wait_before(f, 0, 3, head=3)
++
++
++if __name__ == '__main__':
++    unittest.main()

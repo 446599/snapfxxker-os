@@ -1,0 +1,594 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -5288,6 +5288,9 @@
+         # artificial main_state==IDLE block. We are inside a gcode command here,
+         # so the restore's run_script_from_command is the correct context.
+         def _wrap(gcmd):
++            policy = getattr(self, '_insert_policy', None)
++            if policy is not None:
++                policy.require_paused_grip_stopped(gcmd)
+             self._require_no_stop_fault(gcmd)
+             try:
+                 self._restore_machine_state_for_resume()
+@@ -5297,6 +5300,8 @@
+             # Restore may yield or swallow errors. Check the persistent
+             # latch again before calling the unwrapped stock handler.
+             self._require_no_stop_fault(gcmd)
++            if policy is not None:
++                policy.require_paused_grip_stopped(gcmd)
+             return prev(gcmd)
+         return _wrap
+ 
+@@ -10259,7 +10264,10 @@
+                             self._gen1_gate_gen.get(_gk, 0) + 1
+                         insert_policy = getattr(self, '_insert_policy', None)
+                         if insert_policy is not None:
+-                            insert_policy.gate_changed(idx, i, _gate_prev, gate_list[i], ser)
++                            insert_policy.gate_changed(idx, i, _gate_prev, gate_list[i], ser,
++                                                       valid=valid_motor_status)
++                    if valid_motor_status and getattr(self, '_insert_policy', None) is not None:
++                        self._insert_policy.observe_gate(idx, i, gate_list[i], ser)
+                     if _gate_prev != gate_list[i] and _gate_prev != GATE_UNKNOWN:
+                         logging.info('[multiACE] [gate] ACE %d slot %d: %s -> '
+                                      '%s (active=%s status=%r rfid=%s)'
+--- a/klipper/extras/ace_insert_policy.py
++++ b/klipper/extras/ace_insert_policy.py
+@@ -1,10 +1,11 @@
+ """Bounded short grip from a fresh inlet edge, followed by optional RFID."""
+ import logging
++import math
+ import secrets
+ import struct
+ import threading
+ from .ace_filament_options import FilamentOptions, SCAN_MM, GRIP_MM, GRIP_SPEED
+-from .ace_v2_standstill import DECODER_UNAVAILABLE_REASONS
++from .ace_v2_standstill import DECODER_UNAVAILABLE_REASONS, stop_and_verify
+ from .ace_flow_guard import dynamic_route_blocked, raw_head_state, source_route
+ from contextlib import contextmanager
+ 
+@@ -57,6 +58,13 @@
+         self.active = None
+         self.owner = None
+         self.gate_events = {}
++        self.pause_empty = {}
++        self.pause_events = {}
++        self.pause_tainted = set()
++        self.paused_since = None
++        self.paused_motion_since = None
++        self.pause_mutex = None
++        self.paused_grip_unconfirmed = None
+         self.scan_origins = {}
+         self.wire_lock = threading.Lock()
+         self.timer = None
+@@ -76,7 +84,7 @@
+         self.timer = self.ace.reactor.register_timer(self.tick, self.ace.reactor.monotonic() + 1)
+ 
+     def capable(self, idx):
+-        return str((self.ace._ace_models.get(idx) or ('', ''))[1]).upper() in (FIRMWARE, 'V1.2.01O')
++        return str((self.ace._ace_models.get(idx) or ('', ''))[1]).upper() in (FIRMWARE, 'V1.2.01O', 'V1.2.03O')
+ 
+     def bypass(self, idx):
+         return self.changing or self.capable(idx)
+@@ -92,14 +100,17 @@
+             or getattr(getattr(a, '_path_calibration', None), 'task', {}).get('active', False))
+ 
+     @contextmanager
+-    def claim(self, kind, idx=None, slot=None):
++    def claim(self, kind, idx=None, slot=None, paused_grip=False):
+         """Claim the same gate as manual RFID/eject before the first reactor yield."""
+         a, actions = self.ace, self.ace._slot_actions
+-        if self.owner is not None or self.busy():
++        if self.owner is not None or (not paused_grip and self.busy()):
+             raise RuntimeError('请等待当前打印或料槽动作结束')
++        if paused_grip and (kind != 'insert' or not self._paused_safe(idx, slot)):
++            raise RuntimeError('暂停期间料路或设备尚未安全停稳')
+         previous_action = actions.state
+         actions.seq += 1
+-        token = {'seq': actions.seq, 'kind': kind, 'idx': idx, 'slot': slot}
++        token = {'seq': actions.seq, 'kind': kind, 'idx': idx, 'slot': slot,
++                 'paused_grip': paused_grip}
+         self.owner = token
+         actions.cancel = False
+         actions.state = {'seq': actions.seq, 'state': 'running', 'kind': kind,
+@@ -365,13 +376,146 @@
+         return (a._serials.get(idx), a._location_identity(idx), a._ace_mode,
+                 tuple(a._rfid_route_heads(idx, slot) or ()), a._gen1_gate_gen.get((idx, slot)))
+ 
+-    def gate_changed(self, idx, slot, before, after, transport):
++    def gate_changed(self, idx, slot, before, after, transport, valid=False):
+         key = idx, slot
++        ps = self.ace.printer.lookup_object('print_stats', None)
++        if ps is not None and getattr(ps, 'state', '').lower() in ('printing', 'paused'):
++            self.pause_tainted.add(key)
+         self.gate_events.pop(key, None)
++        self.pause_events.pop(key, None)
++        previous = self.pause_empty.pop(key, None)
+         entry = self.units.get(idx)
++        ctx = self._gate_context(idx, slot)
++        if (valid and before == 1 and after == 0 and self._pause_stable()
++                and entry is not None and entry['applied'] is False
++                and entry['transport'] is transport and self.ace._serials.get(idx) is transport):
++            self.pause_empty[key] = [ctx, 0]
+         if (before == 0 and after == 1 and entry is not None and entry['applied'] is False
+                 and entry['transport'] is transport and self.ace._serials.get(idx) is transport):
+-            self.gate_events[key] = self._gate_context(idx, slot)
++            self.gate_events[key] = ctx
++            if (valid and self._pause_stable() and previous and previous[1] >= 2
++                    and previous[0][:-1] == ctx[:-1]
++                    and type(previous[0][-1]) is int and ctx[-1] == previous[0][-1] + 1):
++                self.pause_events[key] = (ctx, self.ace.reactor.monotonic())
++
++    def observe_gate(self, idx, slot, gate, transport):
++        key = idx, slot
++        empty = self.pause_empty.get(key)
++        if empty is None:
++            return
++        if (not self._pause_stable() or gate != 0 or self.ace._serials.get(idx) is not transport
++                or self._gate_context(idx, slot) != empty[0]):
++            self.pause_empty.pop(key, None)
++        else:
++            empty[1] += 1
++
++    def _pause_stable(self):
++        ps = self.ace.printer.lookup_object('print_stats', None)
++        pause = self.ace.printer.lookup_object('pause_resume', None)
++        try:
++            confirmed = pause is not None and pause.get_status(self.ace.reactor.monotonic()).get('is_paused') is True
++        except (AttributeError, KeyError, TypeError, RuntimeError):
++            confirmed = False
++        return (confirmed and ps is not None and getattr(ps, 'state', '').lower() == 'paused'
++                and self.paused_since is not None
++                and self.ace.reactor.monotonic() - self.paused_since >= 1.0)
++
++    def _motion_stable(self):
++        """Read live motion and the unflushed/MCU queue without scheduling moves."""
++        a = self.ace
++        now = a.reactor.monotonic()
++        try:
++            motion = a.printer.lookup_object('motion_report', None)
++            toolhead = a.printer.lookup_object('toolhead', None)
++            if motion is None or toolhead is None:
++                raise ValueError('motion evidence unavailable')
++            report = motion.get_status(now)
++            names = report['trapq']
++            if 'toolhead' not in names or toolhead.get_extruder().get_name() not in names:
++                raise ValueError('motion queues unavailable')
++            xyz, extruder = report['live_velocity'], report['live_extruder_velocity']
++            print_time, estimated, empty = toolhead.check_busy(now)
++            values = (xyz, extruder, print_time, estimated)
++            if (any(type(v) not in (int, float) or not math.isfinite(v) for v in values)
++                    or xyz != 0 or extruder != 0 or empty is not True or print_time > estimated):
++                raise ValueError('motion or queued moves remain')
++        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError):
++            self.paused_motion_since = None
++            return False
++        if self.paused_motion_since is None:
++            self.paused_motion_since = now
++        return now - self.paused_motion_since >= .5
++
++    def allows_paused_check(self, idx, slot):
++        token = self.active
++        return (token is not None and token is self.owner and token.get('paused_grip') is True
++                and (token.get('idx'), token.get('slot')) == (idx, slot)
++                and self._paused_safe(idx, slot, own=True))
++
++    def require_paused_grip_stopped(self, gcmd):
++        """Block RESUME only while this paused grip lacks a STOP receipt."""
++        if self.paused_grip_unconfirmed is not None:
++            raise gcmd.error('暂停短吸的停止尚未确认，请先检查原 ACE 并复核停止')
++
++    def confirm_paused_grip_stop(self, idx, slot, receipt):
++        """Accept a verified STOP on the same physical port, UID and slot."""
++        pending = self.paused_grip_unconfirmed
++        if (pending is not None and (pending['idx'], pending['slot']) == (idx, slot)
++                and isinstance(receipt, dict) and receipt.get('slot') == slot
++                and receipt.get('identity') == pending['identity']
++                and receipt.get('transport') is not None
++                and self.ace._serials.get(idx) is receipt['transport']
++                and self.ace._connected_per_ace.get(idx) is True
++                and not getattr(self.ace, '_reconnecting_per_ace', {}).get(idx)
++                and self.ace._location_identity(idx) == pending['identity']
++                and isinstance(pending['identity'], (tuple, list))
++                and len(pending['identity']) == 2 and pending['identity'][0]
++                and isinstance(pending['identity'][1], (tuple, list))
++                and len(pending['identity'][1]) == 3
++                and any(pending['identity'][1])
++                and type(receipt.get('samples')) is int and receipt['samples'] >= 3):
++            self.paused_grip_unconfirmed = None
++
++    def _paused_safe(self, idx, slot, own=False):
++        a = self.ace
++        if not self._pause_stable() or not self._motion_stable() or self.changing:
++            return False
++        recovery = getattr(a, '_error_recovery', None)
++        held = self.pause_mutex is not None
++        if recovery is None or (not own and recovery._is_busy(ignore_gcode_mutex=held)):
++            return False
++        if own:
++            if (self.owner is not self.active or self.active is None
++                    or recovery.active or recovery._feed_in_progress(ignore_gcode_mutex=held)
++                    or a._slot_actions.cancel or a._unload_all_active
++                    or getattr(a, '_tag_read_busy', False)
++                    or getattr(a, '_gen1_manual_busy', False)
++                    or getattr(a, '_feed_supervisors', {})
++                    or getattr(a, '_insert_read_running', set())
++                    or getattr(a, '_insert_abort_running', set())):
++                return False
++            bg = a.printer.lookup_object('ace_bg_swap', None)
++            guard = a.printer.lookup_object('ace_native_guard', None)
++            operations = getattr(a, '_path_operations', None)
++            if ((bg is not None and getattr(bg, '_busy', False))
++                    or (guard is not None and getattr(guard, 'state', None) != 'idle')
++                    or (operations is not None and any(op.get('state') not in ('complete', 'cancelled', 'error')
++                                                       for op in operations.status()))):
++                return False
++        if a._stop_message(idx, slot) or dynamic_route_blocked(a, idx=idx, slot=slot):
++            return False
++        try:
++            heads = tuple(a._rfid_route_heads(idx, slot) or ())
++            if not heads or any(raw_head_state(a, head) is not False for head in heads):
++                return False
++            for head in heads:
++                source = a._head_source.get(head)
++                if source is not None and (source_route(source) != (idx, slot)
++                        or not a._source_insertion_matches(source, idx, slot)):
++                    return False
++        except (AttributeError, KeyError, TypeError, RuntimeError):
++            return False
++        return True
+ 
+     def prepare_manual(self, idx, slot):
+         if not self.capable(idx): return
+@@ -383,19 +527,59 @@
+             self.gate_events.pop((idx, slot), None)
+ 
+     def tick(self, eventtime):
+-        if not self.polling and not self.changing and not self.busy():
++        ps = self.ace.printer.lookup_object('print_stats', None)
++        paused = ps is not None and getattr(ps, 'state', '').lower() == 'paused'
++        if paused:
++            if self.paused_since is None:
++                self.paused_since = self.ace.reactor.monotonic()
++            if self._pause_stable():
++                self._motion_stable()
++            else:
++                self.paused_motion_since = None
++        else:
++            self._drop_reserved_events()
++        if not self.polling and not self.changing and (paused or not self.busy()):
+             self.polling = True
+             self.ace.reactor.register_async_callback(self.poll)
+         return eventtime + .5
+ 
++    def _drop_reserved_events(self):
++        self.paused_since = None
++        self.paused_motion_since = None
++        for key in self.pause_tainted:
++            self.gate_events.pop(key, None)
++        self.pause_tainted.clear()
++        self.pause_empty.clear()
++        self.pause_events.clear()
++
+     def poll(self, eventtime):
+         a = self.ace
+         try:
+             for idx, connected in list(a._connected_per_ace.items()):
+-                if not connected or not self.capable(idx) or self.changing or self.busy(): continue
++                ps = a.printer.lookup_object('print_stats', None)
++                paused = ps is not None and getattr(ps, 'state', '').lower() == 'paused'
++                if not paused:
++                    self._drop_reserved_events()
++                if not connected or not self.capable(idx) or self.changing or (not paused and self.busy()): continue
+                 try:
+                     entry = self.unit(idx)
+                     snapshot = self.request(idx, 'insert_policy_query', entry)
++                    if paused:
++                        # Send QUERY only. On .03O the MCU also advances its
++                        # empty-inlet fault reconciliation while serving QUERY.
++                        # Never configure/discard/start or run RFID here.
++                        if (not self._pause_stable() or self.changing
++                                or a.printer.lookup_object('print_stats', None) is not ps):
++                            continue
++                        if not (snapshot['configured'] and snapshot['session'] == entry['session']
++                                and snapshot['enabled'] is False and entry['applied'] is False):
++                            continue
++                        self.observe(idx, entry, snapshot)
++                        for slot, epoch in enumerate(snapshot['epochs']):
++                            proof = self.pause_events.get((idx, slot))
++                            if proof is not None and self._paused_safe(idx, slot):
++                                self._run_paused_grip(idx, slot, entry, epoch, proof)
++                        continue
+                     if self.changing or self.busy(): continue
+                     if (snapshot['configured'] and snapshot['session'] == entry['session']
+                             and snapshot['enabled'] is False and entry['applied'] is False):
+@@ -481,26 +665,53 @@
+         method = request.get('method')
+         params = request.get('params') or {}
+         with self.wire_lock:
++            if (request.get('_insert_policy_owner') is not None and self.active is not None
++                    and self.active.get('revoked')):
++                return False
++            if (request.get('_insert_policy_owner') is self.owner and self.active is not None
++                    and self.active.get('paused_grip')):
++                token = self.active
++                if (method != 'feed_filament' or params != {'index': token['slot'],
++                        'length': GRIP_MM, 'speed': GRIP_SPEED}
++                        or (idx, transport) != (token['idx'], token['entry']['transport'])
++                        or self._gate_context(idx, token['slot']) != token.get('gate_event')
++                        or self.pause_mutex is None or not self.pause_mutex.test()
++                        or not self._pause_stable()):
++                    return False
+             if method == 'insert_policy_start':
+                 if not self.permits_start(idx, request, transport):
+                     return False
+                 request['_insert_policy_token']['wire_attempted'] = True
++            if (method == 'feed_filament' and request.get('_insert_policy_owner') is self.owner
++                    and self.active is self.owner and self.active is not None
++                    and (self.active.get('idx'), self.active.get('slot')) == (idx, params.get('index'))):
++                self.active['grip_wire_attempted'] = True
++                if self.active.get('paused_grip'):
++                    self.paused_grip_unconfirmed = {
++                        'idx': idx, 'slot': params['index'], 'transport': transport,
++                        'identity': self.active['entry']['identity']}
+             if method in ('insert_policy_start', 'feed_filament', 'unwind_filament',
+                           'feed_or_rollback_raw', 'start_feed_assist', 'update_feeding_speed'):
+                 slot = params.get('index')
+                 if type(slot) is int and 0 <= slot < 4:
+                     self.gate_events.pop((idx, slot), None)
+                     self.scan_origins.pop((idx, slot), None)
++                    self.pause_empty.pop((idx, slot), None)
++                    self.pause_events.pop((idx, slot), None)
+                 else:
+                     for lane in range(4):
+                         self.gate_events.pop((idx, lane), None)
+                         self.scan_origins.pop((idx, lane), None)
++                        self.pause_empty.pop((idx, lane), None)
++                        self.pause_events.pop((idx, lane), None)
+             elif ((method == 'raw' and params.get('cmd') in (8, 10, 77))
+                   or (method in ('drying', 'drying_raw') and params.get('auto_roll') is True)
+                   or '_controlled_owner' in request):
+                 for lane in range(4):
+                     self.gate_events.pop((idx, lane), None)
+                     self.scan_origins.pop((idx, lane), None)
++                    self.pause_empty.pop((idx, lane), None)
++                    self.pause_events.pop((idx, lane), None)
+             return True
+ 
+     def monitor(self, token):
+@@ -514,6 +725,135 @@
+                     and self._gate_context(idx, slot) != token['gate_event'])):
+             raise RuntimeError('插料已停止或任务发生变化')
+         actions._check(idx, slot, transport=entry['transport'], own=True)
++
++    def _run_paused_grip(self, idx, slot, entry, epoch, proof):
++        # Reserve Klipper's G-code mutex through the one finite grip and STOP.
++        # A queued resume/cancel waits; the command is never replayed.
++        gcode = self.ace.printer.lookup_object('gcode', None)
++        try:
++            mutex = gcode.get_mutex() if gcode is not None else None
++            if mutex is None or mutex.test() or mutex.queue:
++                return
++        except (AttributeError, TypeError, RuntimeError):
++            return
++        with mutex:
++            self.pause_mutex = mutex
++            try:
++                self._run_paused_grip_locked(idx, slot, entry, epoch, proof)
++            finally:
++                self.pause_mutex = None
++
++    def _run_paused_grip_locked(self, idx, slot, entry, epoch, proof):
++        """One normal bounded inlet feed; never clear or bypass a lane fault."""
++        a, actions = self.ace, self.ace._slot_actions
++        key = idx, slot
++        if (self.pause_events.get(key) != proof or self.gate_events.get(key) != proof[0]
++                or self._gate_context(idx, slot) != proof[0]
++                or not 0 <= a.reactor.monotonic() - proof[1] <= 30):
++            self.pause_events.pop(key, None)
++            return
++        # Consume before any claim/yield. A rejected or cancelled attempt is
++        # never replayed without another actual removal and insertion.
++        self.pause_events.pop(key, None)
++        self.gate_events.pop(key, None)
++        try:
++            with self.claim('insert', idx, slot, paused_grip=True) as token:
++                token.update(entry=entry, epoch=epoch, gate_event=proof[0])
++                self.active = token
++                monitor = lambda: self.monitor(token)
++                stopped_proved = False
++                try:
++                    monitor()
++                    current = self.request(idx, 'insert_policy_query', entry)
++                    if (current['epochs'][slot] != epoch or not current['configured']
++                            or current['session'] != entry['session'] or current['enabled']):
++                        raise RuntimeError('原 ACE 插料代次或策略已变化')
++                    samples = []
++                    for number in range(3):
++                        monitor()
++                        sample = actions._sample(idx, slot, allow_initial_zero=True, monitor=monitor)
++                        if not sample[0]:
++                            raise RuntimeError('原槽入口无料')
++                        samples.append(sample)
++                        if number < 2:
++                            a.reactor.pause(a.reactor.monotonic() + .25)
++                    if len(set(samples)) != 1:
++                        raise RuntimeError('原槽停止状态或反馈不稳定')
++                    baseline = samples[-1]
++                    monitor()
++                    actions._request(idx, 'feed_filament',
++                        {'index': slot, 'length': GRIP_MM, 'speed': GRIP_SPEED}, 8,
++                        monitor=monitor, stop_transport=entry['transport'], policy_token=self.owner)
++                    started = a.reactor.monotonic()
++                    deadline = started + GRIP_MM / float(GRIP_SPEED) + 3.0
++                    ready_since = None
++                    saw_feeding = False
++                    while True:
++                        monitor()
++                        now = a.reactor.monotonic()
++                        if now >= deadline:
++                            raise RuntimeError('短吸未在时限内确认完成')
++                        states = actions._lane_states(idx, monitor=monitor)
++                        if any(value != 'ready' for lane, value in states.items() if lane != slot):
++                            raise RuntimeError('短吸期间其他槽状态异常')
++                        state = states.get(slot)
++                        if state == 'feeding':
++                            saw_feeding = True
++                            ready_since = None
++                        elif state == 'ready':
++                            if ready_since is None:
++                                ready_since = now
++                            elif now - ready_since >= .2:
++                                endpoint = actions._sample(idx, slot, allow_initial_zero=True, monitor=monitor)
++                                present, (decoder_ok, delta), (steps, length) = endpoint
++                                zero_baseline = baseline[1] == (True, 0) and baseline[2] == (0, 0)
++                                if (present and decoder_ok and steps > 0 and GRIP_MM - 10 <= length <= GRIP_MM
++                                        and 0 < abs(delta) <= GRIP_MM + 10 and endpoint[1:] != baseline[1:]
++                                        and (saw_feeding or zero_baseline)):
++                                    break
++                                if (present and saw_feeding and not decoder_ok
++                                        and now >= started + GRIP_MM / float(GRIP_SPEED)):
++                                    # READY after the finite nominal duration is
++                                    # a stop condition, not a distance receipt.
++                                    break
++                        else:
++                            raise RuntimeError('短吸遇到实际槽故障或异常: %s' % state)
++                        a.reactor.pause(min(deadline, a.reactor.monotonic() + .1))
++                    receipt = stop_and_verify(a, idx, slot, transport=entry['transport'], identity=entry['identity'],
++                                              monitor=monitor, timeout=5.0, ready_status_only=True,
++                                              stopped_fault_without_decoder=True)
++                    stopped_proved = True
++                    self.confirm_paused_grip_stop(idx, slot, dict(receipt, slot=slot))
++                    monitor()
++                    final = actions._sample(idx, slot, allow_initial_zero=True, monitor=monitor)
++                    if final != endpoint:
++                        raise RuntimeError('短吸停稳后的终点反馈改变')
++                    measured = endpoint[1][0]
++                    actions.state.update(state='complete', stopped=True, stop_confirmed=True,
++                                         progress=100, measured=measured,
++                                         message=('已短吸 10 cm，打印仍暂停' if measured else
++                                                  '短吸已停止，耗材位移未测得，打印仍暂停'))
++                    entry['error'] = ''
++                except Exception as original:
++                    with self.wire_lock:
++                        token['revoked'] = True
++                        attempted = token.get('grip_wire_attempted', False)
++                    if attempted and not stopped_proved:
++                        try:
++                            receipt = stop_and_verify(a, idx, slot, transport=entry['transport'],
++                                                      identity=entry['identity'],
++                                                      monitor=lambda: self.connected(idx, entry), timeout=5.0,
++                                                      ready_status_only=True, stopped_fault_without_decoder=True)
++                            actions.state['stop_confirmed'] = True
++                            self.confirm_paused_grip_stop(idx, slot, dict(receipt, slot=slot))
++                        except Exception as stop_error:
++                            raise RuntimeError('%s；停止未确认: %s' % (original, stop_error)) from stop_error
++                    raise
++                finally:
++                    self.active = None
++        except Exception as exc:
++            entry['error'] = str(exc)
++            logging.info('[multiACE] paused inlet grip %d/%d: %s', idx, slot, exc)
+ 
+     def run(self, idx, slot, entry, epoch, event=None):
+         a, actions = self.ace, self.ace._slot_actions
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -197,7 +197,10 @@
+         if ps is None or getattr(ps, 'state', '').lower() not in ('standby', 'complete', 'cancelled', 'error'):
+             # Only inlet ejection of an unloaded, independent path can run
+             # during a print. RFID sweeps and hot-end unload retain their gate.
+-            if not for_eject or not self._printing_service(idx, slot):
++            policy = getattr(a, '_insert_policy', None)
++            allows = getattr(policy, 'allows_paused_check', None)
++            paused_grip = own and callable(allows) and allows(idx, slot) is True
++            if not paused_grip and (not for_eject or not self._printing_service(idx, slot)):
+                 raise RuntimeError('打印正在使用或预留此料路，或该料路尚未确认独立')
+         if not a._is_v2_idx(idx) or not a._connected_per_ace.get(idx) or idx in a._fw_update_hold:
+             raise RuntimeError('ACE 离线或不支持此操作')
+@@ -773,6 +776,10 @@
+             self._arm_route_hold(idx, slot)
+         if own_faults and not guard.clear_verified(generation, idx, slot, self._eject_identity):
+             raise RuntimeError('STOP 故障代次、原 UID 或持久记录变化，保留故障等待复核')
++        policy = getattr(self.ace, '_insert_policy', None)
++        confirm = getattr(policy, 'confirm_paused_grip_stop', None)
++        if callable(confirm):
++            confirm(idx, slot, self._last_eject_stop)
+         if require_target_clear:
+             self.ace._require_no_stop_fault(idx=idx, slot=slot)
+ 
+--- a/klipper/extras/ace_error_recovery.py
++++ b/klipper/extras/ace_error_recovery.py
+@@ -72,7 +72,7 @@
+                 getattr(a, '_ace_mode', None), tuple(a._rfid_route_heads(idx, slot) or ()),
+                 tuple(sorted((head, repr(source)) for head, source in a._head_source.items())))
+ 
+-    def _feed_in_progress(self):
++    def _feed_in_progress(self, ignore_gcode_mutex=False):
+         lookup = self.ace.printer.lookup_object
+         # Native FEED_AUTO holds its channel while moving. The machine state
+         # also covers the handoff between its prepare and doing commands.
+@@ -83,9 +83,9 @@
+         if manager is not None and str(manager.get_status().get('main_state')) in FILAMENT_MACHINE_STATES:
+             return True
+         gcode = lookup('gcode', None)
+-        return gcode is not None and gcode.get_mutex().test()
+-
+-    def _is_busy(self):
++        return not ignore_gcode_mutex and gcode is not None and gcode.get_mutex().test()
++
++    def _is_busy(self, ignore_gcode_mutex=False):
+         a = self.ace
+         path = getattr(a, '_path_calibration', None)
+         operations = getattr(a, '_path_operations', None)
+@@ -97,7 +97,8 @@
+                 or getattr(a, '_in_internal_load_head', False)
+                 or getattr(a, '_tag_read_busy', False)
+                 or getattr(a, '_gen1_manual_busy', False)
+-                or self._feed_in_progress()
++                or (self._feed_in_progress(ignore_gcode_mutex=True) if ignore_gcode_mutex
++                    else self._feed_in_progress())
+                 or path is not None and path.task.get('active')
+                 or getattr(a, '_calibration_unload', {}).get('active')
+                 or (getattr(a, '_calibration', {}) or {}).get('state', 'idle')
+--- a/klipper/extras/ace_manual_measure.py
++++ b/klipper/extras/ace_manual_measure.py
+@@ -700,7 +700,7 @@
+ 
+     def begin(self):
+         a, actions = self.ace, self.ace._slot_actions
+-        if (str((a._ace_models.get(0) or ('', ''))[1]).upper() not in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O') or
++        if (str((a._ace_models.get(0) or ('', ''))[1]).upper() not in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O', 'V1.2.03O') or
+             len(a._ace_devices) < 1 or str(a._ace_devices[0]) != PORT):
+             raise MeasurementUnavailable('unverified RF route')
+         a._manual_measure_owner = self.owner
+@@ -765,7 +765,7 @@
+     from .ace_filament_approximation import estimate_remaining
+     a, actions = ace, ace._slot_actions
+     model = (a._ace_models.get(0) or ('', ''))[1]
+-    if (str(model).upper() not in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O') or len(a._ace_devices) < 1 or
++    if (str(model).upper() not in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O', 'V1.2.03O') or len(a._ace_devices) < 1 or
+         str(a._ace_devices[0]) != PORT):
+         raise MeasurementUnavailable('unverified measurement device')
+     owner = MeasureOwner(a, transport, epoch, uid, seq)
+--- a/klipper/extras/ace_v2_standstill.py
++++ b/klipper/extras/ace_v2_standstill.py
+@@ -67,7 +67,7 @@
+                     timeout=3.0, monitor=None, ready_zero_mm=None,
+                     ready_without_decoder=False, stopped_assist_without_decoder=False,
+                     trace_failure=False, stock_unload=False, assist_handoff=False,
+-                    ready_status_only=False):
++                    ready_status_only=False, stopped_fault_without_decoder=False):
+     """Return a target-lane stillness receipt; retain a fault on uncertainty.
+ 
+ Other slots may keep assisting their own toolheads. This receipt says nothing
+@@ -227,7 +227,9 @@
+                     except DecoderUnavailable as exc:
+                         if state == 'assist_error' and stopped_assist_without_decoder:
+                             keys = assist_stop_keys(query('get_key_state', 73)['result'], slot)
+-                        elif state != 'ready' or not ready_without_decoder:
++                        elif not ((state == 'ready' and ready_without_decoder)
++                                  or (state in STOPPED and state != 'ready'
++                                      and stopped_fault_without_decoder)):
+                             raise
+                         motor_counters = exc.motor_counters
+                 after = lane_state(query('get_status', 6))

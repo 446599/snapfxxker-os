@@ -1,0 +1,58 @@
+--- a/klipper/extras/ace_feed_supervisor.py
++++ b/klipper/extras/ace_feed_supervisor.py
+@@ -32,6 +32,8 @@
+     READY_GUARD_S = 4.0
+     STARTUP_RESET_S = 1.0
+     STARTUP_ZERO_MOTOR_MM = 8
++    # ACE V2 can report six motor steps of offset at zero motor distance.
++    STARTUP_ZERO_STEPS = (0, 6)
+     STOP_VERIFY_S = 3.0
+     BACKOFF_MM = 20
+     BACKOFF_SPEED = 10
+@@ -131,7 +133,7 @@
+                 and response.get('_v2_payload_valid') is True
+                 and str(response.get('msg', '')).strip().upper() != 'FORBIDDEN')
+ 
+-    def _decode(self, response):
++    def _decode(self, response, *, at_feed_start=False):
+         if not self._ok(response, 76):
+             raise FeedSupervisionError('telemetry_invalid', '送料编码器响应无效')
+         result = response.get('result')
+@@ -147,12 +149,13 @@
+                for name in ('length', 'steps', 'decoder')):
+             raise FeedSupervisionError('telemetry_invalid', '送料计数格式无效')
+         if row.get('_decoder_present') is not True:
+-            # Some V2 units omit protobuf zero just after the counter resets.
+-            # Defer this frame without advancing the telemetry/progress clocks
+-            # or treating the implicit value as a measured travel origin.
++            # Proto3 omits zero. Use it as the origin only in the fresh
++            # start reply with a zero motor distance and the native step offset.
+             if (row.get('_decoder_present') is False and row['decoder'] == 0
+                     and row['length'] <= self.STARTUP_ZERO_MOTOR_MM
+                     and self.ace.reactor.monotonic() - self.started_at <= self.STARTUP_RESET_S):
++                if at_feed_start and row['length'] == 0 and row['steps'] in self.STARTUP_ZERO_STEPS:
++                    return (0., 0., row['steps'])
+                 return None
+             raise FeedSupervisionError('decoder_unavailable', '送料编码器未提供有效数值')
+         decoder = row['decoder'] - (1 << 64) if row['decoder'] >= 1 << 63 else row['decoder']
+@@ -315,14 +318,17 @@
+                         or type(response.get('id')) is not int
+                         or response['id'] != request['id']):
+                     raise FeedSupervisionError('telemetry_invalid', '送料遥测不是本次请求的响应')
+-                sample = self._decode(response)
++                sample = self._decode(response, at_feed_start=True)
++                now = self.ace.reactor.monotonic()
+                 logging.info('[multiACE feed-endpoint] start ACE=%d slot=%d head=%d speed=%.1f sample=%s',
+                              self.idx, self.slot, self.head, self.speed, sample)
+                 # The previous command can still be visible immediately after ACK.
+-                if sample != (0, 0, 0) or self.ace.reactor.monotonic() - self.started_at > self.STARTUP_RESET_S:
++                if (sample is None or sample[:2] != (0, 0)
++                        or sample[2] not in self.STARTUP_ZERO_STEPS
++                        or now - self.started_at > self.STARTUP_RESET_S):
+                     self._measurement_issue('起点未取得本次送料的零位读数')
+                     return
+-                self._observe(sample, self.ace.reactor.monotonic())
++                self._observe(sample, now)
+             except (FeedSupervisionError, TypeError, ValueError) as exc:
+                 self._measurement_issue(str(exc))
+         try:

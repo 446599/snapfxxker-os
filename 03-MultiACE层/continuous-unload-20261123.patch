@@ -1,0 +1,919 @@
+diff --git a/klipper/extras/ace_fixed_park.py b/klipper/extras/ace_fixed_park.py
+--- a/klipper/extras/ace_fixed_park.py
++++ b/klipper/extras/ace_fixed_park.py
+@@ -165,12 +165,13 @@
+         return None
+ 
+     def _move(self, length, speed, *, edge=None, stop_at=None,
+-              allow_edge_miss=False, wait_native=False, material_limit_mm=None, commanded=False):
++              allow_edge_miss=False, wait_native=False, material_limit_mm=None, commanded=False,
++              head_clear_mm=None):
+         """One finite pulse, or stop sooner at a witnessed switch transition."""
+         start_pin = self.check()
+         if edge is not None and start_pin is edge:
+             raise RuntimeError('喷头开关已在目标侧，无法建立本次边缘')
+-        if edge is None and start_pin is not False:
++        if edge is None and head_clear_mm is None and start_pin is not False:
+             raise RuntimeError('长退开始前喷头尚未清空')
+         if not commanded and edge is None and self.forward_decoder_sign is None:
+             raise RuntimeError('长退前原槽编码器方向未确认')
+@@ -185,7 +186,7 @@
+             material_limit_mm = motor_limit_mm
+         params = {'index': self.slot, 'length': length, 'speed': speed}
+         request = {'method': 'unwind_filament',
+-                   'params': params, '_fixed_park_motion': self, '_park_require_empty': edge is None,
++                   'params': params, '_fixed_park_motion': self, '_park_require_empty': edge is None and head_clear_mm is None,
+                    '_insert_stop_transport': self.transport}
+         replies = []
+ 
+@@ -197,11 +198,16 @@
+         self.pending = request
+         start = self.reactor.monotonic()
+         observed = 0.0
++        clear_deadline = start + head_clear_mm / speed if head_clear_mm is not None else None
++        head_cleared = not start_pin
++        saw_rollback = False
+         try:
+             if self.ace.send_request_to(self.idx, request, reply) is False:
+                 raise RuntimeError('ACE 未受理本次回停动作')
+             while not replies and self.reactor.monotonic() < start + 1.5:
+-                self.check()
++                pin = self.check()
++                if clear_deadline is not None and pin and self.reactor.monotonic() >= clear_deadline:
++                    raise ParkAckUnavailable('短退范围内未收到退料确认，已停止')
+                 self.reactor.pause(self.reactor.monotonic() + self.POLL_S)
+             if not replies:
+                 raise ParkAckUnavailable('ACE 未确认本次回停动作')
+@@ -211,7 +217,8 @@
+                 raise ParkAckUnavailable('ACE 未确认本次回停动作')
+             now = progress_at = poll_at = self.reactor.monotonic()
+             end = now + length / speed + .55
+-            ready_poll_at = end
++            nominal_end = end
++            ready_poll_at = now if head_clear_mm is not None else end
+             if wait_native:
+                 end += max(2.0, length / speed * .40)
+             poll_gate_at = now + .8
+@@ -219,14 +226,26 @@
+             while True:
+                 pin = self.check()
+                 now = self.reactor.monotonic()
+-                if edge is not None and pin is edge:
++                if head_clear_mm is not None and not head_cleared:
++                    if not pin:
++                        if clear_since is None:
++                            clear_since = now
++                        if now - clear_since >= self.FALLING_EDGE_SETTLE_S:
++                            head_cleared = True
++                            logging.info('[multiACE] continuous return head=%d cleared; reverse continues', self.head + 1)
++                    else:
++                        clear_since = None
++                    if not head_cleared and (now >= clear_deadline and
++                            (clear_since is None or clear_since > clear_deadline)):
++                        raise RuntimeError('短退范围内喷头仍有料，已停止退料')
++                elif edge is not None and pin is edge:
+                     if clear_since is None:
+                         clear_since = now
+                     elif now - clear_since >= self.FALLING_EDGE_SETTLE_S:
+                         break
+                 else:
+                     clear_since = None
+-                if edge is None and pin:
++                if edge is None and head_cleared and pin:
+                     raise RuntimeError('长退期间喷头开关重新触发')
+                 if now >= end:
+                     if commanded:
+@@ -236,19 +255,26 @@
+                     break
+                 # At the switch, poll the pin without a serial round trip.
+                 # The bounded long move also checks the fresh inlet switch.
+-                if edge is None and now >= poll_gate_at:
++                if edge is None and (head_clear_mm is None or head_cleared) and now >= poll_gate_at:
+                     self._gate()
+                     poll_gate_at = now + .8
+-                if wait_native and now >= ready_poll_at:
++                if wait_native and (head_clear_mm is None or head_cleared) and now >= ready_poll_at:
+                     ready_poll_at = now + .55
+                     try:
+                         state = self.actions._lane_states(self.idx, monitor=self.check).get(self.slot)
+                     except RuntimeError:
+                         self.check()
+                     else:
+-                        if state == 'ready':
+-                            break
+-                        if state != 'rollback':
++                        if state == 'rollback':
++                            saw_rollback = True
++                        elif state == 'ready':
++                            if head_clear_mm is None:
++                                break
++                            if saw_rollback and now + .75 < nominal_end - .55:
++                                raise RuntimeError('原槽提前结束退料，未确认回停')
++                            if now >= nominal_end and (saw_rollback or start_pin):
++                                break
++                        else:
+                             raise RuntimeError('长退期间原槽状态异常')
+                 if stop_at is not None and now >= poll_at:
+                     sample = self._feed_sample()
+@@ -295,29 +321,42 @@
+                      length, speed, observed, distance, motor)
+         return distance
+ 
+-    def run(self, target, short_commanded_mm, speed, *, direct=False, measured=False):
++    def run(self, target, short_commanded_mm, speed, *, direct=False, measured=False,
++            head_clear_mm=None, handoff=None):
+         a = self.ace
+         if getattr(a, '_fixed_park_motion', None) is not None:
+             raise RuntimeError('另一料路正在回停')
+         a._fixed_park_motion = self
+         try:
+-            if not direct and self.check() is not False:
++            initial_pin = self.check()
++            if head_clear_mm is None and not direct and initial_pin is not False:
+                 raise RuntimeError('喷头尚未清空，未开始回停')
+             a._v2_active_rev_assist = False
+             a._clear_fa_cache_for(self.idx, self.slot)
+             commanded = not (direct or measured)
+-            self._stop(allow_zero=True, ready_without_decoder=True, ready_status_only=commanded)
++            if head_clear_mm is not None:
++                if (not commanded or not isinstance(handoff, dict)
++                        or handoff.get('transport') is not self.transport
++                        or handoff.get('identity') != self.identity
++                        or (handoff.get('ace'), handoff.get('slot'), handoff.get('head')) !=
++                           (self.idx, self.slot, self.head)
++                        or handoff.get('slot_status') not in ('ready', 'assist_error')):
++                    raise RuntimeError('连续退料前未确认原槽已交接')
++                self.receipt = handoff
++            else:
++                self._stop(allow_zero=True, ready_without_decoder=True, ready_status_only=commanded)
++                if self.receipt['slot_status'] == 'assist_error':
++                    raise ParkEncoderUnavailable('原槽已停止助送，转普通有限回退')
++                if self.receipt['slot_status'] != 'ready':
++                    raise RuntimeError('原槽未就绪，未开始回停')
+             self._gate()
+-            if self.receipt['slot_status'] == 'assist_error':
+-                raise ParkEncoderUnavailable('原槽已停止助送，转普通有限回退')
+-            if self.receipt['slot_status'] != 'ready':
+-                raise RuntimeError('原槽未就绪，未开始回停')
+             if commanded:
+                 # The native short pull already cleared the head. Debit every
+                 # completed short move before issuing one finite reverse.
+                 remaining = max(0, math.floor(target - short_commanded_mm))
+                 if remaining:
+-                    self._move(remaining, speed, wait_native=True, commanded=True)
++                    self._move(remaining, speed, wait_native=True, commanded=True,
++                               head_clear_mm=head_clear_mm)
+                 a._verify_unload_park(self.idx, self.slot, self.head)
+                 if self.check() is not False:
+                     raise RuntimeError('回停完成后喷头重新检测到料')
+diff --git a/klipper/extras/ace_slot_actions.py b/klipper/extras/ace_slot_actions.py
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -1,10 +1,11 @@
+ """Bounded, fail-closed ACE2 slot ejection; no heating or head motion."""
+ import logging
++import math
+ import secrets
+ from .ace_flow_guard import (dynamic_route_blocked, eject_peer_source,
+                              raw_head_state, source_conflict)
+ from .ace_v2_standstill import (DECODER_UNAVAILABLE_MESSAGE, DECODER_UNAVAILABLE_REASONS,
+-                                assist_stop_keys)
++                                assist_stop_keys, stop_and_verify)
+ STEP_MM = 20
+ SPEED_MM_S = 80
+ MAX_MM = 5000  # hard command budget; inlet sensor ends the move
+@@ -114,6 +115,9 @@
+         self._recovery_owner = None
+         self._route_token = None
+         self._prepare_command = None
++        self._continuous_exit = None
++        self._continuous_head = None
++        self._continuous_attempted = False
+         ace.printer.lookup_object('webhooks').register_endpoint('multiace/slot_eject_cancel', self.cancel_endpoint)
+         ace.printer.lookup_object('webhooks').register_endpoint('multiace/slot_operation_cancel', self.operation_cancel_endpoint)
+ 
+@@ -447,7 +451,10 @@
+                     continue
+                 pin = raw_head_state(self.ace, head)
+                 source = self.ace._head_source.get(head)
+-                if pin is not False or (isinstance(source, dict)
++                loaded_handoff = (head == getattr(self, '_continuous_head', None) and pin is True
++                                  and isinstance(source, dict)
++                                  and (source.get('ace_index'), source.get('slot')) == (idx, slot))
++                if (pin is not False and not loaded_handoff) or (isinstance(source, dict)
+                         and (source.get('ace_index'), source.get('slot')) != (idx, slot)):
+                     return False
+             return True
+@@ -974,13 +981,16 @@
+                 command = 'ACE_UNLOAD_HEAD HEAD=%d' % head
+                 self._prepare_command = a.gcode.create_gcode_command(
+                     'ACE_UNLOAD_HEAD', command, {'HEAD': str(head)})
++                self._continuous_exit = (sequence, idx, slot, head, transport, identity)
++                self._continuous_attempted = False
+                 exit_without_park = False
+                 try:
+                     a.cmd_ACE_UNLOAD_HEAD(self._prepare_command)
+                 except Exception:
+                     source = a._head_source.get(head)
+                     exit_without_park = (
+-                        getattr(a, '_last_unload_reason', None) == 'distance_unknown'
++                        not self._continuous_attempted
++                        and getattr(a, '_last_unload_reason', None) == 'distance_unknown'
+                         and raw_head_state(a, head) is False
+                         and a._serials.get(idx) is transport
+                         and a._location_identity(idx) == identity
+@@ -991,6 +1001,9 @@
+                         raise
+                 finally:
+                     self._prepare_command = None
++                    self._continuous_exit = None
++                if self.state.get('state') == 'complete' and self.state.get('ejected') is True:
++                    return
+                 if self.cancel:
+                     self.state.update(state='cancelled', message='已停止后续退出 ACE，请核对喷头状态')
+                     return
+@@ -1015,6 +1028,161 @@
+ 
+     def start(self, gcmd):
+         return self._start(gcmd)
++
++    def try_continuous_exit(self, idx, slot, head, short_mm):
++        """Take over only the currently prepared screen EXIT; never replay motion."""
++        a = self.ace
++        prepared = self._continuous_exit
++        if (prepared is None or self._prepare_command is None
++                or self.state.get('state') != 'preparing'
++                or self.state.get('kind') != 'eject'
++                or prepared[:4] != (self.state.get('seq'), idx, slot, head)
++                or (self.state.get('ace'), self.state.get('slot')) != (idx, slot)):
++            return False
++        sequence, _, _, _, transport, identity = prepared
++        # The native tip pull may already have crossed the head switch. Let
++        # the stock unload path finish, without claiming or issuing motion.
++        if raw_head_state(a, head) is False:
++            return False
++        recovery = getattr(a, '_error_recovery', None)
++        owner = None
++        self._motor_pending = False
++        self._last_eject_stop = None
++        self._eject_identity = None
++        self._route_token = None
++        self._continuous_head = None
++        try:
++            if (type(short_mm) not in (int, float) or not math.isfinite(short_mm)
++                    or short_mm <= 0):
++                raise RuntimeError('喷头退料距离无效')
++            if self.cancel:
++                raise RuntimeError('本次操作已取消')
++            if recovery is None:
++                raise RuntimeError('原槽恢复授权不可用')
++            operations = getattr(a, '_path_operations', None)
++            if operations is not None and operations.handles(idx, slot):
++                raise RuntimeError('受控料路不支持此连续退出')
++            if a._serials.get(idx) is not transport or a._location_identity(idx) != identity:
++                raise RuntimeError('原 ACE 已断开或更换')
++            self._check(idx, slot, transport, own=True, for_eject=True,
++                        allow_target_loaded=True)
++            if raw_head_state(a, head) is not True:
++                raise RuntimeError('连续退出前喷头到料信号未知或已释放')
++            owner = recovery.begin(idx, slot)
++            self._recovery_owner = owner
++            self._bind_legacy_route(idx, slot, transport, allow_loaded=True)
++            if self._eject_heads != (head,) or self._eject_peers:
++                raise RuntimeError('连续退出要求唯一原喷头')
++            deadline = a.reactor.monotonic() + MAX_SECONDS
++            def preflight_monitor():
++                self._original_monitor(idx, slot, transport, deadline, allow_target_loaded=True)
++            proof = stop_and_verify(a, idx, slot, transport=transport, identity=identity,
++                                    monitor=preflight_monitor, stock_unload=True,
++                                    assist_handoff=True, ready_without_decoder=True,
++                                    trace_failure=True)
++            if proof['slot_status'] not in ('ready', 'assist_error'):
++                raise RuntimeError('原槽 STOP 或 assist 状态不允许连续退出')
++            a._require_no_stop_fault(idx=idx, slot=slot)
++            preflight_monitor()
++            if raw_head_state(a, head) is False:
++                return False
++            if self._gate(idx, slot, monitor=preflight_monitor) is not True:
++                raise RuntimeError('连续退出前原槽入口无料')
++            if raw_head_state(a, head) is False:
++                return False
++            self._arm_route_hold(idx, slot)
++            self.state.update(state='running', message='正在连续退出喷头和 ACE', limit=MAX_MM)
++            self._continuous_head = head
++            motion_start = a.reactor.monotonic()
++            head_deadline = motion_start + min(float(short_mm), 140.0) / SPEED_MM_S
++            motion_deadline = min(deadline, motion_start + MAX_MM / SPEED_MM_S + 15.0)
++            head_clear_at = None
++            head_clear = False
++
++            def motion_check():
++                nonlocal head_clear_at, head_clear
++                self._original_monitor(idx, slot, transport, motion_deadline,
++                                       allow_removal=True, allow_target_loaded=True)
++                now = a.reactor.monotonic()
++                pin = raw_head_state(a, head)
++                if type(pin) is not bool:
++                    raise RuntimeError('喷头传感器不可用')
++                if not head_clear:
++                    if now >= head_deadline:
++                        raise RuntimeError('喷头未在短退时限内稳定释放')
++                    if pin is False:
++                        if head_clear_at is None:
++                            head_clear_at = now
++                        elif now - head_clear_at >= .04:
++                            head_clear = True
++                    elif head_clear_at is not None:
++                        raise RuntimeError('喷头到料信号抖动，连续退出已停止')
++                elif pin is not False:
++                    raise RuntimeError('喷头到料信号重新触发')
++                if not head_clear and (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot)) != self._eject_epoch:
++                    raise RuntimeError('喷头释放前原槽插料代次改变')
++
++            self._continuous_attempted = True
++            logging.info('[multiACE] continuous EXIT start ACE=%d slot=%d head=%d limit=%dmm speed=%dmm/s',
++                         idx + 1, slot + 1, head, MAX_MM, SPEED_MM_S)
++            self._send_eject_motion(idx, slot, MAX_MM, SPEED_MM_S, motion_check)
++            while not head_clear:
++                motion_check()
++                a.reactor.pause(min(head_deadline, a.reactor.monotonic() + .02))
++            seen_motion = False
++            while True:
++                motion_check()
++                state = self._lane_states(idx, monitor=motion_check).get(slot)
++                gate = self._gate(idx, slot, monitor=motion_check)
++                startup = a.reactor.monotonic() - motion_start <= MOTION_STARTUP_SECONDS
++                if state not in ('ready', 'rollback') and not (
++                        startup and not seen_motion and proof['slot_status'] == 'assist_error'
++                        and state == 'assist_error'):
++                    raise RuntimeError('目标槽退料实际错误: %s' % state)
++                if not gate:
++                    if state not in ('ready', 'rollback'):
++                        raise RuntimeError('入口释放时目标槽状态异常: %s' % state)
++                    logging.info('[multiACE] continuous EXIT inlet clear ACE=%d slot=%d head=%d',
++                                 idx + 1, slot + 1, head)
++                    break
++                if (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot)) != self._eject_epoch:
++                    raise RuntimeError('入口仍有料但原槽插料代次改变')
++                seen_motion = seen_motion or state == 'rollback'
++                if state == 'ready' and seen_motion:
++                    raise RuntimeError('退料已停止但入口仍有料')
++                a.reactor.pause(min(motion_deadline, a.reactor.monotonic() + .05))
++            gate = self._eject_stop_ready(idx, slot, transport, motion_start, allow_fault=True)
++            self._motor_pending = False
++            if gate or self._last_eject_stop.get('status') != 'ready':
++                raise RuntimeError('STOP 后入口或目标槽状态未确认')
++            motion_check()
++            self._commit_ejected(idx, slot, transport)
++            logging.info('[multiACE] continuous EXIT complete ACE=%d slot=%d head=%d STOP confirmed',
++                         idx + 1, slot + 1, head)
++            self.state.update(state='complete', message='耗材已退出 ACE 入口', stopped=True,
++                              gate=False, ejected=True, path_cleared=True,
++                              source_retained=False, slot_status='ready')
++            return True
++        except Exception as exc:
++            self.state.update(state='cancelled' if self.cancel else 'error', message=str(exc))
++            if self._motor_pending:
++                try:
++                    self._eject_stop_ready(idx, slot, transport, allow_fault=True)
++                except Exception as stop_exc:
++                    self.state.update(state='error', stopped=False,
++                                      message='%s；停止未确认: %s' % (exc, stop_exc))
++                    a._latch_stop_fault(idx, slot, str(stop_exc), identity=self._eject_identity)
++            raise
++        finally:
++            self._continuous_head = None
++            self._motor_pending = False
++            self._eject_pending = self._eject_lease = None
++            self._eject_sources = None
++            self._eject_peers = {}
++            self._eject_params = None
++            self._recovery_owner = None
++            if recovery is not None and owner is not None:
++                recovery.end(owner)
+ 
+     def _require_exit_source(self, idx, slot):
+         a = self.ace
+diff --git a/klipper/extras/filament_feed_ace.py b/klipper/extras/filament_feed_ace.py
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -1108,12 +1108,10 @@
+             ace.wait_ace_ready_on(idx, slot=slot, unload_stop=unload_stop)
+         return unload_stop
+ 
+-    def _finish_fixed_unload(self, ch, idx, slot, short_commanded_mm, speed, *, direct=False):
++    def _finish_fixed_unload(self, ch, idx, slot, short_commanded_mm, speed, *, continuous=False):
+         ace = self.ace
+         head = self.filament_ch[ch]
+         operations = getattr(ace, '_path_operations', None)
+-        if direct:
+-            return False
+         foreground = (getattr(ace, '_swap_in_progress', False)
+                       and getattr(ace, '_swap_phase', None) == 'unload')
+         if (not ace._is_v2_idx(idx) or (not foreground and not ParkMotion.idle(ace))
+@@ -1121,6 +1119,15 @@
+                 or (operations is not None and operations.handles(idx, slot))
+                 or getattr(ace, '_calibration_unload', {}).get('active')):
+             return False
++        if continuous:
++            if not getattr(ace, 'unload_gpio', True) or short_commanded_mm <= 0:
++                return False
++            actions = getattr(ace, '_slot_actions', None)
++            exit_run = getattr(actions, 'try_continuous_exit', None)
++            if exit_run is not None and exit_run(idx, slot, head, short_commanded_mm):
++                return True
++            if not unload_source_matches(ace, idx, slot, head):
++                return False
+         if foreground and (not unload_source_matches(ace, idx, slot, head)
+                 or not ace._source_insertion_matches(ace._head_source[head], idx, slot)):
+             raise RuntimeError('换料回停的原来源或插料代次未确认')
+@@ -1142,12 +1149,17 @@
+             target = tracking.fixed_park_target(head, idx, slot, motion.scope)
+             if target is None:
+                 return False
+-        # Direct edge parking and measured corrections depend on in-flight
+-        # decoder feedback. Use the native short probe first, then one finite
+-        # commanded return from the confirmed-empty head.
++        handoff = None
++        if continuous:
++            handoff = self._wait_before_unload_retract(idx, slot, head=head)
++            if handoff is None:
++                return False
+         tracking.begin_fixed_park(head, idx, slot)
+         try:
+-            motion.run(target, short_commanded_mm, speed)
++            if continuous:
++                motion.run(target, 0, speed, head_clear_mm=short_commanded_mm, handoff=handoff)
++            else:
++                motion.run(target, short_commanded_mm, speed)
+             tracking.finish_commanded_park(head, idx, slot)
+         except ParkEncoderUnavailable as exc:
+             tracking.finish_fixed_park_probe(head, idx, slot, 0)
+@@ -3268,16 +3280,12 @@
+                                     ace=self.ace._disp(_gate_ace),
+                                     slot=self.ace._disp(_ace_slot)))
+                             _short_total = 0.0
+-                            if keep_in_ace and not _gate_empty and _return_mm is not None:
+-                                try:
+-                                    fixed_parked = self._finish_fixed_unload(
+-                                        ch, self.ace._active_device_index, _ace_slot,
+-                                        _short_retract, _retract_speed, direct=True)
+-                                except ParkEdgeMissed as exc:
+-                                    _short_total += exc.retracted_mm
+-                                if fixed_parked:
+-                                    unload_ok = True
+-                                    unload_max = 0
++                            if (_hot_park_context is None and not _gate_empty and unload_max > 0
++                                    and self._finish_fixed_unload(ch, self.ace._active_device_index,
++                                                                _ace_slot, _short_retract,
++                                                                _retract_speed, continuous=True)):
++                                fixed_parked = unload_ok = True
++                                unload_max = 0
+                             _hot_short_start = self.reactor.monotonic()
+                             for unload_attempt in range(unload_max):
+                                 self.ace._check_calibration_unload_cancel()
+@@ -3743,16 +3751,12 @@
+                                     ace=self.ace._disp(_gate_ace),
+                                     slot=self.ace._disp(_ace_slot)))
+                             _short_total = 0.0
+-                            if keep_in_ace and not _gate_empty and _return_mm is not None:
+-                                try:
+-                                    fixed_parked = self._finish_fixed_unload(
+-                                        ch, self.ace._active_device_index, _ace_slot,
+-                                        _short_retract, _retract_speed, direct=True)
+-                                except ParkEdgeMissed as exc:
+-                                    _short_total += exc.retracted_mm
+-                                if fixed_parked:
+-                                    unload_ok = True
+-                                    unload_max = 0
++                            if (_hot_park_context is None and not _gate_empty and unload_max > 0
++                                    and self._finish_fixed_unload(ch, self.ace._active_device_index,
++                                                                _ace_slot, _short_retract,
++                                                                _retract_speed, continuous=True)):
++                                fixed_parked = unload_ok = True
++                                unload_max = 0
+                             _hot_short_start = self.reactor.monotonic()
+                             for unload_attempt in range(unload_max):
+                                 self.ace._check_calibration_unload_cancel()
+diff --git a/tests/test_continuous_exit.py b/tests/test_continuous_exit.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_continuous_exit.py
+@@ -0,0 +1,328 @@
++"""Continuous screen EXIT: single motion, bounded head edge and fail-closed cleanup."""
++from importlib import import_module
++from types import SimpleNamespace
++import unittest
++from unittest.mock import Mock, patch
++
++from test_print_assist_recovery import PACKAGE, Reactor
++
++actions = import_module(PACKAGE + '.ace_slot_actions')
++
++
++class ContinuousExit(unittest.TestCase):
++    def setUp(self):
++        self.clock = Reactor()
++        self.transport = object()
++        self.identity = ('port', (1, 2, 3))
++        self.source = {1: {'ace_index': 0, 'slot': 1, 'load_failed': False}}
++        self.pin = True
++        self.lane = 'rollback'
++        self.gate = True
++        self.start = None
++        self.moves = 0
++        self.stops = 0
++        self.commit = 0
++        self.behavior = 'normal'
++        self.owner = object()
++        self.ace = SimpleNamespace(
++            reactor=self.clock, _serials={0: self.transport},
++            _location_identity=lambda idx: self.identity,
++            _head_source=self.source, _insert_epochs={(0, 1): 7},
++            _rfid_route_heads=lambda idx, slot: [1], _ace_mode='multi',
++            _require_no_stop_fault=lambda **kw: None,
++            _error_recovery=SimpleNamespace(begin=lambda *args: self.owner, end=Mock()),
++            _latch_stop_fault=Mock())
++        self.action = a = actions.SlotActions.__new__(actions.SlotActions)
++        a.ace = self.ace
++        a.state = dict(state='preparing', kind='eject', seq=2, ace=0, slot=1)
++        a.cancel = False
++        a._prepare_command = object()
++        a._continuous_exit = (2, 0, 1, 1, self.transport, self.identity)
++        a._continuous_attempted = False
++        a._check = self.check
++        a._bind_legacy_route = self.bind
++        a._arm_route_hold = Mock()
++        a._eject_stop_ready = self.stop
++        a._send_eject_motion = self.move
++        a._lane_states = self.states
++        a._gate = self.inlet
++        a._commit_ejected = self.finish
++        self.sensor = patch.object(actions, 'raw_head_state', side_effect=lambda ace, head: self.pin)
++        self.sensor.start()
++        self.addCleanup(self.sensor.stop)
++        self.handoff = patch.object(actions, 'stop_and_verify', side_effect=self.preflight)
++        self.stop_handoff = self.handoff.start()
++        self.addCleanup(self.handoff.stop)
++        self.clock.on_pause = self.tick
++
++    def preflight(self, ace, idx, slot, **kw):
++        self.assertTrue(kw['stock_unload'])
++        self.assertTrue(kw['assist_handoff'])
++        kw['monitor']()
++        self.stops += 1
++        return {'slot_status': 'assist_error'}
++
++    def check(self, idx, slot, transport=None, **kwargs):
++        if transport is not None and self.ace._serials.get(idx) is not transport:
++            raise RuntimeError('reconnected')
++
++    def bind(self, idx, slot, transport, **kw):
++        a = self.action
++        a._eject_identity = self.identity
++        a._eject_epoch = 7
++        a._eject_heads = (1,)
++        a._eject_peers = {}
++        a._eject_mode = 'multi'
++        a._eject_sources = {1: dict(self.source[1])}
++        a._eject_lease = (idx, slot, transport)
++
++    def stop(self, idx, slot, transport, *args, **kwargs):
++        self.stops += 1
++        if self.behavior == 'stop_error' and self.stops > 1:
++            raise RuntimeError('STOP lost')
++        self.action._last_eject_stop = dict(status='assist_error' if self.stops == 1 else 'ready',
++            gate=self.stops == 1, assist_keys=1 << 4, samples=3)
++        return self.stops == 1
++
++    def move(self, idx, slot, length, speed, monitor):
++        monitor()
++        self.moves += 1
++        self.action._motor_pending = True
++        self.start = self.clock.monotonic()
++        if self.behavior == 'ack_lost':
++            raise RuntimeError('ACK lost')
++        # Model delayed ACK: monitor keeps running while the command is in flight.
++        for _ in range(10):
++            self.clock.pause(self.clock.monotonic() + .02)
++            monitor()
++
++    def tick(self):
++        if self.start is None:
++            return
++        elapsed = self.clock.monotonic() - self.start
++        if self.behavior != 'missed' and elapsed >= .10:
++            self.pin = False
++        if self.behavior == 'bounce' and elapsed >= .12:
++            self.pin = True
++        if self.behavior == 'cancel' and elapsed >= .12:
++            self.action.cancel = True
++        if self.behavior == 'reconnect' and elapsed >= .12:
++            self.ace._serials[0] = object()
++        if self.behavior == 'epoch' and elapsed >= .12:
++            self.ace._insert_epochs[(0, 1)] = 8
++        if elapsed >= .35:
++            self.gate = False
++            if self.behavior == 'natural_removal':
++                self.ace._insert_epochs[(0, 1)] = 8
++        if self.behavior == 'fault' and elapsed >= .2:
++            self.lane = 'motor_error'
++
++    def states(self, idx, monitor):
++        monitor()
++        return {1: self.lane}
++
++    def inlet(self, idx, slot, monitor):
++        monitor()
++        return self.gate
++
++    def finish(self, idx, slot, transport):
++        self.assertFalse(self.pin)
++        self.assertFalse(self.gate)
++        self.assertEqual(self.stops, 2)
++        self.commit += 1
++
++    def run_exit(self):
++        return self.action.try_continuous_exit(0, 1, 1, 150)
++
++    def test_single_motion_to_confirmed_stop(self):
++        self.assertTrue(self.run_exit())
++        self.assertEqual((self.moves, self.stops, self.commit), (1, 2, 1))
++        self.assertTrue(self.action.state['ejected'])
++        self.ace._error_recovery.end.assert_called_once_with(self.owner)
++
++    def test_natural_removal_epoch_is_accepted_at_empty_gate(self):
++        self.behavior = 'natural_removal'
++        self.assertTrue(self.run_exit())
++        self.assertEqual(self.moves, 1)
++
++    def test_unowned_returns_false_without_any_motion(self):
++        for changes in ((3, 0, 1, 1, self.transport, self.identity),
++                        (2, 0, 2, 1, self.transport, self.identity)):
++            self.action._continuous_exit = changes
++            self.assertFalse(self.run_exit())
++        self.assertEqual((self.moves, self.stops), (0, 0))
++
++    def test_missed_edge_bounce_cancel_reconnect_and_epoch_fail_closed(self):
++        for scenario in ('missed', 'bounce', 'cancel', 'reconnect', 'epoch', 'fault', 'ack_lost'):
++            with self.subTest(scenario=scenario):
++                self.setUp()
++                self.behavior = scenario
++                with self.assertRaises(RuntimeError):
++                    self.run_exit()
++                self.assertEqual(self.moves, 1)
++                self.assertEqual(self.commit, 0)
++                self.assertEqual(self.stops, 2)
++                if scenario == 'missed':
++                    self.assertLess(self.clock.monotonic() - self.start, 150 / 80)
++                self.doCleanups()
++
++    def test_stop_failure_latches_and_no_commit(self):
++        self.behavior = 'stop_error'
++        with self.assertRaises(RuntimeError):
++            self.run_exit()
++        self.assertEqual(self.moves, 1)
++        self.assertEqual(self.commit, 0)
++        self.ace._latch_stop_fault.assert_called_once()
++
++    def test_real_fault_never_starts_motion(self):
++        def forbidden(**kw):
++            raise RuntimeError('real fault')
++        self.ace._require_no_stop_fault = forbidden
++        with self.assertRaisesRegex(RuntimeError, 'real fault'):
++            self.run_exit()
++        self.assertEqual(self.moves, 0)
++        self.assertEqual(self.commit, 0)
++
++    def test_loaded_head_authorization_is_only_for_handoff(self):
++        a = self.action
++        self.bind(0, 1, self.transport)
++        a.state['state'] = 'running'
++        a._eject_pending = token = object()
++        a._eject_params = params = {'index': 1, 'length': actions.MAX_MM, 'speed': actions.SPEED_MM_S}
++        a._eject_command_deadline = self.clock.monotonic() + 2
++        self.ace._connected_per_ace = {0: True}
++        self.ace._serial_failed_per_ace = {}
++        self.ace._stop_message = lambda *args: None
++        self.ace.printer = SimpleNamespace(lookup_object=lambda *args: SimpleNamespace(state='standby'))
++        request = {'method': 'unwind_filament', 'params': params, '_eject_token': token}
++        a._continuous_head = None
++        self.assertFalse(a.eject_allows(0, request, self.transport))
++        a._continuous_head = 1
++        self.assertTrue(a.eject_allows(0, request, self.transport))
++        self.ace._head_source[1]['slot'] = 2
++        self.assertFalse(a.eject_allows(0, request, self.transport))
++
++    def test_exit_wrapper_does_not_dispatch_second_eject(self):
++        a = self.action
++        a.state = {'state': 'idle'}
++        a.seq = 0
++        self.ace.head_uses_ace = lambda head: True
++        self.ace._stop_message = lambda *args: None
++        self.ace.gcode = SimpleNamespace(create_gcode_command=lambda *args: object())
++        a._require_exit_source = Mock()
++        a._start = Mock(side_effect=AssertionError('second motion'))
++        def unload(command):
++            self.assertIs(command, a._prepare_command)
++            self.assertEqual(a._continuous_exit[:4], (1, 0, 1, 1))
++            a.state.update(state='complete', ejected=True)
++        self.ace.cmd_ACE_UNLOAD_HEAD = unload
++        gcmd = SimpleNamespace(get_int=lambda name, **kw: {'ACE': 0, 'SLOT': 1}[name],
++                               error=lambda msg: RuntimeError(msg))
++        with patch.object(actions, 'empty_head_held_eject_allowed', return_value=False), \
++             patch.object(actions, 'held_loaded_source_matches', return_value=False):
++            a.exit_slot(gcmd)
++        a._start.assert_not_called()
++        self.assertIsNone(a._continuous_exit)
++
++    def test_real_fault_in_handoff_never_runs_motion(self):
++        self.stop_handoff.side_effect = lambda *args, **kw: {'slot_status': 'motor_error'}
++        with self.assertRaisesRegex(RuntimeError, 'assist'):
++            self.run_exit()
++        self.assertEqual((self.moves, self.commit), (0, 0))
++
++    def test_already_clear_returns_false_without_ownership_or_motion(self):
++        self.pin = False
++        self.assertFalse(self.run_exit())
++        self.assertEqual((self.moves, self.stops), (0, 0))
++        self.assertEqual(self.action.state['state'], 'preparing')
++        self.assertFalse(self.action._continuous_attempted)
++        self.ace._error_recovery.end.assert_not_called()
++
++    def test_clear_during_stop_returns_false_before_motion(self):
++        def clear_during_stop(ace, idx, slot, **kw):
++            kw['monitor']()
++            self.pin = False
++            kw['monitor']()
++            self.stops += 1
++            return {'slot_status': 'assist_error'}
++        self.stop_handoff.side_effect = clear_during_stop
++        self.assertFalse(self.run_exit())
++        self.assertEqual((self.moves, self.commit), (0, 0))
++        self.assertEqual(self.action.state['state'], 'preparing')
++        self.assertFalse(self.action._continuous_attempted)
++        self.action._arm_route_hold.assert_not_called()
++
++    def test_stock_assist_handoff_uses_real_wire_proof_without_decoder(self):
++        from test_unload_assist_handoff import Fixture
++        from importlib import import_module
++        stock = import_module(PACKAGE + '.ace_v2_standstill')
++        f = Fixture(decoder=False)
++        f.states = {1: 'assist_error'}
++        original_send = f.send
++        def send(idx, request, callback):
++            if request['method'] != 'get_key_state':
++                return original_send(idx, request, callback)
++            def translate(ace, response):
++                keys = response['result']['buffer_keys']
++                # The inlet remains set while unrelated buffer bits vary.
++                keys['raw_mask'] = (1 << 4) | (keys['raw_mask'] & ~((1 << 12)))
++                callback(ace, response)
++            return original_send(idx, request, translate)
++        f.ace.send_request_to = send
++        def real_preflight(ace, idx, slot, **kw):
++            self.stops += 1
++            kw['transport'] = f.transport
++            kw['identity'] = f.ace._location_identity(idx)
++            return stock.stop_and_verify(f.ace, idx, slot, **kw)
++        self.stop_handoff.side_effect = real_preflight
++        self.assertTrue(self.run_exit())
++        self.assertNotIn('get_feed_info', [command for command, _ in f.cmds])
++        self.assertGreaterEqual([command for command, _ in f.cmds].count('stop_feed_filament'), 2)
++
++    def setup_real_commit(self):
++        a, ace = self.action, self.ace
++        self.bind(0, 1, self.transport)
++        self.pin = False
++        a.state['state'] = 'running'
++        a._check = actions.SlotActions._check.__get__(a)
++        a._commit_ejected = actions.SlotActions._commit_ejected.__get__(a)
++        ace._connected_per_ace = {0: True}
++        ace._fw_update_hold = set()
++        ace._swap_in_progress = ace._unload_all_active = False
++        ace._calibration = {'state': 'idle'}
++        ace._is_v2_idx = lambda idx: True
++        ace.printer = SimpleNamespace(lookup_object=lambda name, *args:
++                                      SimpleNamespace(state='standby') if name == 'print_stats' else None)
++        ace._save_head_source = Mock()
++        ace._location_hold = SimpleNamespace(route_token=lambda *args: 'held-token', release_route=Mock())
++        a._route_token = 'held-token'
++        a._last_eject_stop = dict(transport=self.transport, identity=self.identity,
++            slot=1, gate=False, samples=3, status='ready', at=self.clock.monotonic(),
++            acknowledged_at=self.clock.monotonic() - .1)
++
++    def test_real_monitor_and_commit_allow_retained_matching_source(self):
++        self.setup_real_commit()
++        self.action._original_monitor(0, 1, self.transport, self.clock.monotonic() + 1,
++                                      allow_removal=True)
++        self.assertIsNotNone(self.ace._head_source[1])
++        self.action._commit_ejected(0, 1, self.transport)
++        self.assertIsNone(self.ace._head_source[1])
++        self.ace._location_hold.release_route.assert_called_once()
++
++    def test_real_commit_rejects_stale_receipt_and_changed_source(self):
++        self.setup_real_commit()
++        self.action._last_eject_stop['at'] -= 3
++        with self.assertRaisesRegex(RuntimeError, 'STOP'):
++            self.action._commit_ejected(0, 1, self.transport)
++        self.assertIsNotNone(self.ace._head_source[1])
++        self.action._last_eject_stop['at'] = self.clock.monotonic()
++        self.ace._head_source[1] = dict(ace_index=0, slot=2)
++        with self.assertRaises(RuntimeError):
++            self.action._original_monitor(0, 1, self.transport, self.clock.monotonic() + 1)
++        with self.assertRaises(RuntimeError):
++            self.action._commit_ejected(0, 1, self.transport)
++        self.ace._location_hold.release_route.assert_not_called()
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/tests/test_continuous_park.py b/tests/test_continuous_park.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_continuous_park.py
+@@ -0,0 +1,67 @@
++"""A single finite command crosses the head switch and parks the strand."""
++import unittest
++from test_fixed_park import ParkWire, park
++
++
++class ContinuousParkTest(unittest.TestCase):
++    def run_park(self, a, *, length=1480, budget=150, before='ready'):
++        p = park.ParkMotion(a, 0, 0, 0)
++        receipt = dict(slot_status=before, sample=None, transport=p.transport,
++                       identity=p.identity, ace=0, slot=0, head=0)
++        return p.run(length, 0, 80, head_clear_mm=budget, handoff=receipt)
++
++    def test_head_clears_without_second_command(self):
++        a=ParkWire(45)
++        self.run_park(a,before='assist_error')
++        self.assertEqual([c['params']['length'] for c in a.motion_commands],[1480])
++        self.assertNotIn('get_feed_info',[op for op,_,_ in a.calls])
++        self.assertIsNone(a.active_move)
++        self.assertFalse(a.runout_buttun_state)
++        self.assertTrue(a._gate(0,0))
++
++    def test_stuck_head_stops_early_without_replay(self):
++        a=ParkWire(900)
++        with self.assertRaisesRegex(RuntimeError, '短退范围内'):
++            self.run_park(a)
++        self.assertEqual(len(a.motion_commands),1)
++        self.assertLess(900-a.position,155)
++        self.assertIsNone(a.active_move)
++
++    def test_retrigger_after_head_cleared(self):
++        a=ParkWire(900)
++        a.transient_clear_range=(790,865)
++        with self.assertRaisesRegex(RuntimeError, '重新触发'):
++            self.run_park(a)
++        self.assertIsNone(a.active_move)
++        self.assertGreater(a.position,750)
++
++    def test_short_clear_bounce_is_not_a_confirmed_departure(self):
++        a=ParkWire(900)
++        a.transient_clear_range=(840,845)
++        with self.assertRaisesRegex(RuntimeError, '短退范围内'):
++            self.run_park(a)
++        self.assertIsNone(a.active_move)
++
++    def test_inlet_loss_stops_same_command(self):
++        a=ParkWire(45)
++        a.gate_failure_at=-250
++        with self.assertRaises(RuntimeError):
++            self.run_park(a)
++        self.assertIsNone(a.active_move)
++        self.assertEqual(len(a.motion_commands),1)
++
++    def test_lane_fault_without_arrival_does_not_replay(self):
++        a=ParkWire(45)
++        a._lane_states=lambda idx,monitor=None:{0:'rollback_error'}
++        with self.assertRaisesRegex(RuntimeError,'原槽状态异常'):
++            self.run_park(a)
++        self.assertIsNone(a.active_move)
++        self.assertEqual(len(a.motion_commands),1)
++
++    def test_lost_ack_stops_without_retry(self):
++        a=ParkWire(45)
++        a.reject_move=1
++        with self.assertRaises(park.ParkAckUnavailable):
++            self.run_park(a)
++        self.assertIsNone(a.active_move)
++        self.assertEqual(len(a.motion_commands),1)
+diff --git a/tests/test_endpoint_unload.py b/tests/test_endpoint_unload.py
+--- a/tests/test_endpoint_unload.py
++++ b/tests/test_endpoint_unload.py
+@@ -10,10 +10,11 @@
+     def fixture(self):
+         return test_fixed_park.FixedParkTests().incident_fixture()
+ 
+-    def test_direct_park_defers_to_head_clear_probe(self):
++    def test_disabled_raw_pin_uses_existing_unload_probe(self):
+         h, a, _ = self.fixture()
+         a.position = 5
+-        self.assertFalse(h._finish_fixed_unload(0, 0, 0, 150, 80, direct=True))
++        a.unload_gpio = False
++        self.assertFalse(h._finish_fixed_unload(0, 0, 0, 150, 80, continuous=True))
+         self.assertEqual(a.motion_commands, [])
+         self.assertFalse(a._head_travel.status()['0']['pending'])
+ 

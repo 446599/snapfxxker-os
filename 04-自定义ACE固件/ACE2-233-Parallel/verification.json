@@ -1,0 +1,29 @@
+{
+  "version": "0.16.0-233a",
+  "target": "Anycubic ACE 2 Pro",
+  "source_commit": "27c564d210170f01aa1a57cd928a60c520247aff",
+  "klipper_commit": "2d7717e3b62ea2fe3401b27f54f8681f80451c69",
+  "toolchain": "Debian GCC 14.2.1 arm-none-eabi + newlib",
+  "build_image": "sha256:66332063a12afd2c75d4e11afec7dec3af6acbfc655dbe1dd0a143d9cf7567d7",
+  "image_bytes": 74928,
+  "slot_address": "0x8008000",
+  "reset_vector": "0x8009de9",
+  "stack_pointer": "0x2000c000",
+  "image_crc32": "ffc26524",
+  "embedded_dictionary_verified": true,
+  "lane_concurrency_constant": 1,
+  "host_api": 29,
+  "c_tests": 1224,
+  "python_tests": 1834,
+  "parallel_ordered_slot_pairs": 12,
+  "parallel_feed_and_rollback_cases": 24,
+  "physical_test": false,
+  "sha256": {
+    "ace2k-0.16.0-233a.bin": "896657c442ce239e054efdb8274c52d3d35eed2c21f3d8a9232b4e00a3ad3256",
+    "ace2k-0.16.0-233a.dict": "d16cb48151e988a694fe85adb8bcff59cb3365b0b4fa8ed510ac5307a02e291c",
+    "ace2k-host-0.16.0-233a.tar.gz": "fa0e37b26e47f6e328b711978a8ded0438a07d1e71d3d2d64461298f8d91d2ff",
+    "parallel-lanes.patch": "e010daccda5110d6be61bddc467d43165e38082247079ffe35d3cca88bb1db2c",
+    "README.md": "6c79bff0a2ef95af8b6ef8770dcf888606627cffe4d30925dffb6414393fd53d",
+    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+  }
+}

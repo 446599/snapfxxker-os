@@ -1,0 +1,259 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -22026,6 +22026,10 @@
+ 
+         if exit_after_cleanup:
+             idx, slot = source_route(source)
++            if (position_unload_owner is not None
++                    and not self._position_unload_recovery.valid_handoff(idx, slot, unload_transport)):
++                self.log_notice('喷头已退空；料管仍可能有料，原槽记录已保留。', done=True)
++                return
+             self.log_always('喷头已退空；缺少可信回停计距，继续退出原 ACE 槽至入口无料，建立零点')
+             command = self.gcode.create_gcode_command('ACE_SLOT_EXIT',
+                 'ACE_SLOT_EXIT ACE=%d SLOT=%d' % (idx, slot),
+--- a/klipper/extras/ace_position_unload.py
++++ b/klipper/extras/ace_position_unload.py
+@@ -19,9 +19,9 @@
+         self.active = None
+         self.handoff = None
+ 
+-    def _hold_route(self, idx, slot, head, identity, refresh):
++    def _eject_hold(self, slot, head, identity):
+         hold = getattr(self.ace, '_location_hold', None)
+-        if hold is None or (refresh and not hold.refresh_routes()) or not hold.routes_valid:
++        if hold is None or not hold.refresh_routes():
+             return None
+         exact = [row for row in hold.routes
+                  if hold._same_route(row, identity[0], identity[1], slot)]
+@@ -37,8 +37,7 @@
+                     and (row.get('port') == identity[0]
+                          or tuple(row.get('uid', ())) == identity[1])):
+                 return None
+-        # The hold's exact route matters here, not whether it has already
+-        # reached disk. Eject still checks the durable record before clearing it.
++        # Only a matching record can be handed off to the full eject flow.
+         return (identity[0], tuple(identity[1]), slot, head)
+ 
+     def prepare(self, head, stage='all'):
+@@ -84,9 +83,6 @@
+         if (getattr(a, '_tag_read_busy', False) or getattr(a, '_unload_all_active', False)
+                 or getattr(getattr(a, '_path_calibration', None), 'task', {}).get('active')):
+             return None
+-        hold_token = self._hold_route(idx, slot, head, identity, refresh=True)
+-        if hold_token is None:
+-            return None
+         if self._peer_assisting(idx, slot, transport, identity):
+             return None
+         if a._v2_get_slot_status(idx, slot) != 'ready':
+@@ -96,7 +92,7 @@
+             'identity': (identity[0], tuple(identity[1])),
+             'source': copy.deepcopy(source), 'insert_epoch': (a._insert_epochs or {}).get((idx, slot)),
+             'insert_session': getattr(a, '_insert_session', None),
+-            'hold_token': hold_token, 'token': object(), 'used_mm': 0,
++            'token': object(), 'used_mm': 0,
+             'speed_limit': max(1, int(a.get_retract_speed(idx))),
+         }
+ 
+@@ -130,9 +126,6 @@
+                 or not self._same_live_source(owner)
+                 or raw_head_state(a, owner['head']) is not True):
+             return False
+-        if self._hold_route(idx, owner['slot'], owner['head'], owner['identity'],
+-                            refresh=False) != owner['hold_token']:
+-            return False
+         # A full or stale buffer is not a source conflict. Reverse assist is
+         # what relieves buffer pressure; the ACE still enforces its end stops.
+         if self._peer_assisting(idx, owner['slot'], serial, owner['identity']):
+@@ -164,11 +157,6 @@
+         if candidate is None or self.active is not None:
+             raise RuntimeError('原料路恢复卸料授权不可用')
+         a = self.ace
+-        hold = getattr(a, '_location_hold', None)
+-        if (hold is None or self._hold_route(candidate['idx'], candidate['slot'],
+-                                             candidate['head'], candidate['identity'],
+-                                             refresh=True) != candidate['hold_token']):
+-            raise RuntimeError('位置记录已变化，未开始原槽卸料')
+         if (not self._same_live_source(candidate)
+                 or raw_head_state(a, candidate['head']) is not True):
+             raise RuntimeError('原设备、来源或喷头传感器已变化，未开始原槽卸料')
+@@ -177,8 +165,13 @@
+             raise RuntimeError('同一 ACE 的其他料槽正在使用缓冲助力，未开始位置恢复卸料')
+         if a._v2_get_slot_status(candidate['idx'], candidate['slot']) != 'ready':
+             raise RuntimeError('原槽状态已变化，未开始位置恢复卸料')
++        # The live head and original route authorize head unload. The old
++        # position record is only relevant to a later full eject handoff.
++        candidate['hold_token'] = self._eject_hold(candidate['slot'], candidate['head'],
++                                                  candidate['identity'])
+         candidate['deadline'] = a.reactor.monotonic() + SESSION_TIMEOUT_S
+         candidate['sources'] = copy.deepcopy(a._head_source)
++        self.handoff = None
+         self.active = candidate
+         return candidate
+ 
+@@ -218,15 +211,16 @@
+     def finish(self, owner):
+         if self.active is owner:
+             a = self.ace
+-            if (raw_head_state(a, owner['head']) is False
++            if (owner['hold_token'] is not None
++                    and raw_head_state(a, owner['head']) is False
+                     and self._head_cleared(a)
+                     and a._serials.get(owner['idx']) is owner['transport']
+                     and a._location_identity(owner['idx']) == owner['identity']
+                     and a._head_source == owner.get('sources')
+                     and (a._insert_epochs or {}).get((owner['idx'], owner['slot'])) == owner['insert_epoch']
+                     and getattr(a, '_insert_session', None) == owner['insert_session']
+-                    and self._hold_route(owner['idx'], owner['slot'], owner['head'],
+-                                         owner['identity'], refresh=False) == owner['hold_token']):
++                    and self._eject_hold(owner['slot'], owner['head'],
++                                         owner['identity']) == owner['hold_token']):
+                 self.handoff = dict(owner, expires=a.reactor.monotonic() + 300.)
+             self.active = None
+ 
+@@ -251,8 +245,7 @@
+                 or (a._insert_epochs or {}).get((idx, slot)) != owner['insert_epoch']
+                 or getattr(a, '_insert_session', None) != owner['insert_session']
+                 or raw_head_state(a, owner['head']) is not False
+-                or self._hold_route(idx, slot, owner['head'], owner['identity'],
+-                                    refresh=False) != owner['hold_token']):
++                or self._eject_hold(slot, owner['head'], owner['identity']) != owner['hold_token']):
+             return False
+         return True
+ 
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -4627,7 +4627,7 @@
+             if _slot is None and ace.head_uses_ace(_head):
+                 _slot = ace._ace_slot_for_head(_head)
+             position_unload = getattr(ace, '_position_unload_recovery', None)
+-            if not (need_to_unload and position_unload is not None
++            if not (need_to_unload and not need_to_load and position_unload is not None
+                     and position_unload.allows_unload_command(_head, _idx, _slot)):
+                 ace._require_location_clear(gcmd, head=_head, idx=_idx, slot=_slot)
+         is_printing = gcmd.get_int('PRINTING', 0, minval=0, maxval=1)
+--- a/tests/test_original_unload_admission.py
++++ b/tests/test_original_unload_admission.py
+@@ -165,7 +165,7 @@
+                 self.verify_stop_without_encoder(ace)
+                 self.assert_original_unload_admitted(ace)
+ 
+-    def test_stale_source_identity_generation_and_failed_load_do_not_block_route(self):
++    def test_unverified_source_is_not_a_parking_position_error(self):
+         for conflict in ('changed device', 'new insertion', 'failed load'):
+             with self.subTest(conflict=conflict):
+                 ace, _lane = self.fixture()
+@@ -175,22 +175,51 @@
+                     ace._head_source[HEAD]['insert_epoch'] = 6
+                 else:
+                     ace._head_source[HEAD]['load_failed'] = True
+-                self.assertIsNotNone(ace._position_unload_recovery.prepare(HEAD, stage='all'))
++                self.assertIsNone(ace._position_unload_recovery.prepare(HEAD, stage='all'))
+ 
++    def test_old_nonmatching_position_holds_do_not_block_loaded_head_unload(self):
++        for record in ('whole ACE', 'shared head', 'unreadable'):
++            with self.subTest(record=record):
++                ace, _ = self.fixture()
++                hold = ace._location_hold
++                if record == 'whole ACE':
++                    hold.hold_route(PORT, UID, SLOT, [HEAD], scope='ace')
++                elif record == 'shared head':
++                    hold.hold_route('/dev/ace2', (2, 2, 2), SLOT, [HEAD])
++                else:
++                    Path(hold.routes_path).write_text('invalid json')
++                path = Path(hold.routes_path)
++                before = path.read_bytes()
++                self.assert_original_unload_admitted(ace)
++                recovery = ace._position_unload_recovery
++                owner = recovery.active
++                self.assertIsNone(owner['hold_token'])
++                feed = {'method': 'feed_filament', 'params': {'index': SLOT}}
++                recovery.stamp(ACE, feed)
++                self.assertIsNotNone(flow_guard.wire_rejection(ace, ACE, feed, ace._serials[ACE]))
++                ace.printer.lookup_object(f'filament_motion_sensor e{HEAD}_filament').runout_buttun_state = False
++                ace._last_unload_reason = 'distance_unknown'
++                recovery.finish(owner)
++                self.assertFalse(recovery.valid_handoff(ACE, SLOT))
++                self.assertEqual(path.read_bytes(), before)
++
++    def test_empty_or_unknown_head_keeps_normal_location_guard(self):
++        for present in (False, None):
++            with self.subTest(present=present):
++                ace, _ = self.fixture()
++                ace.printer.lookup_object(f'filament_motion_sensor e{HEAD}_filament').runout_buttun_state = present
++                self.assertIsNone(ace._position_unload_recovery.prepare(HEAD))
++
+     def test_real_motion_conflicts_are_still_refused(self):
+         for evidence_complete in (True, False):
+             for conflict in ('busy slot', 'peer motion', 'real stop fault'):
+                 with self.subTest(evidence_complete=evidence_complete, conflict=conflict):
+                     ace, lane = self.fixture(journal_token=evidence_complete,
+                                              cached_cmd73=evidence_complete)
+-                    if conflict == 'changed device':
+-                        ace._head_source[HEAD]['connection_identity']['uid'] = [9, 9, 9]
+-                    elif conflict == 'busy slot':
++                    if conflict == 'busy slot':
+                         ace._slot_actions.state = {'state': 'running', 'ace': ACE, 'slot': SLOT}
+                     elif conflict == 'peer motion':
+                         ace._native_buffer.status(ACE)['assist'] = [{'slot': 3, 'phase': 'assisting'}]
+-                    elif conflict == 'new insertion':
+-                        ace._head_source[HEAD]['insert_epoch'] = 6
+                     else:
+                         ace._stop_guard.latch(ACE, SLOT, 'STOP rejected by ACE', identity=(PORT, UID))
+                     self.assertIsNone(ace._position_unload_recovery.prepare(HEAD, stage='all'))
+--- a/tests/test_fixed_park_handoff.py
++++ b/tests/test_fixed_park_handoff.py
+@@ -57,6 +57,7 @@
+ class FakeRecovery:
+     def __init__(self):
+         self.finished = []
++        self.handoff = None
+ 
+     def prepare(self, head, stage='all'):
+         return {'head': head, 'stage': stage}
+@@ -67,7 +68,10 @@
+     def finish(self, owner):
+         self.finished.append(owner)
+ 
++    def valid_handoff(self, idx, slot, transport):
++        return (idx, slot, transport) == self.handoff
+ 
++
+ class FakeGCode:
+     def __init__(self, ace, change_state):
+         self.ace = ace
+@@ -100,6 +104,7 @@
+         sensor = types.SimpleNamespace(runout_buttun_state=True)
+         printer_state = types.SimpleNamespace(state='standby')
+         recovery = FakeRecovery()
++        recovery.handoff = (ACE, SLOT, transport)
+         ace = types.SimpleNamespace()
+         ace.sensor = sensor
+         ace._head_source = {HEAD: source}
+@@ -141,6 +146,7 @@
+         ace._audit_state = lambda *_args, **_kwargs: None
+         ace.log_always = lambda *_args, **_kwargs: None
+         ace.log_error = lambda *_args, **_kwargs: None
++        ace.log_notice = lambda message, **_kwargs: setattr(ace, 'notice', message)
+         ace._t = lambda text, **_kwargs: text
+         ace._disp = lambda value: value
+         ace._raw = lambda value: value
+@@ -167,6 +173,19 @@
+         self.assertIs(ace.exit_command, command)
+         self.assertEqual(len(recovery.finished), 1)
+ 
++    def test_empty_head_without_handoff_keeps_original_source_and_skips_slot_exit(self):
++        ace, recovery = self.fixture()
++        recovery.handoff = None
++        source = ace._head_source[HEAD]
++
++        ace.cmd_ACE_UNLOAD_HEAD(FakeCommand())
++
++        self.assertFalse(ace.sensor.runout_buttun_state)
++        self.assertFalse(ace.gcode.commands)
++        self.assertIs(ace._head_source[HEAD], source)
++        self.assertIn('喷头已退空', ace.notice)
++        self.assertEqual(len(recovery.finished), 1)
++
+     def test_empty_head_with_held_route_exits_ace_without_position_recovery(self):
+         ace, recovery = self.fixture()
+         ace.sensor.runout_buttun_state = False

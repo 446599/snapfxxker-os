@@ -1,0 +1,49 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -10348,6 +10348,7 @@
+                 self._info_per_ace[idx] = result
+                 if valid_motor_status:
+                     self._native_buffer.observe_status(idx, result.get('slots') or [], ser, issued_at=eventtime)
++                    self._reconcile_restored_sources(idx, ser, result['slots'])
+ 
+                 # V1 FA-health monitor (parity with the V2 disarm/dropped-arm
+                 # recovery, which lived in the V2-only velocity tick). Status was
+@@ -19262,6 +19263,38 @@
+                     logging.info('[multiACE] Restored head %d -> ACE %d / Slot %d' % (
+                         head, saved[key]['ace_index'], saved[key]['slot']))
+ 
++    def _reconcile_restored_sources(self, idx, transport, slots):
++        """Carry a retained source onto the first live observation of its slot."""
++        if (self._serials.get(idx) is not transport or self._swap_in_progress
++                or self._feed_supervisors
++                or self._slot_actions.state.get('state') in ('preparing', 'running')):
++            return
++        identity = self._rfid_identity_status(idx)
++        if identity is None or not any(identity['uid']):
++            return
++        for head, source in self._head_source.items():
++            route = source_route(source)
++            if route is None or route[0] != idx or source.get('insert_session') == self._insert_session:
++                continue
++            _, slot = route
++            if (source.get('connection_identity') != identity
++                    or configured_route_heads(self, idx, slot) != (head,)
++                    or source_conflict(self, head, idx, slot)
++                    or any(other != head and source_route(record) == route
++                           for other, record in self._head_source.items())
++                    # Never adopt after a gate transition or a reconnect's
++                    # second UNKNOWN-to-present observation.
++                    or self._gen1_gate_gen.get(route) != 1
++                    or self._gate_status_per_ace[idx][slot] != GATE_AVAILABLE
++                    or slots[slot]['slot_status'] != 'ready'
++                    or raw_head_state(self, head) is None):
++                continue
++            # Keep the recorded owner and load result. Only retag its
++            # observation window so subsequent inlet changes still invalidate it.
++            self._head_source[head] = dict(source, **self._capture_source_origin(idx, slot))
++            logging.info('[multiACE] Reconciled restored source: head %d ACE %d slot %d',
++                         head, idx, slot)
++
+     def notify_external_load(self, module, channel, head):
+         """Hook called from filament_feed_ace.py after a successful
+         display-initiated FEED_AUTO LOAD or FEED_MANUAL FINISH. The

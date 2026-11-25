@@ -1,0 +1,404 @@
+diff --git a/klipper/extras/ace.py b/klipper/extras/ace.py
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -30,7 +30,7 @@
+     except FileExistsError:
+         pass
+ 
+-from .ace_slot_actions import (SlotActions, empty_head_held_eject_allowed,
++from .ace_slot_actions import (STOPPED_STATES, SlotActions, empty_head_held_eject_allowed,
+                                supervise_rfid_motion)
+ from .ace_location_hold import LocationHold
+ from .ace_position_unload import PositionUnloadRecovery
+@@ -51,7 +51,7 @@
+ from .ace_controlled_motion import (request_operation, MotionError, REQUEST,
+                                     QUERY, RENEW, STOP, CLOSE)
+ from .ace_path_store import PathStateError, configured_route_heads
+-from .ace_flow_guard import (raw_head_state, source_route, source_conflict,
++from .ace_flow_guard import (raw_head_state, source_route, source_conflict, same_slot_reinsert,
+                              dynamic_route_blocked, wire_rejection, stop_targets,
+                              isolated_assist_stop_generation)
+ 
+@@ -833,6 +833,7 @@
+         # into a fresh host session.
+         self._insert_session = os.urandom(16).hex()
+         self._insert_epochs = {}
++        self._last_disconnect_epoch = {}
+         self.baud = config.getint('baud', 0, minval=0)
+         self._ace_devices = []
+         self._active_device_index = 0
+@@ -5847,6 +5848,7 @@
+                 previous_epoch = epochs.get((idx, slot))
+                 epochs[(idx, slot)] = (previous_epoch
+                     if type(previous_epoch) is int else 0) + 1
++                self._last_disconnect_epoch[(idx, slot)] = epochs[(idx, slot)]
+         threads = [d.pop(idx, None) for d in
+                    (self._reader_threads, self._writer_threads)]
+         self._cb_locks.pop(idx, None)
+@@ -19179,7 +19181,7 @@
+                         head, saved[key]['ace_index'], saved[key]['slot']))
+ 
+     def _reconcile_restored_sources(self, idx, transport, slots):
+-        """Carry a retained source onto the first live observation of its slot."""
++        """Refresh only the routing stamp from a validated V2 status frame."""
+         if (self._serials.get(idx) is not transport or self._swap_in_progress
+                 or self._feed_supervisors
+                 or self._slot_actions.state.get('state') in ('preparing', 'running')):
+@@ -19189,26 +19191,36 @@
+             return
+         for head, source in self._head_source.items():
+             route = source_route(source)
+-            if route is None or route[0] != idx or source.get('insert_session') == self._insert_session:
++            if route is None or route[0] != idx:
+                 continue
+             _, slot = route
++            if self._source_insertion_matches(source, idx, slot):
++                continue
++            lane = slots[slot]['slot_status']
++            reinserted = same_slot_reinsert(self, source, idx, slot)
++            if reinserted:
++                stats = self.printer.lookup_object('print_stats', None)
++                if (getattr(stats, 'state', '') not in ('standby', 'complete', 'cancelled', 'error', 'paused')
++                        or lane not in STOPPED_STATES or self._error_recovery._is_busy()):
++                    continue
++            elif (source.get('insert_session') == self._insert_session
++                    or self._gen1_gate_gen.get(route) != 1
++                    or not (lane == 'ready' or lane == 'feed_error' and source.get('load_failed') is True)):
++                continue
+             if (source.get('connection_identity') != identity
+                     or configured_route_heads(self, idx, slot) != (head,)
+                     or source_conflict(self, head, idx, slot)
+                     or any(other != head and source_route(record) == route
+                            for other, record in self._head_source.items())
+-                    # Never adopt after a gate transition or a reconnect's
+-                    # second UNKNOWN-to-present observation.
+-                    or self._gen1_gate_gen.get(route) != 1
+                     or self._gate_status_per_ace[idx][slot] != GATE_AVAILABLE
+-                    or slots[slot]['slot_status'] != 'ready'
+                     or raw_head_state(self, head) is None):
+                 continue
+-            # Keep the recorded owner and load result. Only retag its
+-            # observation window so subsequent inlet changes still invalidate it.
+-            self._head_source[head] = dict(source, **self._capture_source_origin(idx, slot))
+-            logging.info('[multiACE] Reconciled restored source: head %d ACE %d slot %d',
+-                         head, idx, slot)
++            updated = dict(source, **self._capture_source_origin(idx, slot))
++            if reinserted:
++                updated.pop('ace_insertion', None)  # The old spool's MCU observation expired.
++            self._head_source[head] = updated
++            logging.info('[multiACE] Refreshed %s route: head %d ACE %d slot %d',
++                         'reinserted' if reinserted else 'restored', head + 1, idx + 1, slot + 1)
+ 
+     def notify_external_load(self, module, channel, head):
+         """Hook called from filament_feed_ace.py after a successful
+diff --git a/klipper/extras/ace_error_recovery.py b/klipper/extras/ace_error_recovery.py
+--- a/klipper/extras/ace_error_recovery.py
++++ b/klipper/extras/ace_error_recovery.py
+@@ -4,7 +4,7 @@
+ import secrets
+ from .ace_stop_guard import controlled_cleanup
+ from .ace_recovery_policy import RecoveryBudget
+-from .ace_flow_guard import raw_head_state, eject_peer_source
++from .ace_flow_guard import raw_head_state, eject_peer_source, same_slot_reinsert
+ from .ace_path_store import configured_route_heads
+ 
+ 
+@@ -145,6 +145,8 @@
+             if source['connection_identity'] != identity:
+                 raise RecoveryContextChanged('原送料设备或端口已变化，保留原来源，请先核对原来源')
+             if not a._source_insertion_matches(source, idx, slot):
++                if same_slot_reinsert(a, source, idx, slot):
++                    raise RuntimeError('等待 ACE 更新原槽入口状态')
+                 raise RecoveryContextChanged('原来源的会话或插料代次已变化，请先确认原来源并核对管内耗材')
+ 
+     def require_exit_source(self, idx, slot):
+@@ -324,7 +326,8 @@
+             if not self._source_device_confirmable(source, identity):
+                 continue
+             if (source.get('connection_identity') != identity
+-                    or not a._source_insertion_matches(source, idx, slot)):
++                    or (not a._source_insertion_matches(source, idx, slot)
++                        and not same_slot_reinsert(a, source, idx, slot))):
+                 candidates.append(head)
+         return candidates[0] if len(candidates) == 1 else None
+ 
+@@ -340,7 +343,7 @@
+         epoch = (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot))
+         if ('insert_epoch' not in source or type(source['insert_epoch']) is not type(epoch)
+                 or source['insert_epoch'] != epoch):
+-            return '检测到插拔记录变化，可能已更换耗材；只有确认仍是原来的连续耗材才可继续。'
++            return '原槽的连续连接记录已中断，请核对 ACE 和料槽的连接。'
+         return '同一台 ACE 的连接端口记录已变化，请核对原设备和原料管连接。'
+ 
+     def _connection_review_message(self, idx, slot):
+diff --git a/klipper/extras/ace_flow_guard.py b/klipper/extras/ace_flow_guard.py
+--- a/klipper/extras/ace_flow_guard.py
++++ b/klipper/extras/ace_flow_guard.py
+@@ -42,6 +42,23 @@
+             and type(slot) is int and 0 <= slot < 4):
+         return idx, slot
+     return None
++
++
++def same_slot_reinsert(ace, source, idx, slot):
++    """A later inlet observation on the same live ACE can reuse its tube."""
++    if source_route(source) != (idx, slot) or 'insert_epoch' not in source:
++        return False
++    session = getattr(ace, '_insert_session', None)
++    if not session or source.get('insert_session') != session:
++        return False
++    saved = source['insert_epoch']
++    if saved is None:
++        saved = 0  # No inlet changes observed when the route was first recorded.
++    current = ace._insert_epochs.get((idx, slot))
++    floor = ace._last_disconnect_epoch.get((idx, slot), 0)
++    return (type(saved) is int and type(current) is int and floor <= saved < current
++            and isinstance(source.get('connection_identity'), dict)
++            and source['connection_identity'] == ace._rfid_identity_status(idx))
+ 
+ 
+ def eject_peer_source(ace, idx, slot, head):
+diff --git a/web/frontend/app.js b/web/frontend/app.js
+--- a/web/frontend/app.js
++++ b/web/frontend/app.js
+@@ -3716,7 +3716,7 @@
+     }
+     function retainedSourceConfirmationText(ace, slot, row) {
+       const reason = [row.source_confirmation_prompt, row.connection_review_message].filter(Boolean).join('\n') || '原来源需要重新核对。';
+-      return `${reason}\n请沿料管确认：喷头 ${dispIdx(row.source_head)} 管内保留的耗材仍连续来自同一台 ACE ${dispIdx(ace.idx)} 的原槽 ${dispIdx(slot.idx)}。如果已换料盘、换料或无法确认，请取消并先处理原料路。\n确认仅更新原来源的连接和插料记录；保留堵料及管内占用记录，不会自动继续打印。`;
++      return `${reason}\n请核对 ACE ${dispIdx(ace.idx)} 的 ${dispIdx(slot.idx)} 号槽是否接到 ${dispIdx(row.source_head)} 号喷头。\n确认后会更新料路的连接记录。`;
+     }
+     async function confirmRetainedSource(ace, slot) {
+       const row = slotRecoveryRow(ace, slot);
+diff --git a/web/frontend/index.html b/web/frontend/index.html
+--- a/web/frontend/index.html
++++ b/web/frontend/index.html
+@@ -3423,6 +3423,6 @@
+      unmounted HTML skeleton whenever unpkg.com was unreachable. -->
+ <script src="vendor/vue.global.prod.js"></script>
+ <script src="workspace.js?v=20261107-dashboard3"></script>
+-<script src="app.js?v=20261121-flow1567"></script>
++<script src="app.js?v=20261123-flow1590"></script>
+ </body>
+ </html>
+diff --git a/tests/test_native_buffer.py b/tests/test_native_buffer.py
+--- a/tests/test_native_buffer.py
++++ b/tests/test_native_buffer.py
+@@ -589,6 +589,7 @@
+         self.assertEqual(self.saved, [])
+ 
+     def test_retire_invalidates_all_four_slots_once_and_keeps_other_ace(self):
++        self.a._last_disconnect_epoch = {}
+         self.a._insert_epochs[(0, 1)] = None
+         self.a._insert_epochs[(1, 0)] = 9
+         sources = [self.a._capture_source_origin(0, slot) for slot in range(4)]
+@@ -600,6 +601,7 @@
+         epochs = dict(self.a._insert_epochs)
+         for slot in range(4):
+             self.assertFalse(self.a._source_insertion_matches(sources[slot], 0, slot))
++        self.assertEqual(self.a._last_disconnect_epoch, {(0, n): epochs[(0, n)] for n in range(4)})
+         self.assertEqual(epochs[(1, 0)], 9)
+         self.assertTrue(METHODS._retire_transport(self.a, 0).is_set())
+         self.assertEqual(self.a._insert_epochs, epochs)
+diff --git a/tests/test_recovery_ui.js b/tests/test_recovery_ui.js
+--- a/tests/test_recovery_ui.js
++++ b/tests/test_recovery_ui.js
+@@ -115,13 +115,15 @@
+ form.fields.packing_fraction = ['0.8', '1.2'];
+ assert.throws(() => ctx.remainingProfilePayload(form), /范围无效/);
+ const confirmation = ctx.retainedSourceConfirmationText(ace, slot,
+-  {source_head: 0, source_confirmation_prompt: '检测到插拔记录变化，可能已更换耗材。',
++  {source_head: 0, source_confirmation_prompt: 'ACE 连接记录已变化。',
+    connection_review_message: '旧连接仍保留停止故障和占用，请恢复原 USB 连接，未解锁退料。'});
+-assert.ok(confirmation.includes('检测到插拔记录变化'));
+-assert.ok(confirmation.includes('同一台 ACE 1 的原槽 1'));
+-assert.ok(confirmation.includes('已换料盘、换料或无法确认，请取消'));
+-assert.ok(confirmation.includes('保留堵料及管内占用记录'));
+-assert.ok(confirmation.includes('不会自动继续打印'));
++assert.ok(confirmation.includes('ACE 连接记录已变化'));
++assert.ok(confirmation.includes('ACE 1 的 1 号槽是否接到 1 号喷头'));
++assert.doesNotMatch(confirmation, /换料盘|原来的连续耗材/);
++row.needs_source_confirmation = false;
++row.can_confirm_empty = false;
++row.prompt = '送料受阻';
++assert.equal(ctx.slotRecoveryMessage(ace, slot), '送料受阻');
+ assert.ok(confirmation.includes('恢复原 USB 连接，未解锁退料'));
+ row.connection_review_message = '原连接仍待核，未解锁退料';
+ row.source_confirmation_prompt = '来源记录已补充';
+diff --git a/tests/test_recovery_ui.py b/tests/test_recovery_ui.py
+--- a/tests/test_recovery_ui.py
++++ b/tests/test_recovery_ui.py
+@@ -118,6 +118,7 @@
+         if (fault.get('ace_idx'), fault.get('slot')) == (idx, slot)), None)
+     a._serials = {0: object()}
+     a._connected_per_ace = {0: True}
++    a._last_disconnect_epoch = {}
+     a._insert_epochs = {(0, 0): 4}
+     a._insert_session = '1' * 32
+     a._ace_mode = 'multi'
+@@ -940,7 +941,7 @@
+         self.assertEqual(commands, ['discover_device'])
+         self.assertEqual(a._head_source[0]['connection_identity']['uid'], [8, 8, 8])
+ 
+-    def test_changed_insertion_epoch_cannot_reuse_retained_route(self):
++    def test_eject_waits_for_first_status_after_insertion(self):
+         a, _, actions, commands = self.setup_route()
+         a._insert_epochs[(0, 0)] = 5
+         with self.assertRaisesRegex(RuntimeError, '插料代次已变化'):
+@@ -1003,16 +1004,16 @@
+                 self.assertEqual(actions._eject_lease, (0, 0, a._serials[0]))
+                 self.assertEqual(commands, ['discover_device', 'discover_device'])
+ 
+-    def test_paused_print_allows_retained_source_confirmation_without_motion(self):
++    def test_paused_reinsert_does_not_request_confirmation_or_start_motion(self):
+         a, recovery, _, commands = self.setup_route()
+         a.printer.lookup_object('print_stats').state = 'paused'
+         a._insert_epochs[(0, 0)] += 1
+         row = recovery.status()['slots'][0]
+-        self.assertTrue(row['can_confirm_source'])
++        self.assertFalse(row['needs_source_confirmation'])
++        self.assertFalse(row['can_confirm_source'])
++        self.assertEqual(row['source_confirmation_prompt'], '')
+         self.assertFalse(row['can_probe'])
+         self.assertFalse(row['can_clear'])
+-        result = recovery.confirm_source(0, 0, 0, retained=True, ticket=row['ticket'])
+-        self.assertTrue(result['saved'])
+         self.assertEqual(commands, [])
+         self.assertEqual(a.printer.lookup_object('print_stats').state, 'paused')
+ 
+@@ -1048,17 +1049,9 @@
+         recovery.source_endpoint(stale)
+         self.assertFalse(stale.result['saved'])
+         row = recovery.status()['slots'][0]
+-        self.assertIn('插拔', row['source_confirmation_prompt'])
+-        self.assertIn('更换耗材', row['source_confirmation_prompt'])
+-        unconfirmed = Request(head=0, ace=0, slot=0, retained=1, confirmed=0, ticket=row['ticket'])
+-        recovery.source_endpoint(unconfirmed)
+-        self.assertFalse(unconfirmed.result['saved'])
++        self.assertFalse(row['needs_source_confirmation'])
++        self.assertEqual(row['source_confirmation_prompt'], '')
+         self.assertEqual(a._head_source, before)
+-        confirmed = Request(head=0, ace=0, slot=0, retained=1, confirmed=1, ticket=row['ticket'])
+-        recovery.source_endpoint(confirmed)
+-        self.assertTrue(confirmed.result['saved'])
+-        self.assertEqual(a._head_source[0]['insert_epoch'], 6)
+-        self.assertTrue(a._head_source[0]['load_failed'])
+         self.assertFalse(commands)
+         self.assertFalse(a.reactor.pending)
+ 
+diff --git a/tests/test_restart_retained_source.py b/tests/test_restart_retained_source.py
+--- a/tests/test_restart_retained_source.py
++++ b/tests/test_restart_retained_source.py
+@@ -10,8 +10,10 @@
+ 
+ methods = actual_methods('_reconcile_restored_sources', '_native_reconnect_block_reason',
+                          'cmd_ACE_LOAD_HEAD')
+-methods._reconcile_restored_sources.__globals__['configured_route_heads'] = (
+-    flow_guard.configured_route_heads)
++methods._reconcile_restored_sources.__globals__.update(
++    configured_route_heads=flow_guard.configured_route_heads,
++    same_slot_reinsert=flow_guard.same_slot_reinsert,
++    STOPPED_STATES=test_recovery_ui.slot_actions.STOPPED_STATES)
+ InsertPolicy = import_module(test_recovery_ui.PACKAGE + '.ace_insert_policy').InsertPolicy
+ 
+ 
+@@ -73,14 +75,85 @@
+         methods.cmd_ACE_LOAD_HEAD(a, command)
+         self.assertEqual(self.messages, ['msg.load_head_already_loaded'])
+ 
+-    def test_actual_inlet_change_still_invalidates_source(self):
++    def test_reinsert_renews_route_after_fresh_status(self):
+         self.observe()
+         a = self.ace
+         self.assertTrue(a._source_insertion_matches(a._head_source[0], 0, 0))
+         a._gen1_gate_gen[(0, 0)] += 2
+         a._insert_epochs[(0, 0)] += 2
+         self.observe()
+-        self.assertFalse(a._source_insertion_matches(a._head_source[0], 0, 0))
++        self.assertTrue(a._source_insertion_matches(a._head_source[0], 0, 0))
++        self.recovery.require_exit_source(0, 0)
++
++    def test_paused_ace3_slot4_after_y_jam(self):
++        a = self.ace
++        idx, head, slot = 2, 3, 3
++        a.head_uses_ace = lambda n: n == head
++        a._rfid_route_heads = lambda device, bay: [bay]
++        a._serials[idx] = object()
++        a._connected_per_ace[idx] = True
++        a._gate_status_per_ace[idx] = [1, 1, 1, 1]
++        a._insert_epochs[idx, slot] = 3
++        a._gen1_gate_gen[idx, slot] = 3
++        source = dict(a._head_source.pop(0), ace_index=idx, slot=slot, insert_epoch=1,
++                      insert_session=a._insert_session, load_failed=True,
++                      ace_insertion={'session': 11, 'epoch': 7})
++        a._head_source[head] = source
++        rows = [dict(index=n, slot_status='feed_error' if n == slot else 'ready') for n in range(4)]
++        a._info_per_ace[idx] = {'slots': rows}
++        lookup = a.printer.lookup_object
++        a.printer.lookup_object = lambda name, default=None: (
++            a._test_head_sensor if name == 'filament_motion_sensor e3_filament' else lookup(name, default))
++        ps = a.printer.lookup_object('print_stats')
++        ps.state = 'paused'
++
++        methods._reconcile_restored_sources(a, idx, a._serials[idx], rows)
++        self.recovery.require_exit_source(idx, slot)
++        row = next(r for r in self.recovery.status()['slots'] if (r['ace'], r['slot']) == (idx, slot))
++        self.assertFalse(row['needs_source_confirmation'])
++        self.assertEqual(row['source_confirmation_prompt'], '')
++        self.assertEqual(row['detail'], 'feed_error')
++        self.assertTrue(row['needs_clear'])
++        self.assertTrue(a._head_source[head]['load_failed'])
++        self.assertTrue(a._source_insertion_matches(a._head_source[head], idx, slot))
++        self.assertFalse(a._source_insertion_matches(source, idx, slot))
++        self.assertNotIn('ace_insertion', a._head_source[head])
++        self.assertEqual(ps.state, 'paused')
++        self.assertEqual(self.commands, [])
++        self.assertFalse(a.reactor.pending)
++
++    def test_reinsert_during_motion_or_across_disconnect_cannot_renew_route(self):
++        for case in ('moving', 'disconnected', 'empty', 'changed_uid', 'busy', 'printing'):
++            with self.subTest(case=case):
++                self.setUp()
++                self.observe()
++                a = self.ace
++                source = a._head_source[0]
++                a._insert_epochs[0, 0] += 2
++                if case == 'moving':
++                    a._info_per_ace[0]['slots'][0]['slot_status'] = 'feeding'
++                elif case == 'disconnected':
++                    a._last_disconnect_epoch[0, 0] = a._insert_epochs[0, 0] - 1
++                elif case == 'empty':
++                    a._gate_status_per_ace[0][0] = 0
++                elif case == 'changed_uid':
++                    a._rfid_identity_status = lambda _: {'port': '/dev/ace0', 'uid': [7, 8, 9]}
++                elif case == 'busy':
++                    self.actions.state['state'] = 'running'
++                else:
++                    a.printer.lookup_object('print_stats').state = 'printing'
++                self.observe()
++                self.assertIs(a._head_source[0], source)
++                self.assertFalse(a._source_insertion_matches(source, 0, 0))
++
++    def test_restart_in_failed_lane_recovers_only_the_route(self):
++        a = self.ace
++        a._head_source[0]['load_failed'] = True
++        a._info_per_ace[0]['slots'][0]['slot_status'] = 'feed_error'
++        self.observe()
++        self.recovery.require_exit_source(0, 0)
++        self.assertTrue(a._head_source[0]['load_failed'])
++        self.assertTrue(self.recovery.status()['slots'][0]['needs_clear'])
+ 
+     def test_first_firmware_report_does_not_invalidate_restored_source(self):
+         self.observe()
+@@ -102,8 +175,10 @@
+ 
+         policy.observe(0, entry, {'epochs': [9, 15, 12, 6]})
+         self.assertEqual(changed_routes, [(0, 0)])
+-        with self.assertRaisesRegex(RuntimeError, '插料代次'):
++        with self.assertRaisesRegex(RuntimeError, '等待 ACE'):
+             self.recovery.require_exit_source(0, 0)
++        self.observe()
++        self.recovery.require_exit_source(0, 0)
+ 
+     def test_other_device_absent_inlet_and_unknown_nozzle_keep_guard(self):
+         cases = ('uid', 'inlet', 'nozzle', 'changed_gate', 'wrong_head',

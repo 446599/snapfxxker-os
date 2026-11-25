@@ -1,0 +1,15 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -5827,9 +5827,9 @@
+             self._info = info
+         if idx in self._request_ids:
+             self._request_id = self._request_ids[idx]
+-        gate_list = self._gate_status_per_ace.get(idx)
+-        if gate_list is not None:
+-            self.gate_status = gate_list
++        # A box can be selected before its first successful connection.
++        # Bind now so its first status update reaches the active view.
++        self.gate_status = self._gate_status_per_ace.setdefault(idx, [GATE_UNKNOWN] * 4)
+         self.ace_dev_fd = self._ace_dev_fds.get(idx)
+         self.heartbeat_timer = self._heartbeat_timers.get(idx)
+         # The SAVE_VARIABLE goes out on the NEXT reactor tick, never inline.

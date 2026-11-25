@@ -1,0 +1,519 @@
+--- a/klipper/extras/ace_fixed_park.py
++++ b/klipper/extras/ace_fixed_park.py
+@@ -1,4 +1,4 @@
+-"""Park stock V2 filament from a fresh toolhead-switch reference."""
++"""Return stock V2 filament to its route in reverse only."""
+ import logging
+ import math
+ 
+@@ -24,7 +24,6 @@
+ 
+ class ParkMotion:
+     TOLERANCE_MM = 3
+-    EDGE_SEEK_SPEED = 24
+     DIRECT_EDGE_LIMIT_MM = 120
+     FAST_RETURN_SPEED = 100
+     FAST_APPROACH_SPEED = 80
+@@ -85,19 +84,20 @@
+         if idx != self.idx or serial is not self.transport or request is not self.pending:
+             return False
+         try:
+-            self.check()
+-            return True
++            present = self.check()
++            return (request.get('method') == 'unwind_filament'
++                    and (not request.get('_park_require_empty') or present is False))
+         except RuntimeError:
+             return False
+ 
+-    def _stop(self, allow_zero=False, ready_without_decoder=False):
++    def _stop(self, allow_zero=False, ready_without_decoder=False, ready_status_only=False):
+         # Always verify on the original connection, even if a route/gate guard
+         # caused the move to abort. Do not send another move on uncertain STOP.
+         self.receipt = stop_and_verify(
+             self.ace, self.idx, self.slot, transport=self.transport,
+             identity=self.identity, timeout=5.0, ready_zero_mm=0 if allow_zero else None,
+             ready_without_decoder=ready_without_decoder,
+-            stopped_assist_without_decoder=ready_without_decoder)
++            stopped_assist_without_decoder=ready_without_decoder, ready_status_only=ready_status_only)
+ 
+     def _gate(self):
+         if not self.actions._gate(self.idx, self.slot, monitor=self.check):
+@@ -152,20 +152,19 @@
+                 pass
+         return None
+ 
+-    def _move(self, length, speed, *, reverse, edge=None, stop_at=None,
+-              allow_edge_miss=False, wait_native=False, material_limit_mm=None):
++    def _move(self, length, speed, *, edge=None, stop_at=None,
++              allow_edge_miss=False, wait_native=False, material_limit_mm=None, commanded=False):
+         """One finite pulse, or stop sooner at a witnessed switch transition."""
+         start_pin = self.check()
+         if edge is not None and start_pin is edge:
+             raise RuntimeError('喷头开关已在目标侧，无法建立本次边缘')
+         if edge is None and start_pin is not False:
+             raise RuntimeError('长退开始前喷头尚未清空')
+-        if edge is None and self.forward_decoder_sign is None:
++        if not commanded and edge is None and self.forward_decoder_sign is None:
+             raise RuntimeError('长退前原槽编码器方向未确认')
+-        direction = -1 if reverse else 1
+         before = self.receipt['sample']
+         stopped_motor = self.receipt.get('motor_counters') if before is None else None
+-        if before is None and (not reverse or edge is not False or stopped_motor is None
++        if not commanded and before is None and (edge is not False or stopped_motor is None
+                                or self.forward_decoder_sign is None):
+             raise ParkEncoderUnavailable('回停前缺少可比较的原槽基线')
+         allowance = 14 if wait_native else 4
+@@ -173,8 +172,8 @@
+         if material_limit_mm is None:
+             material_limit_mm = motor_limit_mm
+         params = {'index': self.slot, 'length': length, 'speed': speed}
+-        request = {'method': 'unwind_filament' if reverse else 'feed_filament',
+-                   'params': params, '_fixed_park_motion': self,
++        request = {'method': 'unwind_filament',
++                   'params': params, '_fixed_park_motion': self, '_park_require_empty': edge is None,
+                    '_insert_stop_transport': self.transport}
+         replies = []
+ 
+@@ -209,8 +208,6 @@
+                 pin = self.check()
+                 now = self.reactor.monotonic()
+                 if edge is not None and pin is edge:
+-                    if edge is True:
+-                        break
+                     if clear_since is None:
+                         clear_since = now
+                     elif now - clear_since >= self.FALLING_EDGE_SETTLE_S:
+@@ -220,6 +217,8 @@
+                 if edge is None and pin:
+                     raise RuntimeError('长退期间喷头开关重新触发')
+                 if now >= end:
++                    if commanded:
++                        raise RuntimeError('原槽未在退料时限内就绪')
+                     if edge is not None and not allow_edge_miss:
+                         raise RuntimeError('在限程内未找到喷头传感器边缘')
+                     break
+@@ -243,7 +242,7 @@
+                     sample = self._feed_sample()
+                     poll_at = now + .25
+                     if sample is not None and sample != before and sample[0] <= motor_limit_mm:
+-                        value = sample[1] * self.forward_decoder_sign * direction
++                        value = sample[1] * -self.forward_decoder_sign
+                         if value + 1 < observed:
+                             raise RuntimeError('低速回停的编码器方向改变或计数重置')
+                         if value > observed:
+@@ -255,15 +254,19 @@
+                 self.reactor.pause(min(end, now + self.POLL_S))
+         finally:
+             self.pending = None
+-            self._stop(allow_zero=edge is not None and stopped_motor is None)
++            self._stop(allow_zero=edge is not None and stopped_motor is None, ready_status_only=commanded)
+         pin = self.check()
+         self._gate()
++        if commanded:
++            if pin is not False or self.receipt['slot_status'] != 'ready':
++                raise RuntimeError('回退后原槽或喷头状态未确认')
++            return None  # Completion of a finite command supplies no measured distance.
+         motor, decoder, steps = sample = self.receipt['sample']
+         if self.forward_decoder_sign is None and edge is not None and pin is edge and decoder:
+             # Older travel ledgers lack polarity. Only learn it from a
+             # stopped short move whose physical switch changed as expected.
+-            self.forward_decoder_sign = (1 if decoder > 0 else -1) * direction
+-        distance = decoder * (self.forward_decoder_sign or 0) * direction
++            self.forward_decoder_sign = (-1 if decoder > 0 else 1)
++        distance = decoder * -(self.forward_decoder_sign or 0)
+         if (self.receipt['slot_status'] != 'ready' or sample == before
+                 or (stopped_motor is not None
+                     and ((steps, motor) == stopped_motor or distance <= 0))
+@@ -274,9 +277,9 @@
+             if allow_edge_miss and edge is False and pin is True:
+                 raise ParkEdgeMissed(distance)
+             raise RuntimeError('回停动作停稳后的喷头信号不符')
+-        logging.info('[multiACE] fixed park pulse ACE=%d slot=%d direction=%s '
++        logging.info('[multiACE] fixed park pulse ACE=%d slot=%d direction=reverse '
+                      'command=%d speed=%d observed=%.1f terminal=%.1f motor=%.1f',
+-                     self.idx + 1, self.slot + 1, 'reverse' if reverse else 'forward',
++                     self.idx + 1, self.slot + 1,
+                      length, speed, observed, distance, motor)
+         return distance
+ 
+@@ -290,31 +293,37 @@
+                 raise RuntimeError('喷头尚未清空，未开始回停')
+             a._v2_active_rev_assist = False
+             a._clear_fa_cache_for(self.idx, self.slot)
+-            self._stop(allow_zero=True, ready_without_decoder=True)
++            commanded = not (direct or measured)
++            self._stop(allow_zero=True, ready_without_decoder=True, ready_status_only=commanded)
+             self._gate()
+             if self.receipt['slot_status'] == 'assist_error':
+                 raise ParkEncoderUnavailable('原槽已停止助送，转普通有限回退')
+             if self.receipt['slot_status'] != 'ready':
+                 raise RuntimeError('原槽未就绪，未开始回停')
++            if commanded:
++                # The native short pull already cleared the head. Debit every
++                # completed short move before issuing one finite reverse.
++                remaining = max(0, math.floor(target - short_commanded_mm))
++                if remaining:
++                    self._move(remaining, speed, wait_native=True, commanded=True)
++                a._verify_unload_park(self.idx, self.slot, self.head)
++                if self.check() is not False:
++                    raise RuntimeError('回停完成后喷头重新检测到料')
++                logging.info('[multiACE] one-way park ACE=%d slot=%d target=%d prior=%.1f remaining=%d',
++                             self.idx + 1, self.slot + 1, target, short_commanded_mm, remaining)
++                return None, None
+             if self.receipt['sample'] is None and (not direct or self.forward_decoder_sign is None
+                     or self.receipt.get('motor_counters') is None):
+                 raise ParkEncoderUnavailable('固定回停缺少初始计数记录')
+             if measured:
+                 if self.check() is not False or self.forward_decoder_sign is None:
+                     raise RuntimeError('按实测距离回退前喷头或编码器方向未确认')
+-                forward = reverse_edge = 0.0
+-            elif direct:
++                reverse_edge = 0.0
++            else:
+                 if self.check() is not True:
+                     raise ParkEdgeMissed(0)
+-                forward = 0.0
+                 reverse_edge = self._move(min(self.DIRECT_EDGE_LIMIT_MM, int(short_commanded_mm)), 6,
+-                                          reverse=True, edge=False, allow_edge_miss=True)
+-            else:
+-                # Recovery after the native short pull still re-acquires
+-                # the same falling edge before any long travel.
+-                seek = min(450, int(short_commanded_mm) + 100)
+-                forward = self._move(seek, self.EDGE_SEEK_SPEED, reverse=False, edge=True)
+-                reverse_edge = self._move(35, 6, reverse=True, edge=False)
++                                          edge=False, allow_edge_miss=True)
+             # The legacy motor length can undershoot in filament units.
+             # Measure the coarse move before sizing each fast correction.
+             coarse = math.floor(target - 100)
+@@ -322,7 +331,7 @@
+             distance = 0.0
+             fast_speed = min(speed, self.FAST_APPROACH_SPEED)
+             if coarse > 40:
+-                distance = self._move(coarse, self.FAST_RETURN_SPEED, reverse=True,
++                distance = self._move(coarse, self.FAST_RETURN_SPEED,
+                                       wait_native=True, material_limit_mm=target + self.TOLERANCE_MM)
+                 moves.append((coarse, distance))
+             if fast_speed >= self.FAST_APPROACH_MIN_SPEED:
+@@ -334,31 +343,29 @@
+                     # the measured-move allowance. Keep the last approach slow
+                     # enough to stop on the encoder with millimetre accuracy.
+                     length = math.floor(remaining - self.FAST_APPROACH_RESERVE_MM)
+-                    actual = self._move(length, fast_speed, reverse=True, wait_native=True,
++                    actual = self._move(length, fast_speed, wait_native=True,
+                                         material_limit_mm=remaining + self.TOLERANCE_MM)
+                     moves.append((length, actual))
+                     distance += actual
+             for _ in range(3):
+                 remaining = target - distance
+-                if abs(remaining) <= self.TOLERANCE_MM:
++                if remaining <= self.TOLERANCE_MM:
+                     break
+-                length = math.ceil(abs(remaining)) + 25
+-                actual = self._move(length, min(speed, 10), reverse=remaining > 0,
+-                                    stop_at=abs(remaining) - 1)
+-                signed = actual if remaining > 0 else -actual
+-                moves.append((length, signed))
+-                distance += signed
++                length = math.ceil(remaining) + 25
++                actual = self._move(length, min(speed, 10), stop_at=remaining - 1)
++                moves.append((length, actual))
++                distance += actual
+             if abs(target - distance) > self.TOLERANCE_MM:
+                 raise RuntimeError('回停未达到编码器目标：%.1f / %.1f mm' % (distance, target))
+             a._verify_unload_park(self.idx, self.slot, self.head)
+             if self.check() is not False:
+                 raise RuntimeError('回停完成后喷头重新检测到料')
+             logging.info('[multiACE] fixed park ACE=%d slot=%d head=%d target=%.1f '
+-                         'decoder=%.1f reference=%s edge_feed=%.1f edge_retract=%.1f moves=%s',
++                         'decoder=%.1f reference=%s edge_retract=%.1f moves=%s',
+                          self.idx + 1, self.slot + 1, self.head + 1,
+-                         target, distance, 'measured' if measured else 'direct' if direct else 'reseek',
+-                         forward, reverse_edge, moves)
+-            return distance, forward - reverse_edge - distance
++                         target, distance, 'measured' if measured else 'direct',
++                         reverse_edge, moves)
++            return distance, -reverse_edge - distance
+         finally:
+             if a._fixed_park_motion is self:
+                 a._fixed_park_motion = None
+--- a/klipper/extras/ace_filament_travel.py
++++ b/klipper/extras/ace_filament_travel.py
+@@ -277,6 +277,16 @@
+                    park_target_mm=target, park_retracted_mm=distance)
+         self._save()
+ 
++    def finish_commanded_park(self, head, ace, slot):
++        row = self._row(head, ace, slot)
++        if not row or not row.get('pending') or row.get('phase') != 'unloading':
++            raise ValueError('回停完成记录不匹配')
++        # The head is clear and the inlet still occupied. Do not publish a
++        # new edge calibration or a measured position from a command length.
++        row.update(phase='head_empty', pending=False, known=False,
++                   reason='commanded_return', park_reference_reached=False)
++        self._save()
++
+     def finish_fixed_park_probe(self, head, ace, slot, retracted_mm):
+         row = self._row(head, ace, slot)
+         if (row is None or not row.get('pending') or row.get('phase') != 'unloading'
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -1140,15 +1140,18 @@
+                 distance, _ = motion.run(measured_target, short_commanded_mm, speed, measured=True)
+                 tracking.finish_park(head, idx, slot, measured_mm=distance,
+                                      measured_target=measured_target)
++            elif not direct:
++                motion.run(target, short_commanded_mm, speed)
++                tracking.finish_commanded_park(head, idx, slot)
+             else:
+-                distance, net = motion.run(target, short_commanded_mm, speed, direct=direct)
++                distance, net = motion.run(target, short_commanded_mm, speed, direct=True)
+                 tracking.finish_fixed_park(head, idx, slot, motion.scope, target,
+                                            distance, net)
+         except ParkEdgeMissed as exc:
+             tracking.finish_fixed_park_probe(head, idx, slot, exc.retracted_mm)
+             logging.info('[multiACE] direct park probe stopped after %.1f mm; using native probe',
+                          exc.retracted_mm)
+-            return False
++            raise
+         except ParkEncoderUnavailable as exc:
+             tracking.finish_fixed_park_probe(head, idx, slot, 0)
+             logging.info('[multiACE] 继续普通退料：%s', exc)
+@@ -1159,6 +1162,8 @@
+             # as a generic motion failure: invalidate the distance record and
+             # let ACE_UNLOAD_HEAD use its existing ACE_SLOT_EXIT handoff.
+             tracking.unknown(head, idx, slot, 'fixed_park_unconfirmed')
++            if not direct and measured_target is None:
++                raise
+             logging.info('[multiACE] 回停 ACK 未确认，转原槽入口退出以重新建立零点')
+             return False
+         except Exception:
+@@ -3310,10 +3315,14 @@
+                                     head=self.ace._disp(head_idx),
+                                     ace=self.ace._disp(_gate_ace),
+                                     slot=self.ace._disp(_ace_slot)))
++                            _short_total = 0.0
+                             if keep_in_ace and not _gate_empty and _return_mm is not None:
+-                                fixed_parked = self._finish_fixed_unload(
+-                                    ch, self.ace._active_device_index, _ace_slot,
+-                                    _short_retract, _retract_speed, direct=True)
++                                try:
++                                    fixed_parked = self._finish_fixed_unload(
++                                        ch, self.ace._active_device_index, _ace_slot,
++                                        _short_retract, _retract_speed, direct=True)
++                                except ParkEdgeMissed as exc:
++                                    _short_total += exc.retracted_mm
+                                 if fixed_parked:
+                                     unload_ok = True
+                                     unload_max = 0
+@@ -3345,6 +3354,7 @@
+                                         unload_stop=_unload_stop))
+                                 self.ace.wait_ace_ready(slot=_ace_slot)
+                                 self.ace._check_calibration_unload_cancel()
++                                _short_total += _short_retract
+                                 self._unload_dec_log(
+                                     head_idx, _ace_slot, 'short', _short_retract,
+                                     _usp, unload_attempt + 1)
+@@ -3521,7 +3531,7 @@
+                                     logging.info('[multiACE] verified hot park: %s', _hot_result)
+                                 elif keep_in_ace and self._finish_fixed_unload(
+                                         ch, self.ace._active_device_index, _ace_slot,
+-                                        _short_retract * (unload_attempt + 1), _retract_speed):
++                                        _short_total, _retract_speed):
+                                     fixed_parked = True
+                                 else:
+                                     _rest = self.ace._head_return_remaining(
+@@ -3813,10 +3823,14 @@
+                                     head=self.ace._disp(head_idx),
+                                     ace=self.ace._disp(_gate_ace),
+                                     slot=self.ace._disp(_ace_slot)))
++                            _short_total = 0.0
+                             if keep_in_ace and not _gate_empty and _return_mm is not None:
+-                                fixed_parked = self._finish_fixed_unload(
+-                                    ch, self.ace._active_device_index, _ace_slot,
+-                                    _short_retract, _retract_speed, direct=True)
++                                try:
++                                    fixed_parked = self._finish_fixed_unload(
++                                        ch, self.ace._active_device_index, _ace_slot,
++                                        _short_retract, _retract_speed, direct=True)
++                                except ParkEdgeMissed as exc:
++                                    _short_total += exc.retracted_mm
+                                 if fixed_parked:
+                                     unload_ok = True
+                                     unload_max = 0
+@@ -3848,6 +3862,7 @@
+                                         unload_stop=_unload_stop))
+                                 self.ace.wait_ace_ready(slot=_ace_slot)
+                                 self.ace._check_calibration_unload_cancel()
++                                _short_total += _short_retract
+                                 self._unload_dec_log(
+                                     head_idx, _ace_slot, 'short', _short_retract,
+                                     _usp, unload_attempt + 1)
+@@ -4024,7 +4039,7 @@
+                                     logging.info('[multiACE] verified hot park: %s', _hot_result)
+                                 elif keep_in_ace and self._finish_fixed_unload(
+                                         ch, self.ace._active_device_index, _ace_slot,
+-                                        _short_retract * (unload_attempt + 1), _retract_speed):
++                                        _short_total, _retract_speed):
+                                     fixed_parked = True
+                                 else:
+                                     _rest = self.ace._head_return_remaining(
+--- a/tests/test_fixed_park.py
++++ b/tests/test_fixed_park.py
+@@ -3,6 +3,7 @@
+ import json
+ import unittest
+ 
++import test_feed_handoff
+ from test_feed_handoff import PKG, Reactor, Wire
+ 
+ 
+@@ -163,20 +164,64 @@
+         self.assertIsNone(a.active_move)
+         self.assertEqual(a.state, 'ready')
+ 
+-    def test_different_start_points_park_at_same_edge_relative_target(self):
+-        results = []
+-        for start in (-75, -143, -215):
+-            a = ParkWire(start)
+-            move = park.ParkMotion(a, 0, 0, 0)
+-            distance, _ = move.run(1480, 150, 80)
+-            self.assertLessEqual(abs(distance - 1480), 3)
+-            self.assertTrue(a._gate(0, 0))
+-            self.assertFalse(a.runout_buttun_state)
+-            self.assertGreater(len(a.motion_commands), 3)  # encoder correction
+-            self.assertIsNone(a._fixed_park_motion)
+-            self.assertTrue(guard.wire_rejection(a, 0, a.motion_commands[-1], a._serials[0]))
+-            results.append(a.position)
+-        self.assertLessEqual(max(results) - min(results), 3)
++    def test_saved_target_with_no_load_receipt_debits_all_short_pulls(self):
++        for short_total, expected in ((150, 1330), (150+95, 1235), (1480, 0), (1490, 0)):
++            with self.subTest(short_total=short_total):
++                a = ParkWire(-short_total)
++                a.decoder_present = False
++                park.ParkMotion(a, 0, 0, 0).run(1480, short_total, 80)
++                self.assertEqual([(cmd['method'], cmd['params']['length']) for cmd in a.motion_commands],
++                                 [('unwind_filament', expected)] if expected else [])
++                self.assertNotIn('get_feed_info', [method for method, _, _ in a.calls])
++                self.assertTrue(a._gate(0, 0))
++                self.assertFalse(a.runout_buttun_state)
++                self.assertIsNone(a._fixed_park_motion)
++
++    def incident_fixture(self):
++        a = ParkWire(-150)
++        a._is_v2_idx = lambda idx: idx == 0
++        a.decoder_present = False
++        ledger = a._head_travel = travel.FilamentTravel()
++        saved = {'scope': park.ParkMotion(a, 0, 0, 0).scope, 'target_mm': 1480}
++        ledger.fixed_park_references['0:0:0'] = saved
++        ledger.begin_load(0, 0, 0)
++        ledger.finish_load(0, 0, 0)  # As on the device: head arrived, no credible load distance.
++        self.assertIsNone(ledger.begin_unload(0, 0, 0))
++        h = test_feed_handoff.IntegrationTests.harness({'_finish_fixed_unload'})
++        h.ace, h.filament_ch = a, [0]
++        h._finish_fixed_unload.__func__.__globals__.update(
++            raw_head_state=guard.raw_head_state, ParkEdgeMissed=park.ParkEdgeMissed,
++            ParkEncoderUnavailable=park.ParkEncoderUnavailable, ParkAckUnavailable=park.ParkAckUnavailable)
++        return h, a, saved
++
++    def test_unload_handler_finishes_reported_route_without_claiming_an_exact_park(self):
++        h, a, saved = self.incident_fixture()
++        self.assertTrue(h._finish_fixed_unload(0, 0, 0, 150, 80))
++        self.assertEqual([(cmd['method'], cmd['params']['length']) for cmd in a.motion_commands],
++                         [('unwind_filament', 1330)])
++        row = a._head_travel.status()['0']
++        self.assertEqual(row['phase'], 'head_empty')
++        self.assertFalse(row['park_reference_reached'])
++        self.assertFalse(row['known'])
++        self.assertFalse(row['pending'])
++        self.assertEqual(a._head_travel.fixed_park_references['0:0:0'], saved)
++
++    def test_unconfirmed_bulk_is_never_replayed_or_recorded_as_success(self):
++        h, a, _ = self.incident_fixture()
++        a.reject_move = 1
++        with self.assertRaises(park.ParkAckUnavailable):
++            h._finish_fixed_unload(0, 0, 0, 150, 80)
++        self.assertEqual(len(a.motion_commands), 1)
++        self.assertEqual(a._head_travel.status()['0']['phase'], 'unloading')
++        self.assertFalse(a._head_travel.status()['0']['pending'])
++
++    def test_commanded_return_requires_device_completion(self):
++        a = ParkWire(-150)
++        a.motor_speed_cap = 6
++        with self.assertRaisesRegex(RuntimeError, '未在退料时限内就绪'):
++            park.ParkMotion(a, 0, 0, 0).run(1480, 150, 80)
++        self.assertEqual([cmd['method'] for cmd in a.motion_commands], ['unwind_filament'])
++        self.assertIsNone(a.active_move)
+ 
+     def test_measured_clear_head_never_seeks_the_sensor(self):
+         a = ParkWire(-320)
+@@ -231,15 +276,20 @@
+     def test_closed_loop_trim_compensates_for_a_motor_deadband(self):
+         a = ParkWire(-140)
+         a.trim_deadband = 10
+-        distance, _ = park.ParkMotion(a, 0, 0, 0).run(1480, 150, 80)
++        motion = park.ParkMotion(a, 0, 0, 0)
++        motion.forward_decoder_sign = 1
++        distance, _ = motion.run(1480, 150, 80, measured=True)
+         self.assertLessEqual(abs(distance - 1480), 3)
+         self.assertTrue(a._gate(0, 0))
+-        self.assertGreater(sum(method == 'get_feed_info' for method, _, _ in a.calls), 30)
++        self.assertTrue(any(cmd['params']['speed'] == 10 for cmd in a.motion_commands))
++        self.assertTrue(all(cmd['method'] == 'unwind_filament' for cmd in a.motion_commands))
+ 
+     def test_measured_fast_approach_leaves_only_a_short_finish(self):
+         a = ParkWire(-140)
+         a.fast_speed_factor = .9  # long pulse delivers less travel than nominal
+-        distance, _ = park.ParkMotion(a, 0, 0, 0).run(1480, 150, 80)
++        motion = park.ParkMotion(a, 0, 0, 0)
++        motion.forward_decoder_sign = 1
++        distance, _ = motion.run(1480, 150, 80, measured=True)
+         self.assertLessEqual(abs(distance - 1480), 3)
+         reverse = [request['params'] for request in a.motion_commands
+                    if request['method'] == 'unwind_filament']
+@@ -312,18 +362,16 @@
+         self.assertTrue(a.runout_buttun_state)
+         self.assertEqual(a._head_source[0]['slot'], 0)
+ 
+-    def test_reversed_encoder_works_for_direct_and_legacy_edge_paths(self):
++    def test_reversed_encoder_works_for_direct_and_precleared_measured_returns(self):
+         for direct in (False, True):
+             with self.subTest(direct=direct):
+-                a=ParkWire(24 if direct else -140)
+-                a.wiring_sign=-1
+-                motion=park.ParkMotion(a, 0, 0, 0)
+-                if direct:
+-                    motion.forward_decoder_sign=-1
+-                distance,_=motion.run(1480, 150, 80, direct=direct)
+-                self.assertEqual(motion.forward_decoder_sign,-1)
+-                self.assertAlmostEqual(distance,1480,delta=3)
+-                self.assertTrue(a._gate(0,0))
++                a = ParkWire(24 if direct else -140)
++                a.wiring_sign = -1
++                motion = park.ParkMotion(a, 0, 0, 0)
++                motion.forward_decoder_sign = -1
++                distance, _ = motion.run(1480, 150, 80, direct=direct, measured=not direct)
++                self.assertAlmostEqual(distance, 1480, delta=3)
++                self.assertTrue(all(cmd['method']=='unwind_filament' for cmd in a.motion_commands))
+                 self.assertFalse(a.runout_buttun_state)
+ 
+     def test_coarse_encoder_can_exceed_motor_travel_inside_park_budget(self):
+@@ -352,15 +400,15 @@
+             park.ParkMotion(a, 0, 0, 0).run(1480, 150, 80)
+         self.assertIsNone(a.active_move)
+         self.assertIsNone(a._fixed_park_motion)
+-        self.assertEqual(len(a.motion_commands), 3)
++        self.assertEqual(len(a.motion_commands), 1)
+         self.assertEqual(a._head_source[0]['slot'], 0)
+ 
+     def test_lost_move_ack_stops_without_replaying(self):
+         a = ParkWire(-140)
+-        a.reject_move = 3
++        a.reject_move = 1
+         with self.assertRaisesRegex(park.ParkAckUnavailable, '未确认'):
+             park.ParkMotion(a, 0, 0, 0).run(1480, 150, 80)
+-        self.assertEqual(len(a.motion_commands), 3)
++        self.assertEqual(len(a.motion_commands), 1)
+         self.assertIsNone(a.active_move)
+         self.assertEqual(a.state, 'ready')
+ 

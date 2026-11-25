@@ -1,0 +1,137 @@
+--- a/klipper/extras/ace_flow_guard.py
++++ b/klipper/extras/ace_flow_guard.py
+@@ -212,9 +212,11 @@
+                        and actions.eject_allows(idx, request, serial))
+         position_unload = (getattr(ace, '_position_unload_recovery', None) is not None
+                            and ace._position_unload_recovery.allows_wire(idx, request, serial))
++        policy = getattr(ace, '_insert_policy', None)
+         for head in heads:
+             reason = source_conflict(ace, head, idx, slot)
+-            if reason and not (exact_eject or position_unload):
++            if (reason and not (exact_eject or position_unload)
++                    and not (policy is not None and policy.allows_branch_grip(idx, request, serial, head))):
+                 return reason
+         for owner in list(getattr(ace, '_feed_supervisors', {}).values()):
+             if owner.active and owner.head in heads and (owner.idx, owner.slot) != (idx, slot):
+--- a/klipper/extras/ace_insert_policy.py
++++ b/klipper/extras/ace_insert_policy.py
+@@ -390,7 +390,7 @@
+                 and entry is not None and entry['applied'] is False
+                 and entry['transport'] is transport and self.ace._serials.get(idx) is transport):
+             self.pause_empty[key] = [ctx, 0]
+-        if (before == 0 and after == 1 and entry is not None and entry['applied'] is False
++        if (valid and before == 0 and after == 1 and entry is not None and entry['applied'] is False
+                 and entry['transport'] is transport and self.ace._serials.get(idx) is transport):
+             self.gate_events[key] = ctx
+             if (valid and self._pause_stable() and previous and previous[1] >= 2
+@@ -660,6 +660,37 @@
+                 return False
+             self.scan_origins[(idx, slot)] = original_context
+         return True
++
++    def _occupied_branch(self, idx, slot, heads):
++        a = self.ace
++        if a._ace_mode != 'multi' or heads != (slot,) or raw_head_state(a, slot) is not True:
++            return None
++        source = a._head_source.get(slot)
++        route = source_route(source)
++        if (route is None or route[0] == idx or route[1] != slot
++                or source.get('load_failed') is not False):
++            return None
++        return route
++
++    def allows_branch_grip(self, idx, request, transport, head):
++        """Admit precisely one finite inlet grip while another ACE owns the head."""
++        a, token = self.ace, self.active
++        if (token is None or token is not self.owner or token is not request.get('_insert_policy_owner')
++                or token.get('paused_grip') or token.get('revoked') or token.get('grip_wire_attempted')
++                or a._slot_actions.cancel or self.changing or request.get('method') != 'feed_filament'):
++            return False
++        slot, event = token['slot'], token.get('gate_event')
++        if (event is None or head != slot or idx != token['idx']
++                or transport is not token['entry']['transport']
++                or request.get('params') != token.get('grip_params')
++                or self._gate_context(idx, slot) != event):
++            return False
++        stats = a.printer.lookup_object('print_stats', None)
++        gates = a._gate_status_per_ace.get(idx) or ()
++        peer = self._occupied_branch(idx, slot, event[3])
++        return (stats is not None and stats.state in ('standby', 'complete', 'cancelled')
++                and a._connected_per_ace.get(idx) is True and len(gates) > slot and gates[slot] == 1
++                and peer is not None and peer == token.get('branch_peer'))
+ 
+     def before_write(self, idx, request, transport):
+         method = request.get('method')
+@@ -857,11 +888,19 @@
+ 
+     def run(self, idx, slot, entry, epoch, event=None):
+         a, actions = self.ace, self.ace._slot_actions
++        peer = self._occupied_branch(idx, slot, event[3]) if event is not None else None
++        # Eight millimetres is the original inlet-only grip. Use the full
++        # ten centimetres on an occupied branch with recorded Y clearance.
++        grip_mm, grip_speed = ((8, 10) if peer is not None and not self.options.enabled('rfid', idx)
++                               else (GRIP_MM, GRIP_SPEED))
++        params = {'index': slot, 'length': grip_mm, 'speed': grip_speed}
+         auto_at_start = self.options.enabled('auto_rfid', idx)
+         try:
+             actions._check(idx, slot)
+             with self.claim('insert', idx, slot) as token:
+-                token.update(entry=entry, epoch=epoch, gate_event=event)
++                token.update(entry=entry, epoch=epoch, gate_event=event, branch_peer=peer,
++                             grip_params=params.copy())
++                actions.state['limit'] = grip_mm
+                 self.active = token
+                 monitor = lambda: self.monitor(token)
+                 try:
+@@ -880,16 +919,15 @@
+                     if current['pending'][slot]:
+                         self.request(idx, 'insert_policy_discard', entry, slot, epoch)
+                     monitor()
+-                    actions._request(idx, 'feed_filament',
+-                        {'index': slot, 'length': GRIP_MM, 'speed': GRIP_SPEED}, 8,
++                    actions._request(idx, 'feed_filament', params, 8,
+                         monitor=monitor, stop_transport=entry['transport'], policy_token=self.owner)
+                     # Wait for the finite feed while remaining responsive to cancel.
+                     started = a.reactor.monotonic()
+-                    duration = GRIP_MM / float(GRIP_SPEED)
++                    duration = grip_mm / float(grip_speed)
+                     earliest = started + duration
+                     deadline = earliest + 3.0
+                     actions.state.update(progress_percent=0, progress_estimated=True,
+-                                         message='正在插入 10 cm')
++                                         message='正在短吸 %d mm' % grip_mm)
+                     while a.reactor.monotonic() < earliest:
+                         monitor()
+                         percent = min(95, int(100 * (a.reactor.monotonic() - started) / duration))
+@@ -909,8 +947,8 @@
+                     try:
+                         stopped = actions._sample(idx, slot, allow_initial_zero=True, monitor=monitor)
+                         present, (decoder_ok, delta), (_steps, measured_length) = stopped
+-                        if (present and decoder_ok and 0 < abs(delta) <= GRIP_MM + 10
+-                                and 0 < measured_length <= GRIP_MM and stopped[1:] != baseline[1:]):
++                        if (peer is None and present and decoder_ok and 0 < abs(delta) <= grip_mm + 10
++                                and 0 < measured_length <= grip_mm and stopped[1:] != baseline[1:]):
+                             context = self._scan_context(idx, slot)
+                             with self.wire_lock:
+                                 self.scan_origins[(idx, slot)] = context
+@@ -938,7 +976,7 @@
+                     raise
+                 finally:
+                     self.active = None
+-            if (auto_at_start and not actions.cancel
++            if (peer is None and auto_at_start and not actions.cancel
+                     and self.options.enabled('auto_rfid', idx)):
+                 self.connected(idx, entry)
+                 gcmd = a.gcode.create_gcode_command('ACE_SLOT_RFID', 'ACE_SLOT_RFID',
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -295,6 +295,9 @@
+                                  idx, method, request.get('id'), attempt + 1)
+         if r is None:
+             raise RuntimeError('%s 响应超时' % method)
++        if (isinstance(r, dict) and isinstance(r.get('msg'), str)
++                and any(r.get(key) is True for key in ('_insert_invalidated', '_location_hold', '_host_stop_fault'))):
++            raise RuntimeError(r['msg'])
+         if not isinstance(r, dict) or r.get('_v2_frame_valid') is not True or r.get('_v2_payload_valid') is not True or r.get('_v2_command') != command:
+             raise RuntimeError('%s 响应帧无效' % method)
+         if type(r.get('code')) is not int or r['code'] != 0 or str(r.get('msg','')).upper() == 'FORBIDDEN':

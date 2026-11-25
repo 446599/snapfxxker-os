@@ -1,0 +1,464 @@
+--- a/klipper/extras/ace_insert_policy.py
++++ b/klipper/extras/ace_insert_policy.py
+@@ -589,6 +589,63 @@
+             finally:
+                 self.pause_mutex = None
+ 
++    def _paused_inlet_ready(self, idx, slot, entry, context, inserted):
++        """Release only isolated, armed peers while the original inlet is being serviced."""
++        a = self.ace
++        rows = a._info_per_ace.get(idx, {}).get('slots', ())
++        lanes = {row['index']: row['slot_status'] for row in rows}
++        if len(lanes) != 4 or context != self._gate_context(idx, slot):
++            return False
++        if inserted and all(state == 'ready' for state in lanes.values()):
++            return True
++        if lanes[slot] != ('ready' if inserted else 'feed_error'):
++            return False
++        peers = [peer for peer, state in lanes.items() if peer != slot and state != 'ready']
++        if not peers or any(lanes[peer] not in ('assisting', 'rollback_assisting') for peer in peers):
++            return False
++        heads = context[3]
++        if not heads or any(raw_head_state(a, head) is not False for head in heads):
++            return False
++        for peer in peers:
++            peer_heads = tuple(a._rfid_route_heads(idx, peer) or ())
++            if (not peer_heads or set(heads).intersection(peer_heads)
++                    or not a._native_assist_is_armed(idx, peer) or a._stop_message(idx, peer)):
++                return False
++        stopped = entry.setdefault('inlet_peer_stops', {})
++        event = context[-1]
++        if stopped.get(slot) == event:
++            return False
++        mutex = self._free_gcode_mutex()
++        recovery = getattr(a, '_error_recovery', None)
++        if mutex is None or recovery is None or recovery._is_busy() or not self._motion_stable():
++            return False
++        transport = entry['transport']
++
++        def monitor():
++            self.connected(idx, entry)
++            if (not self._pause_stable() or not self._motion_stable()
++                    or self._gate_context(idx, slot) != context
++                    or any(raw_head_state(a, head) is not False for head in heads)
++                    or recovery._is_busy(ignore_gcode_mutex=True)):
++                raise RuntimeError('暂停插料状态已变化')
++
++        with mutex:
++            monitor()
++            current = a._slot_actions._lane_states(idx, monitor=monitor)
++            if current != lanes or any(not a._native_assist_is_armed(idx, peer) for peer in peers):
++                return False
++            stopped[slot] = event
++            for peer in peers:
++                monitor()
++                a._slot_actions._request(idx, 'stop_feed_assist', {'index': peer}, 9,
++                                         monitor=monitor, stop_transport=transport)
++                a._clear_fa_cache_for(idx, peer)
++            logging.info('[multiACE] ACE %d slot %d paused insert: stopped armed peers %s',
++                         idx + 1, slot + 1, [peer + 1 for peer in peers])
++        # A fresh status must confirm READY. The next CMD93 query can then
++        # clear the firmware's old feed error while the inlet is still empty.
++        return False
++
+     def poll(self, eventtime):
+         a = self.ace
+         try:
+@@ -613,8 +670,18 @@
+                         self.observe(idx, entry, snapshot)
+                         entry['error'] = ''
+                         for slot, epoch in enumerate(snapshot['epochs']):
+-                            proof = self.pause_events.get((idx, slot))
+-                            if proof is not None and self._paused_safe(idx, slot):
++                            key = idx, slot
++                            empty = self.pause_empty.get(key)
++                            if empty is not None:
++                                self._paused_inlet_ready(idx, slot, entry, empty[0], inserted=False)
++                            proof = self.pause_events.get(key)
++                            if proof is None:
++                                continue
++                            if a.reactor.monotonic() - proof[1] > 30:
++                                self.pause_events.pop(key, None)
++                                continue
++                            if (self._paused_safe(idx, slot)
++                                    and self._paused_inlet_ready(idx, slot, entry, proof[0], inserted=True)):
+                                 self._run_paused_grip(idx, slot, entry, epoch, proof)
+                         continue
+                     if self.changing or self.busy(): continue
+--- a/web/frontend/app.js
++++ b/web/frontend/app.js
+@@ -7870,8 +7870,52 @@
+       window.removeEventListener("beforeunload", _onBeforeUnload);
+     });
+     const workspace = MultiaceWorkspace.create({state, tab, t, dispIdx, language, reloadState});
++    function homeSlot(ace, slot) {
++      const zh = language.value === 'zh';
++      const route = workspace.slotRoute(ace.idx, slot.idx);
++      const recovery = slotRecoveryRow(ace, slot);
++      const held = rfidHoldForRoute(ace.idx, slot.idx);
++      const present = slot.raw === 1 || slot.state === 'ready' || route?.loaded === true;
++      const text = (cn, en) => zh ? cn : en;
++      if (ace.connected !== true) return {label: text('离线', 'Offline'), tone: 'muted', present: false};
++      if (slot.slot_status === 'feed_error') {
++        return {label: text('送料受阻', 'Feed blocked'), tone: 'fault', present,
++          next: present ? text('检查料管和 Y 接头。清开后，将这一槽的耗材完全拔出，等故障消失再插回。',
++                                'Check the tube and Y junction. After clearing them, remove the filament and reinsert once the fault clears.')
++                        : text('槽口已空，等这一槽恢复就绪后再插料。', 'The inlet is empty. Reinsert when the slot is ready.')};
++      }
++      const ownFault = recovery?.needs_clear || recovery?.needs_source_confirmation ||
++        recovery?.can_confirm_empty || route?.failed;
++      if (held || ownFault) {
++        const directHold = state.location_hold?.rfid_routes?.some(item =>
++          item.ace_index === ace.idx && item.slot === slot.idx);
++        const shared = held && !ownFault && !directHold && state.location_hold?.rfid_routes?.length > 0;
++        return {label: shared ? text('共用料路待清', 'Shared path held') : text('需要检查', 'Needs attention'),
++          tone: 'fault', present, shared,
++          next: held ? rfidHoldMessage(ace.idx, slot.idx) : slotRecoveryMessage(ace, slot)};
++      }
++      if (route?.loaded) return {label: text('已到喷头', 'At toolhead'), tone: 'loaded', present};
++      if (slot.state === 'empty') return {label: text('空槽', 'Empty'), tone: 'muted', present: false};
++      if (present) return {label: text('已插料', 'Inserted'), tone: 'ready', present};
++      return {label: text('等待读取', 'Waiting for status'), tone: 'muted', present: false};
++    }
++    const homeFaults = computed(() => state.aces.flatMap(ace => ace.slots.map(slot => ({
++      ace, slot, view: homeSlot(ace, slot),
++    }))).filter(item => item.view.tone === 'fault' && !item.view.shared));
++    function showHomeSlot(ace, slot) {
++      workspace.selectedAce.value = ace.idx;
++      workspace.selectDashboard(slot);
++      tab.value = 'dashboard';
++    }
++    function homeLoadDisabled(ace, slot) {
++      return !workspace.stateFresh.value || !homeSlot(ace, slot).present ||
++        ace.connected !== true || isPrinting.value || slotOperationsBusy() || slotActionPending.value ||
++        homeSlot(ace, slot).tone === 'fault' || slotHeadHasNoAce(slot.idx) ||
++        !workspace.slotRoute(ace.idx, slot.idx) || (!needsReload(ace.idx, slot.idx) &&
++        (state.mode === 'head' ? slotLoadedInHead(ace.idx, slot.idx) : isToolheadOccupied(ace.idx, slot.idx)));
++    }
+     return {
+-      ...workspace, scheduleWiringRecompute,
++      ...workspace, scheduleWiringRecompute, homeSlot, homeFaults, showHomeSlot, homeLoadDisabled,
+       subText,
+       sourceLabel,
+       tab, version, printerName, printerFw, connClass, connText, screenAvailable,
+--- a/web/frontend/filament-console.css
++++ b/web/frontend/filament-console.css
+@@ -59,3 +59,68 @@
+   .cycle-stats { margin: 16px 0; }
+   .policy-row { gap: 6px; }
+ }
++
++/* Material dashboard: choose a device, choose a slot, act on that slot. */
++#app .ace-home { --console-gap: 18px; }
++.ace-home-header,.ace-list-heading,.ace-detail-title,.ace-unit-name { display:flex; align-items:center; justify-content:space-between; gap:12px; }
++.ace-home-header { margin:0 0 22px; }
++#app .ace-home h1 { margin:0; font-size:clamp(26px,4vw,37px); letter-spacing:-.035em; line-height:1.18; font-weight:650; }
++.ace-home-header p { margin:9px 0 0; color:var(--nt-fg2); }
++.ace-machine-state { display:flex; align-items:center; gap:9px; padding:7px 12px; border:1px solid var(--border); border-radius:10px; background:var(--card); color:var(--nt-fg2); white-space:nowrap; }
++.ace-attention { background:var(--error-bg); border:1px solid color-mix(in srgb,var(--error) 35%,var(--border)); border-radius:12px; color:var(--error); padding:10px 12px; display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0 0 16px; }
++.ace-attention strong { margin:0 6px; }
++#app .ace-attention button { background:var(--card); color:var(--error); border:1px solid color-mix(in srgb,var(--error) 35%,var(--border)); min-height:36px; padding:7px 10px; }
++.ace-unit-picker { display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:10px; margin-bottom:var(--console-gap); }
++#app .ace-unit-picker>button { display:grid; gap:8px; padding:13px 14px; text-align:left; color:var(--fg); background:var(--card); border:1px solid var(--border); border-radius:12px; }
++#app .ace-unit-picker>button[aria-pressed="true"] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--card)); }
++.ace-unit-name { font-size:16px; line-height:1.25; }
++.ace-unit-dots { display:flex; gap:5px; }
++.ace-unit-dots i { width:16px; height:5px; border-radius:2px; background:var(--filament); border:1px solid color-mix(in srgb,var(--filament) 62%,var(--fg)); }
++.ace-unit-dots i.muted { background:var(--border); border-color:var(--border); }
++.ace-unit-dots i.fault { background:var(--error); border-color:var(--error); }
++.ace-unit-picker small { color:var(--nt-fg2); }
++.ace-console-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:var(--console-gap); align-items:start; }
++.ace-slot-list,#app .ace-slot-detail { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
++.ace-list-heading { padding:0 0 12px; }
++.ace-list-heading h2 { margin:0; font-size:21px; }
++#app .ace-slot-choice { display:grid; width:100%; grid-template-columns:28px minmax(0,1fr) max-content; align-items:center; gap:10px; text-align:left; padding:10px; min-height:60px; margin:0 0 6px; border:1px solid transparent; background:var(--nt-bg2); color:var(--fg); }
++#app .ace-slot-choice:last-child { margin-bottom:0; }
++#app .ace-slot-choice[aria-pressed="true"] { border-color:var(--accent); }
++#app .ace-slot-choice.loaded { background:color-mix(in srgb,var(--accent) 12%,var(--card)); }
++#app .ace-slot-choice.fault { background:color-mix(in srgb,var(--error) 7%,var(--card)); }
++.ace-spool-dot { width:26px; height:26px; background:var(--filament); border:1px solid color-mix(in srgb,var(--filament) 62%,var(--fg)); border-radius:50%; }
++.ace-spool-dot.empty { background:transparent; border:1px dashed var(--muted); }
++.ace-slot-name { min-width:0; display:grid; gap:2px; }
++.ace-slot-name strong,.ace-slot-name small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
++.ace-slot-name small,.ace-detail-path { color:var(--nt-fg2); }
++.ace-slot-state { color:var(--nt-fg2); font-size:12px; white-space:nowrap; }
++.ace-slot-state.loaded,.ace-slot-state.ready { color:var(--ok); }
++.ace-slot-state.fault { color:var(--error); font-weight:650; }
++#app .ace-slot-detail { width:auto; position:static; min-width:0; }
++.ace-detail-title { align-items:flex-start; }
++.ace-detail-title h2 { margin:2px 0 0; font-size:22px; overflow-wrap:anywhere; }
++.ace-detail-facts { display:flex; flex-wrap:wrap; gap:12px 24px; margin:16px 0; padding:12px 0; border-block:1px solid var(--border); }
++.ace-detail-facts div { display:flex; align-items:baseline; gap:7px; }
++.ace-detail-facts dt,.ace-detail-hint { color:var(--nt-fg2); }
++.ace-detail-facts dd { margin:0; }
++.ace-next { background:var(--nt-bg2); border-radius:8px; padding:10px 12px; margin:0 0 12px; overflow-wrap:anywhere; }
++.ace-next.fault { border-inline-start:3px solid var(--error); }
++.ace-next button { margin-top:8px; }
++.ace-detail-actions { display:flex; flex-wrap:wrap; gap:8px; }
++#app .ace-detail-actions button { min-height:40px; }
++.ace-detail-hint { margin:12px 0 0; }
++.ace-slot-more { margin-top:14px; padding-top:10px; border-top:1px solid var(--border); }
++.ace-slot-more summary,.ace-maintenance summary { cursor:pointer; padding:7px 2px; color:var(--nt-fg2); }
++.ace-slot-more small { display:block; margin-top:6px; overflow-wrap:anywhere; color:var(--nt-fg2); }
++#app .ace-maintenance { margin:4px 0; padding:0 8px; color:var(--nt-fg2); }
++#app .ace-maintenance button { width:100%; min-height:36px; }
++@media (max-width: 900px) {
++  .ace-console-grid { grid-template-columns:1fr; }
++  .ace-slot-detail { scroll-margin-top:90px; }
++}
++@media (max-width: 550px) {
++  .ace-unit-picker { grid-template-columns:repeat(2,minmax(0,1fr)); }
++  .ace-home-header { align-items:flex-start; flex-wrap:wrap; }
++  .ace-home-header p { font-size:13px; }
++  .ace-list-heading h2,.ace-detail-title h2 { font-size:19px; }
++}
+--- a/web/frontend/index.html
++++ b/web/frontend/index.html
+@@ -11,7 +11,7 @@
+   <link rel="stylesheet" href="style-new.css?v=20261107-dashboard3">
+   <link rel="stylesheet" href="style-workspace.css?v=20261107-dashboard3">
+   <link rel="stylesheet" href="dashboard-redesign.css?v=20261107-dashboard3">
+-  <link rel="stylesheet" href="filament-console.css?v=20261118">
++  <link rel="stylesheet" href="filament-console.css?v=20261124-flow1599">
+   <!-- Loading splash: visible from the first paint until app.js has the
+        first printer state (hideSplash), so a reload - e.g. of a tab the
+        browser discarded while it sat in the background - shows the logo
+@@ -336,27 +336,28 @@
+     <div class="workspace-brand"><span class="brand-mark" aria-hidden="true">✳</span><h1>multiACE</h1><span class="brand-printer">U1</span></div>
+     <nav :aria-label="wt('navigation')">
+       <button v-if="state.mode !== 'normal'" :class="{active:tab==='dashboard'}" :aria-current="tab==='dashboard' ? 'page' : null"
+-              @click="tab='dashboard'"><span aria-hidden="true">◫</span>{{ wt('overview') }}</button>
++              @click="tab='dashboard'"><span aria-hidden="true">◫</span>{{ say('耗材','Filament') }}</button>
+       <button v-if="state.mode !== 'normal'" :class="{active:tab==='operations'}" :aria-current="tab==='operations' ? 'page' : null"
+-              @click="tab='operations'"><span aria-hidden="true">⇄</span>{{ say('喷头与作业','Toolheads & jobs') }}</button>
++              @click="tab='operations'"><span aria-hidden="true">⇄</span>{{ say('喷头与打印','Printing') }}</button>
+       <button :class="{active:tab==='drying'}" :aria-current="tab==='drying' ? 'page' : null"
+-              @click="tab='drying'"><span aria-hidden="true">◉</span>{{ say('烘干与排湿','Drying & ventilation') }}</button>
++              @click="tab='drying'"><span aria-hidden="true">◉</span>{{ say('烘干','Drying') }}</button>
+       <button :class="{active:tab==='spools'}" :aria-current="tab==='spools' ? 'page' : null"
+               @click="tab='spools'"><span aria-hidden="true">◎</span>{{ wt('material_library') }}</button>
+-      <button v-if="state.mode !== 'normal'" :class="{active:tab==='calibration'}" :aria-current="tab==='calibration' ? 'page' : null"
+-              @click="tab='calibration'"><span aria-hidden="true">⌖</span>{{ t('ui.tabs.calibration') }}</button>
+-      <button :class="{active:tab==='devices'}" :aria-current="tab==='devices' ? 'page' : null"
+-              @click="tab='devices'"><span aria-hidden="true">▤</span>{{ wt('device_details') }}</button>
+       <button :class="{active:tab==='config'}" :aria-current="tab==='config' ? 'page' : null"
+               @click="tab='config'"><span aria-hidden="true">⚙</span>{{ wt('settings') }}</button>
+-      <button v-for="p in plugins.items" :key="p.name" :class="{active:tab===('plugin:'+p.name)}" @click="tab='plugin:'+p.name">{{ p.label }}</button>
++      <details class="ace-maintenance" :open="['calibration','devices'].includes(tab) || tab.startsWith('plugin:')">
++        <summary>{{ say('设备与维护','Maintenance') }}</summary>
++        <button :class="{active:tab==='devices'}" @click="tab='devices'">{{ wt('device_details') }}</button>
++        <button v-if="state.mode !== 'normal'" :class="{active:tab==='calibration'}" @click="tab='calibration'">{{ t('ui.tabs.calibration') }}</button>
++        <button v-for="p in plugins.items" :key="p.name" :class="{active:tab===('plugin:'+p.name)}" @click="tab='plugin:'+p.name">{{ p.label }}</button>
++      </details>
+     </nav>
+     <div class="sidebar-bottom">
+       <input ref="uploadInput" type="file" accept=".gcode,.gco,.g" class="upload-input" @change="onUploadGcode($event.target.files)">
+       <button class="upload-btn" @click="triggerUpload()" :disabled="uploading">{{ uploading ? t('ui.upload.in_progress') : t('ui.upload.button') }}</button>
+       <button v-if="screenAvailable" class="screen-btn" :class="{active:screenPopout}" @click="toggleScreenPopout">{{ screenPopout ? t('ui.dashboard.hide_display') : t('ui.dashboard.show_display') }}</button>
+-      <div class="sidebar-preferences"><span class="conn" :class="connClass"><i class="status-dot" :class="{live:connClass.ok}"></i>{{ stateFresh ? (language === 'zh' ? '数据已同步' : 'Data synced') : (language === 'zh' ? '数据已过期' : 'Data stale') }} · {{ connClass.ok ? (language === 'zh' ? '实时连接正常' : 'Live connected') : (language === 'zh' ? '实时连接未建立' : 'Live unavailable') }}</span><select class="lang-select" :aria-label="wt('language')" :value="language" @change="setLanguage($event.target.value)"><option v-for="l in languages" :key="l.code" :value="l.code">{{ l.name }}</option></select></div>
+-      <small class="sidebar-version">{{ version }} · {{ printerName || 'U1' }}</small>
++      <div class="sidebar-preferences"><span class="conn" :class="connClass"><i class="status-dot" :class="{live:connClass.ok}"></i>{{ stateFresh ? say('已连接','Connected') : say('等待连接','Connecting') }}</span><select class="lang-select" :aria-label="wt('language')" :value="language" @change="setLanguage($event.target.value)"><option v-for="l in languages" :key="l.code" :value="l.code">{{ l.name }}</option></select></div>
++      <small class="sidebar-version"><template v-if="version">{{ version }} · </template>{{ printerName || 'U1' }}</small>
+     </div>
+   </header>
+   <div v-if="rebootNeeded && !panelMode" class="reboot-banner">{{ t('ui.common.please_restart') }}</div>
+@@ -377,7 +378,7 @@
+       <span v-else-if="!state.unload_all.state">{{ say('当前固件仅可查看','Monitoring only on this firmware') }}</span>
+     </div>
+     <section v-show="tab==='drying'" class="dash-dryer-page">
+-      <div class="workspace-heading"><h1>{{ say('烘干与排湿','Drying & ventilation') }}</h1></div>
++      <div class="workspace-heading"><h1>{{ say('烘干','Drying') }}</h1></div>
+       <p v-if="state.mode === 'normal' || !state.aces.length" class="workspace-empty">
+         {{ state.mode === 'normal' ? say('当前模式未启用 ACE','ACE is disabled in this mode') : say('尚未检测到 ACE','No ACE detected') }}
+       </p>
+@@ -521,58 +522,121 @@
+         </article>
+       </div>
+     </section>
+-    <section v-show="tab==='dashboard' && state.mode !== 'normal'" class="dashboard-page">
+-      <p v-if="loadError" class="error">{{ loadError }}</p>
+-      <div class="workspace-heading">
+-        <div><h1>{{ wt('overview_title') }}</h1></div>
+-        <button class="subtle-btn" @click="tab='operations'">{{ say('喷头与作业','Toolheads & jobs') }} →</button>
+-      </div>
+-      <div class="workspace-summary">
+-        <span><i class="status-dot" :class="{live: onlineCount > 0}"></i>{{ wt('online_count', {n:onlineCount}) }}</span>
+-        <span>{{ wt('loaded_count', {n:loadedCount}) }}</span>
+-        <button @click="tab='config'">{{ modeLabel(state.mode) }} <span aria-hidden="true">↗</span></button>
+-        <span class="summary-printer">{{ statusLabel(state.printer_state) }}</span><a v-if="notifications.length" class="dash-alert-link" href="#dashboard-notifications">{{ language === 'zh' ? '通知与历史' : 'Notifications' }} · {{ notifications.length }}</a>
+-      </div>
+-      <div class="topology-toolbar">
+-        <div class="ace-view-tabs" role="group" :aria-label="wt('view_ace')">
+-          <button v-for="ace in state.aces.filter(a => a.connected === true || a.idx === displayedAce?.idx)" :key="ace.idx" :class="{active:displayedAce?.idx === ace.idx}" @click="selectedAce=ace.idx">
+-            <i class="status-dot" :class="{live:ace.connected === true}"></i>ACE {{ dispIdx(ace.idx) }}<small v-if="ace.idx === state.active_device">{{ wt('current') }}</small>
++    <section v-show="tab==='dashboard' && state.mode !== 'normal'" class="dashboard-page ace-home">
++      <div class="ace-home-header">
++        <div>
++          <h1>{{ say('耗材','Filament') }}</h1>
++          <p>{{ onlineCount }}/{{ state.aces.length }} {{ say('台 ACE 在线','ACE units online') }} · {{ loadedCount }} {{ say('个喷头已上料','heads loaded') }}</p>
++        </div>
++        <span class="ace-machine-state"><i class="status-dot" :class="{live:stateFresh}"></i>{{ stateFresh ? statusLabel(state.printer_state) : say('正在等待设备状态','Waiting for device status') }}</span>
++      </div>
++      <p v-if="loadError" class="error" role="alert">{{ loadError }}</p>
++      <div v-if="homeFaults.length" class="ace-attention" role="region" :aria-label="say('需要处理','Needs attention')">
++        <strong>{{ say('需要处理','Needs attention') }}</strong>
++        <button v-for="item in homeFaults" :key="item.ace.idx + '/' + item.slot.idx" type="button"
++                @click="showHomeSlot(item.ace,item.slot)">
++          ACE {{ dispIdx(item.ace.idx) }} · {{ dispIdx(item.slot.idx) }} {{ say('号槽','slot') }} · {{ item.view.label }} <span aria-hidden="true">→</span>
++        </button>
++      </div>
++      <div v-if="!displayedAce" class="workspace-empty">
++        <h2>{{ wt('no_devices') }}</h2><button @click="tab='devices'">{{ wt('device_details') }}</button>
++      </div>
++      <template v-else>
++        <div class="ace-unit-picker" role="group" :aria-label="wt('view_ace')">
++          <button v-for="ace in state.aces" :key="ace.idx" type="button"
++                  :aria-pressed="displayedAce.idx === ace.idx" @click="selectedAce=ace.idx">
++            <div class="ace-unit-name"><strong>ACE {{ dispIdx(ace.idx) }}</strong><i class="status-dot" :class="{live:ace.connected === true}"></i></div>
++            <div class="ace-unit-dots" aria-hidden="true">
++              <i v-for="slot in ace.slots" :key="slot.idx" :class="homeSlot(ace,slot).tone"
++                 :style="{'--filament':slot.color || 'var(--accent)'}"></i>
++            </div>
++            <small>{{ ace.connected === true ? (ace.temp == null ? say('在线','Online') : ace.temp + ' °C · ' + (ace.humidity == null ? '—' : Math.round(ace.humidity) + '% RH')) : say('离线','Offline') }}</small>
+           </button>
+         </div>
+-        <details v-if="state.aces.some(a => a.connected !== true)" class="dash-disconnected"><summary>{{ language === 'zh' ? '未连接通道' : 'Disconnected' }} ({{ state.aces.filter(a => a.connected !== true).length }})</summary><button v-for="ace in state.aces.filter(a => a.connected !== true)" :key="ace.idx" @click="selectedAce=ace.idx">ACE {{ dispIdx(ace.idx) }}</button></details>
+-        <div class="route-legend"><span><i class="legend-line solid"></i>{{ wt('at_extruder') }}</span><span><i class="legend-line"></i>{{ wt('configured') }}</span></div>
+-      </div>
+-      <div v-if="!displayedAce" class="workspace-empty"><h2>{{ wt('no_devices') }}</h2><p>{{ wt('no_devices_hint') }}</p><button @click="tab='devices'">{{ wt('device_details') }}</button></div>
+-      <div v-if="displayedAce && tab === 'dashboard'" class="dash-device-brief"><strong>ACE {{ dispIdx(displayedAce.idx) }}</strong><span>{{ displayedAce.model || 'ACE' }} · {{ displayedAce.firmware || (language === 'zh' ? '固件未知' : 'Firmware unknown') }}</span><span>{{ displayedAce.connected !== true || displayedAce.temp == null ? '—' : displayedAce.temp + ' °C' }} · {{ displayedAce.connected !== true || displayedAce.humidity == null ? '—' : Math.round(displayedAce.humidity) + ' % RH' }}</span><button class="dry-shortcut" @click="openDryer(displayedAce)">{{ say('烘干','Dryer') }} · {{ dryPhaseLabel(displayedAce) }} →</button></div>
+-      <p v-if="displayedAce && bufferControlText(displayedAce)" class="dash-hint">{{ bufferControlText(displayedAce) }}</p>
+-      <div v-if="displayedAce && tab === 'dashboard'" class="dash-layout">
+-        <div class="dash-main">
+-          <div class="dash-section-title"><div><h2>{{ language === 'zh' ? '耗材与喷头' : 'Filament routes' }}</h2></div><small>{{ language === 'zh' ? '更新于' : 'Updated' }} {{ timeText(stateUpdatedAt) }}</small></div>
+-          <p class="dash-hint">{{ language === 'zh' ? '虚线表示配置关系；实线表示喷头传感器与来源均已确认。' : 'Dashed means configured; solid means sensor and source confirmed.' }}</p>
+-          <div v-if="displayedAce.connected !== true" class="dash-notice">{{ language === 'zh' ? '设备离线，以下为上次记录。' : 'Device offline; showing last known data.' }}</div>
+-          <div v-else-if="displayedAce.slots.some(s => s.state !== 'empty' && !s.material)" class="dash-notice">{{ language === 'zh' ? '有耗材尚未识别，可编辑材料信息。' : 'Some inserted filament is unidentified.' }}</div>
+-          <article v-for="slot in displayedAce.slots" :key="slot.idx" class="dash-row" :class="{selected:dashboardSlot===slot.idx}">
+-            <div class="dash-material"><span class="dash-disc" :style="{background:slot.color || '#dad5cb'}"></span><div><small>{{ language === 'zh' ? '料槽' : 'SLOT' }} {{ dispIdx(slot.idx) }}<template v-if="slot.state !== 'empty'"> · {{ slotOrigin(slot) }}</template></small><strong>{{ displayedAce.connected !== true ? (language === 'zh' ? '状态未知' : 'Status unknown') : slot.state !== 'empty' && slot.state !== 'unknown' && !slot.material ? (language === 'zh' ? '已检测耗材 · 材质未确认' : 'Filament detected · material unconfirmed') : materialText(slot) }}</strong><span>{{ displayedAce.connected !== true ? (language === 'zh' ? '设备离线' : 'Device offline') : slot.brand || (slot.state === 'empty' ? (language === 'zh' ? '等待插入' : 'Empty') : (language === 'zh' ? '信息待确认' : 'Details unconfirmed')) }}</span></div></div>
+-            <div class="dash-path" :class="{loaded:routeLoaded(slot)}"><span>ACE {{ dispIdx(displayedAce.idx) }} · {{ dispIdx(slot.idx) }}</span><i></i><strong>{{ slotRoute(displayedAce.idx,slot.idx) ? 'T' + dispIdx(slotRoute(displayedAce.idx,slot.idx).head) : '—' }}</strong></div>
+-            <div class="dash-state"><span>{{ language === 'zh' ? '入口' : 'Entry' }} · {{ displayedAce.connected !== true ? (language === 'zh' ? '未知' : 'Unknown') : slot.state === 'empty' ? (language === 'zh' ? '无料' : 'Empty') : slot.state === 'unknown' ? (language === 'zh' ? '未知' : 'Unknown') : (language === 'zh' ? '有料' : 'Present') }}</span><span>{{ language === 'zh' ? '喷头' : 'Head' }} · {{ ({unknown:language === 'zh' ? '未知' : 'Unknown',not_detected:language === 'zh' ? '未到位' : 'Not detected',confirmed:language === 'zh' ? '已到位' : 'Confirmed',sensor_source_unknown:language === 'zh' ? '传感器有料 · 来源未知' : 'Detected · source unknown',sensor_other_source:language === 'zh' ? '传感器有料 · 其他来源' : 'Detected · different source',load_failed:language === 'zh' ? '装载失败 · 未确认' : 'Load failed · unconfirmed'})[slotHeadEvidence(slot)] }}</span><small v-if="spoolWeightLabel(spoolForSlot(displayedAce.idx,slot.idx) || {})">{{ language === 'zh' ? '耗材库记录' : 'Library record' }} · {{ spoolWeightLabel(spoolForSlot(displayedAce.idx,slot.idx) || {}) }}</small><small v-else>{{ language === 'zh' ? '余量尚未测得' : 'Remaining unavailable' }}</small></div>
+-            <small v-if="rfidHoldForRoute(displayedAce.idx, slot.idx) && !slotRecoveryRow(displayedAce,slot)?.needs_source_confirmation" class="dash-block-reason">{{ rfidHoldMessage(displayedAce.idx, slot.idx) }}</small>
+-          <div v-if="slotRecoveryVisible(displayedAce,slot)" class="dash-actions">
+-            <button v-if="slotRecoveryRow(displayedAce,slot)?.needs_source_confirmation" @click.stop="confirmRetainedSource(displayedAce,slot)" :disabled="slotActionPending || slotRecoveryRow(displayedAce,slot)?.can_confirm_source !== true">确认原来源</button>
+-            <button v-if="slotRecoveryRow(displayedAce,slot)?.can_confirm_empty === true" @click.stop="recoverSlot(displayedAce,slot,'empty')" :disabled="slotRecoveryDisabled(displayedAce,slot,'empty')">确认已退空</button>
+-            <button v-if="state.flow_version >= 15 && !slotRecoveryRow(displayedAce,slot)?.needs_source_confirmation" @click.stop="recoverSlot(displayedAce,slot,'auto')" :disabled="slotRecoveryDisabled(displayedAce,slot,'auto')">自动恢复</button>
+-            <button v-if="!slotRecoveryRow(displayedAce,slot)?.needs_source_confirmation" @click.stop="recoverSlot(displayedAce,slot,'check')" :disabled="slotRecoveryDisabled(displayedAce,slot,'check')">重新检查</button>
+-            <button v-if="slot.slot_status === 'feed_error' && !slotRecoveryRow(displayedAce,slot)?.needs_source_confirmation" @click.stop="recoverSlot(displayedAce,slot,'clear')" :disabled="slotRecoveryDisabled(displayedAce,slot,'clear')">短退一次</button>
+-            <button v-if="slotRetryHead(displayedAce,slot) !== null" @click.stop="retryObstructedSlot(displayedAce,slot)" :disabled="slotActionPending || slotOperationsBusy()">短退重试</button>
+-            <small class="dash-block-reason">{{ slotRecoveryMessage(displayedAce,slot) }}</small>
+-          </div>
+-            <div class="dash-actions"><button v-if="!slotRecoveryRow(displayedAce,slot)?.needs_source_confirmation" @click="slotAction(displayedAce,slot,'eject')" :disabled="slotActionDisabled(displayedAce,slot,'eject')">退出 ACE</button><button @click="slotAction(displayedAce,slot,'rfid')" :disabled="slotActionDisabled(displayedAce,slot)">识别耗材</button><button v-if="slotActiveOperation(displayedAce,slot)" @click="cancelSlotOperation(displayedAce,slot)" :disabled="slotCancelDisabled(displayedAce,slot)">停止当前动作</button><small v-if="slotActionDisabled(displayedAce,slot,'eject') && slotActionDisabled(displayedAce,slot,'rfid') && !rfidHoldForRoute(displayedAce.idx,slot.idx) && !slotActionText(displayedAce,slot)" class="dash-block-reason">{{ slotBlockReason(displayedAce,slot) }}</small><small v-if="slotActionText(displayedAce,slot)" class="dash-block-reason">{{ slotActionText(displayedAce,slot) }}</small><button @click="selectDashboard(slot)">{{ language === 'zh' ? '详情' : 'Details' }}</button><button @click="openPicker(displayedAce,slot)">{{ language === 'zh' ? '编辑' : 'Edit' }}</button><button class="dash-primary" @click="loadSlot(displayedAce.idx,slot.idx)" :disabled="rfidHoldForRoute(displayedAce.idx, slot.idx) || slotOperationsBusy() || displayedAce.connected !== true || isPrinting || slotIsEmpty(displayedAce.idx,slot.idx) || slotHeadHasNoAce(slot.idx) || (state.mode === 'head' ? (slotLoadedInHead(displayedAce.idx,slot.idx) && !needsReload(displayedAce.idx,slot.idx)) : (!needsReload(displayedAce.idx,slot.idx) && isToolheadOccupied(displayedAce.idx,slot.idx)))">{{ language === 'zh' ? '装载到喷头' : 'Load to head' }}</button><button v-if="targetHead(slot)" @click="unloadHead(targetHead(slot).idx)" :disabled="slotOperationsBusy() || isPrinting || displayedAce.connected !== true || (!targetHead(slot).head_source_known && !targetHead(slot).filament_at_extruder)">{{ language === 'zh' ? '从喷头卸载' : 'Unload head' }}</button><small v-if="displayedAce.connected !== true || isPrinting || slotIsEmpty(displayedAce.idx,slot.idx) || slotHeadHasNoAce(slot.idx) || (state.mode === 'head' ? (slotLoadedInHead(displayedAce.idx,slot.idx) && !needsReload(displayedAce.idx,slot.idx)) : (!needsReload(displayedAce.idx,slot.idx) && isToolheadOccupied(displayedAce.idx,slot.idx)))" class="dash-block-reason">{{ displayedAce.connected !== true ? (language === 'zh' ? '设备离线' : 'Device offline') : isPrinting ? (language === 'zh' ? '打印中不可装载' : 'Printing in progress') : slotIsEmpty(displayedAce.idx,slot.idx) ? (language === 'zh' ? '料槽为空' : 'Slot empty') : (language === 'zh' ? '喷头状态或接线不允许装载' : 'Head status or routing prevents loading') }}</small></div>
+-          </article>
+-        </div>
+-        <aside v-if="selectedSlot" class="dash-detail"><h2>{{ language === 'zh' ? '料槽详情' : 'Slot details' }} · {{ dispIdx(selectedSlot.idx) }}</h2><p>{{ materialText(selectedSlot) }} <span v-if="selectedSlot.state !== 'empty'" class="dash-pill">{{ slotOrigin(selectedSlot) }}</span></p><dl><div><dt>{{ language === 'zh' ? '标签 UID' : 'Tag UID' }}</dt><dd>{{ selectedSlot.uid || '—' }}</dd></div><div><dt>{{ language === 'zh' ? '识别来源' : 'Source' }}</dt><dd>{{ slotOrigin(selectedSlot) }}</dd></div><div><dt>{{ language === 'zh' ? '余量' : 'Remaining' }}</dt><dd><template v-if="spoolWeightLabel(spoolForSlot(displayedAce.idx,selectedSlot.idx) || {})">{{ spoolWeightLabel(spoolForSlot(displayedAce.idx,selectedSlot.idx) || {}) }} · {{ language === 'zh' ? '耗材库记录' : 'Library record' }}</template><template v-else>{{ language === 'zh' ? '尚未测得' : 'Unavailable' }}</template><small>{{ spoolWeightLabel(spoolForSlot(displayedAce.idx,selectedSlot.idx) || {}) ? (language === 'zh' ? '来自绑定的耗材库，并非本次测量' : 'From linked library, not measured now') : (language === 'zh' ? '当前未提供测量结果' : 'No measurement available') }}</small><button class="dash-inline-link" @click="tab='spools'">{{ language === 'zh' ? '查看耗材库 / Spoolman' : 'Material library / Spoolman' }}</button></dd></div><div><dt>{{ language === 'zh' ? '入口状态' : 'Entry' }}</dt><dd>{{ displayedAce.connected !== true ? (language === 'zh' ? '未知' : 'Unknown') : selectedSlot.state === 'empty' ? (language === 'zh' ? '无料' : 'Empty') : selectedSlot.state === 'unknown' ? (language === 'zh' ? '未知' : 'Unknown') : (language === 'zh' ? '检测到耗材' : 'Filament present') }}</dd></div><div><dt>{{ language === 'zh' ? '关联喷头' : 'Head' }}</dt><dd>{{ routeText(displayedAce.idx,selectedSlot.idx) }}</dd></div><div><dt>{{ language === 'zh' ? '操作状态' : 'Operations' }}</dt><dd>{{ displayedAce.connected !== true ? (language === 'zh' ? '设备离线' : 'Device offline') : isPrinting ? (language === 'zh' ? '打印中不可操作' : 'Unavailable while printing') : (language === 'zh' ? '按实际槽位和喷头状态判断' : 'Subject to slot and head state') }}</dd></div></dl><button class="dash-back" @click="backToRows">{{ language === 'zh' ? '返回料槽列表' : 'Back to slots' }}</button><button @click="openPicker(displayedAce,selectedSlot)">{{ language === 'zh' ? '编辑耗材信息' : 'Edit filament' }}</button><button @click="openDevice(displayedAce)">{{ language === 'zh' ? '查看设备详情' : 'Device details' }} →</button></aside>
+-      </div>
++        <div class="ace-console-grid">
++          <div class="ace-slot-list">
++            <div class="ace-list-heading">
++              <h2>ACE {{ dispIdx(displayedAce.idx) }}</h2>
++              <button type="button" class="subtle-btn" @click="openDryer(displayedAce)">{{ say('烘干','Drying') }} · {{ dryPhaseLabel(displayedAce) }}</button>
++            </div>
++            <button v-for="slot in displayedAce.slots" :key="slot.idx" type="button" class="ace-slot-choice"
++                    :class="homeSlot(displayedAce,slot).tone" :aria-pressed="dashboardSlot===slot.idx"
++                    @click="selectDashboard(slot)">
++              <span class="ace-spool-dot" :class="{empty:!homeSlot(displayedAce,slot).present}"
++                    :style="{'--filament':slot.color || 'var(--border)'}" aria-hidden="true"></span>
++              <span class="ace-slot-name">
++                <strong>{{ dispIdx(slot.idx) }} {{ say('号槽','slot') }}<template v-if="homeSlot(displayedAce,slot).present && slot.material"> · {{ slot.material }}</template></strong>
++                <small v-if="targetHead(slot)">{{ dispIdx(targetHead(slot).idx) }} {{ say('号喷头','toolhead') }}</small>
++                <small v-else>{{ say('未绑定喷头','No toolhead assigned') }}</small>
++              </span>
++              <span class="ace-slot-state" :class="homeSlot(displayedAce,slot).tone">{{ homeSlot(displayedAce,slot).label }}</span>
++            </button>
++          </div>
++          <aside class="ace-slot-detail dash-detail" v-if="selectedSlot" :key="displayedAce.idx + '/' + selectedSlot.idx">
++            <div class="ace-detail-title">
++              <div>
++                <div class="ace-detail-path">ACE {{ dispIdx(displayedAce.idx) }} · {{ dispIdx(selectedSlot.idx) }} {{ say('号槽','slot') }}</div>
++                <h2>{{ homeSlot(displayedAce,selectedSlot).present ? (selectedSlot.material || say('未识别耗材','Unidentified filament')) : homeSlot(displayedAce,selectedSlot).label }}</h2>
++              </div>
++              <span class="ace-slot-state" :class="homeSlot(displayedAce,selectedSlot).tone">{{ homeSlot(displayedAce,selectedSlot).label }}</span>
++            </div>
++            <dl class="ace-detail-facts">
++              <div><dt>{{ say('对应喷头','Toolhead') }}</dt><dd>{{ selectedHead() ? dispIdx(selectedHead().idx) : '—' }}</dd></div>
++              <div><dt>{{ say('槽口','Inlet') }}</dt><dd>{{ displayedAce.connected !== true ? '—' : homeSlot(displayedAce,selectedSlot).present ? say('有料','Present') : selectedSlot.state === 'empty' ? say('空','Empty') : '—' }}</dd></div>
++              <div v-if="selectedSlot.brand"><dt>{{ say('品牌','Brand') }}</dt><dd>{{ selectedSlot.brand }}</dd></div>
++            </dl>
++            <p v-if="slotActionText(displayedAce,selectedSlot) && (homeSlot(displayedAce,selectedSlot).tone !== 'fault' || slotActiveOperation(displayedAce,selectedSlot))" class="ace-next" role="status">{{ slotActionText(displayedAce,selectedSlot) }}</p>
++            <div v-if="homeSlot(displayedAce,selectedSlot).tone === 'fault'" class="ace-next fault">
++              <strong>{{ say('下一步','Next step') }}</strong>
++              <div>{{ homeSlot(displayedAce,selectedSlot).next }}</div>
++              <button v-if="!slotRecoveryDisabled(displayedAce,selectedSlot,'empty')" class="primary" type="button"
++                      @click="recoverSlot(displayedAce,selectedSlot,'empty')">{{ say('确认已退空','Confirm empty') }}</button>
++              <button v-else-if="slotRecoveryRow(displayedAce,selectedSlot)?.can_confirm_source === true" class="primary" type="button"
++                      @click="confirmRetainedSource(displayedAce,selectedSlot)" :disabled="slotActionPending">{{ say('确认原来源','Confirm source') }}</button>
++              <button v-else-if="slotRetryHead(displayedAce,selectedSlot) !== null" class="primary" type="button"
++                      @click="retryObstructedSlot(displayedAce,selectedSlot)" :disabled="slotActionPending || slotOperationsBusy()">{{ say('短退重试','Retract and retry') }}</button>
++            </div>
++            <div class="ace-detail-actions">
++              <button v-if="slotActiveOperation(displayedAce,selectedSlot)" type="button"
++                      @click="cancelSlotOperation(displayedAce,selectedSlot)" :disabled="slotCancelDisabled(displayedAce,selectedSlot)">{{ say('停止当前动作','Stop current action') }}</button>
++              <template v-else>
++                <button v-if="routeLoaded(selectedSlot) && selectedHead()" type="button" class="primary"
++                        @click="unloadHead(selectedHead().idx)" :disabled="!stateFresh || isPrinting || slotOperationsBusy()">{{ say('从喷头退料','Unload from head') }}</button>
++                <button v-else-if="homeSlot(displayedAce,selectedSlot).tone !== 'fault' && homeSlot(displayedAce,selectedSlot).present"
++                        type="button" class="primary" @click="loadSlot(displayedAce.idx,selectedSlot.idx)"
++                        :disabled="homeLoadDisabled(displayedAce,selectedSlot)">{{ say('送到喷头','Load to head') }}</button>
++                <button v-if="homeSlot(displayedAce,selectedSlot).present || slotRecoveryVisible(displayedAce,selectedSlot)"
++                        type="button" @click="slotAction(displayedAce,selectedSlot,'eject')"
++                        :disabled="!stateFresh || slotActionDisabled(displayedAce,selectedSlot,'eject')">{{ say('退出 ACE','Eject from ACE') }}</button>
++              </template>
++              <button v-if="displayedAce.connected === true" type="button" @click="openPicker(displayedAce,selectedSlot)">{{ say('编辑耗材','Edit filament') }}</button>
++            </div>
++            <p v-if="selectedSlot.state === 'empty' && homeSlot(displayedAce,selectedSlot).tone !== 'fault'" class="ace-detail-hint">{{ say('把料尖插到槽口，等待自动短吸。','Insert filament into the inlet and wait for the short grip.') }}</p>
++            <details class="ace-slot-more">
++              <summary>{{ say('更多槽位操作','More slot actions') }}</summary>
++              <div class="ace-detail-actions">
++                <button type="button" @click="slotAction(displayedAce,selectedSlot,'rfid')"
++                        :disabled="!stateFresh || slotActionDisabled(displayedAce,selectedSlot,'rfid')">{{ say('识别耗材','Read filament tag') }}</button>
++                <button v-if="slotRecoveryVisible(displayedAce,selectedSlot)" type="button"
++                        @click="recoverSlot(displayedAce,selectedSlot,'check')"
++                        :disabled="slotRecoveryDisabled(displayedAce,selectedSlot,'check')">{{ say('复核料槽','Check slot') }}</button>
++                <button v-if="slotRecoveryVisible(displayedAce,selectedSlot) && !slotRecoveryDisabled(displayedAce,selectedSlot,'auto')" type="button"
++                        @click="recoverSlot(displayedAce,selectedSlot,'auto')">{{ say('自动恢复','Recover slot') }}</button>
++                <button v-if="selectedSlot.slot_status === 'feed_error'" type="button" @click="recoverSlot(displayedAce,selectedSlot,'clear')"
++                        :disabled="slotRecoveryDisabled(displayedAce,selectedSlot,'clear')">{{ say('短退一次','Retract once') }}</button>
++                <button type="button" @click="openDevice(displayedAce)">{{ wt('device_details') }}</button>
++              </div>
++              <small v-if="selectedSlot.uid">UID {{ selectedSlot.uid }}</small>
++              <small v-if="homeSlot(displayedAce,selectedSlot).tone === 'fault' && slotActionText(displayedAce,selectedSlot)">{{ slotActionText(displayedAce,selectedSlot) }}</small>
++              <small v-if="bufferControlText(displayedAce)">{{ bufferControlText(displayedAce) }}</small>
++              <small v-if="spoolWeightLabel(spoolForSlot(displayedAce.idx,selectedSlot.idx) || {})">{{ say('耗材库记录','Library record') }} · {{ spoolWeightLabel(spoolForSlot(displayedAce.idx,selectedSlot.idx) || {}) }}</small>
++            </details>
++          </aside>
++        </div>
++      </template>
+     </section>
+     <section v-show="tab==='operations' && state.mode !== 'normal'" class="jobs-page">
+-      <div class="workspace-heading"><h1>{{ say('喷头与作业','Toolheads & jobs') }}</h1></div>
++      <div class="workspace-heading"><h1>{{ say('喷头与打印','Printing') }}</h1></div>
+       <div class="operations-body">
+       <div ref="wiringContainerEl" class="ace-th-wrap">
+         <svg v-if="wiringPaths.length"
+@@ -3422,7 +3486,7 @@
+      internet at the browser: the CDN reference left the page as a bare,
+      unmounted HTML skeleton whenever unpkg.com was unreachable. -->
+ <script src="vendor/vue.global.prod.js"></script>
+-<script src="workspace.js?v=20261107-dashboard3"></script>
+-<script src="app.js?v=20261123-flow1590"></script>
++<script src="workspace.js?v=20261124-flow1599"></script>
++<script src="app.js?v=20261124-flow1599"></script>
+ </body>
+ </html>
+--- a/web/frontend/workspace.js
++++ b/web/frontend/workspace.js
+@@ -63,7 +63,7 @@
+     const selectedAce = ref(null), dashboardSlot = ref(0), stateUpdatedAt = ref(null), freshnessNow = ref(Date.now());
+     const stateFresh = computed(() => stateUpdatedAt.value !== null && freshnessNow.value - stateUpdatedAt.value < 15000);
+     const markUpdated=()=>{stateUpdatedAt.value=Date.now();};
+-    function selectDashboard(slot) { dashboardSlot.value=slot.idx; if (window.innerWidth<=1100) nextTick(()=>document.querySelector('.dash-detail')?.scrollIntoView({behavior:'smooth',block:'start'})); }
++    function selectDashboard(slot) { dashboardSlot.value=slot.idx; if (window.innerWidth<=900) nextTick(()=>document.querySelector('.dash-detail')?.scrollIntoView({behavior:'smooth',block:'start'})); }
+     function backToRows() { document.querySelector('.dash-main')?.scrollIntoView({behavior:'smooth',block:'start'}); }
+     const selectedSlot = computed(() => (displayedAce.value?.slots || []).find(s => s.idx === dashboardSlot.value) || null);
+     function slotOrigin(slot) {

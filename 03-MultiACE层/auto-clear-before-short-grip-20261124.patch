@@ -1,0 +1,219 @@
+--- a/klipper/extras/ace_insert_policy.py
++++ b/klipper/extras/ace_insert_policy.py
+@@ -12,6 +12,7 @@
+ FIRMWARE = 'V1.2.00O'
+ # Klipper can report roundoff from the endpoint of a completed move.
+ STOPPED_VELOCITY_EPSILON = 1e-6
++REFRESH_EDGE_SECONDS = 30.0
+ METHODS = {'insert_policy_query': 0, 'insert_policy_set': 1,
+            'insert_policy_start': 2, 'insert_policy_discard': 3}
+ 
+@@ -86,7 +87,7 @@
+         self.timer = self.ace.reactor.register_timer(self.tick, self.ace.reactor.monotonic() + 1)
+ 
+     def capable(self, idx):
+-        return str((self.ace._ace_models.get(idx) or ('', ''))[1]).upper() in (FIRMWARE, 'V1.2.01O', 'V1.2.03O')
++        return str((self.ace._ace_models.get(idx) or ('', ''))[1]).upper() in (FIRMWARE, 'V1.2.01O', 'V1.2.03O', 'V1.2.04O')
+ 
+     def bypass(self, idx):
+         return self.changing or self.capable(idx)
+@@ -384,6 +385,80 @@
+         return (a._serials.get(idx), a._location_identity(idx), a._ace_mode,
+                 tuple(a._rfid_route_heads(idx, slot) or ()), a._gen1_gate_gen.get((idx, slot)))
+ 
++    def _refresh_proof_valid(self, idx, slot, entry, proof):
++        """RAM-only physical evidence; MCU pending bits are never insertion consent."""
++        ps = self.ace.printer.lookup_object('print_stats', None)
++        state = getattr(ps, 'state', '').lower()
++        return (self.units.get(idx) is entry
++                and self.ace._connected_per_ace.get(idx) is True
++                and entry['transport'] is self.ace._serials.get(idx)
++                and entry['identity'] == self.ace._location_identity(idx)
++                and proof['session'] == entry['session']
++                and proof['context'] == self._gate_context(idx, slot)
++                and state == proof['state']
++                and state in ('standby', 'complete', 'cancelled', 'paused')
++                and (state != 'paused' or self._pause_stable())
++                and 0 <= self.ace.reactor.monotonic() - proof['at'] <= REFRESH_EDGE_SECONDS)
++
++    def _discard_refresh_edge(self, idx, slot):
++        entry = self.units.get(idx, {})
++        entry.get('refresh_drops', {}).pop(slot, None)
++        proof = entry.get('refresh_edges', {}).pop(slot, None)
++        if proof is not None and self.gate_events.get((idx, slot)) == proof['context']:
++            self.gate_events.pop((idx, slot), None)
++            self.pause_events.pop((idx, slot), None)
++
++    def _prune_refresh_edges(self):
++        for idx, entry in self.units.items():
++            for name in ('refresh_drops', 'refresh_edges'):
++                for slot, proof in list(entry.get(name, {}).items()):
++                    if not self._refresh_proof_valid(idx, slot, entry, proof):
++                        self._discard_refresh_edge(idx, slot)
++
++    def _refresh_gate_changed(self, idx, slot, before, after, transport, valid, entry, ctx):
++        if entry is None:
++            return
++        previous = entry.get('refresh_drops', {}).pop(slot, None)
++        self._discard_refresh_edge(idx, slot)
++        ps = self.ace.printer.lookup_object('print_stats', None)
++        state = getattr(ps, 'state', '').lower()
++        if (valid is not True or type(before) is not int or type(after) is not int
++                or entry.get('snapshot') is None or entry['transport'] is not transport
++                or transport is not self.ace._serials.get(idx)
++                or entry['identity'] != self.ace._location_identity(idx)
++                or state not in ('standby', 'complete', 'cancelled', 'paused')
++                or (state == 'paused' and not self._pause_stable())):
++            return
++        now = self.ace.reactor.monotonic()
++        if before == 1 and after == 0 and entry['applied'] is None:
++            entry.setdefault('refresh_drops', {})[slot] = {
++                'context': ctx, 'at': now, 'state': state,
++                'session': entry['session'], 'samples': 0}
++        elif (before == 0 and after == 1 and previous is not None
++                and previous['state'] == state and previous['session'] == entry['session']
++                and previous['context'][:-1] == ctx[:-1]
++                and type(previous['context'][-1]) is int and type(ctx[-1]) is int
++                and ctx[-1] == previous['context'][-1] + 1
++                and 0 <= now - previous['at'] <= REFRESH_EDGE_SECONDS
++                and (state != 'paused' or previous['samples'] >= 2)):
++            entry.setdefault('refresh_edges', {})[slot] = {
++                'context': ctx, 'at': now, 'state': state, 'session': entry['session']}
++
++    def _restore_refresh_edges(self, idx, entry):
++        # Only the acknowledged, disabled host policy may adopt the new CMD93
++        # epochs. The GPIO generation/port/UID/slot proof itself cannot rebase.
++        self._prune_refresh_edges()
++        if entry['applied'] is not False:
++            return
++        for slot, proof in list(entry.get('refresh_edges', {}).items()):
++            gates = self.ace._gate_status_per_ace.get(idx) or ()
++            if slot >= len(gates) or type(gates[slot]) is not int or gates[slot] != 1:
++                self._discard_refresh_edge(idx, slot)
++                continue
++            self.gate_events[(idx, slot)] = proof['context']
++            if proof['state'] == 'paused':
++                self.pause_events[(idx, slot)] = (proof['context'], proof['at'])
++
+     def gate_changed(self, idx, slot, before, after, transport, valid=False):
+         key = idx, slot
+         ps = self.ace.printer.lookup_object('print_stats', None)
+@@ -394,6 +469,7 @@
+         previous = self.pause_empty.pop(key, None)
+         entry = self.units.get(idx)
+         ctx = self._gate_context(idx, slot)
++        self._refresh_gate_changed(idx, slot, before, after, transport, valid, entry, ctx)
+         if (valid and before == 1 and after == 0 and self._pause_stable()
+                 and entry is not None and entry['applied'] is False
+                 and entry['transport'] is transport and self.ace._serials.get(idx) is transport):
+@@ -408,6 +484,14 @@
+ 
+     def observe_gate(self, idx, slot, gate, transport):
+         key = idx, slot
++        entry = self.units.get(idx, {})
++        drop = entry.get('refresh_drops', {}).get(slot)
++        if drop is not None:
++            if (gate != 0 or transport is not entry['transport']
++                    or not self._refresh_proof_valid(idx, slot, entry, drop)):
++                self._discard_refresh_edge(idx, slot)
++            else:
++                drop['samples'] += 1
+         empty = self.pause_empty.get(key)
+         if empty is None:
+             return
+@@ -537,6 +621,7 @@
+             self.gate_events.pop((idx, slot), None)
+ 
+     def tick(self, eventtime):
++        self._prune_refresh_edges()
+         ps = self.ace.printer.lookup_object('print_stats', None)
+         paused = ps is not None and getattr(ps, 'state', '').lower() == 'paused'
+         if paused:
+@@ -649,6 +734,7 @@
+     def poll(self, eventtime):
+         a = self.ace
+         try:
++            self._prune_refresh_edges()
+             for idx, connected in list(a._connected_per_ace.items()):
+                 ps = a.printer.lookup_object('print_stats', None)
+                 paused = ps is not None and getattr(ps, 'state', '').lower() == 'paused'
+@@ -669,6 +755,7 @@
+                             continue
+                         self.observe(idx, entry, snapshot)
+                         entry['error'] = ''
++                        self._restore_refresh_edges(idx, entry)
+                         for slot, epoch in enumerate(snapshot['epochs']):
+                             key = idx, slot
+                             empty = self.pause_empty.get(key)
+@@ -683,6 +770,8 @@
+                             if (self._paused_safe(idx, slot)
+                                     and self._paused_inlet_ready(idx, slot, entry, proof[0], inserted=True)):
+                                 self._run_paused_grip(idx, slot, entry, epoch, proof)
++                                if key not in self.pause_events:
++                                    self._discard_refresh_edge(idx, slot)
+                         continue
+                     if self.changing or self.busy(): continue
+                     if (snapshot['configured'] and snapshot['session'] == entry['session']
+@@ -693,6 +782,7 @@
+                     else:
+                         with self.claim('insert_policy', idx):
+                             snapshot = self.apply_unit(idx)
++                    self._restore_refresh_edges(idx, entry)
+                     for slot, epoch in enumerate(snapshot['epochs']):
+                         key = idx, slot
+                         event = self.gate_events.get(key)
+@@ -702,7 +792,10 @@
+                             self.gate_events.pop(key, None)
+                             continue
+                         if not a._stop_message(idx, slot) and not dynamic_route_blocked(a, idx=idx, slot=slot):
+-                            self.run(idx, slot, entry, epoch, event=event)
++                            try:
++                                self.run(idx, slot, entry, epoch, event=event)
++                            finally:
++                                self._discard_refresh_edge(idx, slot)
+                 except Exception as exc:
+                     entry = self.units.get(idx)
+                     if entry is not None: entry['error'] = str(exc)
+@@ -836,12 +929,14 @@
+                           'feed_or_rollback_raw', 'start_feed_assist', 'update_feeding_speed'):
+                 slot = params.get('index')
+                 if type(slot) is int and 0 <= slot < 4:
++                    self._discard_refresh_edge(idx, slot)
+                     self.gate_events.pop((idx, slot), None)
+                     self.scan_origins.pop((idx, slot), None)
+                     self.pause_empty.pop((idx, slot), None)
+                     self.pause_events.pop((idx, slot), None)
+                 else:
+                     for lane in range(4):
++                        self._discard_refresh_edge(idx, lane)
+                         self.gate_events.pop((idx, lane), None)
+                         self.scan_origins.pop((idx, lane), None)
+                         self.pause_empty.pop((idx, lane), None)
+@@ -850,6 +945,7 @@
+                   or (method in ('drying', 'drying_raw') and params.get('auto_roll') is True)
+                   or '_controlled_owner' in request):
+                 for lane in range(4):
++                    self._discard_refresh_edge(idx, lane)
+                     self.gate_events.pop((idx, lane), None)
+                     self.scan_origins.pop((idx, lane), None)
+                     self.pause_empty.pop((idx, lane), None)
+--- a/klipper/extras/ace_manual_measure.py
++++ b/klipper/extras/ace_manual_measure.py
+@@ -700,7 +700,7 @@
+ 
+     def begin(self):
+         a, actions = self.ace, self.ace._slot_actions
+-        if (str((a._ace_models.get(0) or ('', ''))[1]).upper() not in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O', 'V1.2.03O') or
++        if (str((a._ace_models.get(0) or ('', ''))[1]).upper() not in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O', 'V1.2.03O', 'V1.2.04O') or
+             len(a._ace_devices) < 1 or str(a._ace_devices[0]) != PORT):
+             raise MeasurementUnavailable('unverified RF route')
+         a._manual_measure_owner = self.owner
+@@ -765,7 +765,7 @@
+     from .ace_filament_approximation import estimate_remaining
+     a, actions = ace, ace._slot_actions
+     model = (a._ace_models.get(0) or ('', ''))[1]
+-    if (str(model).upper() not in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O', 'V1.2.03O') or len(a._ace_devices) < 1 or
++    if (str(model).upper() not in ('V1.1.98O', 'V1.2.00O', 'V1.2.01O', 'V1.2.03O', 'V1.2.04O') or len(a._ace_devices) < 1 or
+         str(a._ace_devices[0]) != PORT):
+         raise MeasurementUnavailable('unverified measurement device')
+     owner = MeasureOwner(a, transport, epoch, uid, seq)

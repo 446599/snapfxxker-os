@@ -1,0 +1,561 @@
+diff --git a/klipper/extras/ace_fixed_park.py b/klipper/extras/ace_fixed_park.py
+--- a/klipper/extras/ace_fixed_park.py
++++ b/klipper/extras/ace_fixed_park.py
+@@ -12,6 +12,14 @@
+     def __init__(self, retracted_mm):
+         super().__init__('短退限程内喷头开关尚未清空')
+         self.retracted_mm = retracted_mm
++
++
++class SwapShortStillLoaded(RuntimeError):
++    """One finite swap pull completed and stopped with the original head still occupied."""
++    def __init__(self, motion, commanded_mm):
++        super().__init__('短退完成，喷头仍有料')
++        self.motion = motion
++        self.commanded_mm = commanded_mm
+ 
+ 
+ class ParkEncoderUnavailable(RuntimeError):
+@@ -62,13 +70,13 @@
+         stats = ace.printer.lookup_object('print_stats', None)
+         return getattr(stats, 'state', None) in cls.IDLE_STATES
+ 
+-    def check(self):
++    def check(self, *, released=False):
+         a = self.ace
+         a._require_no_stop_fault(idx=self.idx, slot=self.slot, head=self.head)
+         a._check_calibration_unload_cancel()
+         present = raw_head_state(a, self.head)
+         gates = a._gate_status_per_ace.get(self.idx) or []
+-        if (a._fixed_park_motion is not self or self.transport is None
++        if (a._fixed_park_motion is not (None if released else self) or self.transport is None
+                 or a._serials.get(self.idx) is not self.transport
+                 or not a._connected_per_ace.get(self.idx)
+                 or a._reconnecting_per_ace.get(self.idx)
+@@ -90,7 +98,7 @@
+             raise RuntimeError('回停期间 ACE 槽口有料状态未确认')
+         if present is None:
+             raise RuntimeError('回停期间喷头传感器状态未知')
+-        if self.reactor.monotonic() >= self.operation_deadline:
++        if not released and self.reactor.monotonic() >= self.operation_deadline:
+             raise RuntimeError('回停超过本次动作时限')
+         return present
+ 
+@@ -168,12 +176,13 @@
+ 
+     def _move(self, length, speed, *, edge=None, stop_at=None,
+               allow_edge_miss=False, wait_native=False, material_limit_mm=None, commanded=False,
+-              head_clear_mm=None):
++              head_clear_mm=None, bounded_short=False):
+         """One finite pulse, or stop sooner at a witnessed switch transition."""
+         start_pin = self.check()
+         if edge is not None and start_pin is edge:
+             raise RuntimeError('喷头开关已在目标侧，无法建立本次边缘')
+-        if edge is None and head_clear_mm is None and start_pin is not False:
++        require_empty = edge is None and head_clear_mm in (None, 0)
++        if require_empty and start_pin is not False:
+             raise RuntimeError('长退开始前喷头尚未清空')
+         if not commanded and edge is None and self.forward_decoder_sign is None:
+             raise RuntimeError('长退前原槽编码器方向未确认')
+@@ -188,7 +197,7 @@
+             material_limit_mm = motor_limit_mm
+         params = {'index': self.slot, 'length': length, 'speed': speed}
+         request = {'method': 'unwind_filament',
+-                   'params': params, '_fixed_park_motion': self, '_park_require_empty': edge is None and head_clear_mm is None,
++                   'params': params, '_fixed_park_motion': self, '_park_require_empty': require_empty,
+                    '_insert_stop_transport': self.transport}
+         replies = []
+ 
+@@ -238,7 +247,7 @@
+                             logging.info('[multiACE] continuous return head=%d cleared; reverse continues', self.head + 1)
+                     else:
+                         clear_since = None
+-                    if not head_cleared and (now >= clear_deadline and
++                    if not bounded_short and not head_cleared and (now >= clear_deadline and
+                             (clear_since is None or clear_since > clear_deadline)):
+                         raise RuntimeError('短退范围内喷头仍有料，已停止退料')
+                 elif edge is not None and pin is edge:
+@@ -271,7 +280,11 @@
+                         if state == 'rollback':
+                             saw_rollback = True
+                         elif state == 'ready':
+-                            if head_clear_mm is not None and not head_cleared:
++                            if bounded_short:
++                                # A ready sample alone can predate motor startup.
++                                if not saw_rollback or (not pin and not head_cleared):
++                                    continue
++                            elif head_clear_mm is not None and not head_cleared:
+                                 continue
+                             if head_clear_mm is None:
+                                 break
+@@ -303,7 +316,10 @@
+         pin = self.check()
+         self._gate()
+         if commanded:
+-            if pin is not False or self.receipt['slot_status'] != 'ready':
++            if bounded_short and pin and not head_cleared and self.receipt['slot_status'] == 'ready':
++                raise SwapShortStillLoaded(self, length)
++            if (pin is not False or (bounded_short and not head_cleared)
++                    or self.receipt['slot_status'] != 'ready'):
+                 raise RuntimeError('回退后原槽或喷头状态未确认')
+             return None  # Completion of a finite command supplies no measured distance.
+         motor, decoder, steps = sample = self.receipt['sample']
+@@ -361,6 +377,20 @@
+                 # The native short pull already cleared the head. Debit every
+                 # completed short move before issuing one finite reverse.
+                 remaining = max(0, math.floor(target - short_commanded_mm))
++                if self.foreground and head_clear_mm is not None and self.check():
++                    # The head still grips the tip. Issue only a finite short command
++                    # so a hot-end retry can debit it without guessing where a long
++                    # command was interrupted.
++                    short = min(head_clear_mm, remaining)
++                    if short <= 0:
++                        raise RuntimeError('退料长度用尽，喷头仍有料')
++                    self._move(short, speed, wait_native=True, commanded=True,
++                               head_clear_mm=short, bounded_short=True)
++                    remaining -= short
++                if self.foreground and head_clear_mm is not None:
++                    # The bulk return now starts from an empty switch. Keep watching
++                    # the lane for faults throughout the remainder of the same swap.
++                    head_clear_mm = 0
+                 if remaining:
+                     self._move(remaining, speed, wait_native=True, commanded=True,
+                                head_clear_mm=head_clear_mm)
+diff --git a/klipper/extras/filament_feed_ace.py b/klipper/extras/filament_feed_ace.py
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -26,7 +26,7 @@
+ from .ace_flow_guard import raw_head_state, source_route
+ from .ace_ready_wait import unload_source_matches
+ from .ace_fixed_park import (ParkAckUnavailable, ParkEdgeMissed,
+-                             ParkEncoderUnavailable, ParkMotion)
++                             ParkEncoderUnavailable, ParkMotion, SwapShortStillLoaded)
+ 
+ FEED_CHANNEL_NUMS                                   = 2
+ FEED_CHANNEL_1                                      = 0
+@@ -1108,7 +1108,7 @@
+             ace.wait_ace_ready_on(idx, slot=slot, unload_stop=unload_stop)
+         return unload_stop
+ 
+-    def _finish_fixed_unload(self, ch, idx, slot, short_commanded_mm, speed, *, continuous=False):
++    def _finish_fixed_unload(self, ch, idx, slot, short_commanded_mm, speed, *, continuous=False, prior_short_mm=0, retry_motion=None):
+         ace = self.ace
+         head = self.filament_ch[ch]
+         operations = getattr(ace, '_path_operations', None)
+@@ -1124,7 +1124,7 @@
+                 return False
+             actions = getattr(ace, '_slot_actions', None)
+             exit_run = getattr(actions, 'try_continuous_exit', None)
+-            if exit_run is not None and exit_run(idx, slot, head, short_commanded_mm):
++            if retry_motion is None and exit_run is not None and exit_run(idx, slot, head, short_commanded_mm):
+                 return True
+             if not unload_source_matches(ace, idx, slot, head):
+                 return False
+@@ -1132,6 +1132,10 @@
+                 or not ace._source_insertion_matches(ace._head_source[head], idx, slot)):
+             raise RuntimeError('换料回停的原来源或插料代次未确认')
+         motion = ParkMotion(ace, idx, slot, head, foreground=True) if foreground else ParkMotion(ace, idx, slot, head)
++        if retry_motion is not None:
++            if (idx, slot, head) != (retry_motion.idx, retry_motion.slot, retry_motion.head):
++                raise RuntimeError('短退重试前料路改变')
++            retry_motion.check(released=True)
+         tracking = ace._head_travel
+         if foreground:
+             saved = tracking.fixed_park_references.get(tracking._park_key(head, idx, slot))
+@@ -1157,10 +1161,14 @@
+         tracking.begin_fixed_park(head, idx, slot)
+         try:
+             if continuous:
+-                motion.run(target, 0, speed, head_clear_mm=short_commanded_mm, handoff=handoff)
++                motion.run(target, prior_short_mm, speed, head_clear_mm=short_commanded_mm, handoff=handoff)
+             else:
+                 motion.run(target, short_commanded_mm, speed)
+             tracking.finish_commanded_park(head, idx, slot)
++        except SwapShortStillLoaded:
++            # We know the command completed, not how much filament actually moved.
++            tracking.unknown(head, idx, slot, 'commanded_short_return')
++            raise
+         except ParkEncoderUnavailable as exc:
+             tracking.finish_fixed_park_probe(head, idx, slot, 0)
+             if foreground:
+@@ -1175,6 +1183,19 @@
+             tracking.unknown(head, idx, slot, 'fixed_park_unconfirmed')
+             raise
+         return True
++
++    def _try_unload_park(self, ch, idx, slot, short_mm, speed, prior_mm, retry_motion):
++        try:
++            parked = self._finish_fixed_unload(
++                ch, idx, slot, short_mm, speed, continuous=True,
++                prior_short_mm=prior_mm, retry_motion=retry_motion)
++        except SwapShortStillLoaded as short:
++            logging.info('[multiACE] head %d still occupied after completed %d mm short command',
++                         self.filament_ch[ch] + 1, short.commanded_mm)
++            return False, short.motion, short.commanded_mm
++        if not parked and retry_motion is not None:
++            raise RuntimeError('短退重试前原槽交接未确认')
++        return parked, None, 0
+ 
+     def _unload_dec_log(self, head, slot, kind, length, span, attempt):
+         """[diag] one decoder-SPAN line per unload retract to the ace feed log.
+@@ -3280,31 +3301,35 @@
+                                     ace=self.ace._disp(_gate_ace),
+                                     slot=self.ace._disp(_ace_slot)))
+                             _short_total = 0.0
+-                            if (_hot_park_context is None and not _gate_empty and unload_max > 0
+-                                    and self._finish_fixed_unload(ch, self.ace._active_device_index,
+-                                                                _ace_slot, _short_retract,
+-                                                                _retract_speed, continuous=True)):
+-                                fixed_parked = unload_ok = True
+-                                unload_max = 0
++                            retry_motion = None
+                             _hot_short_start = self.reactor.monotonic()
+                             for unload_attempt in range(unload_max):
+                                 self.ace._check_calibration_unload_cancel()
+-                                # Stop source-side reverse assist before the finite move.
+-                                _unload_stop = self._wait_before_unload_retract(
+-                                    self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
+-                                _remaining = self.ace._head_return_remaining(
+-                                    self.ace._active_device_index, _ace_slot, head_idx)
+-                                if _remaining is not None:
+-                                    _short_retract = min(FEED_UNLOAD_PROBE_RETRACT, _remaining)
+-                                    if _short_retract <= 0:
++                                if _hot_park_context is None and (unload_attempt == 0 or retry_motion is not None):
++                                    fixed_parked, retry_motion, completed = self._try_unload_park(
++                                        ch, self.ace._active_device_index, _ace_slot, _short_retract,
++                                        _retract_speed, _short_total, retry_motion)
++                                    if fixed_parked:
++                                        unload_ok = True
+                                         break
+-                                self.ace._retract(
+-                                    _ace_slot, _short_retract, _retract_speed,
+-                                    head=head_idx, hot_owner=_hot_park_context,
+-                                    unload_stop=_unload_stop)
+-                                self.ace.wait_ace_ready(slot=_ace_slot)
+-                                self.ace._check_calibration_unload_cancel()
+-                                _short_total += _short_retract
++                                    _short_total += completed
++                                if retry_motion is None:
++                                    # Stop source-side reverse assist before the finite move.
++                                    _unload_stop = self._wait_before_unload_retract(
++                                        self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
++                                    _remaining = self.ace._head_return_remaining(
++                                        self.ace._active_device_index, _ace_slot, head_idx)
++                                    if _remaining is not None:
++                                        _short_retract = min(FEED_UNLOAD_PROBE_RETRACT, _remaining)
++                                        if _short_retract <= 0:
++                                            break
++                                    self.ace._retract(
++                                        _ace_slot, _short_retract, _retract_speed,
++                                        head=head_idx, hot_owner=_hot_park_context,
++                                        unload_stop=_unload_stop)
++                                    self.ace.wait_ace_ready(slot=_ace_slot)
++                                    self.ace._check_calibration_unload_cancel()
++                                    _short_total += _short_retract
+ 
+                                 # Pin-first verify (unload_gpio default on):
+                                 # the raw presence pin reads the short
+@@ -3332,6 +3357,10 @@
+                                         _pin = None
+                                 _last_attempt = (unload_attempt + 1 >= unload_max)
+                                 pushed = False
++                                if retry_motion is not None:
++                                    _pin = retry_motion.check(released=True)
++                                    if _last_attempt and _pin:
++                                        break
+                                 if _pin is False:
+                                     logging.info(
+                                         "[feed][gpio] head %d pin CLEAR after short "
+@@ -3446,6 +3475,8 @@
+                                     self.gcode.run_script_from_command("M109 S%d\r\n"
+                                         % (max(filament_feed_temp_db, filament_unload_temp)))
+                                     self.toolhead.wait_moves()
++                                    if retry_motion is not None:
++                                        retry_motion.check(released=True)
+                                     if _hot_park_context is not None: self.ace._hot_session.phase = 'tipform'
+                                     self.ace._run_tipform(
+                                         self.filament_ch[ch],
+@@ -3461,7 +3492,7 @@
+                                     # cool_probe -> non-swap retries stuck at 0, gcode hung).
+                                     self.gcode.run_script_from_command("M104 S%d\r\n" % probe_temp)
+                                 except:
+-                                    if _hot_park_context is not None: raise
++                                    if _hot_park_context is not None or retry_motion is not None: raise
+                                     logging.info("[feed][unload] toolhead unload retry failed")
+                             # Verified clear of the toolhead via the short
+                             # probe-retract: now pull the rest of the configured
+@@ -3479,7 +3510,7 @@
+                                 elif (keep_in_ace or (self.ace._swap_in_progress
+                                       and getattr(self.ace, '_swap_phase', None) == 'unload')) and self._finish_fixed_unload(
+                                         ch, self.ace._active_device_index, _ace_slot,
+-                                        _short_total, _retract_speed):
++                                        _short_total, _retract_speed, retry_motion=retry_motion):
+                                     fixed_parked = True
+                                 else:
+                                     _rest = self.ace._head_return_remaining(
+@@ -3751,31 +3782,35 @@
+                                     ace=self.ace._disp(_gate_ace),
+                                     slot=self.ace._disp(_ace_slot)))
+                             _short_total = 0.0
+-                            if (_hot_park_context is None and not _gate_empty and unload_max > 0
+-                                    and self._finish_fixed_unload(ch, self.ace._active_device_index,
+-                                                                _ace_slot, _short_retract,
+-                                                                _retract_speed, continuous=True)):
+-                                fixed_parked = unload_ok = True
+-                                unload_max = 0
++                            retry_motion = None
+                             _hot_short_start = self.reactor.monotonic()
+                             for unload_attempt in range(unload_max):
+                                 self.ace._check_calibration_unload_cancel()
+-                                # Stop source-side reverse assist before the finite move.
+-                                _unload_stop = self._wait_before_unload_retract(
+-                                    self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
+-                                _remaining = self.ace._head_return_remaining(
+-                                    self.ace._active_device_index, _ace_slot, head_idx)
+-                                if _remaining is not None:
+-                                    _short_retract = min(FEED_UNLOAD_PROBE_RETRACT, _remaining)
+-                                    if _short_retract <= 0:
++                                if _hot_park_context is None and (unload_attempt == 0 or retry_motion is not None):
++                                    fixed_parked, retry_motion, completed = self._try_unload_park(
++                                        ch, self.ace._active_device_index, _ace_slot, _short_retract,
++                                        _retract_speed, _short_total, retry_motion)
++                                    if fixed_parked:
++                                        unload_ok = True
+                                         break
+-                                self.ace._retract(
+-                                    _ace_slot, _short_retract, _retract_speed,
+-                                    head=head_idx, hot_owner=_hot_park_context,
+-                                    unload_stop=_unload_stop)
+-                                self.ace.wait_ace_ready(slot=_ace_slot)
+-                                self.ace._check_calibration_unload_cancel()
+-                                _short_total += _short_retract
++                                    _short_total += completed
++                                if retry_motion is None:
++                                    # Stop source-side reverse assist before the finite move.
++                                    _unload_stop = self._wait_before_unload_retract(
++                                        self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
++                                    _remaining = self.ace._head_return_remaining(
++                                        self.ace._active_device_index, _ace_slot, head_idx)
++                                    if _remaining is not None:
++                                        _short_retract = min(FEED_UNLOAD_PROBE_RETRACT, _remaining)
++                                        if _short_retract <= 0:
++                                            break
++                                    self.ace._retract(
++                                        _ace_slot, _short_retract, _retract_speed,
++                                        head=head_idx, hot_owner=_hot_park_context,
++                                        unload_stop=_unload_stop)
++                                    self.ace.wait_ace_ready(slot=_ace_slot)
++                                    self.ace._check_calibration_unload_cancel()
++                                    _short_total += _short_retract
+ 
+                                 # Pin-first verify (unload_gpio default on):
+                                 # the raw presence pin reads the short
+@@ -3803,6 +3838,10 @@
+                                         _pin = None
+                                 _last_attempt = (unload_attempt + 1 >= unload_max)
+                                 pushed = False
++                                if retry_motion is not None:
++                                    _pin = retry_motion.check(released=True)
++                                    if _last_attempt and _pin:
++                                        break
+                                 if _pin is False:
+                                     logging.info(
+                                         "[feed][gpio] head %d pin CLEAR after short "
+@@ -3917,6 +3956,8 @@
+                                     self.gcode.run_script_from_command("M109 S%d\r\n"
+                                         % (max(filament_feed_temp_db, filament_unload_temp)))
+                                     self.toolhead.wait_moves()
++                                    if retry_motion is not None:
++                                        retry_motion.check(released=True)
+                                     if _hot_park_context is not None: self.ace._hot_session.phase = 'tipform'
+                                     self.ace._run_tipform(
+                                         self.filament_ch[ch],
+@@ -3932,7 +3973,7 @@
+                                     # cool_probe -> non-swap retries stuck at 0, gcode hung).
+                                     self.gcode.run_script_from_command("M104 S%d\r\n" % probe_temp)
+                                 except:
+-                                    if _hot_park_context is not None: raise
++                                    if _hot_park_context is not None or retry_motion is not None: raise
+                                     logging.info("[feed][unload] toolhead unload retry failed")
+                             # Verified clear of the toolhead via the short
+                             # probe-retract: now pull the rest of the configured
+@@ -3950,7 +3991,7 @@
+                                 elif (keep_in_ace or (self.ace._swap_in_progress
+                                       and getattr(self.ace, '_swap_phase', None) == 'unload')) and self._finish_fixed_unload(
+                                         ch, self.ace._active_device_index, _ace_slot,
+-                                        _short_total, _retract_speed):
++                                        _short_total, _retract_speed, retry_motion=retry_motion):
+                                     fixed_parked = True
+                                 else:
+                                     _rest = self.ace._head_return_remaining(
+diff --git a/tests/test_endpoint_unload.py b/tests/test_endpoint_unload.py
+--- a/tests/test_endpoint_unload.py
++++ b/tests/test_endpoint_unload.py
+@@ -127,7 +127,8 @@
+         self.assertEqual(spans, [])
+         self.assertFalse(any(n.func.attr == '_unload_dec_stalled' for n in calls))
+         fixed_calls = [n for n in calls if n.func.attr == '_finish_fixed_unload']
+-        self.assertEqual(len(fixed_calls), 4)  # direct probe and final return, in both branches
++        self.assertEqual(len(fixed_calls), 2)  # final return in both branches
++        self.assertEqual(sum(n.func.attr == '_try_unload_park' for n in calls), 2)
+         press_calls = [n for n in ast.walk(method) if isinstance(n, ast.Call)
+                        and isinstance(n.func, ast.Name) and n.func.id == '_do_press']
+         self.assertEqual(len(press_calls), 1)
+diff --git a/tests/test_fixed_park.py b/tests/test_fixed_park.py
+--- a/tests/test_fixed_park.py
++++ b/tests/test_fixed_park.py
+@@ -191,7 +191,8 @@
+         h.ace, h.filament_ch = a, [0]
+         h._finish_fixed_unload.__func__.__globals__.update(
+             raw_head_state=guard.raw_head_state, ParkEdgeMissed=park.ParkEdgeMissed,
+-            ParkEncoderUnavailable=park.ParkEncoderUnavailable, ParkAckUnavailable=park.ParkAckUnavailable)
++            ParkEncoderUnavailable=park.ParkEncoderUnavailable, ParkAckUnavailable=park.ParkAckUnavailable,
++            SwapShortStillLoaded=park.SwapShortStillLoaded)
+         return h, a, saved
+ 
+     def test_unload_handler_finishes_reported_route_without_claiming_an_exact_park(self):
+diff --git a/tests/test_swap_short_retry.py b/tests/test_swap_short_retry.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_swap_short_retry.py
+@@ -0,0 +1,140 @@
++"""Exercise both real _do_feed retry loops with simulated ACE and head switches."""
++import ast
++import logging
++from pathlib import Path
++from types import SimpleNamespace
++import unittest
++
++import test_endpoint_unload
++import test_feed_handoff
++from test_fixed_park import park
++
++
++SOURCE = Path(__file__).resolve().parents[1] / 'runtime/klipper/extras/filament_feed_ace.py'
++TREE = ast.parse(SOURCE.read_text())
++LOOPS = sorted((n for n in ast.walk(TREE) if isinstance(n, ast.For)
++                and isinstance(n.target, ast.Name) and n.target.id == 'unload_attempt'),
++               key=lambda n: n.lineno)
++
++
++class SwapShortRetryTests(unittest.TestCase):
++    def setup_route(self, position):
++        fixture = test_endpoint_unload.EndpointUnloadTests()
++        old, a, saved = fixture.foreground_fixture()
++        h = test_feed_handoff.IntegrationTests.harness({'_try_unload_park'})
++        h._try_unload_park.__func__.__globals__['SwapShortStillLoaded'] = park.SwapShortStillLoaded
++        old._try_unload_park = h._try_unload_park
++        h._finish_fixed_unload = old._finish_fixed_unload
++        h.filament_ch = [0]
++        old._wait_before_unload_retract = lambda idx, slot, head: dict(
++            slot_status='assist_error', sample=None, transport=a._serials[idx],
++            identity=a._location_identity(idx), ace=idx, slot=slot, head=head)
++        a._active_device_index = 0
++        a.position = position
++        old.reactor, old.runout_sensor = a.reactor, [a]
++        scripts = []
++        old.gcode = SimpleNamespace(run_script_from_command=scripts.append)
++        old.toolhead = SimpleNamespace(wait_moves=lambda: None, get_extruder=lambda:
++                                       SimpleNamespace(nozzle_diameter=.4, get_name=lambda: 'extruder'))
++        return old, a, scripts
++
++    def run_loop(self, loop, h, retries=3):
++        scope = dict(self=h, logging=logging, ch=0, _hot_park_context=None, head_idx=0,
++                     _ace_slot=0, _short_retract=150, _retract_speed=80, _short_total=0,
++                     retry_motion=None, fixed_parked=False, unload_ok=False, unload_max=retries,
++                     filament_feed_temp_db=215, filament_unload_temp=205, filament_soft=0,
++                     precool_temp=0, probe_push=5, probe_pull=7, probe_temp=175,
++                     FEED_UNLOAD_TRIGGER_SETTLE=.5)
++        exec(compile(ast.Module(body=[loop], type_ignores=[]), str(SOURCE), 'exec'), scope)
++        return scope['unload_ok']
++
++    def lengths(self, a):
++        return [cmd['params']['length'] for cmd in a.motion_commands]
++
++    def test_hot_release_retries_once_and_debits_short(self):
++        self.assertEqual(len(LOOPS), 2)
++        for loop in LOOPS:
++            with self.subTest(line=loop.lineno):
++                h, a, scripts = self.setup_route(900)
++                def release(*args, **kwargs):
++                    self.assertIsNone(a.active_move)
++                    self.assertEqual(self.lengths(a), [150])
++                    a.position = -1
++                a._run_tipform = release
++                self.assertTrue(self.run_loop(loop, h))
++                self.assertEqual(self.lengths(a), [150, 1330])
++                self.assertEqual(sum('M109' in s for s in scripts), 1)
++                self.assertNotIn('get_feed_info', [op for op, _, _ in a.calls])
++                self.assertEqual(a._head_travel.status()['0']['reason'], 'commanded_return')
++
++    def test_persistently_occupied_stops_after_configured_attempts(self):
++        for loop in LOOPS:
++            h, a, scripts = self.setup_route(1000)
++            a._run_tipform = lambda *args, **kwargs: None
++            self.assertFalse(self.run_loop(loop, h))
++            self.assertEqual(self.lengths(a), [150, 150, 150])
++            self.assertEqual(sum('M109' in s for s in scripts), 2)
++            self.assertFalse(any('G1 E' in s for s in scripts))
++            self.assertIsNone(a.active_move)
++            self.assertTrue(a.runout_buttun_state)
++            self.assertFalse(a._head_travel.status()['0']['pending'])
++
++    def test_easy_return_with_and_without_initial_tip_release(self):
++        for position, expected in ((-1, [1480]), (45, [150, 1330])):
++            h, a, scripts = self.setup_route(position)
++            self.assertTrue(self.run_loop(LOOPS[0], h))
++            self.assertEqual(self.lengths(a), expected)
++            self.assertFalse(scripts)
++
++    def test_lost_ack_or_fault_does_not_trigger_hot_retry(self):
++        for fault in ('ack', 'motor', 'disconnect'):
++            h, a, scripts = self.setup_route(900)
++            if fault == 'ack':
++                a.reject_move = 1
++            elif fault == 'motor':
++                a._lane_states = lambda idx, monitor=None: {0:'motor_error'}
++            else:
++                advance = a.advance
++                def disconnect(reactor, target):
++                    advance(reactor, target)
++                    if a.active_move and reactor.now > .2:
++                        a._connected_per_ace[0] = False
++                a.advance = disconnect
++            with self.subTest(fault=fault), self.assertRaises(RuntimeError):
++                self.run_loop(LOOPS[0], h)
++            self.assertEqual(self.lengths(a), [150])
++            self.assertFalse(scripts)
++
++    def test_source_changed_after_tip_release_prevents_long_command(self):
++        h, a, _ = self.setup_route(900)
++        def replace_spool(*args, **kwargs):
++            a.position = -1
++            a._insert_epochs[(0, 0)] += 1
++        a._run_tipform = replace_spool
++        with self.assertRaises(RuntimeError):
++            self.run_loop(LOOPS[0], h)
++        self.assertEqual(self.lengths(a), [150])
++
++
++    def test_ready_without_observed_rollback_never_credits_short(self):
++        h, a, scripts = self.setup_route(900)
++        a._lane_states = lambda idx, monitor=None: {0: 'ready'}
++        with self.assertRaisesRegex(RuntimeError, '退料时限'):
++            self.run_loop(LOOPS[0], h)
++        self.assertEqual(self.lengths(a), [150])
++        self.assertFalse(scripts)
++
++    def test_bulk_lane_fault_aborts_after_successful_short(self):
++        h, a, scripts = self.setup_route(45)
++        lane_states = a._lane_states
++        def report(idx, monitor=None):
++            if len(a.motion_commands) == 2 and a.active_move:
++                return {0: 'motor_error'}
++            return lane_states(idx, monitor)
++        a._lane_states = report
++        with self.assertRaisesRegex(RuntimeError, '原槽状态异常'):
++            self.run_loop(LOOPS[0], h)
++        self.assertEqual(self.lengths(a), [150, 1330])
++        self.assertTrue(a.motion_commands[-1]['_park_require_empty'])
++        self.assertFalse(scripts)
++        self.assertIsNone(a.active_move)

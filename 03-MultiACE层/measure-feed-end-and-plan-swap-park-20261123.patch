@@ -1,0 +1,230 @@
+--- a/klipper/extras/ace_feed_supervisor.py
++++ b/klipper/extras/ace_feed_supervisor.py
+@@ -78,6 +78,8 @@
+         self.last_sample = None
+         self.origin_sample = None
+         self.observed_samples = 0
++        self.forward_status_seen = False
++        self.terminal_only_mm = None
+         self.measurement_error = None
+         self.decoder_sign = None
+         direction = getattr(ace, '_insert_encoder_direction', {}).get((idx, slot))
+@@ -256,7 +258,7 @@
+             self.error = FeedSupervisionError('feed_rejected', 'ACE 未确认本次送料指令')
+         elif not self.ack:
+             self.ack = True
+-            # The sensor stays live while this one start sample is in flight.
++            # The sensor stays live while this optional start sample is in flight.
+             self._read_start()
+ 
+     def cancel(self):
+@@ -326,19 +328,17 @@
+                 if (sample is None or sample[:2] != (0, 0)
+                         or sample[2] not in self.STARTUP_ZERO_STEPS
+                         or now - self.started_at > self.STARTUP_RESET_S):
+-                    self._measurement_issue('起点未取得本次送料的零位读数')
+                     return
+                 self._observe(sample, now)
+             except (FeedSupervisionError, TypeError, ValueError) as exc:
+-                self._measurement_issue(str(exc))
++                logging.debug('[multiACE] optional feed start sample ignored: %s', exc)
+         try:
+             accepted = self.ace.send_request_to(self.idx, request, callback)
+             if accepted is False:
+                 self.pending = None
+-                self._measurement_issue('送料遥测请求被拒绝')
+         except Exception as exc:
+             self.pending = None
+-            self._measurement_issue('送料遥测请求失败：%s' % exc)
++            logging.debug('[multiACE] optional feed start request failed: %s', exc)
+ 
+     def check(self):
+         self._check_identity()
+@@ -354,6 +354,8 @@
+         stamp = getattr(self.ace, '_slot_status_provenance', {}).get(self.idx)
+         if self.ack and stamp and stamp[0] is self.transport and stamp[1] >= self.status_started_at:
+             lane = self.ace._v2_get_slot_status(self.idx, self.slot)
++            if lane == 'feeding':
++                self.forward_status_seen = True
+             if lane in self.STOPPED and lane != 'ready':
+                 raise FeedSupervisionError('feed_device_error', '原槽报告送料故障：%s' % lane)
+         if value is True:
+@@ -406,6 +408,7 @@
+         self.stopping = True
+         self.pending = None  # Late in-flight feeding polls cannot mutate evidence.
+         self.terminal_sample = self.terminal_slot_status = None
++        self.terminal_only_mm = None
+         try:
+             receipt = stop_and_verify(self.ace, self.idx, self.slot,
+                 transport=self.transport, identity=self.identity, timeout=self.STOP_VERIFY_S,
+@@ -420,15 +423,18 @@
+                     reply = self._query('get_feed_info', 76)
+                     self.terminal_sample = self._decode(reply)
+                     if self.terminal_sample is not None:
+-                        self._observe(self.terminal_sample, self.ace.reactor.monotonic())
++                        now = self.ace.reactor.monotonic()
++                        self._observe(self.terminal_sample, now)
++                        if self.observed_samples == 1:
++                            self._use_terminal_counter(now)
+                 except Exception as exc:
+                     self._measurement_issue(str(exc))
+                 self._check_identity()
+             if self.feed_admitted and self.ack:
+                 logging.info('[multiACE feed-endpoint] end ACE=%d slot=%d head=%d status=%s sample=%s',
+                              self.idx, self.slot, self.head, self.terminal_slot_status, self.terminal_sample)
+-                if self.observed_samples < 2 and self.terminal_slot_status == 'ready':
+-                    self._measurement_issue('首尾读数不全，本次距离未确认')
++                if self.terminal_sample is None and self.terminal_slot_status == 'ready':
++                    self._measurement_issue('缺少送料终点的有效编码器读数')
+                 elif self.terminal_sample and self.terminal_slot_status == 'ready':
+                     motor, decoder, _ = self.terminal_sample
+                     if motor <= 0 or abs(decoder) < motor * self.MIN_PROGRESS_RATIO:
+@@ -438,13 +444,31 @@
+             self.result = 'stop_unconfirmed'
+             raise
+ 
++    def _use_terminal_counter(self, now):
++        # The ACE resets this counter for each finite feed. With no usable
++        # start frame, require observed native forward motion on this slot and
++        # a real head arrival before crediting the fresh, post-STOP reading.
++        motor, decoder, steps = self.terminal_sample
++        direction = 1 if decoder > 0 else -1
++        limit = min(self.length, self.speed * max(0., now - self.started_at) * 1.25 + 25.)
++        if (not self.forward_status_seen or self.sensor() is not True or self.gate() is not True
++                or steps <= 0 or not 0 < motor <= limit or not 0 < abs(decoder) <= limit
++                or abs(decoder) < motor * self.MIN_PROGRESS_RATIO
++                or self.known_decoder_sign not in (None, direction)):
++            self._measurement_issue('本次送料终点读数无法和送达动作对应')
++            return
++        self.decoder_sign = direction
++        self.terminal_only_mm = abs(decoder)
++
+     def observed_forward_mm(self):
+         """Lower bound from this command's actual forward material samples."""
+         if (not self.ack or not self.feed_admitted or self.cancelled
+                 or self.terminal_sample is None or self.terminal_slot_status != 'ready'
+                 or self.measurement_error or self.origin_sample is None
+-                or self.observed_samples < 2 or self.decoder_sign not in (-1, 1)):
++                or self.decoder_sign not in (-1, 1)):
+             return None
++        if self.observed_samples < 2:
++            return self.terminal_only_mm
+         distance = (self.terminal_sample[1] - self.origin_sample[1]) * self.decoder_sign
+         # Reject a pre-reset sample from the preceding reverse command.
+         distance = min(distance, self.terminal_sample[1] * self.decoder_sign)
+@@ -537,9 +561,13 @@
+         distance = self.observed_forward_mm()
+         if self.error is not None or distance is None:
+             return None
+-        zero_origin = not self.after_retry and self.origin_sample[:3] == (0.0, 0.0, 0)
++        basis = 'observed_span_lower_bound'
++        if self.terminal_only_mm is not None:
++            basis = 'observed_feed_end'
++        elif not self.after_retry and self.origin_sample[:3] == (0.0, 0.0, 0):
++            basis = 'observed_zero_origin'
+         return {'distance_mm': self.prior_observed_mm + distance,
+-                'basis': 'observed_zero_origin' if zero_origin else 'observed_span_lower_bound',
++                'basis': basis,
+                 'samples': self.observed_samples, 'seq': self.seq,
+                 'ace': self.idx, 'slot': self.slot, 'head': self.head,
+                 'uid': list(self.identity[1]), 'insert_epoch': self.insertion_epoch,
+--- a/klipper/extras/ace_filament_travel.py
++++ b/klipper/extras/ace_filament_travel.py
+@@ -233,6 +233,9 @@
+         saved = self.fixed_park_references.get(self._park_key(head, ace, slot))
+         if saved is not None and saved['scope'] == scope:
+             return saved['target_mm']
++        return self._measured_load_park_target(head, ace, slot, scope, row)
++
++    def _measured_load_park_target(self, head, ace, slot, scope, row):
+         receipt = row.get('load_receipt') or {}
+         loaded = row.get('loaded_mm')
+         if (not row.get('known') or not self._valid(loaded)
+@@ -244,6 +247,23 @@
+         # tube and must not resize the fixed head-relative target.
+         target = math.floor(loaded - self.PARK_RESERVE_MM)
+         return target if self._valid_fixed_park(scope, target) else None
++
++    def swap_park_target(self, head, ace, slot, scope, configured, *, automatic):
++        saved = self.fixed_park_references.get(self._park_key(head, ace, slot))
++        if saved is not None and saved['scope'] != scope:
++            saved = None
++        if saved is not None and saved.get('basis') != 'measured_load':
++            return saved['target_mm'], False
++        if not automatic or not self._valid_fixed_park(scope, configured):
++            return configured, False
++        row = self._row(head, ace, slot)
++        measured = (self._measured_load_park_target(head, ace, slot, scope, row)
++                    if row is not None and not row.get('pending') else None)
++        previous = saved['target_mm'] if saved is not None else configured
++        # A later load can begin from the previous park point and be shorter.
++        # Keep the scoped target rather than moving it towards the head.
++        target = max(configured, previous, measured or 0)
++        return target, measured is not None and measured > max(configured, previous)
+ 
+     def forward_decoder_sign(self, head, ace, slot, scope, insert_epoch):
+         row = self._row(head, ace, slot)
+@@ -277,7 +297,7 @@
+                    park_target_mm=target, park_retracted_mm=distance)
+         self._save()
+ 
+-    def finish_commanded_park(self, head, ace, slot):
++    def finish_commanded_park(self, head, ace, slot, *, measured_load_plan=None):
+         row = self._row(head, ace, slot)
+         if not row or not row.get('pending') or row.get('phase') != 'unloading':
+             raise ValueError('回停完成记录不匹配')
+@@ -285,6 +305,12 @@
+         # new edge calibration or a measured position from a command length.
+         row.update(phase='head_empty', pending=False, known=False,
+                    reason='commanded_return', park_reference_reached=False)
++        if measured_load_plan is not None:
++            scope, target = measured_load_plan
++            if not self._valid_fixed_park(scope, target):
++                raise ValueError('进料距离推算的回停目标无效')
++            self.fixed_park_references[self._park_key(head, ace, slot)] = {
++                'scope': copy.deepcopy(scope), 'target_mm': target, 'basis': 'measured_load'}
+         self._save()
+ 
+     def finish_fixed_park_probe(self, head, ace, slot, retracted_mm):
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -1137,18 +1137,21 @@
+                 raise RuntimeError('短退重试前料路改变')
+             retry_motion.check(released=True)
+         tracking = ace._head_travel
++        measured_load_plan = None
+         if foreground:
+-            saved = tracking.fixed_park_references.get(tracking._park_key(head, idx, slot))
+-            target = (saved.get('target_mm') if isinstance(saved, dict)
+-                      and saved.get('scope') == motion.scope else None)
+-            if target is None:
+-                # The foreground caller supplies the configured swap command;
+-                # never reinterpret it as a measured filament displacement.
+-                target = getattr(ace, '_retract_length_override', None)
+-                if target != ace.get_swap_retract_length(idx, slot):
+-                    target = None
++            configured = getattr(ace, '_retract_length_override', None)
++            if configured != ace.get_swap_retract_length(idx, slot):
++                configured = None
++            automatic = (idx not in getattr(ace, '_ace_section_swap_retract_length', {})
++                         and (idx, slot) not in getattr(ace, '_ace_section_swap_retract_length_slot', {}))
++            target, remember = tracking.swap_park_target(head, idx, slot, motion.scope, configured,
++                                                         automatic=automatic)
+             if not tracking._valid_fixed_park(motion.scope, target):
+                 return False
++            if remember:
++                measured_load_plan = motion.scope, target
++                logging.info('[multiACE] swap return ACE=%d slot=%d planned from measured load: %d mm',
++                             idx + 1, slot + 1, target)
+         else:
+             target = tracking.fixed_park_target(head, idx, slot, motion.scope)
+             if target is None:
+@@ -1164,7 +1167,7 @@
+                 motion.run(target, prior_short_mm, speed, head_clear_mm=short_commanded_mm, handoff=handoff)
+             else:
+                 motion.run(target, short_commanded_mm, speed)
+-            tracking.finish_commanded_park(head, idx, slot)
++            tracking.finish_commanded_park(head, idx, slot, measured_load_plan=measured_load_plan)
+         except SwapShortStillLoaded:
+             # We know the command completed, not how much filament actually moved.
+             tracking.unknown(head, idx, slot, 'commanded_short_return')

@@ -1,0 +1,207 @@
+--- a/klipper/extras/ace_feed_supervisor.py
++++ b/klipper/extras/ace_feed_supervisor.py
+@@ -35,6 +35,10 @@
+     WINDOW_MOTOR_MM = 30.0
+     MIN_PROGRESS_RATIO = 0.5
+     BAD_WINDOWS = 2
++    SLOW_CHECK_SPEED = 20
++    SLOW_CHECK_MM = 55
++    SLOW_CHECK_S = 3.0
++    SPEED_ACK_S = .5
+     STARTUP_RESET_S = 1.0
+     STARTUP_ZERO_MOTOR_MM = 8
+     STOP_VERIFY_S = 3.0
+@@ -88,6 +92,10 @@
+             self.decoder_sign = direction[2]
+         self.known_decoder_sign = self.decoder_sign
+         self.bad_windows = 0
++        self.slow_start = None
++        self.slow_request = None
++        self.slow_ack = False
++        self.slow_recovered = False
+         self.startup_rebases = 0
+         self.terminal_sample = None
+         self.terminal_slot_status = None
+@@ -232,6 +240,12 @@
+                     and request.get('_feed_supervisor_token') is self.token
+                     and self.sensor() is False and self.gate() is True):
+                 return False
++            if method == 'update_feeding_speed':
++                if request is not self.slow_request or params != {'index': self.slot,
++                        'speed': int(min(self.speed, self.SLOW_CHECK_SPEED))}:
++                    return False
++                self.slow_request = None
++                return True
+             if self.backoff_params is not None:
+                 if (method != 'unwind_filament' or params != self.backoff_params
+                         or self.backoff_admitted):
+@@ -308,8 +322,47 @@
+                          self.idx, self.slot, self.head, motor_window, material_window,
+                          ratio, self.bad_windows)
+             self.window = current
+-            if self.bad_windows >= self.BAD_WINDOWS:
+-                raise FeedSupervisionError('filament_slip', '送料机构在转，但耗材连续明显少走，已停止长推')
++            if self.slow_ack and self.bad_windows == 0 and not self.stopping and not self.slow_recovered:
++                start_motor, start_time = self.slow_start
++                self.slow_recovered = (current[0] - start_motor <= self.SLOW_CHECK_MM
++                                       and now - start_time <= self.SLOW_CHECK_S)
++
++    def _check_slow_progress(self, now):
++        if self.slow_start is None:
++            if self.bad_windows < self.BAD_WINDOWS:
++                return
++            motor = self.last_sample[0]
++            self.slow_start = (motor, now)
++            speed = min(self.speed, self.SLOW_CHECK_SPEED)
++            request = {'method': 'update_feeding_speed', 'params': {'index': self.slot, 'speed': int(speed)},
++                       '_feed_supervisor': self, '_feed_supervisor_token': self.token,
++                       '_insert_stop_transport': self.transport}
++            self.slow_request = request
++            def reply(*args, **kwargs):
++                if not self.active or self.stopping or self.cancelled:
++                    return
++                response = kwargs.get('response', args[-1] if args else None)
++                if (not self._ok(response, 10) or type(request.get('id')) is not int
++                        or type(response.get('id')) is not int or response['id'] != request['id']):
++                    self.error = FeedSupervisionError('speed_unconfirmed', 'ACE 未确认本次降速')
++                    return
++                self.slow_ack = True
++                self.window = self.last_sample
++                self.bad_windows = 0
++            request['_insert_reject'] = reply
++            logging.info('[multiACE] slowdown ACE=%d slot=%d head=%d motor=%.0f speed=%d',
++                         self.idx, self.slot, self.head, motor, speed)
++            if self.ace.send_request_to(self.idx, request, reply) is False:
++                raise FeedSupervisionError('speed_unconfirmed', 'ACE 未受理本次降速')
++        motor, started = self.slow_start
++        if not self.slow_ack and now - started >= self.SPEED_ACK_S:
++            raise FeedSupervisionError('speed_unconfirmed', 'ACE 未确认本次降速')
++        if self.slow_recovered:
++            exhausted = self.bad_windows >= self.BAD_WINDOWS
++        else:
++            exhausted = now - started >= self.SLOW_CHECK_S or self.last_sample[0] - motor >= self.SLOW_CHECK_MM
++        if exhausted:
++            raise FeedSupervisionError('filament_slip', '低速复核后送料距离仍异常，喷头尚未检测到料')
+ 
+     def _poll(self, now):
+         if self.pending is not None or now < self.next_poll_at or not self.ack:
+@@ -367,10 +420,12 @@
+             raise FeedSupervisionError('feed_ack_timeout', '送料指令确认超时')
+         if self.ack and now - self.last_valid_at >= self.TELEMETRY_TIMEOUT_S:
+             raise FeedSupervisionError('telemetry_timeout', '送料遥测超时，已停止后续长推')
+-        if self.ack and now - self.last_progress_at >= self.NO_PROGRESS_S:
+-            raise FeedSupervisionError('no_progress', '送料编码器持续无进展')
+         if self.deadline is not None and now >= self.deadline:
+             raise FeedSupervisionError('head_not_reached', '已到本次送料限程，喷头仍未确认到料')
++        self._check_slow_progress(now)
++        if (self.ack and (self.slow_start is None or self.slow_recovered)
++                and now - self.last_progress_at >= self.NO_PROGRESS_S):
++            raise FeedSupervisionError('no_progress', '送料编码器持续无进展')
+         self._poll(now)
+         if self.error is not None:
+             raise self.error
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -4331,6 +4331,13 @@
+         if a is None or s is None:
+             return None, None
+         try:
++            result = getattr(self, '_last_load_supervision', {}).get(channel) or {}
++            if (self.channel_error[channel] in ('filament_slip', 'speed_unconfirmed')
++                    and result.get('code') == self.channel_error[channel]
++                    and (result.get('head'), result.get('ace'), result.get('slot')) == (head, a, s)):
++                return ('喷头 %d · ACE %d 槽 %d：%s' %
++                        (head + 1, a + 1, s + 1, result['message']),
++                        ['检查原槽料丝是否顺畅，再点“短退重试”'])
+             return detail_fn(head, int(a), int(s))
+         except Exception as e:
+             logging.info('[feed][load] classify failed, using flat message: %s' % e)
+--- /dev/null
++++ b/tests/test_slow_progress.py
+@@ -0,0 +1,86 @@
++import unittest
++
++from test_feed_handoff import feed, observer
++
++
++class SlowProgressTests(unittest.TestCase):
++    def setUp(self):
++        self.a, self.s = observer()
++        self.sent = []
++        self.reply = True
++        original = self.a.send_request_to
++
++        def send(idx, request, callback):
++            if request['method'] != 'update_feeding_speed':
++                return original(idx, request, callback)
++            self.assertIsNone(request.get('length'))
++            self.assertEqual(request['params'], {'index': 0, 'speed': 20})
++            self.assertFalse(self.s.allows_wire(1, request, self.s.transport))
++            self.assertTrue(self.s.allows_wire(idx, request, self.s.transport))
++            self.assertFalse(self.s.allows_wire(idx, request, self.s.transport))
++            self.sent.append(request)
++            request['id'] = 123
++            if self.reply:
++                callback(self.a, dict(id=123, code=0, _v2_command=10,
++                                      _v2_frame_valid=True, _v2_payload_valid=True))
++            return True
++
++        self.a.send_request_to = send
++
++    def observe(self, t, motor, material):
++        self.a.reactor.now = t
++        self.a.motor, self.a.decoder, self.a.steps = motor, material, motor * 10
++        return self.s.check()
++
++    def reproduce(self):
++        self.observe(0, 0, 0)
++        self.observe(.64, 51, 46)
++        self.observe(1.28, 104, 55)
++        self.observe(1.92, 156, 55)
++        self.assertFalse(self.observe(2.03, 156, 55))
++        self.assertEqual(len(self.sent), 1)
++        self.assertFalse(self.observe(2.4, 161, 55))
++
++    def test_latest_trace_then_head_triggers_during_slow_check(self):
++        self.reproduce()
++        self.a.head = True
++        self.assertTrue(self.observe(2.4, 162, 55))
++
++    def test_recovered_progress_keeps_slow_feed_until_the_head(self):
++        self.reproduce()
++        self.assertFalse(self.observe(3.55, 187, 81))
++        self.assertTrue(self.s.slow_recovered)
++        self.a.head = True
++        self.assertTrue(self.observe(6.5, 236, 122))
++        self.assertEqual(len(self.sent), 1)
++
++    def test_persistent_low_readings_stop_on_distance(self):
++        self.reproduce()
++        self.observe(3.5, 188, 58)
++        self.observe(4.78, 213, 59)
++        with self.assertRaisesRegex(feed.FeedSupervisionError, '低速复核后'):
++            self.observe(4.88, 213, 59)
++        self.assertEqual(len(self.sent), 1)
++
++    def test_zero_motion_stops_on_time(self):
++        self.reproduce()
++        for t in (2.5, 3.2, 4.1, 4.8):
++            self.observe(t, 161, 55)
++        with self.assertRaisesRegex(feed.FeedSupervisionError, '低速复核后'):
++            self.observe(5.1, 161, 55)
++
++    def test_lost_speed_reply_stops_without_resending(self):
++        self.reply = False
++        self.reproduce()
++        with self.assertRaisesRegex(feed.FeedSupervisionError, '降速'):
++            self.observe(2.6, 180, 55)
++        self.assertEqual(len(self.sent), 1)
++
++    def test_new_slip_after_recovery_has_no_second_budget(self):
++        self.reproduce()
++        self.observe(3.6, 187, 82)
++        self.observe(4.6, 218, 85)
++        self.observe(5.6, 249, 86)
++        with self.assertRaisesRegex(feed.FeedSupervisionError, '低速复核后'):
++            self.observe(5.7, 249, 86)
++        self.assertEqual(len(self.sent), 1)

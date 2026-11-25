@@ -1,0 +1,133 @@
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -1133,12 +1133,13 @@
+             return False
+         measured_target = None
+         if not direct and motion.forward_decoder_sign is not None:
+-            measured_target = tracking.measured_park_distance(head, idx, slot)
++            measured_target = tracking.measured_park_distance(head, idx, slot, motion.scope)
+         tracking.begin_fixed_park(head, idx, slot)
+         try:
+             if measured_target is not None:
+                 distance, _ = motion.run(measured_target, short_commanded_mm, speed, measured=True)
+-                tracking.finish_park(head, idx, slot, measured_mm=distance)
++                tracking.finish_park(head, idx, slot, measured_mm=distance,
++                                     measured_target=measured_target)
+             else:
+                 distance, net = motion.run(target, short_commanded_mm, speed, direct=direct)
+                 tracking.finish_fixed_park(head, idx, slot, motion.scope, target,
+--- a/klipper/extras/ace_fixed_park.py
++++ b/klipper/extras/ace_fixed_park.py
+@@ -24,6 +24,7 @@
+ 
+ class ParkMotion:
+     TOLERANCE_MM = 3
++    EDGE_SEEK_SPEED = 24
+     DIRECT_EDGE_LIMIT_MM = 120
+     FAST_RETURN_SPEED = 100
+     FAST_APPROACH_SPEED = 80
+@@ -312,7 +313,7 @@
+                 # Recovery after the native short pull still re-acquires
+                 # the same falling edge before any long travel.
+                 seek = min(450, int(short_commanded_mm) + 100)
+-                forward = self._move(seek, 12, reverse=False, edge=True)
++                forward = self._move(seek, self.EDGE_SEEK_SPEED, reverse=False, edge=True)
+                 reverse_edge = self._move(35, 6, reverse=True, edge=False)
+             # The legacy motor length can undershoot in filament units.
+             # Measure the coarse move before sizing each fast correction.
+--- a/klipper/extras/ace_filament_travel.py
++++ b/klipper/extras/ace_filament_travel.py
+@@ -168,31 +168,44 @@
+         # sample was delayed. An older park reference must not enlarge it.
+         return min(wanted, max(0.0, row['remaining_mm']))
+ 
+-    def measured_park_distance(self, head, ace, slot):
++    def measured_park_distance(self, head, ace, slot, scope):
+         """Remaining measured return after a finite short retract on this load."""
+         row = self._row(head, ace, slot)
+-        remaining = self.park_distance(head, ace, slot)
+-        if remaining is None or row.get('phase') != 'unloading':
+-            return None
++        if (not row or not row.get('known') or row.get('pending') or row.get('phase') != 'unloading'
++                or not self._valid(row.get('loaded_mm')) or not self._valid(row.get('remaining_mm'))):
++            return None
++        fixed = self.fixed_park_references.get(self._park_key(head, ace, slot))
++        if fixed is not None:
++            if fixed['scope'] != scope:
++                return None
++            reference = fixed['target_mm']
++        else:
++            reference = self._park_reference(row, head, ace, slot)
+         withdrawn = row['loaded_mm'] - row['remaining_mm']
+-        reference = self._park_reference(row, head, ace, slot)
++        remaining = reference - withdrawn
+         if withdrawn <= 0 or reference > row['loaded_mm'] or not 0 < remaining <= self.MAX_FIXED_PARK_MM:
+             return None
+         return remaining
+ 
+-    def finish_park(self, head, ace, slot, *, measured_mm=None):
++    def finish_park(self, head, ace, slot, *, measured_mm=None, measured_target=None):
+         row = self._row(head, ace, slot)
+         if measured_mm is not None:
+             if (not row or not row.get('pending') or not row.get('known')
+                     or not self._valid(measured_mm) or measured_mm < 0):
+                 raise ValueError('回停计距未确认')
++            if not self._valid(measured_target) or abs(measured_target - measured_mm) > 3:
++                raise ValueError('实测回退未到停泊距离')
++            reference = row['loaded_mm'] - row['remaining_mm'] + measured_target
+             row['remaining_mm'] -= measured_mm
+             row['samples'] += 1
+             row.update(pending=False, park_reference_basis='measured_travel')
+         if self.park_distance(head, ace, slot) is None:
+             raise ValueError('回停计距未确认')
+         key = self._park_key(head, ace, slot)
+-        self.park_references.setdefault(key, self._park_reference(row, head, ace, slot))
++        if measured_mm is not None:
++            self.park_references[key] = reference
++        else:
++            self.park_references.setdefault(key, self._park_reference(row, head, ace, slot))
+         retracted = max(0.0, row['loaded_mm'] - row['remaining_mm'])
+         reference = self._park_reference(row, head, ace, slot)
+         row['park_reference_reached'] = (abs(reference - retracted) <= 3.0 if measured_mm is not None
+--- a/tests/test_fixed_park.py
++++ b/tests/test_fixed_park.py
+@@ -188,14 +188,14 @@
+         ledger.motion_finished('load', 1728)
+         ledger.finish_load(0, 0, 0)
+         ledger.begin_unload(0, 0, 0)
+-        self.assertIsNone(ledger.measured_park_distance(0, 0, 0))
++        self.assertIsNone(ledger.measured_park_distance(0, 0, 0, motion.scope))
+         ledger.motion_started('short', 0, 0, 0, 'retract')
+         ledger.motion_finished('short', -137)
+-        target = ledger.measured_park_distance(0, 0, 0)
++        target = ledger.measured_park_distance(0, 0, 0, motion.scope)
+         self.assertEqual(target, 1341)
+         ledger.begin_fixed_park(0, 0, 0)
+         distance, _ = motion.run(target, 150, 80, measured=True)
+-        ledger.finish_park(0, 0, 0, measured_mm=distance)
++        ledger.finish_park(0, 0, 0, measured_mm=distance, measured_target=target)
+         row = ledger.status()['0']
+         self.assertAlmostEqual(row['remaining_mm'], 250, delta=3)
+         self.assertEqual(row['phase'], 'parked')
+@@ -204,6 +204,21 @@
+         self.assertEqual(a.motion_commands[0]['method'], 'unwind_filament')
+         self.assertFalse(any(cmd['method'] == 'feed_filament' for cmd in a.motion_commands))
+         self.assertTrue(a._gate(0, 0))
++
++    def test_reload_keeps_existing_scoped_park_reference(self):
++        motion = park.ParkMotion(ParkWire(-100), 0, 0, 0)
++        ledger = travel.FilamentTravel()
++        ledger.fixed_park_references['0:0:0'] = {'scope': motion.scope, 'target_mm': 1480}
++        ledger.records['0'] = dict(head=0, ace=0, slot=0, phase='unloading', known=True,
++                                   pending=False, loaded_mm=1500, remaining_mm=1363, samples=2)
++        target = ledger.measured_park_distance(0, 0, 0, motion.scope)
++        self.assertEqual(target, 1343)
++        self.assertIsNone(ledger.measured_park_distance(0, 0, 0, dict(motion.scope, port='changed')))
++        ledger.begin_fixed_park(0, 0, 0)
++        ledger.finish_park(0, 0, 0, measured_mm=1342, measured_target=target)
++        self.assertEqual(ledger.park_references['0:0:0'], 1480)
++        ledger.records['0'].update(loaded_mm=900, remaining_mm=750, phase='unloading')
++        self.assertIsNone(ledger.measured_park_distance(0, 0, 0, motion.scope))
+ 
+     def test_measured_park_refuses_a_loaded_head_before_motion(self):
+         a = ParkWire(10)

@@ -1,0 +1,88 @@
+diff --git a/klipper/extras/ace.py b/klipper/extras/ace.py
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -21349,6 +21349,7 @@
+ 
+         head = gcmd.get_int('HEAD')
+         manual_retry = gcmd.get_int('RETRY', 0, minval=0, maxval=1) == 1
++        endpoints = gcmd.get_int('MEASURE_ENDPOINTS', 0, minval=0, maxval=1)
+         self._require_location_clear(gcmd,head=head)
+         self._last_load_ok = True
+ 
+@@ -21608,6 +21609,7 @@
+ 
+         self._in_internal_load_head = True
+         self._manual_load_retry = (head, ace_index, slot) if manual_retry else None
++        self._endpoint_feed_route = (ace_index, slot, head) if endpoints else None
+         try:
+             try:
+                 self.gcode.run_script_from_command(
+@@ -21626,6 +21628,7 @@
+                 self._last_load_ok = False
+                 raise
+         finally:
++            self._endpoint_feed_route = None
+             self._manual_load_retry = None
+             self._in_internal_load_head = False
+ 
+diff --git a/klipper/extras/ace_feed_supervisor.py b/klipper/extras/ace_feed_supervisor.py
+--- a/klipper/extras/ace_feed_supervisor.py
++++ b/klipper/extras/ace_feed_supervisor.py
+@@ -54,6 +54,7 @@
+         self.seq = (previous_seq if type(previous_seq) is int and previous_seq >= 0 else 0) + 1
+         ace._flow_feed_seq = self.seq
+         self.epoch = getattr(getattr(ace, '_slot_actions', None), 'epoch', None)
++        self.endpoint_only = getattr(ace, '_endpoint_feed_route', None) == (idx, slot, head)
+         self.sensor = sensor
+         self.length, self.speed = float(length), float(speed)
+         if not all(math.isfinite(x) and x > 0 for x in (self.length, self.speed)):
+@@ -259,7 +260,7 @@
+             return
+         if not self._ok(response, 8):
+             self.error = FeedSupervisionError('feed_rejected', 'ACE 未确认本次送料指令')
+-        else:
++        elif not self.ack:
+             self.ack = True
+             # Capture a possible zero-origin sample before the firmware finishes
+             # its motor setup, instead of losing the first polling interval.
+@@ -342,6 +343,14 @@
+                         or response['id'] != request['id']):
+                     raise FeedSupervisionError('telemetry_invalid', '送料遥测不是本次请求的响应')
+                 sample = self._decode(response)
++                if self.endpoint_only:
++                    logging.info('[multiACE feed-endpoint] start ACE=%d slot=%d head=%d speed=%.1f sample=%s',
++                                 self.idx, self.slot, self.head, self.speed, sample)
++                    # A delayed first response can still contain the previous
++                    # operation's counters. Only credit an explicit clean zero.
++                    if sample != (0, 0, 0) or self.ace.reactor.monotonic() - now > self.STARTUP_RESET_S:
++                        self._measurement_issue('起点未取得本次送料的零位读数')
++                        return
+                 if sample is not None:
+                     self._observe(sample, self.ace.reactor.monotonic())
+             except (FeedSupervisionError, TypeError, ValueError) as exc:
+@@ -383,7 +392,8 @@
+             raise FeedSupervisionError('head_not_reached', '本段送料已结束，喷头仍未到料')
+         if now >= self.deadline:
+             raise FeedSupervisionError('head_not_reached', '本次送料已超时，喷头仍未到料')
+-        self._poll(now)
++        if not self.endpoint_only:
++            self._poll(now)
+         if self.error is not None:
+             raise self.error
+         return False
+@@ -442,6 +452,15 @@
+                 except Exception as exc:
+                     self._measurement_issue(str(exc))
+                 self._check_identity()
++            if self.endpoint_only and self.feed_admitted:
++                logging.info('[multiACE feed-endpoint] end ACE=%d slot=%d head=%d status=%s sample=%s',
++                             self.idx, self.slot, self.head, self.terminal_slot_status, self.terminal_sample)
++                if self.observed_samples < 2 and self.terminal_slot_status == 'ready':
++                    self._measurement_issue('首尾读数不全，本次距离未确认')
++                elif self.terminal_sample and self.terminal_slot_status == 'ready':
++                    motor, decoder, _ = self.terminal_sample
++                    if motor <= 0 or abs(decoder) < motor * self.MIN_PROGRESS_RATIO:
++                        self._measurement_issue('终点测量轮读数偏低，本次距离未确认')
+             return
+         except StopUnconfirmedError:
+             self.result = 'stop_unconfirmed'

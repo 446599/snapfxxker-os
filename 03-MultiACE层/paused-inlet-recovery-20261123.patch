@@ -1,0 +1,160 @@
+--- a/klipper/extras/ace_insert_policy.py
++++ b/klipper/extras/ace_insert_policy.py
+@@ -10,6 +10,8 @@
+ from contextlib import contextmanager
+ 
+ FIRMWARE = 'V1.2.00O'
++# Klipper can report roundoff from the endpoint of a completed move.
++STOPPED_VELOCITY_EPSILON = 1e-6
+ METHODS = {'insert_policy_query': 0, 'insert_policy_set': 1,
+            'insert_policy_start': 2, 'insert_policy_discard': 3}
+ 
+@@ -100,17 +102,20 @@
+             or getattr(getattr(a, '_path_calibration', None), 'task', {}).get('active', False))
+ 
+     @contextmanager
+-    def claim(self, kind, idx=None, slot=None, paused_grip=False):
++    def claim(self, kind, idx=None, slot=None, paused_grip=False, paused_sync=False):
+         """Claim the same gate as manual RFID/eject before the first reactor yield."""
+         a, actions = self.ace, self.ace._slot_actions
+-        if self.owner is not None or (not paused_grip and self.busy()):
++        if self.owner is not None or (not (paused_grip or paused_sync) and self.busy()):
+             raise RuntimeError('请等待当前打印或料槽动作结束')
+         if paused_grip and (kind != 'insert' or not self._paused_safe(idx, slot)):
+             raise RuntimeError('暂停期间料路或设备尚未安全停稳')
++        if paused_sync and (kind != 'insert_policy' or self.pause_mutex is None
++                            or not self.pause_mutex.test() or not self._pause_stable()):
++            raise RuntimeError('暂停状态已变化，等待同步插料设置')
+         previous_action = actions.state
+         actions.seq += 1
+         token = {'seq': actions.seq, 'kind': kind, 'idx': idx, 'slot': slot,
+-                 'paused_grip': paused_grip}
++                 'paused_grip': paused_grip, 'paused_sync': paused_sync}
+         self.owner = token
+         actions.cancel = False
+         actions.state = {'seq': actions.seq, 'state': 'running', 'kind': kind,
+@@ -128,7 +133,7 @@
+             raise
+         finally:
+             if (kind == 'insert_policy' and actions.state.get('seq') == token['seq']
+-                    and previous_action.get('kind') in ('recover', 'eject')):
++                    and (paused_sync or previous_action.get('kind') in ('recover', 'eject'))):
+                 actions.state = previous_action
+             self.owner = None
+             a._swap_in_progress = False
+@@ -204,6 +209,9 @@
+         if (not isinstance(reply, dict) or reply.get('_v2_frame_valid') is not True
+                 or reply.get('_v2_payload_valid') is not True or reply.get('_v2_command') != 93
+                 or type(reply.get('code')) is not int or reply['code'] != 0):
++            if isinstance(reply, dict):
++                logging.debug('[multiACE] ACE %d %s response rejected: %s', idx + 1, method,
++                              reply.get('msg') or reply.get('code'))
+             raise RuntimeError('ACE 插料设置响应未确认')
+         result = reply.get('result', {}).get('insert_policy')
+         if not isinstance(result, dict): raise RuntimeError('ACE 插料设置数据缺失')
+@@ -437,7 +445,9 @@
+             print_time, estimated, empty = toolhead.check_busy(now)
+             values = (xyz, extruder, print_time, estimated)
+             if (any(type(v) not in (int, float) or not math.isfinite(v) for v in values)
+-                    or xyz != 0 or extruder != 0 or empty is not True or print_time > estimated):
++                    or abs(xyz) > STOPPED_VELOCITY_EPSILON
++                    or abs(extruder) > STOPPED_VELOCITY_EPSILON
++                    or empty is not True or print_time > estimated):
+                 raise ValueError('motion or queued moves remain')
+         except (AttributeError, KeyError, TypeError, ValueError, RuntimeError):
+             self.paused_motion_since = None
+@@ -551,6 +561,33 @@
+         self.pause_tainted.clear()
+         self.pause_empty.clear()
+         self.pause_events.clear()
++
++    def _paused_policy_sync(self, idx, entry):
++        """Restore motion-free settings after an ACE loses its session during a pause."""
++        for slot in range(4):
++            key = idx, slot
++            self.gate_events.pop(key, None)
++            self.pause_empty.pop(key, None)
++            self.pause_events.pop(key, None)
++        entry['applied'] = None
++        now = self.ace.reactor.monotonic()
++        mutex = self._free_gcode_mutex()
++        recovery = getattr(self.ace, '_error_recovery', None)
++        if (now < entry.get('paused_sync_after', 0) or mutex is None or recovery is None
++                or recovery._is_busy() or not self._motion_stable()):
++            return
++        # Existing apply_unit verifies every lane is ready and only disables
++        # native automatic insertion and background RFID. Never replay an edge
++        # observed before the new session was confirmed.
++        with mutex:
++            self.pause_mutex = mutex
++            entry['paused_sync_after'] = now + 5.0
++            try:
++                with self.claim('insert_policy', idx, paused_sync=True):
++                    self.apply_unit(idx)
++                logging.info('[multiACE] restored ACE %d insertion policy during pause', idx + 1)
++            finally:
++                self.pause_mutex = None
+ 
+     def poll(self, eventtime):
+         a = self.ace
+@@ -565,16 +602,16 @@
+                     entry = self.unit(idx)
+                     snapshot = self.request(idx, 'insert_policy_query', entry)
+                     if paused:
+-                        # Send QUERY only. On .03O the MCU also advances its
+-                        # empty-inlet fault reconciliation while serving QUERY.
+-                        # Never configure/discard/start or run RFID here.
++                        # On .03O, QUERY also advances empty-inlet fault recovery.
+                         if (not self._pause_stable() or self.changing
+                                 or a.printer.lookup_object('print_stats', None) is not ps):
+                             continue
+                         if not (snapshot['configured'] and snapshot['session'] == entry['session']
+                                 and snapshot['enabled'] is False and entry['applied'] is False):
++                            self._paused_policy_sync(idx, entry)
+                             continue
+                         self.observe(idx, entry, snapshot)
++                        entry['error'] = ''
+                         for slot, epoch in enumerate(snapshot['epochs']):
+                             proof = self.pause_events.get((idx, slot))
+                             if proof is not None and self._paused_safe(idx, slot):
+@@ -699,6 +736,13 @@
+             if (request.get('_insert_policy_owner') is not None and self.active is not None
+                     and self.active.get('revoked')):
+                 return False
++            owner = request.get('_insert_policy_owner')
++            if owner is not None and owner is self.owner and owner.get('paused_sync'):
++                setting_off = ((method == 'insert_policy_set' and params.get('enabled') is False)
++                               or (method == 'set_rfid_enable' and params.get('enable') is False))
++                if (not setting_off or idx != owner['idx'] or self.pause_mutex is None
++                        or not self.pause_mutex.test() or not self._pause_stable()):
++                    return False
+             if (request.get('_insert_policy_owner') is self.owner and self.active is not None
+                     and self.active.get('paused_grip')):
+                 token = self.active
+@@ -757,15 +801,21 @@
+             raise RuntimeError('插料已停止或任务发生变化')
+         actions._check(idx, slot, transport=entry['transport'], own=True)
+ 
+-    def _run_paused_grip(self, idx, slot, entry, epoch, proof):
+-        # Reserve Klipper's G-code mutex through the one finite grip and STOP.
+-        # A queued resume/cancel waits; the command is never replayed.
++    def _free_gcode_mutex(self):
+         gcode = self.ace.printer.lookup_object('gcode', None)
+         try:
+             mutex = gcode.get_mutex() if gcode is not None else None
+-            if mutex is None or mutex.test() or mutex.queue:
+-                return
++            if mutex is not None and not mutex.test() and not mutex.queue:
++                return mutex
+         except (AttributeError, TypeError, RuntimeError):
++            pass
++        return None
++
++    def _run_paused_grip(self, idx, slot, entry, epoch, proof):
++        # Reserve Klipper's G-code mutex through the one finite grip and STOP.
++        # A queued resume/cancel waits; the command is never replayed.
++        mutex = self._free_gcode_mutex()
++        if mutex is None:
+             return
+         with mutex:
+             self.pause_mutex = mutex

@@ -1,0 +1,73 @@
+--- a/klipper/extras/ace_position_unload.py
++++ b/klipper/extras/ace_position_unload.py
+@@ -48,7 +48,9 @@
+         source = a._head_source.get(head)
+         route = source_route(source)
+-        if route is None or source.get('load_failed') is not False:
++        # The live head, physical ACE identity, and current route mapping
++        # authorize reversal; historical load/session flags do not override them.
++        if route is None:
+             return None
+         idx, slot = route
+         if not dynamic_route_blocked(a, head=head, idx=idx, slot=slot):
+             return None
+@@ -62,8 +62,6 @@
+                 or source.get('connection_identity') != physical
+                 or raw_head_state(a, head) is not True
+                 or tuple(a._rfid_route_heads(idx, slot) or ()) != (head,)
+                 or source_conflict(a, head, idx, slot)
+-                or (source.get('insert_session') == getattr(a, '_insert_session', None)
+-                    and not a._source_insertion_matches(source, idx, slot))
+                 or a._stop_message(idx, slot, head) is not None):
+             return None
+@@ -113,8 +113,6 @@
+                 and a._location_identity(idx) == owner['identity']
+                 and a._head_source.get(head) == owner['source']
+                 and source_route(owner['source']) == (idx, slot)
+-                and (a._insert_epochs or {}).get((idx, slot)) == owner['insert_epoch']
+-                and getattr(a, '_insert_session', None) == owner['insert_session']
+                 and tuple(a._rfid_route_heads(idx, slot) or ()) == (head,)
+                 and not source_conflict(a, head, idx, slot)
+                 and a._stop_message(idx, slot, head) is None)
+--- a/tests/test_original_unload_admission.py
++++ b/tests/test_original_unload_admission.py
+@@ -165,16 +165,27 @@
+                 self.verify_stop_without_encoder(ace)
+                 self.assert_original_unload_admitted(ace)
+ 
+-    def test_unverified_source_is_not_a_parking_position_error(self):
+-        for conflict in ('changed device', 'new insertion', 'failed load'):
+-            with self.subTest(conflict=conflict):
+-                ace, _lane = self.fixture()
+-                if conflict == 'changed device':
+-                    ace._head_source[HEAD]['connection_identity']['uid'] = [9, 9, 9]
+-                elif conflict == 'new insertion':
+-                    ace._head_source[HEAD]['insert_epoch'] = 6
+-                else:
+-                    ace._head_source[HEAD]['load_failed'] = True
+-                self.assertIsNone(ace._position_unload_recovery.prepare(HEAD, stage='all'))
++    def test_changed_device_identity_still_rejects_loaded_head_unload(self):
++        ace, _lane = self.fixture()
++        ace._head_source[HEAD]['connection_identity']['uid'] = [9, 9, 9]
++        self.assertIsNone(ace._position_unload_recovery.prepare(HEAD, stage='all'))
++
++    def test_stale_position_metadata_does_not_block_loaded_head_unload(self):
++        for field, value in (('insert_session', 'previous-session'),
++                             ('insert_epoch', 6), ('load_failed', True)):
++            with self.subTest(field=field):
++                ace, _lane = self.fixture()
++                ace._head_source[HEAD][field] = value
++                recovery = ace._position_unload_recovery
++                candidate = recovery.prepare(HEAD, stage='all')
++                self.assertIsNotNone(candidate)
++                owner = recovery.begin(candidate)
++                self.assertTrue(recovery.allows_unload_command(HEAD, ACE, SLOT))
++                motion = {'method': 'unwind_filament', 'params': {
++                    'index': SLOT, 'length': 50, 'speed': 40}}
++                recovery.stamp(ACE, motion)
++                self.assertIsNone(flow_guard.wire_rejection(
++                    ace, ACE, motion, ace._serials[ACE]))
++                recovery.finish(owner)
+ 
+     def test_old_nonmatching_position_holds_do_not_block_loaded_head_unload(self):
+         for record in ('whole ACE', 'shared head', 'unreadable'):

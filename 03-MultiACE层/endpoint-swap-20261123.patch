@@ -1,0 +1,1870 @@
+diff --git a/klipper/extras/ace.py b/klipper/extras/ace.py
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -4426,99 +4426,14 @@
+         return box['d']
+ 
+     def _retract_with_decoder_span(self, idx, slot, retract_fn):
+-        """[diag] Run retract_fn() while sampling the V2 decoder every 250ms
+-        (async get_feed_info in a reactor timer, like _feedlog_tick - ace.dwell
+-        yields so the timer fires DURING the retract; the interval and WHY it
+-        is not 0.1s are pinned at the tick below). Returns (span, n, dmin,
+-        dmax) signed. SPAN = max-min is base-agnostic: it catches a real stall
+-        regardless of the decoder's per-command reset/hold, which a before/after
+-        delta cannot (d0 can hold the prior command's value). V2-only; on a
+-        V1 it just
+-        runs retract_fn.
+-
+-        ABSENT vs REAL ZERO. `n` counts polls that
+-        delivered an actual decoder VALUE; a reply that carries the slot entry
+-        but no `decoder` field is counted in `seen` and contributes NO reading,
+-        so a firmware that never reports the field ends at span None / n 0 and
+-        every consumer abstains instead of seeing a false zero.
+-
+-        WHAT A ZERO SPAN MEANS (from the ACE2 firmware's cmd 76 handler).
+-        `decoder` is fed by the per-lane hardware
+-        quadrature timers (TIM1/TIM8/TIM3/TIM5) wired to each lane's rubber
+-        encoder WHEEL, i.e. it tracks the FILAMENT, not the motor: an empty
+-        lane commanded 299 mm span the motor 3699 counts and read decoder 0.
+-        The accumulator is zeroed at the start of every motion command and
+-        held afterwards (which is why the SPAN, not a before/after delta, is
+-        the right measure). Crucially the stock firmware sets
+-        `bypass = (mode == 1)` for ROLLBACKS, skipping its own slip/jam
+-        comparator - so a rollback over buckled filament spins spool and motor,
+-        moves nothing, and still reports status = 0 (SUCCESS). A flat zero over
+-        a long rollback is therefore ground truth that the filament stood
+-        still, and it is the ONLY signal that contradicts the device's own
+-        success. Calibration: healthy V2 spans read 87-101 % of the commanded
+-        length. Consumers: the bg unload aborts below ~0.3x on its short
+-        retract; the inline unload gates the unverified BULK rest on a near
+-        total stall (unload_decoder_gate, filament_feed_ace) - its short
+-        retract keeps the toolhead pin as the verdict."""
+-        operations = getattr(self, '_path_operations', None)
+-        if operations is not None and operations.handles(idx, slot):
+-            # The controlled operation verifies its own measured terminal
+-            # condition and persists its segmented ledger. Legacy per-command
+-            # decoder spans cannot express a seek/rebase/park transaction.
+-            retract_fn()
+-            return (None, 0, None, None)
+-        try:
+-            is_v2 = self._is_v2_idx(idx)
+-        except Exception:
+-            is_v2 = False
+-        if not is_v2:
+-            retract_fn()
+-            return (None, 0, None, None)
+-        box = {'min': None, 'max': None, 'n': 0, 'seen': 0}
+-        def _cb(self, response, _b=box, _slot=slot):
+-            try:
+-                fi = ((response or {}).get('result') or {}).get(
+-                    'feed_info') or []
+-                for s in fi:
+-                    if s.get('index') == _slot:
+-                        _b['seen'] += 1
+-                        raw = s.get('decoder')
+-                        if raw is None:
+-                            # ABSENT != 0 (see the docstring): no reading, so
+-                            # a firmware without the field leaves span None.
+-                            break
+-                        dv = int(raw)
+-                        if dv >= (1 << 63):
+-                            dv -= (1 << 64)
+-                        _b['min'] = dv if _b['min'] is None else min(_b['min'], dv)
+-                        _b['max'] = dv if _b['max'] is None else max(_b['max'], dv)
+-                        _b['n'] += 1
+-                        break
+-            except Exception:
+-                pass
+-        def _tick(eventtime, _idx=idx):
+-            try:
+-                self.send_request_to(_idx, {'method': 'get_feed_info'}, _cb)
+-            except Exception:
+-                pass
+-            # 0.25s, NOT 0.1s: at ~90-100ms per V2 roundtrip a 0.1s tick
+-            # SATURATES the writer queue - the get_status heartbeat starves
+-            # behind hundreds of queued get_feed_info, _info_per_ace['status']
+-            # freezes at the last delivered value (e.g. 'busy' from the short
+-            # retract) and wait_ace_ready stalls its full 60s timeout into a
+-            # needless reconnect. 4/s still gives a 15s bulk retract 60+
+-            # samples - plenty for the stall gate.
+-            return eventtime + 0.25
+-        timer = self.reactor.register_timer(_tick, self.reactor.NOW)
+-        try:
+-            retract_fn()
+-        finally:
+-            try:
+-                self.reactor.unregister_timer(timer)
+-            except Exception:
+-                pass
+-        span = None if box['min'] is None else (box['max'] - box['min'])
+-        return (span, box['n'], box['min'], box['max'])
++        """Compatibility for older feed modules: execute the move exactly once.
++
++        A legacy callback can submit more than one motion command. Its counters
++        cannot provide a displacement for the whole callback. Individual owners
++        record their own stopped endpoint when available.
++        """
++        retract_fn()
++        return (None, 0, None, None)
+ 
+     def _clear_fa_cache_for(self, idx, slot):
+         control = getattr(self, '_native_buffer', None)
+@@ -21349,7 +21264,6 @@
+ 
+         head = gcmd.get_int('HEAD')
+         manual_retry = gcmd.get_int('RETRY', 0, minval=0, maxval=1) == 1
+-        endpoints = gcmd.get_int('MEASURE_ENDPOINTS', 0, minval=0, maxval=1)
+         self._require_location_clear(gcmd,head=head)
+         self._last_load_ok = True
+ 
+@@ -21609,7 +21523,6 @@
+ 
+         self._in_internal_load_head = True
+         self._manual_load_retry = (head, ace_index, slot) if manual_retry else None
+-        self._endpoint_feed_route = (ace_index, slot, head) if endpoints else None
+         try:
+             try:
+                 self.gcode.run_script_from_command(
+@@ -21628,7 +21541,6 @@
+                 self._last_load_ok = False
+                 raise
+         finally:
+-            self._endpoint_feed_route = None
+             self._manual_load_retry = None
+             self._in_internal_load_head = False
+ 
+diff --git a/klipper/extras/ace_bg_swap.py b/klipper/extras/ace_bg_swap.py
+--- a/klipper/extras/ace_bg_swap.py
++++ b/klipper/extras/ace_bg_swap.py
+@@ -51,9 +51,7 @@
+ # agnostic (V1+V2; the insert event fires on a PARKED head).
+ # FA is turned ON after the feed and the GRIP phase pulls the tip from the
+ # sensor through the gears WITH the extruder turning + forward-assist (FA
+-# alone cannot push through the stationary gears). The V2 decoder span is
+-# logged ('bg-feed') as telemetry only - its flat-detect false-fired
+-# mid-bowden as a stop criterion (span 1512 of ~1970 on a snag).
++# alone cannot push through the stationary gears).
+ BG_LOAD_GRIP_SEAT = 60.      # grip: sensor -> through the gears + seat
+ BG_LOAD_GRIP_SPEED = 5.      # mm/s
+ # PRESS-then-grip: the sensor-stop feed
+@@ -101,7 +99,6 @@
+ # bg swap carries visibly more old colour into the print. ~+10s bg time - invisible, it runs in the background.
+ BG_LOAD_PRIME_EXTRA = 40.
+ BG_LOAD_RETRACT_SPEED = 25.  # mm/s anti-ooze end retract
+-BG_FEED_MIN_MOVE = 100       # V2: span below this = nothing demonstrably moved
+ # EDGE-VERIFY POST-MORTEM: the eN toolhead sensor pin is a
+ # PRESENCE GATE, not a motion-pulse encoder - edges fire ONLY on tip-arrival
+ # and tail-departure transitions, never while filament runs through. Two
+@@ -143,23 +140,8 @@
+ HEAT_HYST = 4.0
+ ACE_UNWIND_SPEED_FALLBACK = 80
+ MOVE_SETTLE = 0.30
+-# [diag] passive: log the V2 decoder SPAN during the bg BULK retract to
+-# multiace_feedlog.log (same 'unload-dec' format as the inline unload), so a
+-# manually-fired ACE_BG_UNLOAD yields the same movement data as an inline
+-# swap. Reuses ace._retract_with_decoder_span. Controls the LOGGING only -
+-# the short-retract decoder GATE below always samples (it is the verify).
+-BG_UNLOAD_DECODER_DIAG = True
+-# Short-first, decoder-verified bg retract (bg analog of the inline
+-# short-probe-retract). Pull this much FIRST and confirm the ACE really
+-# moved via the decoder span before committing the rest - so a stuck filament
+-# is caught after ~150mm instead of a full rollback ground into it, and a
+-# failure is bounded to <=short (recoverable) for a clean inline handover.
++# Check the stopped short-return distance before requesting the rest.
+ BG_UNLOAD_PROBE_RETRACT = 150.
+-# span < FRAC*short = the ACE barely moved -> stuck. Conservative (0.3): only a
+-# NEAR-ZERO short trips it (clean stuck), a healthy pull (bulk data: ~93-98% of
+-# commanded) passes with huge margin -> near-zero false-stall risk. A stuck
+-# that slips past is still caught by the rest's own _ace_unwind verify. Tune up
+-# once real bg-short span data confirms the healthy short magnitude.
+ BG_UNLOAD_STALL_FRAC = 0.3
+ 
+ # --- stall-free move mechanic (merged from the former ace_bg_move module) ---
+@@ -751,29 +733,17 @@
+         ace._require_no_stop_fault(idx=ace_idx, slot=slot)
+ 
+     def _ace_feed_to_gears(self, ace, ace_idx, slot, length, speed, head):
+-        """Feed toward the extruder and STOP at the TOOLHEAD SENSOR - the
+-        same stop marker the inline load uses, hardware-agnostic (V1+V2).
+-        The sensor fires on a PARKED head (encoder edges need no extruder
+-        motion), and a decoder-flat criterion is unreliable as a stop (it
+-        false-fires mid-bowden on a snag that FA then pushes past). The V2 decoder is sampled as TELEMETRY only
+-        ('bg-feed' span log). Secondary stop: the slot leaves its moving
+-        state (V2 self-stops at real resistance, no grinding).
+-        Returns (result, span_tuple): 'ok' = sensor reached (tip at the
+-        toolhead sensor, just above the gears); 'none' = nothing demonstrably
+-        moved (safe EMPTY handover); 'partial' = moved but the sensor never
+-        fired (mid-bowden stop / sensor miss) - the caller must cleanup-
+-        retract before handover. 'stale' = the sensor already read present
+-        BEFORE the feed (cannot serve as a marker; nothing was sent)."""
++        """Feed a bounded length. Arrival is confirmed by the toolhead sensor."""
+         require_printer_clear(self.printer, head=head)
+         operations = getattr(ace, '_path_operations', None)
+         if operations is not None and operations.handles(ace_idx, slot):
+             if ace._path_calibration.head_sensor(head):
+-                return 'stale', (None, 0, None, None)
++                return 'stale'
+             operation = operations.feed(ace_idx, slot, head, length, speed, to_head=True)
+             operation.wait_started()
+             ace._v2_rfid_rescan_pending[ace_idx] = True
+             result = operation.wait_finished()
+-            return ('ok' if result['state'] == 'complete' and result.get('head_reached') else 'partial'), (None, 0, None, None)
++            return ('ok' if result['state'] == 'complete' and result.get('head_reached') else 'partial')
+         sensor = self.printer.lookup_object(
+             'filament_motion_sensor e%d_filament' % head, None)
+         def _detected():
+@@ -783,14 +753,14 @@
+             except Exception:
+                 return False
+         if sensor is None:
+-            return 'stale', (None, 0, None, None)
++            return 'stale'
+         if _detected():
+             # A latched-present sensor on a supposedly EMPTY head: feeding
+             # against it would stop instantly on the stale state -> refuse
+             # before any motion.
+-            return 'stale', (None, 0, None, None)
++            return 'stale'
+         if length <= 0:
+-            return 'ok', (None, 0, None, None)
++            return 'ok'
+         is_v2 = ace._is_v2_idx(ace_idx)
+         # release any rollback-lock, then fire the feed. A too-early send
+         # is rejected code=0 msg=FORBIDDEN (V1 busy rejection) - re-send
+@@ -804,6 +774,12 @@
+                 'method': 'feed_filament',
+                 'params': {'index': slot, 'length': int(length),
+                            'speed': int(speed)}})
++            if not isinstance(resp, dict) or type(resp.get('code')) is not int:
++                # A lost or malformed ACK does not establish that no command
++                # was executed. Stop and preserve the route as uncertain.
++                self._stop_feed_or_latch(ace, ace_idx, slot)
++                ace._head_travel.unknown(head, ace_idx, slot, 'background_feed_ack_unknown')
++                return 'uncertain'
+             if not self._resp_rejected(resp):
+                 break
+             self._say('feed %dmm start: code=%s msg=%s - retry'
+@@ -811,26 +787,21 @@
+                          (resp or {}).get('msg', 'timeout')))
+             self._pause(2.0)
+         if self._resp_rejected(resp):
+-            return 'none', (None, 0, None, None)
+-        dmin = dmax = None
+-        n = 0
++            return 'none'
++        lane_fault = None
+         arrived = False
+         device_idle_since = None
+         deadline = self.reactor.monotonic() + length / max(speed, 1) + 15.
+         while self.reactor.monotonic() < deadline:
++            st = self._slot_status(ace, ace_idx, slot) if is_v2 else None
++            if st and st.endswith('_error'):
++                lane_fault = st
++                break
+             if _detected():
+                 arrived = True
+                 break
+             if is_v2:
+-                d = ace._read_decoder(ace_idx, slot)
+-                if d is not None:
+-                    n += 1
+-                    dmin = d if dmin is None else min(dmin, d)
+-                    dmax = d if dmax is None else max(dmax, d)
+-                # V2 self-stopped (resistance / command end) with no sensor
+-                # arrival: give the FA-less tail a short grace (the sensor
+-                # can lag the stop by a moment), then hand back 'partial'.
+-                st = self._slot_status(ace, ace_idx, slot) or ''
++                st = st or ''
+                 if 'feeding' not in st and 'rollback' not in st:
+                     if device_idle_since is None:
+                         device_idle_since = self.reactor.monotonic()
+@@ -840,15 +811,14 @@
+                 else:
+                     device_idle_since = None
+             self._pause(0.15)
+-        # An unconfirmed STOP aborts before success, retries or FA rescue.
++        # Latch a failed stop before any recovery or retry.
+         self._stop_feed_or_latch(ace, ace_idx, slot)
+         ace._travel_legacy_finish(ace_idx, slot)
+-        span = (dmax - dmin) if (dmax is not None
+-                                 and dmin is not None) else None
++        if lane_fault or (is_v2 and not arrived and self._slot_status(ace, ace_idx, slot) != 'ready'):
++            ace._head_travel.unknown(head, ace_idx, slot, lane_fault or 'background_feed_no_arrival')
++            return 'uncertain'
+         if arrived:
+-            return 'ok', (span, n, dmin, dmax)
+-        if is_v2 and (span is None or span < BG_FEED_MIN_MOVE):
+-            return 'none', (span, n, dmin, dmax)
++            return 'ok'
+         ace._head_travel.unknown(head, ace_idx, slot, 'assist_rescue_distance')
+         # Mid-bowden stop without arrival: FA RESCUE first (forward-assist
+         # can push the tip past a snag to the sensor).
+@@ -858,20 +828,21 @@
+             ace._feed_assist_per_ace[ace_idx] = slot
+             rescue_deadline = self.reactor.monotonic() + BG_FEED_FA_RESCUE
+             while self.reactor.monotonic() < rescue_deadline:
++                status = self._slot_status(ace, ace_idx, slot) if is_v2 else None
++                if status and status.endswith('_error'):
++                    lane_fault = status
++                    break
+                 if _detected():
+                     arrived = True
+                     break
+                 self._pause(0.3)
+         if arrived:
+             # FA stays armed - the caller turns it ON right after anyway.
+-            return 'ok', (span, n, dmin, dmax)
++            return 'ok'
+         self._ace_stop(ace, ace_idx, {
+             'method': 'stop_feed_assist', 'params': {'index': slot}})
+         ace._feed_assist_per_ace[ace_idx] = -1
+-        # Moved (V2: measured; V1: open-loop, assume moved) but the sensor
+-        # never fired even with FA -> the caller retries or stages it in
+-        # place (every follow-up feed is sensor-gated, staged model).
+-        return 'partial', (span, n, dmin, dmax)
++        return 'uncertain' if lane_fault else 'partial'
+ 
+     def _gpio_diag(self, head, where):
+         """Sample the raw per-edge pin state (runout_buttun_state on the
+@@ -1286,25 +1257,6 @@
+             gcmd.respond_info('[bg-unload] head %d: %s'
+                               % (self._dh(h), self.state[h]))
+ 
+-    def _bg_dec_log(self, ace, head, slot, kind, length, span_tuple):
+-        """[diag] one decoder-span line for a bg retract segment, same
+-        'unload-dec' format as the inline unload. See BG_UNLOAD_DECODER_DIAG.
+-        head/slot are raw 0-based (matches the inline log)."""
+-        if not BG_UNLOAD_DECODER_DIAG:
+-            return
+-        fl = getattr(ace, '_feedlog', None)
+-        if fl is None:
+-            return
+-        try:
+-            _s, _n, _mn, _mx = span_tuple
+-            fl.info('unload-dec head=%d slot=%d kind=%s len=%d span=%s n=%s '
+-                    'min=%s max=%s'
+-                    % (head, slot, kind, int(length), _s, _n, _mn, _mx))
+-        except Exception:
+-            pass
+-
+-    # -- the sequences (run in an async-callback greenlet; reactor.pause is
+-    #    allowed here and does NOT block the print) -----------------------
+     def _run_unload(self, head, ace_idx, slot, temp, soft):
+         ace = self.printer.lookup_object('ace')
+         if ace._stop_message(ace_idx, slot, head):
+@@ -1587,14 +1539,8 @@
+                 self._pause(0.3)
+             self._pause(1.0)
+             if rest > 0:
+-                # Short-first, decoder-verified (bg analog of the inline
+-                # short-probe-retract): pull BG_UNLOAD_PROBE_RETRACT first
+-                # and confirm the ACE really moved (decoder span) before
+-                # committing the rest. Catches a stuck filament after ~150mm
+-                # instead of grinding a full rollback into it, and bounds a
+-                # failure to <=short (recoverable) for a clean inline
+-                # handover. NO pick-abort inside a rollback: the ace.py
+-                # wait-hook makes a toolchange WAIT for us.
++                # Commit the rest only after the stopped short-return ledger
++                # shows progress on the same route.
+                 short = min(int(BG_UNLOAD_PROBE_RETRACT), rest)
+                 # Dwell-fan window 1 (bg twin of the inline bulk-retract
+                 # window): passive dock wait, no heat phase, no coil
+@@ -1602,52 +1548,24 @@
+                 # the _run_* finally is the backstop for every raise.
+                 self._dwell_fan(ace, head, True)
+                 self._say('head %d: ACE %d slot %d retract %d mm (%d short + '
+-                          '%d rest, probe+decoder-verified) @%d'
++                          '%d rest) @%d'
+                           % (self._dh(head), self._dh(ace_idx),
+                              self._dh(slot), rest, short, rest - short,
+                              unwind_speed))
+-                # -- short (decoder-gated) --
+-                _sk = {'v': False}
+-                def _do_short(_o=_sk):
+-                    _o['v'] = self._ace_unwind(ace, ace_idx, slot, short,
+-                                               unwind_speed, wait=True,
+-                                               retries=4, head=head)
+-                _sps = ace._retract_with_decoder_span(ace_idx, slot, _do_short)
+-                self._bg_dec_log(ace, head, slot, 'bg-short', short, _sps)
+-                if not _sk['v']:
++                if not self._ace_unwind(ace, ace_idx, slot, short, unwind_speed,
++                                        wait=True, retries=4, head=head):
+                     raise RuntimeError('bg short retract not confirmed by the '
+                                        'device (slot %d)' % slot)
+-                _span = _sps[0]
+-                if _span is not None and _span < short * BG_UNLOAD_STALL_FRAC:
+-                    # decoder: the ACE barely moved -> filament stuck. Do NOT
+-                    # commit the rest (a fixed-length V2 rollback into a stuck
+-                    # filament grinds/strands). Bounded to <=short ->
+-                    # clean handover to the inline unload (probe + hot retry).
+-                    raise RuntimeError(
+-                        'bg short retract STALLED (decoder span %s < %d of '
+-                        '%dmm) - filament likely stuck, handing to inline'
+-                        % (_span, int(short * BG_UNLOAD_STALL_FRAC), short))
+-                # The V2 decoder above is the ONE stuck gate (the push-probe
+-                # that stood here was removed: the presence-gate pin gives no
+-                # edges either way, see the EDGE-VERIFY POST-MORTEM). Raw-pin
+-                # diagnostic: after a SUCCESSFUL short retract the tail should
+-                # have passed the gate - if runout_buttun_state tracks that
+-                # reliably it becomes the future V1 gate (log-only for now).
+                 self._gpio_diag(head, 'after short retract (expected clear)')
+                 # -- rest (committed; _ace_unwind still verifies completion) --
+                 rest2 = ace._head_return_remaining(ace_idx, slot, head)
+                 if rest2 is None:
+                     raise RuntimeError('本次退料距离未确认，请完全退出 ACE 后重新装入')
++                if rest - rest2 < short * BG_UNLOAD_STALL_FRAC:
++                    raise RuntimeError('后台短退的停止后位移不足，未继续退料')
+                 if rest2 > 0.5:
+-                    _rk = {'v': False}
+-                    def _do_rest(_o=_rk):
+-                        _o['v'] = self._ace_unwind(ace, ace_idx, slot, rest2,
+-                                                   unwind_speed, wait=True,
+-                                                   retries=4, bulk=True, head=head)
+-                    _spr = ace._retract_with_decoder_span(ace_idx, slot,
+-                                                          _do_rest)
+-                    self._bg_dec_log(ace, head, slot, 'bg-rest', rest2, _spr)
+-                    if not _rk['v']:
++                    if not self._ace_unwind(ace, ace_idx, slot, rest2, unwind_speed,
++                                            wait=True, retries=4, bulk=True, head=head):
+                         raise RuntimeError('bg rest retract not confirmed by '
+                                            'the device (slot %d)' % slot)
+                 # PIN GATE (the bg twin of the inline pin-first unload
+@@ -1897,13 +1815,6 @@
+                   'toolhead sensor (heating to %.0f in parallel)'
+                   % (self._dh(head), self._dh(ace_idx), self._dh(slot),
+                      feed_len, feed_speed, temp))
+-        # Feed with the INLINE load's retry discipline: on a no-arrival, back off load_retry_retract (50mm,
+-        # per-head knob) and re-push the full length - the sensor stops it,
+-        # so a re-push onto filament already partway in is harmless (V2
+-        # self-stops on resistance, the extruder gears do not turn during a
+-        # feed - nothing grinds). Background time is free, so the retries
+-        # cost nothing visible. Retract is TIME-paced (short unwinds are
+-        # too fast for the ~1s status updates).
+         _retries = 0
+         try:
+             _retries = int(ace.head_load_retry.get(head, ace.load_retry))
+@@ -1914,7 +1825,7 @@
+                 head, ace.load_retry_retract))
+         except Exception:
+             _retry_back = 50
+-        feed_res, _fsp = 'none', (None, 0, None, None)
++        feed_res = 'none'
+         _ever_moved = False
+         # Dwell-fan window 2 (bg twin of the inline bowden-feed window):
+         # the feed incl. retries is passive for the head - it just
+@@ -1930,11 +1841,9 @@
+                 self._ace_unwind(ace, ace_idx, slot, _retry_back,
+                                  feed_speed, wait=False, head=head)
+                 self._pause(max(1.0, _retry_back / max(feed_speed, 1) + 0.5))
+-            # V2 decoder span logged ('bg-feed') as telemetry.
+-            feed_res, _fsp = self._ace_feed_to_gears(
++            feed_res = self._ace_feed_to_gears(
+                 ace, ace_idx, slot, feed_len, feed_speed, head)
+-            self._bg_dec_log(ace, head, slot, 'bg-feed', feed_len, _fsp)
+-            if feed_res in ('ok', 'stale'):
++            if feed_res in ('ok', 'stale', 'uncertain'):
+                 break
+             if feed_res == 'partial':
+                 _ever_moved = True
+@@ -1947,8 +1856,8 @@
+                 'retry' % self._dh(head))
+         if feed_res != 'ok':
+             pheaters.set_temperature(heater, 0.)
+-            if feed_res == 'partial' or _ever_moved:
+-                # Filament moved but never reached the sensor: LEAVE IT IN
++            if feed_res in ('partial', 'uncertain') or _ever_moved:
++                # Filament may have moved but never reached the sensor: LEAVE IT IN
+                 # THE PATH (no cleanup retract - a commanded-length pull can
+                 # rip a short feed clean out of the slot gate). Every follow-up is sensor-gated: the same-slot
+                 # arrival load simply pushes it the rest of the way; a
+@@ -1963,7 +1872,7 @@
+                 self._say('head %d: feed never reached the sensor after %d '
+                           'attempt(s) - filament stays in the path (STAGED, '
+                           'mid-bowden); the arrival load continues it'
+-                          % (self._dh(head), _retries + 1))
++                          % (self._dh(head), _attempt + 1))
+             raise RuntimeError('feed not confirmed by the device')
+ 
+         ace._head_travel.finish_load(head, ace_idx, slot)
+@@ -2121,28 +2030,9 @@
+                         self._ace_stop(ace, ace_idx, {
+                             'method': 'stop_feed_filament',
+                             'params': {'index': slot}})
+-                    _psp = (None, 0, None, None)
+-                    try:
+-                        _psp = ace._retract_with_decoder_span(
+-                            ace_idx, slot, _do_press)
+-                    except StopUnconfirmedError:
+-                        raise
+-                    except Exception:
+-                        _do_press()
+-                    self._bg_dec_log(ace, head, slot, 'bg-press', press, _psp)
+-                    # Zero span with turning gears = slip at the ACE (see
+-                    # ace.note_seat_press_span); tolerated on an old ace.py.
+-                    try:
+-                        if hasattr(ace, 'note_seat_press_span'):
+-                            ace.note_seat_press_span(ace_idx, slot, _psp[0])
+-                    except Exception:
+-                        pass
+-                    self._say('head %d: tip pressed into the gear nip '
+-                              '(<=%d mm, moved %s%s)'
+-                              % (self._dh(head), int(press),
+-                                 ('%s mm' % _psp[0]) if _psp[0] is not None
+-                                 else 'n/a (V1)',
+-                                 ', attempt %d' % (_pa + 1) if _pa else ''))
++                    _do_press()
++                    self._say('head %d: completed seat press (limit %d mm)'
++                              % (self._dh(head), int(press)))
+             self._fa_on(ace, ace_idx, slot)
+             # Tip sits at the toolhead sensor (both hardwares) -> the grip
+             # covers sensor->gears + seats the tip through them. NO edge
+diff --git a/klipper/extras/ace_feed_supervisor.py b/klipper/extras/ace_feed_supervisor.py
+--- a/klipper/extras/ace_feed_supervisor.py
++++ b/klipper/extras/ace_feed_supervisor.py
+@@ -26,13 +26,9 @@
+ 
+ class FeedSupervisor:
+     # These are conservative software observation limits, not pipe calibration.
+-    POLL_S = 0.25
+     PRECHECK_TIMEOUT_S = 3.0
+     ACK_TIMEOUT_S = 2.0
+-    TELEMETRY_TIMEOUT_S = 1.5
+-    WINDOW_MOTOR_MM = 30.0
+     MIN_PROGRESS_RATIO = 0.5
+-    BAD_WINDOWS = 2
+     READY_GUARD_S = 4.0
+     STARTUP_RESET_S = 1.0
+     STARTUP_ZERO_MOTOR_MM = 8
+@@ -54,7 +50,6 @@
+         self.seq = (previous_seq if type(previous_seq) is int and previous_seq >= 0 else 0) + 1
+         ace._flow_feed_seq = self.seq
+         self.epoch = getattr(getattr(ace, '_slot_actions', None), 'epoch', None)
+-        self.endpoint_only = getattr(ace, '_endpoint_feed_route', None) == (idx, slot, head)
+         self.sensor = sensor
+         self.length, self.speed = float(length), float(speed)
+         if not all(math.isfinite(x) and x > 0 for x in (self.length, self.speed)):
+@@ -78,19 +73,16 @@
+         self.after_retry = False
+         self.error = None
+         self.pending = None
+-        self.pending_since = None
+         self.last_sample = None
+         self.origin_sample = None
+         self.observed_samples = 0
+         self.measurement_error = None
+-        self.window = None
+         self.decoder_sign = None
+         direction = getattr(ace, '_insert_encoder_direction', {}).get((idx, slot))
+         if (direction and len(direction) == 3 and direction[0] is self.transport
+                 and direction[1] == self.identity and direction[2] in (-1, 1)):
+             self.decoder_sign = direction[2]
+         self.known_decoder_sign = self.decoder_sign
+-        self.bad_windows = 0
+         self.startup_rebases = 0
+         self.terminal_sample = None
+         self.terminal_slot_status = None
+@@ -178,7 +170,6 @@
+         self.started_at = now
+         # Heartbeat provenance in ace.py uses Python's monotonic clock.
+         self.status_started_at = status_clock()
+-        self.next_poll_at = now
+         self.deadline = now + self.length / self.speed + 30.
+ 
+     def wait_before_feed(self):
+@@ -262,9 +253,8 @@
+             self.error = FeedSupervisionError('feed_rejected', 'ACE 未确认本次送料指令')
+         elif not self.ack:
+             self.ack = True
+-            # Capture a possible zero-origin sample before the firmware finishes
+-            # its motor setup, instead of losing the first polling interval.
+-            self._poll(self.ace.reactor.monotonic())
++            # The sensor stays live while this one start sample is in flight.
++            self._read_start()
+ 
+     def cancel(self):
+         self.cancelled = True
+@@ -274,7 +264,7 @@
+         current = sample + (now,)
+         previous = self.last_sample
+         if previous is None:
+-            self.last_sample = self.window = current
++            self.last_sample = current
+             self.origin_sample = current
+             self.observed_samples = 1
+             return
+@@ -289,7 +279,7 @@
+                 # One initial per-command reset is expected on legacy V2. It
+                 # supplies no movement evidence and never adds a travel span.
+                 self.startup_rebases += 1
+-                self.last_sample = self.window = current
++                self.last_sample = current
+                 self.origin_sample = current
+                 self.observed_samples = 1
+                 self.decoder_sign = self.known_decoder_sign
+@@ -302,17 +292,6 @@
+             self.decoder_sign = sign
+         self.last_sample = current
+         self.observed_samples += 1
+-        motor_window = current[0] - self.window[0]
+-        if motor_window >= self.WINDOW_MOTOR_MM:
+-            material_window = abs(current[1] - self.window[1])
+-            ratio = material_window / motor_window
+-            self.bad_windows = self.bad_windows + 1 if ratio < self.MIN_PROGRESS_RATIO else 0
+-            logging.info('[multiACE feed-supervisor] ACE=%d slot=%d head=%d motor=%.1f decoder=%.1f ratio=%.3f bad=%d',
+-                         self.idx, self.slot, self.head, motor_window, material_window,
+-                         ratio, self.bad_windows)
+-            self.window = current
+-            if self.bad_windows >= self.BAD_WINDOWS:
+-                self._measurement_issue('测量轮读数偏低，本次距离未确认')
+ 
+     def _measurement_issue(self, detail):
+         if self.measurement_error is None:
+@@ -320,15 +299,9 @@
+                          self.idx, self.slot, self.head, detail)
+             self.measurement_error = detail
+ 
+-    def _poll(self, now):
+-        if self.pending is not None and now - self.pending_since >= self.TELEMETRY_TIMEOUT_S:
+-            self._measurement_issue('送料计距响应超时')
+-            self.pending = None
+-        if self.pending is not None or now < self.next_poll_at or not self.ack:
+-            return
++    def _read_start(self):
+         marker = object()
+-        self.pending, self.pending_since = marker, now
+-        self.next_poll_at = now + self.POLL_S
++        self.pending = marker
+         token = self.token
+         request = {'method': 'get_feed_info', '_insert_stop_transport': self.transport}
+ 
+@@ -343,16 +316,13 @@
+                         or response['id'] != request['id']):
+                     raise FeedSupervisionError('telemetry_invalid', '送料遥测不是本次请求的响应')
+                 sample = self._decode(response)
+-                if self.endpoint_only:
+-                    logging.info('[multiACE feed-endpoint] start ACE=%d slot=%d head=%d speed=%.1f sample=%s',
+-                                 self.idx, self.slot, self.head, self.speed, sample)
+-                    # A delayed first response can still contain the previous
+-                    # operation's counters. Only credit an explicit clean zero.
+-                    if sample != (0, 0, 0) or self.ace.reactor.monotonic() - now > self.STARTUP_RESET_S:
+-                        self._measurement_issue('起点未取得本次送料的零位读数')
+-                        return
+-                if sample is not None:
+-                    self._observe(sample, self.ace.reactor.monotonic())
++                logging.info('[multiACE feed-endpoint] start ACE=%d slot=%d head=%d speed=%.1f sample=%s',
++                             self.idx, self.slot, self.head, self.speed, sample)
++                # The previous command can still be visible immediately after ACK.
++                if sample != (0, 0, 0) or self.ace.reactor.monotonic() - self.started_at > self.STARTUP_RESET_S:
++                    self._measurement_issue('起点未取得本次送料的零位读数')
++                    return
++                self._observe(sample, self.ace.reactor.monotonic())
+             except (FeedSupervisionError, TypeError, ValueError) as exc:
+                 self._measurement_issue(str(exc))
+         try:
+@@ -392,10 +362,6 @@
+             raise FeedSupervisionError('head_not_reached', '本段送料已结束，喷头仍未到料')
+         if now >= self.deadline:
+             raise FeedSupervisionError('head_not_reached', '本次送料已超时，喷头仍未到料')
+-        if not self.endpoint_only:
+-            self._poll(now)
+-        if self.error is not None:
+-            raise self.error
+         return False
+ 
+     def _query(self, method, command, params=None, deadline=None,
+@@ -452,7 +418,7 @@
+                 except Exception as exc:
+                     self._measurement_issue(str(exc))
+                 self._check_identity()
+-            if self.endpoint_only and self.feed_admitted:
++            if self.feed_admitted and self.ack:
+                 logging.info('[multiACE feed-endpoint] end ACE=%d slot=%d head=%d status=%s sample=%s',
+                              self.idx, self.slot, self.head, self.terminal_slot_status, self.terminal_sample)
+                 if self.observed_samples < 2 and self.terminal_slot_status == 'ready':
+@@ -583,7 +549,7 @@
+                 'code': self.error.code if self.error is not None else None,
+                 'motor_mm': self.last_sample[0] if self.last_sample else None,
+                 'decoder_mm': self.last_sample[1] if self.last_sample else None,
+-                'bad_windows': self.bad_windows,
++                'bad_windows': 0,  # Retained for existing status clients.
+                 'retry_backoff_mm': self.retry_backoff_mm,
+                 'travel_receipt': self.travel_receipt(),
+                 'measurement_error': self.measurement_error,
+diff --git a/klipper/extras/ace_fixed_park.py b/klipper/extras/ace_fixed_park.py
+--- a/klipper/extras/ace_fixed_park.py
++++ b/klipper/extras/ace_fixed_park.py
+@@ -1,5 +1,6 @@
+ """Return stock V2 filament to its route in reverse only."""
+ import logging
++import copy
+ import math
+ 
+ from .ace_flow_guard import raw_head_state, source_conflict, source_route
+@@ -34,7 +35,7 @@
+     FALLING_EDGE_SETTLE_S = .25
+     IDLE_STATES = ('standby', 'complete', 'cancelled', 'error')
+ 
+-    def __init__(self, ace, idx, slot, head):
++    def __init__(self, ace, idx, slot, head, *, foreground=False):
+         self.ace, self.idx, self.slot, self.head = ace, idx, slot, head
+         self.reactor = ace.reactor
+         self.transport = ace._serials.get(idx)
+@@ -45,6 +46,10 @@
+         self.scope = {'port': port, 'uid': list(uid), 'mode': ace._ace_mode}
+         self.epoch = ace._insert_epochs.get((idx, slot))
+         self.actions = ace._slot_actions
++        self.foreground = foreground
++        self.source = copy.deepcopy(ace._head_source.get(head)) if foreground else None
++        stats = ace.printer.lookup_object('print_stats', None)
++        self.print_state = getattr(stats, 'state', None)
+         self.forward_decoder_sign = None
+         self.pending = None
+         self.receipt = None
+@@ -70,7 +75,14 @@
+                 or a._insert_epochs.get((self.idx, self.slot)) != self.epoch
+                 or source_route(a._head_source.get(self.head)) != (self.idx, self.slot)
+                 or source_conflict(a, self.head, self.idx, self.slot)
+-                or not self.idle(a)):
++                or (self.foreground and (
++                    not getattr(a, '_swap_in_progress', False)
++                    or getattr(a, '_swap_phase', None) != 'unload'
++                    or getattr(a.printer.lookup_object('print_stats', None), 'state', None) != self.print_state
++                    or self.print_state not in self.IDLE_STATES + ('printing',)
++                    or a._head_source.get(self.head) != self.source
++                    or not a._source_insertion_matches(self.source, self.idx, self.slot)))
++                or (not self.foreground and not self.idle(a))):
+             raise RuntimeError('回停期间原连接、料路或打印状态改变')
+         if self.slot >= len(gates) or gates[self.slot] != 1:
+             raise RuntimeError('回停期间 ACE 槽口有料状态未确认')
+diff --git a/klipper/extras/ace_print_assist.py b/klipper/extras/ace_print_assist.py
+--- a/klipper/extras/ace_print_assist.py
++++ b/klipper/extras/ace_print_assist.py
+@@ -2,7 +2,6 @@
+ import logging
+ import math
+ 
+-from .ace_print_tangle import PrintTangleMonitor
+ from .ace_fixed_park import ParkMotion
+ from .ace_flow_guard import dynamic_route_blocked, raw_head_state, source_conflict, source_route
+ from .ace_ready_wait import ReadyWaitError, status_rows, separate_paths
+@@ -35,7 +34,6 @@
+         self.stock_tip = None
+         self.tip_moves = False
+         self.retry_head = None
+-        self.tangle_monitor = PrintTangleMonitor(self)
+ 
+     def install(self):
+         a = self.ace
+@@ -54,14 +52,12 @@
+         if previous is not None:
+             a.gcode.register_command('CONTROL_RETRACT_ACTION', self.wrap_stock_retract(previous))
+             self.tip_moves = True
+-        a.reactor.register_timer(self.tangle_monitor.tick, a.reactor.NOW)
+         a.printer.register_event_handler('pause_resume:pause', self.interrupt)
+         a.printer.register_event_handler('pause_resume:cancel', self.interrupt)
+         a.printer.register_event_handler('virtual_sdcard:reset_file', self.interrupt)
+ 
+     def interrupt(self, *args):
+         self.operator_epoch += 1
+-        self.tangle_monitor.reset()
+ 
+     def active_head(self):
+         ext = self.ace.toolhead.get_extruder()
+@@ -321,7 +317,6 @@
+         if not self.manages(head, source):
+             return
+         idx, slot = source_route(source)
+-        self.tangle_monitor.check_move(gcmd, head, idx, slot)
+         if (not self.sd.must_pause_work and self.online(idx)
+                 and self.accepted(idx, slot) and a._source_insertion_matches(source, idx, slot)
+                 and self.recent_state(idx, slot) in PRINT_SLOT_STATES
+diff --git a/klipper/extras/ace_slot_actions.py b/klipper/extras/ace_slot_actions.py
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -274,6 +274,9 @@
+                 monitor()
+                 r = box[0]
+                 if r is not None:
++                    if (type(request.get('id')) is not int or not isinstance(r, dict)
++                            or type(r.get('id')) is not int or r['id'] != request['id']):
++                        raise RuntimeError('%s 响应 ID 不匹配' % method)
+                     if attempt:
+                         logging.info('[multiACE] slot_eject telemetry reply ace=%d method=%s id=%s attempt=%d',
+                                      idx, method, request.get('id'), attempt + 1)
+@@ -839,71 +842,53 @@
+         self.state.update(message='feed_error：原槽低速短退一次', recovery_attempts=1,
+                           recovery_limit_mm=RECOVERY_MM, recovery_speed_mm_s=RECOVERY_SPEED_MM_S)
+         self._send_eject_motion(idx, slot, RECOVERY_MM, RECOVERY_SPEED_MM_S, monitor)
+-        base = None
+-        last = None
++        # CMD76 may be stale while the motor runs. Observe only the target
++        # lane and inlet until the acknowledged command has completed.
+         saw_rollback = False
+-        seen_reverse = 0
+         learning = polarity is None
+         while True:
+             monitor()
+             status = self._lane_states(idx, monitor=monitor).get(slot)
+             if not self._gate(idx, slot, monitor=monitor):
+                 raise RuntimeError('短退期间入口退空，已停止；请执行完全退出复核')
+-            if status not in ('ready', 'rollback', 'feed_error'):
++            if status == 'rollback':
++                saw_rollback = True
++            elif status == 'ready':
++                if saw_rollback:
++                    break
++            elif status == 'feed_error' and not saw_rollback and (
++                    a.reactor.monotonic() - started <= MOTION_STARTUP_SECONDS):
++                # The original fault may briefly remain while the new command
++                # starts. It is never accepted after actual rollback begins.
++                pass
++            else:
+                 raise RuntimeError('短退遇到不可自动恢复的槽错误: %s' % status)
+-            saw_rollback |= status == 'rollback'
+-            starting = a.reactor.monotonic() - started <= MOTION_STARTUP_SECONDS and seen_reverse == 0
+-            row = self._feed_row(idx, slot, monitor, default_zero_max=MOTION_STARTUP_ZERO_MM if starting else None)
+-            if base is None:
+-                # Legacy CMD76 can still show the preceding command right
+-                # after CMD8 acknowledges. For an uncalibrated lane, accept a
+-                # new reset only after CMD6 reports this same slot rolling back.
+-                reset = (row['steps'] == row['length'] == row['decoder'] == 0
+-                         or row['steps'] < before['steps'] and row['length'] < before['length']
+-                         and row['length'] <= RECOVERY_MM + RECOVERY_MARGIN_MM)
+-                if saw_rollback and reset:
+-                    base = {'steps': 0, 'length': 0, 'decoder': 0}
+-                elif (saw_rollback and not learning and row['steps'] >= before['steps']
+-                        and row['length'] >= before['length']):
+-                    base = before
+-                elif starting:
+-                    a.reactor.pause(min(deadline, a.reactor.monotonic() + .08))
+-                    continue
+-                else:
+-                    raise RuntimeError('短退指令的实际回抽状态或计数零点未确认')
+-            delta = row['decoder'] - base['decoder']
+-            if (polarity is None and status == 'rollback' and row['decoder_present'] and delta):
+-                # The bounded reverse itself is the direction reference. No
+-                # cached polarity is saved until terminal stillness is proven.
+-                polarity = -1 if delta > 0 else 1
+-            reverse = -delta * polarity if polarity is not None else 0
+-            motor = row['length'] - base['length']
+-            if (reverse < 0 or reverse > RECOVERY_MM + RECOVERY_MARGIN_MM
+-                    or motor < 0 or motor > RECOVERY_MM + RECOVERY_MARGIN_MM):
+-                raise RuntimeError('短退方向、计数或有限行程异常')
+-            if last is not None and (row['steps'] < last['steps'] or row['length'] < last['length']
+-                    or (polarity is not None and (row['decoder'] - last['decoder']) * polarity > 0)):
+-                raise RuntimeError('短退过程中计数重置或耗材反向')
+-            if row['decoder_present'] and reverse >= 2:
+-                seen_reverse = reverse
+-            if motor >= 4 and reverse < max(1, motor * .25):
+-                raise RuntimeError('短退机械无进度：电机 %s mm，耗材 %s mm' % (motor, reverse))
+-            if seen_reverse >= 2 and (status == 'ready' or reverse >= RECOVERY_MM):
+-                break
+-            if status == 'feed_error' and motor >= RECOVERY_MM:
+-                raise RuntimeError('短退后仍为 feed_error，保留来源等待机械处理')
+-            last = row
+             a.reactor.pause(min(deadline, a.reactor.monotonic() + .1))
+-        self._eject_stop_ready(idx, slot, transport, allow_fault=True, require_decoder=True)
++        self._eject_stop_ready(idx, slot, transport, allow_fault=False, require_decoder=True)
+         self._motor_pending = False
+         monitor()
+         final = self._last_eject_stop
+-        reverse = (base['decoder'] - final['decoder']) * polarity
+-        if (final['status'] != 'ready' or final['gate'] is not True
++        # V2 reports a per-command ledger. Require an actual reset of its
++        # step counter relative to the stopped pre-command ledger; otherwise
++        # an old short command could masquerade as this reverse. A low or
++        # unknown previous ledger is inconclusive, not a zero baseline.
++        old_steps = before.get('steps')
++        steps, motor, decoder = (final.get('steps'), final.get('length'),
++                                  final.get('decoder'))
++        if (final.get('status') != 'ready' or final.get('gate') is not True
++                or before.get('decoder_present') is not True
+                 or final.get('decoder_present') is not True
+-                or not 2 <= reverse <= RECOVERY_MM + RECOVERY_MARGIN_MM
+-                or not 0 <= final['length'] - base['length'] <= RECOVERY_MM + RECOVERY_MARGIN_MM):
+-            raise RuntimeError('短退终态未确认，实际槽状态: %s；保留来源' % final['status'])
++                or any(type(value) is not int for value in (old_steps, steps, motor, decoder))
++                or not 0 < steps < old_steps
++                or not 2 <= motor <= RECOVERY_MM + RECOVERY_MARGIN_MM
++                or not 2 <= abs(decoder) <= RECOVERY_MM + RECOVERY_MARGIN_MM
++                or abs(decoder) > motor + RECOVERY_MARGIN_MM):
++            raise RuntimeError('短退终态或新指令计数未确认；保留原来源')
++        if polarity is None:
++            polarity = 1 if decoder < 0 else -1
++        reverse = -decoder * polarity
++        if not 2 <= reverse <= RECOVERY_MM + RECOVERY_MARGIN_MM:
++            raise RuntimeError('短退终态方向异常；保留原来源')
+         if learning:
+             directions[key] = (transport, self._eject_identity, polarity)
+             a._insert_encoder_direction = directions
+@@ -1324,6 +1309,13 @@
+                 if not clear_latch and a._stop_message(idx, slot):
+                     raise RuntimeError('仅复核模式不能在 STOP 故障未解除时短退')
+                 a._require_no_stop_fault(idx=idx, slot=slot)
++                # The initial STOP receipt deliberately permits a missing
++                # decoder. A measured recovery needs its own stopped baseline.
++                self._eject_stop_ready(idx, slot, transport, allow_fault=True,
++                                       require_decoder=True)
++                proof = self._last_eject_stop
++                if proof['status'] != 'feed_error' or proof['gate'] is not True:
++                    raise RuntimeError('短退前原槽状态或入口已改变，保留来源')
+                 proof = self._recover_feed_error(idx, slot, transport, proof, learn_direction=recovery_only)
+                 gate = proof['gate']
+             elif proof['status'] != 'ready' and (not recovery_only or allow_probe):
+@@ -1343,49 +1335,43 @@
+             if gate:
+                 check()
+                 motion_start = a.reactor.monotonic()
+-                self._send_eject_motion(idx, slot, MAX_MM, SPEED_MM_S, check)
++                # The finite firmware command bounds travel; the separate
++                # host deadline bounds a stuck or lost completion status.
++                motion_deadline = min(deadline, motion_start + MAX_MM / SPEED_MM_S + 15.0)
++                def motion_check():
++                    self._original_monitor(idx, slot, transport, motion_deadline,
++                                           allow_removal=True)
++                self._send_eject_motion(idx, slot, MAX_MM, SPEED_MM_S, motion_check)
+                 self.state.update(message='正在退出 ACE', limit=MAX_MM)
+                 seen_motion = False
+-                previous = None
+-                progress_at = motion_start
+                 while True:
+-                    check()
+-                    state = self._lane_states(idx, monitor=check).get(slot)
+-                    gate = self._gate(idx, slot, monitor=check)
++                    motion_check()
++                    state = self._lane_states(idx, monitor=motion_check).get(slot)
++                    gate = self._gate(idx, slot, monitor=motion_check)
++                    startup = a.reactor.monotonic() - motion_start <= MOTION_STARTUP_SECONDS
++                    settling_fault = (startup and not seen_motion and
++                                      ((assist_exit and state == 'assist_error') or
++                                       (allow_empty_head_held and state in STOPPED_STATES)))
++                    if state not in ('ready', 'rollback') and not settling_fault:
++                        raise RuntimeError('目标槽退料实际错误: %s' % state)
+                     if not gate:
++                        if state not in ('ready', 'rollback'):
++                            raise RuntimeError('目标槽退料实际错误: %s' % state)
+                         break
+                     if (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot)) != self._eject_epoch:
+                         raise RuntimeError('退料期间原槽插料代次改变且入口仍有料')
+-                    startup = a.reactor.monotonic() - motion_start <= MOTION_STARTUP_SECONDS
+-                    settling_assist = (assist_exit and startup and not seen_motion
+-                                       and state == 'assist_error')
+-                    if (state not in ('ready', 'rollback') and not settling_assist
+-                            and not (allow_empty_head_held and state in STOPPED_STATES)):
+-                        raise RuntimeError('目标槽退料实际错误: %s' % state)
+-                    row = self._feed_row(idx, slot, check, allow_missing_decoder=True)
+                     seen_motion = seen_motion or state == 'rollback'
+-                    if previous is not None:
+-                        reset = row['steps'] < previous['steps'] or row['length'] < previous['length']
+-                        if reset and not startup:
+-                            raise RuntimeError('退出 ACE 期间电机计数重新置零')
+-                        measured = row['decoder_present'] and previous['decoder_present']
+-                        progress = (row['decoder'] != previous['decoder'] if measured else
+-                                    row['steps'] > previous['steps'] or row['length'] > previous['length'])
+-                        if not reset and progress:
+-                            progress_at = a.reactor.monotonic()
+-                    previous = row
+-                    if row['length'] > MAX_MM + RECOVERY_MARGIN_MM:
+-                        raise RuntimeError('退出 ACE 超过本次电机行程上限')
+-                    if a.reactor.monotonic() - progress_at >= 5:
+-                        raise RuntimeError('退出 ACE 连续 5 秒没有可确认的进度')
+                     if state == 'ready' and seen_motion:
+                         break
+-                    a.reactor.pause(min(deadline, a.reactor.monotonic() + .1))
++                    a.reactor.pause(min(motion_deadline, a.reactor.monotonic() + .1))
+                 gate = self._eject_stop_ready(
+                     idx, slot, transport, motion_start, allow_fault=True)
+                 self._motor_pending = False
+                 if gate:
+                     raise RuntimeError('已达到本次退料上限，入口仍有料')
++            if self._last_eject_stop.get('status') != 'ready':
++                raise RuntimeError('退出停止后目标槽实际错误: %s；保留来源' %
++                                   self._last_eject_stop.get('status'))
+             self._commit_ejected(idx, slot, transport)
+             self.state.update(state='complete', message='耗材已退出 ACE 入口', stopped=True,
+                               gate=False, ejected=True, path_cleared=True, source_retained=False,
+diff --git a/klipper/extras/filament_feed_ace.py b/klipper/extras/filament_feed_ace.py
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -1094,8 +1094,7 @@
+                 and (operations is None or not operations.handles(idx, slot))):
+             # Tip-forming can leave hardware rollback assist armed after its
+             # host lease is lost. Stop this exact source before waiting READY.
+-            # This STOP receipt only gates the handoff. The following
+-            # finite retract is still measured with real encoder feedback.
++            # This STOP receipt only gates the finite retract handoff.
+             original = type(head) is int and unload_source_matches(ace, idx, slot, head)
+             receipt = stop_and_verify(ace, idx, slot, ready_zero_mm=STOP_DEFAULT_ZERO_MM,
+                                       ready_without_decoder=True, stock_unload=True,
+@@ -1113,67 +1112,56 @@
+         ace = self.ace
+         head = self.filament_ch[ch]
+         operations = getattr(ace, '_path_operations', None)
+-        if direct and (not getattr(ace, 'unload_gpio', True)
+-                       or short_commanded_mm < 1 or raw_head_state(ace, head) is not True):
++        if direct:
+             return False
+-        if (not ace._is_v2_idx(idx) or not ParkMotion.idle(ace)
++        foreground = (getattr(ace, '_swap_in_progress', False)
++                      and getattr(ace, '_swap_phase', None) == 'unload')
++        if (not ace._is_v2_idx(idx) or (not foreground and not ParkMotion.idle(ace))
+                 or source_route(ace._head_source.get(head)) != (idx, slot)
+                 or (operations is not None and operations.handles(idx, slot))
+                 or getattr(ace, '_calibration_unload', {}).get('active')):
+             return False
+-        motion = ParkMotion(ace, idx, slot, head)
++        if foreground and (not unload_source_matches(ace, idx, slot, head)
++                or not ace._source_insertion_matches(ace._head_source[head], idx, slot)):
++            raise RuntimeError('换料回停的原来源或插料代次未确认')
++        motion = ParkMotion(ace, idx, slot, head, foreground=True) if foreground else ParkMotion(ace, idx, slot, head)
+         tracking = ace._head_travel
+-        target = tracking.fixed_park_target(head, idx, slot, motion.scope)
+-        if target is None:
+-            return False
+-        source = ace._head_source.get(head) or {}
+-        motion.forward_decoder_sign = tracking.forward_decoder_sign(
+-            head, idx, slot, motion.scope, source.get('insert_epoch'))
+-        if direct and motion.forward_decoder_sign is None:
+-            return False
+-        measured_target = None
+-        if not direct and motion.forward_decoder_sign is not None:
+-            measured_target = tracking.measured_park_distance(head, idx, slot, motion.scope)
++        if foreground:
++            saved = tracking.fixed_park_references.get(tracking._park_key(head, idx, slot))
++            target = (saved.get('target_mm') if isinstance(saved, dict)
++                      and saved.get('scope') == motion.scope else None)
++            if target is None:
++                # The foreground caller supplies the configured swap command;
++                # never reinterpret it as a measured filament displacement.
++                target = getattr(ace, '_retract_length_override', None)
++                if target != ace.get_swap_retract_length(idx, slot):
++                    target = None
++            if not tracking._valid_fixed_park(motion.scope, target):
++                return False
++        else:
++            target = tracking.fixed_park_target(head, idx, slot, motion.scope)
++            if target is None:
++                return False
++        # Direct edge parking and measured corrections depend on in-flight
++        # decoder feedback. Use the native short probe first, then one finite
++        # commanded return from the confirmed-empty head.
+         tracking.begin_fixed_park(head, idx, slot)
+         try:
+-            if measured_target is not None:
+-                distance, _ = motion.run(measured_target, short_commanded_mm, speed, measured=True)
+-                tracking.finish_park(head, idx, slot, measured_mm=distance,
+-                                     measured_target=measured_target)
+-            elif not direct:
+-                motion.run(target, short_commanded_mm, speed)
+-                tracking.finish_commanded_park(head, idx, slot)
+-            else:
+-                distance, net = motion.run(target, short_commanded_mm, speed, direct=True)
+-                tracking.finish_fixed_park(head, idx, slot, motion.scope, target,
+-                                           distance, net)
+-        except ParkEdgeMissed as exc:
+-            tracking.finish_fixed_park_probe(head, idx, slot, exc.retracted_mm)
+-            logging.info('[multiACE] direct park probe stopped after %.1f mm; using native probe',
+-                         exc.retracted_mm)
+-            raise
++            motion.run(target, short_commanded_mm, speed)
++            tracking.finish_commanded_park(head, idx, slot)
+         except ParkEncoderUnavailable as exc:
+             tracking.finish_fixed_park_probe(head, idx, slot, 0)
++            if foreground:
++                raise
+             logging.info('[multiACE] 继续普通退料：%s', exc)
+             return False
+         except ParkAckUnavailable:
+-            # The head switch is already clear, but the ACE did not return a
+-            # trustworthy ACK for the initial park pulse. Do not treat that
+-            # as a generic motion failure: invalidate the distance record and
+-            # let ACE_UNLOAD_HEAD use its existing ACE_SLOT_EXIT handoff.
++            # Never replay a move whose acknowledgement is uncertain.
+             tracking.unknown(head, idx, slot, 'fixed_park_unconfirmed')
+-            if not direct and measured_target is None:
+-                raise
+-            logging.info('[multiACE] 回停 ACK 未确认，转原槽入口退出以重新建立零点')
+-            return False
++            raise
+         except Exception:
+             tracking.unknown(head, idx, slot, 'fixed_park_unconfirmed')
+             raise
+-        if direct:
+-            try:
+-                self.runout_sensor[ch].runout_helper.note_filament_present(False, True)
+-            except Exception:
+-                logging.info('[feed][gpio] motion-helper sync failed after fixed park')
+         return True
+ 
+     def _unload_dec_log(self, head, slot, kind, length, span, attempt):
+@@ -2308,15 +2296,8 @@
+                                     self.reactor.pause(
+                                         self.reactor.monotonic() + 2.0)
+                             if _p_ok:
+-                                # [diag] the commanded length is an UPPER
+-                                # BOUND - the ACE stops by itself at
+-                                # resistance. Sample the decoder span so a
+-                                # failed load tells us whether the press
+-                                # ran out its length (tip far from the nip
+-                                # -> a longer press would help) or stopped
+-                                # early (a thin/long taper already trips
+-                                # the stop -> more length is never used).
+-                                # Same 'unload-dec' line as the bg press.
++                                # The finite press stops at resistance; no
++                                # in-flight decoder sampling is needed.
+                                 def _do_press():
+                                     # COUPLED press: the
+                                     # extruder turns WITH the ACE push. An
+@@ -2352,41 +2333,12 @@
+                                     self.ace._checked_stop_request(_p_idx, {
+                                         'method': 'stop_feed_filament',
+                                         'params': {'index': _p_slot}})
+-                                _psp = (None, 0, None, None)
+-                                try:
+-                                    _psp = self.ace._retract_with_decoder_span(
+-                                        _p_idx, _p_slot, _do_press)
+-                                except StopUnconfirmedError:
+-                                    raise
+-                                except Exception:
+-                                    _do_press()
+-                                try:
+-                                    _fl = getattr(self.ace, '_feedlog', None)
+-                                    if _fl is not None:
+-                                        _fl.info(
+-                                            'unload-dec head=%d slot=%d '
+-                                            'kind=seat-press len=%d span=%s '
+-                                            'n=%s min=%s max=%s'
+-                                            % (_p_head, _p_slot, _press,
+-                                               _psp[0], _psp[1], _psp[2],
+-                                               _psp[3]))
+-                                except Exception:
+-                                    pass
++                                _do_press()
+                                 _seat_pressed = True
+                                 logging.info(
+                                     "[feed_loading] hot seat press %dmm done "
+-                                    "(ace %d slot %d, attempt %d, moved %s)",
+-                                    _press, _p_idx, _p_slot, _pa + 1,
+-                                    _psp[0] if _psp[0] is not None
+-                                    else 'n/a (V1)')
+-                                # Zero span with turning gears = slip at the
+-                                # ACE / blockage before it; the load-slip
+-                                # pause names that end (note_seat_press_span).
+-                                try:
+-                                    self.ace.note_seat_press_span(
+-                                        _p_idx, _p_slot, _psp[0])
+-                                except Exception:
+-                                    pass
++                                    "(ace %d slot %d, attempt %d)",
++                                    _press, _p_idx, _p_slot, _pa + 1)
+                             else:
+                                 logging.info(
+                                     "[feed_loading] hot seat press rejected "
+@@ -3329,15 +3281,7 @@
+                             _hot_short_start = self.reactor.monotonic()
+                             for unload_attempt in range(unload_max):
+                                 self.ace._check_calibration_unload_cancel()
+-                                # Wait ready BEFORE the span wrapper: its
+-                                # sampling timer must never hammer get_feed_info
+-                                # through a wait_ace_ready stall (the 0.1s tick
+-                                # saturated the V2 writer queue, the status
+-                                # cache froze at 'busy' and the wait ran its
+-                                # full 60s into a needless reconnect - and the
+-                                # span window covered the whole wait).
+-                                # End source-side reverse assist before the
+-                                # explicit move or its measurement timer.
++                                # Stop source-side reverse assist before the finite move.
+                                 _unload_stop = self._wait_before_unload_retract(
+                                     self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
+                                 _remaining = self.ace._head_return_remaining(
+@@ -3346,18 +3290,13 @@
+                                     _short_retract = min(FEED_UNLOAD_PROBE_RETRACT, _remaining)
+                                     if _short_retract <= 0:
+                                         break
+-                                _usp = self.ace._retract_with_decoder_span(
+-                                    self.ace._active_device_index, _ace_slot,
+-                                    lambda: self.ace._retract(
+-                                        _ace_slot, _short_retract,
+-                                        _retract_speed, head=head_idx, hot_owner=_hot_park_context,
+-                                        unload_stop=_unload_stop))
++                                self.ace._retract(
++                                    _ace_slot, _short_retract, _retract_speed,
++                                    head=head_idx, hot_owner=_hot_park_context,
++                                    unload_stop=_unload_stop)
+                                 self.ace.wait_ace_ready(slot=_ace_slot)
+                                 self.ace._check_calibration_unload_cancel()
+                                 _short_total += _short_retract
+-                                self._unload_dec_log(
+-                                    head_idx, _ace_slot, 'short', _short_retract,
+-                                    _usp, unload_attempt + 1)
+ 
+                                 # Pin-first verify (unload_gpio default on):
+                                 # the raw presence pin reads the short
+@@ -3529,7 +3468,8 @@
+                                                                _short_retract * (unload_attempt + 1))
+                                     self.ace._hot_session.complete(_hot_result)
+                                     logging.info('[multiACE] verified hot park: %s', _hot_result)
+-                                elif keep_in_ace and self._finish_fixed_unload(
++                                elif (keep_in_ace or (self.ace._swap_in_progress
++                                      and getattr(self.ace, '_swap_phase', None) == 'unload')) and self._finish_fixed_unload(
+                                         ch, self.ace._active_device_index, _ace_slot,
+                                         _short_total, _retract_speed):
+                                     fixed_parked = True
+@@ -3537,50 +3477,29 @@
+                                     _rest = self.ace._head_return_remaining(
+                                         self.ace._active_device_index, _ace_slot, head_idx)
+                                     if _rest is None:
+-                                        # No numeric fallback. The hot/short phase has
+-                                        # cleared the nozzle; the operator now ejects
+-                                        # from ACE and reloads to establish a record.
+                                         self.ace._last_unload_reason = 'distance_unknown'
+-                                        raise RuntimeError('喷头已退出；请完全退出 ACE 后重新装入一次，建立送料距离记录')
++                                        raise RuntimeError('喷头已退出；请核对原料路和回停配置')
+                                     if keep_in_ace:
+                                         _rest = self.ace._head_travel.park_distance(
+                                             head_idx, self.ace._active_device_index, _ace_slot)
+                                         if _rest is None:
+                                             self.ace._last_unload_reason = 'distance_unknown'
+                                             raise RuntimeError('喷头已清空，但回停计距未确认')
+-                                    if _rest > 0.5:
++                                    if _rest is not None and _rest > 0.5:
+                                         # Passive dock wait -> dwell-fan window
+                                         # (swap-gated inside the helper; OFF is
+                                         # backstopped in cmd_ACE_SWAP_HEAD's
+                                         # finally if the retract raises).
+                                         self.ace._dwell_fan(True)
+-                                        # Wait ready BEFORE the span wrapper (see
+-                                        # the short-retract note above - this rest
+-                                        # site is where the 60s stall actually hit).
+                                         _unload_stop = self._wait_before_unload_retract(
+                                             self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
+-                                        _rsp = self.ace._retract_with_decoder_span(
+-                                            self.ace._active_device_index, _ace_slot,
+-                                            lambda: self.ace._retract(
+-                                                _ace_slot, _rest,
+-                                                _retract_speed, head=head_idx, hot_owner=_hot_park_context,
+-                                                bulk=True, unload_stop=_unload_stop))
++                                        self.ace._retract(
++                                            _ace_slot, _rest, _retract_speed,
++                                            head=head_idx, hot_owner=_hot_park_context,
++                                            bulk=True, unload_stop=_unload_stop)
+                                         self.ace.wait_ace_ready(slot=_ace_slot)
+                                         self.ace._check_calibration_unload_cancel()
+                                         self.ace._dwell_fan(False)
+-                                        self._unload_dec_log(
+-                                            head_idx, _ace_slot, 'rest', _rest,
+-                                            _rsp, '-')
+-                                        # The bulk is otherwise UNVERIFIED:
+-                                        # the toolhead pin proved the head is
+-                                        # clear, nothing proves the strand ever
+-                                        # reached the ACE. A flat decoder span is
+-                                        # the only signal that contradicts the
+-                                        # device's own 'success' - see the helper.
+-                                        if self._unload_dec_stalled(
+-                                                head_idx, _ace_slot, _rest, _rsp):
+-                                            unload_ok = False
+-                                            unload_reason = 'bowden_stall'
+                             if not unload_ok:
+                                 logging.info("[feed][unload] filament genuinely stuck after %d unload attempts (sensor never cleared)", unload_max)
+                                 if _hot_park_context is not None:
+@@ -3837,15 +3756,7 @@
+                             _hot_short_start = self.reactor.monotonic()
+                             for unload_attempt in range(unload_max):
+                                 self.ace._check_calibration_unload_cancel()
+-                                # Wait ready BEFORE the span wrapper: its
+-                                # sampling timer must never hammer get_feed_info
+-                                # through a wait_ace_ready stall (the 0.1s tick
+-                                # saturated the V2 writer queue, the status
+-                                # cache froze at 'busy' and the wait ran its
+-                                # full 60s into a needless reconnect - and the
+-                                # span window covered the whole wait).
+-                                # End source-side reverse assist before the
+-                                # explicit move or its measurement timer.
++                                # Stop source-side reverse assist before the finite move.
+                                 _unload_stop = self._wait_before_unload_retract(
+                                     self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
+                                 _remaining = self.ace._head_return_remaining(
+@@ -3854,18 +3765,13 @@
+                                     _short_retract = min(FEED_UNLOAD_PROBE_RETRACT, _remaining)
+                                     if _short_retract <= 0:
+                                         break
+-                                _usp = self.ace._retract_with_decoder_span(
+-                                    self.ace._active_device_index, _ace_slot,
+-                                    lambda: self.ace._retract(
+-                                        _ace_slot, _short_retract,
+-                                        _retract_speed, head=head_idx, hot_owner=_hot_park_context,
+-                                        unload_stop=_unload_stop))
++                                self.ace._retract(
++                                    _ace_slot, _short_retract, _retract_speed,
++                                    head=head_idx, hot_owner=_hot_park_context,
++                                    unload_stop=_unload_stop)
+                                 self.ace.wait_ace_ready(slot=_ace_slot)
+                                 self.ace._check_calibration_unload_cancel()
+                                 _short_total += _short_retract
+-                                self._unload_dec_log(
+-                                    head_idx, _ace_slot, 'short', _short_retract,
+-                                    _usp, unload_attempt + 1)
+ 
+                                 # Pin-first verify (unload_gpio default on):
+                                 # the raw presence pin reads the short
+@@ -4037,7 +3943,8 @@
+                                                                _short_retract * (unload_attempt + 1))
+                                     self.ace._hot_session.complete(_hot_result)
+                                     logging.info('[multiACE] verified hot park: %s', _hot_result)
+-                                elif keep_in_ace and self._finish_fixed_unload(
++                                elif (keep_in_ace or (self.ace._swap_in_progress
++                                      and getattr(self.ace, '_swap_phase', None) == 'unload')) and self._finish_fixed_unload(
+                                         ch, self.ace._active_device_index, _ace_slot,
+                                         _short_total, _retract_speed):
+                                     fixed_parked = True
+@@ -4045,50 +3952,29 @@
+                                     _rest = self.ace._head_return_remaining(
+                                         self.ace._active_device_index, _ace_slot, head_idx)
+                                     if _rest is None:
+-                                        # No numeric fallback. The hot/short phase has
+-                                        # cleared the nozzle; the operator now ejects
+-                                        # from ACE and reloads to establish a record.
+                                         self.ace._last_unload_reason = 'distance_unknown'
+-                                        raise RuntimeError('喷头已退出；请完全退出 ACE 后重新装入一次，建立送料距离记录')
++                                        raise RuntimeError('喷头已退出；请核对原料路和回停配置')
+                                     if keep_in_ace:
+                                         _rest = self.ace._head_travel.park_distance(
+                                             head_idx, self.ace._active_device_index, _ace_slot)
+                                         if _rest is None:
+                                             self.ace._last_unload_reason = 'distance_unknown'
+                                             raise RuntimeError('喷头已清空，但回停计距未确认')
+-                                    if _rest > 0.5:
++                                    if _rest is not None and _rest > 0.5:
+                                         # Passive dock wait -> dwell-fan window
+                                         # (swap-gated inside the helper; OFF is
+                                         # backstopped in cmd_ACE_SWAP_HEAD's
+                                         # finally if the retract raises).
+                                         self.ace._dwell_fan(True)
+-                                        # Wait ready BEFORE the span wrapper (see
+-                                        # the short-retract note above - this rest
+-                                        # site is where the 60s stall actually hit).
+                                         _unload_stop = self._wait_before_unload_retract(
+                                             self.ace._active_device_index, _ace_slot, _hot_park_context, head=head_idx)
+-                                        _rsp = self.ace._retract_with_decoder_span(
+-                                            self.ace._active_device_index, _ace_slot,
+-                                            lambda: self.ace._retract(
+-                                                _ace_slot, _rest,
+-                                                _retract_speed, head=head_idx, hot_owner=_hot_park_context,
+-                                                bulk=True, unload_stop=_unload_stop))
++                                        self.ace._retract(
++                                            _ace_slot, _rest, _retract_speed,
++                                            head=head_idx, hot_owner=_hot_park_context,
++                                            bulk=True, unload_stop=_unload_stop)
+                                         self.ace.wait_ace_ready(slot=_ace_slot)
+                                         self.ace._check_calibration_unload_cancel()
+                                         self.ace._dwell_fan(False)
+-                                        self._unload_dec_log(
+-                                            head_idx, _ace_slot, 'rest', _rest,
+-                                            _rsp, '-')
+-                                        # The bulk is otherwise UNVERIFIED:
+-                                        # the toolhead pin proved the head is
+-                                        # clear, nothing proves the strand ever
+-                                        # reached the ACE. A flat decoder span is
+-                                        # the only signal that contradicts the
+-                                        # device's own 'success' - see the helper.
+-                                        if self._unload_dec_stalled(
+-                                                head_idx, _ace_slot, _rest, _rsp):
+-                                            unload_ok = False
+-                                            unload_reason = 'bowden_stall'
+                             if not unload_ok:
+                                 logging.info("[feed][unload] filament genuinely stuck after %d unload attempts (sensor never cleared)", unload_max)
+                                 if _hot_park_context is not None:
+diff --git a/tests/test_endpoint_aux.py b/tests/test_endpoint_aux.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_endpoint_aux.py
+@@ -0,0 +1,213 @@
++"""Bounded operational eject and short recovery use stopped endpoints only."""
++from types import SimpleNamespace
++import unittest
++
++from test_recovery_ui import SlotActions, Reactor
++
++
++class InletEjectTests(unittest.TestCase):
++    def run_eject(self, *, clear_at=6.5, fault_at=None, ready_at=None, stop_fault=False):
++        reactor = Reactor()
++        reactor.pause = lambda until: setattr(reactor, 'now', until)
++        transport = object()
++        recovery = SimpleNamespace(begin=lambda *a, **kw: object(), end=lambda *_: None)
++        ace = SimpleNamespace(reactor=reactor, _error_recovery=recovery, _path_operations=None,
++            _stop_guard=SimpleNamespace(recovery_snapshot=lambda: (1, [])),
++            _insert_epochs={(0, 0): 7}, _swap_in_progress=True)
++        actions = object.__new__(SlotActions)
++        actions.ace, actions.state, actions.cancel = ace, {'state': 'running'}, False
++        actions._eject_peers = {}
++        actions._check = lambda *a, **kw: None
++        def bind(*args, **kwargs):
++            actions._eject_identity = ('port', (1, 2, 3))
++            actions._eject_epoch, actions._eject_heads = 7, ()
++        actions._bind_legacy_route = bind
++        actions._loaded_assist_head = lambda *a: None
++        actions._release_verified_stop_fault = lambda *a, **kw: None
++        actions._other_routes_ready = lambda *a, **kw: None
++        def monitor(idx, slot, original, deadline, **kwargs):
++            if original is not transport or reactor.monotonic() >= deadline:
++                raise RuntimeError('本次操作超过时限')
++        actions._original_monitor = monitor
++        actions._arm_route_hold = lambda *a: None
++        motions = []
++        actions._send_eject_motion = lambda idx, slot, length, speed, monitor: motions.append((length, speed))
++        def status(*args, **kwargs):
++            if fault_at is not None and reactor.now >= fault_at:
++                return {0: 'motor_error'}
++            return {0: 'ready' if ready_at is not None and reactor.now >= ready_at else 'rollback'}
++        actions._lane_states = status
++        actions._gate = lambda *a, **kw: clear_at is None or reactor.now < clear_at
++        actions._feed_row = lambda *a, **kw: self.fail('CMD76 queried during eject')
++        committed = []
++        actions._commit_ejected = lambda *a: committed.append(True)
++        def stop(*args, **kwargs):
++            gate = clear_at is None or reactor.now < clear_at
++            stopped_state = 'motor_error' if stop_fault and not gate else 'ready'
++            actions._last_eject_stop = dict(status=stopped_state, gate=gate, decoder_present=False)
++            return gate
++        actions._eject_stop_ready = stop
++        actions._run(0, 0, transport, clear_latch=False)
++        return actions.state, committed, motions, reactor.now
++
++    def test_eject_completes_only_after_inlet_clear(self):
++        state, committed, motions, _ = self.run_eject()
++        self.assertEqual(state['state'], 'complete', state)
++        self.assertEqual(committed, [True])
++        self.assertEqual(motions, [(5000, 80)])
++
++    def test_gate_never_clears_is_bounded(self):
++        state, committed, motions, elapsed = self.run_eject(clear_at=None)
++        self.assertEqual(state['state'], 'error', state)
++        self.assertIn('时限', state['message'])
++        self.assertLessEqual(elapsed, 78)
++        self.assertEqual(committed, [])
++        self.assertEqual(len(motions), 1)
++
++    def test_ready_with_inlet_present_fails_without_retry(self):
++        state, committed, motions, _ = self.run_eject(clear_at=None, ready_at=2)
++        self.assertEqual(state['state'], 'error', state)
++        self.assertIn('入口仍有料', state['message'])
++        self.assertFalse(committed)
++        self.assertEqual(len(motions), 1)
++
++    def test_real_error_even_when_gate_clears_does_not_commit(self):
++        state, committed, motions, _ = self.run_eject(clear_at=2, fault_at=2)
++        self.assertEqual(state['state'], 'error', state)
++        self.assertIn('motor_error', state['message'])
++        self.assertFalse(committed)
++        self.assertEqual(len(motions), 1)
++
++    def test_fault_in_terminal_stop_receipt_does_not_commit(self):
++        state, committed, motions, _ = self.run_eject(stop_fault=True)
++        self.assertEqual(state['state'], 'error', state)
++        self.assertIn('motor_error', state['message'])
++        self.assertFalse(committed)
++        self.assertEqual(len(motions), 1)
++
++
++class ShortRecoveryTests(unittest.TestCase):
++    def fixture(self, final=None, states=('feed_error', 'rollback', 'ready')):
++        reactor = Reactor()
++        reactor.pause = lambda until: setattr(reactor, 'now', until)
++        transport = object()
++        identity = ('port', (1, 2, 3))
++        ace = SimpleNamespace(reactor=reactor, _source_insertion_matches=lambda *a: True)
++        act = object.__new__(SlotActions)
++        act.ace, act.state = ace, {}
++        act._eject_identity, act._eject_epoch = identity, 5
++        act._eject_heads = (3,)
++        act._eject_sources = {3: {'ace_index': 0, 'slot': 3}}
++        def monitor(idx, slot, original, deadline):
++            if original is not transport or reactor.now >= deadline:
++                raise RuntimeError('本次操作超过时限')
++        act._original_monitor = monitor
++        act._other_routes_ready = lambda *a: None
++        act._arm_route_hold = lambda *a: None
++        act._gate = lambda *a, **kw: True
++        calls = []
++        act._send_eject_motion = lambda idx, slot, mm, speed, monitor: calls.append((mm, speed))
++        seq = iter(states)
++        last = [states[-1]]
++        def lane(*args, **kwargs):
++            last[0] = next(seq, last[0])
++            return {3: last[0]}
++        act._lane_states = lane
++        act._feed_row = lambda *a, **kw: self.fail('CMD76 queried during motion')
++        final = final if final is not None else dict(status='ready', gate=True, decoder=-8,
++                                                      length=9, steps=111, decoder_present=True)
++        def stop(*args, **kwargs):
++            self.assertIs(kwargs.get('allow_fault'), False)
++            self.assertIs(kwargs.get('require_decoder'), True)
++            act._last_eject_stop = final
++        act._eject_stop_ready = stop
++        before = dict(status='feed_error', gate=True, length=629, steps=7779,
++                      decoder=47, decoder_present=True)
++        return act, transport, before, calls
++
++    def test_terminal_reverse_is_learned_only_after_rollback(self):
++        act, transport, before, calls = self.fixture()
++        act._recover_feed_error(0, 3, transport, before, learn_direction=True)
++        self.assertEqual(calls, [(10, 5)])
++        self.assertEqual(act.state['recovery_reverse_mm'], 8)
++        self.assertEqual(act.ace._insert_encoder_direction[(0, 3)][2], 1)
++
++    def test_missing_or_stale_or_implausible_terminal_never_succeeds(self):
++        for change in ({'steps': 7779}, {'decoder_present': False}, {'length': 12},
++                       {'steps': 0}, {'decoder': 0}, {'decoder': -11, 'length': 3},
++                       {'status': 'feed_error'}, {'gate': False}):
++            final = dict(status='ready', gate=True, decoder=-8, length=9,
++                         steps=111, decoder_present=True)
++            final.update(change)
++            act, transport, before, calls = self.fixture(final)
++            with self.subTest(change=change), self.assertRaises(RuntimeError):
++                act._recover_feed_error(0, 3, transport, before, learn_direction=True)
++            self.assertNotIn('recovered', act.state)
++            self.assertEqual(len(calls), 1)
++
++    def test_known_direction_rejects_wrong_terminal_sign(self):
++        act, transport, before, calls = self.fixture()
++        act.ace._insert_encoder_direction = {(0, 3): (transport, act._eject_identity, -1)}
++        with self.assertRaisesRegex(RuntimeError, '方向异常'):
++            act._recover_feed_error(0, 3, transport, before)
++        self.assertEqual(len(calls), 1)
++
++    def test_ready_without_observed_rollback_cannot_succeed(self):
++        act, transport, before, calls = self.fixture(states=('ready',))
++        with self.assertRaisesRegex(RuntimeError, '时限'):
++            act._recover_feed_error(0, 3, transport, before, learn_direction=True)
++        self.assertEqual(len(calls), 1)
++
++    def test_fault_after_rollback_never_retries(self):
++        act, transport, before, calls = self.fixture(states=('rollback', 'feed_error'))
++        with self.assertRaisesRegex(RuntimeError, 'feed_error'):
++            act._recover_feed_error(0, 3, transport, before, learn_direction=True)
++        self.assertEqual(len(calls), 1)
++
++    def test_lost_ack_does_not_read_or_infer_terminal(self):
++        act, transport, before, calls = self.fixture()
++        def missing_ack(*args):
++            calls.append((10, 5))
++            raise RuntimeError('unwind_filament 响应超时')
++        act._send_eject_motion = missing_ack
++        act._eject_stop_ready = lambda *a, **kw: self.fail('unexpected terminal')
++        with self.assertRaisesRegex(RuntimeError, '响应超时'):
++            act._recover_feed_error(0, 3, transport, before, learn_direction=True)
++        self.assertEqual(len(calls), 1)
++
++    def test_identity_change_during_motion_rejects_endpoint(self):
++        act, transport, before, calls = self.fixture()
++        original_monitor = act._original_monitor
++        def changed(idx, slot, original, deadline):
++            original_monitor(idx, slot, original, deadline)
++            if act.ace.reactor.now >= .1:
++                raise RuntimeError('原设备身份变化')
++        act._original_monitor = changed
++        with self.assertRaisesRegex(RuntimeError, '身份变化'):
++            act._recover_feed_error(0, 3, transport, before, learn_direction=True)
++        self.assertNotIn('recovered', act.state)
++        self.assertEqual(len(calls), 1)
++
++
++class RequestIdentityTests(unittest.TestCase):
++    def test_motion_ack_must_match_the_sent_request_id(self):
++        for response_id in (17, 18, None):
++            reactor = Reactor()
++            reactor.pause = lambda until: setattr(reactor, 'now', until)
++            def send(idx, request, callback):
++                request['id'] = 17
++                callback(None, {'id': response_id, 'code': 0, '_v2_command': 8,
++                                '_v2_frame_valid': True, '_v2_payload_valid': True,
++                                'result': {}})
++            act = object.__new__(SlotActions)
++            act.ace = SimpleNamespace(reactor=reactor, send_request_to=send)
++            act._recovery_owner = object()
++            if response_id == 17:
++                self.assertEqual(act._send_eject_motion(0, 3, 10, 5, lambda: None), {})
++            else:
++                with self.subTest(response_id=response_id), self.assertRaisesRegex(RuntimeError, 'ID 不匹配'):
++                    act._send_eject_motion(0, 3, 10, 5, lambda: None)
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/tests/test_endpoint_background.py b/tests/test_endpoint_background.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_endpoint_background.py
+@@ -0,0 +1,54 @@
++"""Exercise the background head switch and ACE fault paths with no encoder."""
++import ast
++from pathlib import Path
++from types import SimpleNamespace
++import unittest
++
++from test_print_assist_recovery import Reactor
++
++
++def background_feed():
++    root = Path(__file__).resolve().parents[1] / 'runtime/klipper/extras'
++    node = next(n for n in ast.walk(ast.parse((root/'ace_bg_swap.py').read_text()))
++                if isinstance(n, ast.FunctionDef) and n.name == '_ace_feed_to_gears')
++    scope = {'require_printer_clear': lambda *a, **k: None, 'BG_FEED_FA_RESCUE': 20}
++    exec(compile(ast.Module(body=[node], type_ignores=[]),str(root/'ace_bg_swap.py'),'exec'),scope)
++    return scope[node.name]
++
++
++feed = background_feed()
++
++
++class BackgroundFeed(unittest.TestCase):
++    def simulate(self, state, pin, ack):
++        clock = Reactor()
++        sent, stops = [], []
++        sensor = SimpleNamespace(get_status=lambda _: {'filament_detected': pin(clock.now)})
++        def send(ace, idx, req):
++            sent.append(req['method'])
++            return ack
++        fake = SimpleNamespace(reactor=clock, printer=SimpleNamespace(lookup_object=lambda *args: sensor),
++                               _ace_send=send, _ace_stop=lambda *args: None,
++                               _resp_rejected=lambda reply: reply.get('code') != 0,
++                               _stop_feed_or_latch=lambda *args: stops.append(1),
++                               _pause=lambda d: clock.pause(clock.now+d),
++                               _slot_status=lambda *args: state(clock.now), _say=lambda *args: None)
++        ace = SimpleNamespace(_is_v2_idx=lambda idx: True, _travel_legacy_start=lambda *args: None,
++                              _travel_legacy_finish=lambda *args: None, _feed_assist_per_ace={},
++                              _head_travel=SimpleNamespace(unknown=lambda *args: None))
++        result=feed(fake,ace,0,0,100,80,0)
++        self.assertEqual(stops,[1])
++        self.assertNotIn('get_feed_info',sent)
++        return result,sent
++
++    def test_head_switch_completes_normal_feed(self):
++        self.assertEqual(self.simulate(lambda t:'feeding',lambda t:t>101,{'code':0})[0], 'ok')
++
++    def test_native_fault_or_lost_ack_preserves_route(self):
++        for lane,ack in [('feed_error',{'code':0}),('ready',None)]:
++            with self.subTest(lane=lane):
++                self.assertEqual(self.simulate(lambda t:lane,lambda t:False,ack),('uncertain',['feed_filament']))
++
++    def test_clean_no_arrival_retains_bounded_assist_rescue(self):
++        self.assertEqual(self.simulate(lambda t:'ready',lambda t:t>106,{'code':0}),
++                         ('ok',['feed_filament','start_feed_assist']))
+diff --git a/tests/test_endpoint_feed.py b/tests/test_endpoint_feed.py
+--- a/tests/test_endpoint_feed.py
++++ b/tests/test_endpoint_feed.py
+@@ -5,8 +5,7 @@
+ 
+ 
+ class EndpointTests(unittest.TestCase):
+-    def start(self, a, route=(0, 0, 0)):
+-        a._endpoint_feed_route = route
++    def start(self, a):
+         s = feed.FeedSupervisor(a, 0, 0, 0, lambda: a.head, 2100, 80)
+         request = {'method': 'feed_filament', 'params': {'index': 0, 'length': 2100, 'speed': 80}}
+         s.feed_request(request)
+@@ -60,9 +59,9 @@
+             s.check()
+         self.assertEqual(len(self.reads(a)), 1)
+ 
+-    def test_other_route_still_polls(self):
++    def test_default_feed_has_no_poll_timer(self):
+         a = Wire()
+-        s = self.start(a, route=(0, 1, 1))
++        s = self.start(a)
+         a.reactor.now += .6
+         self.assertFalse(s.check())
+-        self.assertEqual(len(self.reads(a)), 2)
++        self.assertEqual(len(self.reads(a)), 1)
+diff --git a/tests/test_endpoint_unload.py b/tests/test_endpoint_unload.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_endpoint_unload.py
+@@ -0,0 +1,137 @@
++"""Normal unload decisions must use endpoints, not in-flight decoder spans."""
++import ast
++from pathlib import Path
++import unittest
++
++import test_fixed_park
++
++
++class EndpointUnloadTests(unittest.TestCase):
++    def fixture(self):
++        return test_fixed_park.FixedParkTests().incident_fixture()
++
++    def test_direct_park_defers_to_head_clear_probe(self):
++        h, a, _ = self.fixture()
++        a.position = 5
++        self.assertFalse(h._finish_fixed_unload(0, 0, 0, 150, 80, direct=True))
++        self.assertEqual(a.motion_commands, [])
++        self.assertFalse(a._head_travel.status()['0']['pending'])
++
++    def test_known_decoder_and_saved_target_use_commanded_return(self):
++        h, a, saved = self.fixture()
++        row = a._head_travel.records['0']
++        row.update(known=True, loaded_mm=1725.0, remaining_mm=1575.0, samples=2,
++                   load_receipt={'uid': saved['scope']['uid'], 'ace': 0, 'slot': 0,
++                                 'head': 0, 'insert_epoch': 1, 'forward_decoder_sign': 1})
++        a.decoder_present = True
++        self.assertTrue(h._finish_fixed_unload(0, 0, 0, 150, 80))
++        self.assertEqual([cmd['params']['length'] for cmd in a.motion_commands], [1330])
++        self.assertNotIn('get_feed_info', [method for method, _, _ in a.calls])
++        row = a._head_travel.status()['0']
++        self.assertFalse(row['known'])
++        self.assertEqual(row['reason'], 'commanded_return')
++        self.assertFalse(row['park_reference_reached'])
++
++    def foreground_fixture(self):
++        h, a, saved = self.fixture()
++        a._swap_in_progress = True
++        a._swap_phase = 'unload'
++        a.print.state = 'printing'
++        a._retract_length_override = 900
++        a.get_swap_retract_length = lambda idx, slot: 900
++        a._source_insertion_matches = lambda source, idx, slot: True
++        h._finish_fixed_unload.__func__.__globals__['unload_source_matches'] = lambda *args: True
++        return h, a, saved
++
++    def test_foreground_saved_target_precedes_config_and_keeps_distance_unknown(self):
++        h, a, saved = self.foreground_fixture()
++        self.assertTrue(h._finish_fixed_unload(0, 0, 0, 150, 80))
++        self.assertEqual([x['params']['length'] for x in a.motion_commands], [1330])
++        self.assertNotIn('get_feed_info', [method for method, _, _ in a.calls])
++        row = a._head_travel.status()['0']
++        self.assertFalse(row['known'])
++        self.assertFalse(row['park_reference_reached'])
++        self.assertEqual(row['reason'], 'commanded_return')
++        self.assertEqual(a._head_travel.fixed_park_references['0:0:0'], saved)
++        self.assertTrue(a._swap_in_progress)
++
++    def test_foreground_configured_fallback_debits_short_command(self):
++        h, a, _ = self.foreground_fixture()
++        a._head_travel.fixed_park_references.clear()
++        self.assertTrue(h._finish_fixed_unload(0, 0, 0, 150, 80))
++        self.assertEqual([x['params']['length'] for x in a.motion_commands], [750])
++        self.assertFalse(a._head_travel.status()['0']['known'])
++        self.assertFalse(a._head_travel.fixed_park_references)
++
++    def test_foreground_rejects_unconfirmed_source_and_non_swap(self):
++        h, a, _ = self.foreground_fixture()
++        a._source_insertion_matches = lambda *args: False
++        with self.assertRaises(RuntimeError):
++            h._finish_fixed_unload(0, 0, 0, 150, 80)
++        self.assertEqual(a.motion_commands, [])
++        h, a, _ = self.foreground_fixture()
++        a._swap_in_progress = False
++        self.assertFalse(h._finish_fixed_unload(0, 0, 0, 150, 80))
++        self.assertEqual(a.motion_commands, [])
++
++    def test_foreground_no_reference_and_no_config_fails_closed(self):
++        h, a, _ = self.foreground_fixture()
++        a._head_travel.fixed_park_references.clear()
++        a._retract_length_override = None
++        self.assertFalse(h._finish_fixed_unload(0, 0, 0, 150, 80))
++        self.assertEqual(a.motion_commands, [])
++        self.assertFalse(a._head_travel.status()['0']['pending'])
++
++    def test_foreground_refuses_head_present_and_stop_fault(self):
++        h, a, _ = self.foreground_fixture()
++        a.position = 1
++        with self.assertRaisesRegex(RuntimeError, '尚未清空'):
++            h._finish_fixed_unload(0, 0, 0, 150, 80)
++        self.assertEqual(a.motion_commands, [])
++        h, a, _ = self.foreground_fixture()
++        a.faults.append({'fault': 'stop'})
++        with self.assertRaises(RuntimeError):
++            h._finish_fixed_unload(0, 0, 0, 150, 80)
++        self.assertEqual(a.motion_commands, [])
++
++    def test_wrong_scope_uses_config_without_overwriting_reference(self):
++        h, a, saved = self.foreground_fixture()
++        saved['scope'] = dict(saved['scope'], port='another-port')
++        self.assertTrue(h._finish_fixed_unload(0, 0, 0, 150, 80))
++        self.assertEqual([x['params']['length'] for x in a.motion_commands], [750])
++        self.assertEqual(a._head_travel.fixed_park_references['0:0:0'], saved)
++
++    def test_foreground_swap_phase_change_stops_move(self):
++        h, a, _ = self.foreground_fixture()
++        original = a.advance
++        def change(reactor, target):
++            original(reactor, target)
++            if a.active_move is not None:
++                a._swap_phase = 'load'
++        a.advance = change
++        with self.assertRaises(RuntimeError):
++            h._finish_fixed_unload(0, 0, 0, 150, 80)
++        self.assertIsNone(a.active_move)
++        self.assertFalse(a._head_travel.status()['0']['known'])
++
++    def test_unload_branches_do_not_use_decoder_span_or_stall_gate(self):
++        path = Path(__file__).resolve().parents[1] / 'runtime/klipper/extras/filament_feed_ace.py'
++        source = path.read_text()
++        tree = ast.parse(source)
++        method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == '_do_feed')
++        # Load seat press and both unload branches are endpoint-only.
++        calls = [n for n in ast.walk(method) if isinstance(n, ast.Call)
++                 and isinstance(n.func, ast.Attribute)]
++        spans = [n for n in calls if n.func.attr == '_retract_with_decoder_span']
++        self.assertEqual(spans, [])
++        self.assertFalse(any(n.func.attr == '_unload_dec_stalled' for n in calls))
++        fixed_calls = [n for n in calls if n.func.attr == '_finish_fixed_unload']
++        self.assertEqual(len(fixed_calls), 4)  # direct probe and final return, in both branches
++        press_calls = [n for n in ast.walk(method) if isinstance(n, ast.Call)
++                       and isinstance(n.func, ast.Name) and n.func.id == '_do_press']
++        self.assertEqual(len(press_calls), 1)
++        self.assertFalse(any(n.func.attr == 'note_seat_press_span' for n in calls))
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/tests/test_feed_handoff.py b/tests/test_feed_handoff.py
+--- a/tests/test_feed_handoff.py
++++ b/tests/test_feed_handoff.py
+@@ -420,7 +420,8 @@
+         a.steps = 120
+         a.decoder_present = True
+         s.check()
+-        self.assertEqual(s.observed_samples, 2)
++        self.assertEqual(s.observed_samples, 1)
++        self.assertEqual(a.calls, [])
+ 
+     def test_omitted_decoder_past_startup_only_invalidates_distance(self):
+         for time, motor in ((1.1, 0), (.3, 9)):
+@@ -431,7 +432,7 @@
+                 a.decoder = 0
+                 a.decoder_present = False
+                 self.assertFalse(s.check())
+-                self.assertIsNotNone(s.measurement_error)
++                self.assertIsNone(s.measurement_error)
+                 a.head = True
+                 self.assertTrue(s.check())
+                 s.stop_bound()
+diff --git a/tests/test_recovery_ui.py b/tests/test_recovery_ui.py
+--- a/tests/test_recovery_ui.py
++++ b/tests/test_recovery_ui.py
+@@ -591,7 +591,8 @@
+         act._lane_states = lambda *args, **kwargs: {3: next(states)}
+         act._feed_row = lambda *args, **kwargs: next(rows)
+         def terminal(*args, **kwargs):
+-            act._last_eject_stop = dict(status='ready', gate=True, decoder=-8, length=9, decoder_present=True)
++            act._last_eject_stop = dict(status='ready', gate=True, decoder=-8, length=9,
++                                        steps=111, decoder_present=True)
+         act._eject_stop_ready = terminal
+         return act, transport, before, acted
+ 
+diff --git a/tests/test_slow_progress.py b/tests/test_slow_progress.py
+--- a/tests/test_slow_progress.py
++++ b/tests/test_slow_progress.py
+@@ -18,8 +18,8 @@
+         # Simulate the switch firing after the old stop point.
+         a.reactor.now += 4
+         self.assertFalse(owner.check())
+-        self.assertIsNotNone(owner.measurement_error)
+-        self.assertEqual({name for name, _, _ in a.calls}, {'get_feed_info'})
++        self.assertIsNone(owner.measurement_error)
++        self.assertEqual(a.calls, [])
+         a.head = True
+         self.assertTrue(owner.check())
+         owner.stop_bound()

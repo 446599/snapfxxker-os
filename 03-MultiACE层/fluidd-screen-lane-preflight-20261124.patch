@@ -1,0 +1,80 @@
+--- a/web/backend/main.py
++++ b/web/backend/main.py
+@@ -549,6 +549,7 @@
+             override = None if _override_key(i, s) in removed_overrides else _override_for(i, s)
+             loaded_t = loaded_by_source.get((i, s))
+             screen_color = None
++            screen_material = ""
+             if gate == 1 and a.get("connected") is True and screen_lanes:
+                 # HelixScreen T0–T3 are the heads; ACE bays start at T4.
+                 lane = str(4 + i * SLOT_COUNT + s)
+@@ -556,6 +557,9 @@
+                 if (isinstance(record, dict) and record.get("writer") == "helixscreen"
+                         and record.get("lane") == lane):
+                     screen_color = _declared_color(record.get("color"))
++                    material = record.get("material") or record.get("filament_type")
++                    if isinstance(material, str):
++                        screen_material = material.strip()
+             known_color = None
+             if not is_empty:
+                 bound_spool = spools.get(spool_binding.get(_override_key(i, s)) or "", {}) or {}
+@@ -569,9 +573,8 @@
+             color_fallback = known_color or screen_color or _declared_color(
+                 (_ptc_at(loaded_t) or {}).get("color") if loaded_t is not None else None
+             )
+-            # Identity precedence: Override > RFID > (only if loaded into a
+-            # head) job config > none. `source` exposes provenance to the UI
+-            # badge.
++            # Prefer a manual web entry or tag over the screen's slot data.
++            # A job-derived label is only a display fallback for a loaded head.
+             if override is not None:
+                 ptc_overlay = {
+                     "material": override.get("material", ""),
+@@ -590,6 +593,14 @@
+                     "color":    rfid_data["color"],
+                 }
+                 source = "rfid"
++            elif screen_color and screen_material:
++                ptc_overlay = {
++                    "material": screen_material,
++                    "sku": "",
++                    "brand": "",
++                    "color": known_color or screen_color,
++                }
++                source = "screen"
+             elif loaded_t is not None:
+                 ptc_overlay = _ptc_at(loaded_t)
+                 source = "derived" if ptc_overlay is not None else None
+@@ -1284,7 +1295,7 @@
+ async def _live_slots_async() -> list[dict]:
+     status = await _query_state_gated()
+     out = []
+-    parsed = _parse_state(status)
++    parsed = await _dashboard_state(status)
+     for ace in parsed.get("aces", []) or []:
+         # The preflight addresses at most 4 units (T = ace*4 + slot, T0-T15).
+         # A 5th unit's slots would become T16+, which the rewrite passes
+@@ -1294,11 +1305,9 @@
+         for slot in ace.get("slots", []) or []:
+             if slot.get("state") == "empty":
+                 continue
+-            # Preflight trusts only physically-known identity: an RFID tag
+-            # or a user override. A 'derived' (job print_task_config) label
+-            # is not a real slot identity and must not become a selectable,
+-            # colored preflight target.
+-            if slot.get("source") not in ("rfid", "override"):
++            # Explicit settings apply to an occupied bay; job-derived
++            # labels are never selectable for another print.
++            if slot.get("source") not in ("rfid", "override", "screen"):
+                 continue
+             out.append({
+                 "ace":      ace.get("idx"),
+@@ -1825,7 +1834,7 @@
+ async def preflight_livedata() -> dict:
+     """Live ACE/slot identities + head-mode context for the in-browser
+     preflight, in the exact shape preflight_core.build_report expects. Keeps the
+-    slot filtering (rfid/override only) and head-mode resolution single-source on
++    slot filtering and head-mode resolution single-source on
+     the backend - the browser never re-derives it."""
+     live_slots = await _live_slots_async()
+     head_ctx = await _head_mode_context()

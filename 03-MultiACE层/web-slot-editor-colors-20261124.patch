@@ -1,0 +1,216 @@
+--- a/web/backend/main.py
++++ b/web/backend/main.py
+@@ -289,6 +289,14 @@
+         return None
+     return f"#{r:02x}{g:02x}{b:02x}"
+ 
++def _declared_color(value: Any) -> str | None:
++    if not isinstance(value, str):
++        return None
++    color = value.strip().removeprefix("#")
++    if re.fullmatch(r"[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?", color):
++        return "#" + color[:6].lower()
++    return None
++
+ def _int_or(v, default):
+     try:
+         return int(v)
+@@ -397,6 +405,8 @@
+     # as the SL badge on the feeder tile - per-head counting authority.
+     head_reader = ace.get("head_reader_spool", {}) or {}
+     raw_aces = ace.get("aces", []) or []
++    spools = ace.get("spools", {}) or {}
++    spool_binding = ace.get("spool_binding", {}) or {}
+ 
+     ptc = status.get("print_task_config", {}) or {}
+     ptc_types  = ptc.get("filament_type", []) or []
+@@ -498,11 +508,10 @@
+             gate = gate_status[s] if s < len(gate_status) else None
+             raw_status = sd.get("status", "") or ""
+ 
+-            is_empty = (
+-                gate == 0
+-                or raw_status.startswith("empty")
+-                or (raw_status == "" and gate is None)
+-            )
++            # The live inlet takes precedence over the cached metadata state.
++            is_empty = gate == 0 or (gate != 1 and (
++                raw_status.startswith("empty") or (raw_status == "" and gate is None)
++            ))
+ 
+             # An override dies with its spool: a CONFIRMED gate==0 (never the
+             # 'empty1' default status) drops the label, else a hand-pulled
+@@ -539,6 +548,17 @@
+ 
+             override = None if _override_key(i, s) in removed_overrides else _override_for(i, s)
+             loaded_t = loaded_by_source.get((i, s))
++            known_color = None
++            if not is_empty:
++                bound_spool = spools.get(spool_binding.get(_override_key(i, s)) or "", {}) or {}
++                raw_color = _color_to_hex(
++                    sd.get("color"),
++                    declared=bool((sd.get("material", "") or sd.get("type", "")).strip()),
++                )
++                loaded_color = (_ptc_at(loaded_t) or {}).get("color") if loaded_t is not None else None
++                known_color = ((rfid_data or {}).get("color") or
++                               _declared_color(bound_spool.get("color")) or
++                               raw_color or _declared_color(loaded_color))
+             # Identity precedence: Override > RFID > (only if loaded into a
+             # head) job config > none. `source` exposes provenance to the UI
+             # badge.
+@@ -610,7 +630,7 @@
+                         "brand":     ptc_overlay["brand"],
+                         "sku":       ptc_overlay["sku"],
+                         "subtype":   disp_subtype,
+-                        "color":     ptc_overlay["color"],
++                        "color":     _declared_color(ptc_overlay["color"]) or known_color,
+                         "color_rgb": None,
+                         # Same two fields as the no-identity branch below:
+                         # a slot WITH an identity (RFID/override/spool)
+@@ -636,10 +656,7 @@
+                         "brand":     sd.get("brand", ""),
+                         "sku":       sd.get("sku", ""),
+                         "subtype":   disp_subtype,
+-                        "color":     _color_to_hex(
+-                            sd.get("color"),
+-                            declared=bool((sd.get("material", "")
+-                                           or sd.get("type", "")).strip())),
++                        "color":     known_color,
+                         "color_rgb": sd.get("color"),
+                         # Card UID of the last host read (also for a
+                         # UID-only read without identity) - seeds a new
+@@ -885,8 +902,8 @@
+         # ACE 2 indices a follower may point at (only they report humidity).
+         "auto_dry_masters":   ace.get("auto_dry_masters", []) or [],
+         # Spool table (Klipper-owned; the UI edits via gcode only).
+-        "spools": ace.get("spools", {}) or {},
+-        "spool_binding": ace.get("spool_binding", {}) or {},
++        "spools": spools,
++        "spool_binding": spool_binding,
+         # Last feeder-reader code per non-ACE head (card UID hex / M1 SKU
+         # int as string) - source of the tag sweep's head loop.
+         "head_tag_seen": ace.get("head_tag_seen", {}) or {},
+--- a/web/frontend/index.html
++++ b/web/frontend/index.html
+@@ -11,7 +11,7 @@
+   <link rel="stylesheet" href="style-new.css?v=20261107-dashboard3">
+   <link rel="stylesheet" href="style-workspace.css?v=20261107-dashboard3">
+   <link rel="stylesheet" href="dashboard-redesign.css?v=20261107-dashboard3">
+-  <link rel="stylesheet" href="filament-console.css?v=20261124-flow1599">
++  <link rel="stylesheet" href="filament-console.css?v=20261124-slot-colors">
+   <!-- Loading splash: visible from the first paint until app.js has the
+        first printer state (hideSplash), so a reload - e.g. of a tab the
+        browser discarded while it sat in the background - shows the logo
+@@ -547,8 +547,9 @@
+                   :aria-pressed="displayedAce.idx === ace.idx" @click="selectedAce=ace.idx">
+             <div class="ace-unit-name"><strong>ACE {{ dispIdx(ace.idx) }}</strong><i class="status-dot" :class="{live:ace.connected === true}"></i></div>
+             <div class="ace-unit-dots" aria-hidden="true">
+-              <i v-for="slot in ace.slots" :key="slot.idx" :class="homeSlot(ace,slot).tone"
+-                 :style="{'--filament':slot.color || 'var(--accent)'}"></i>
++              <i v-for="slot in ace.slots" :key="slot.idx"
++                 :class="[homeSlot(ace,slot).tone, {unassigned:!slot.color}]"
++                 :style="slot.color ? {'--filament':slot.color} : null"></i>
+             </div>
+             <small>{{ ace.connected === true ? (ace.temp == null ? say('在线','Online') : ace.temp + ' °C · ' + (ace.humidity == null ? '—' : Math.round(ace.humidity) + '% RH')) : say('离线','Offline') }}</small>
+           </button>
+@@ -559,18 +560,24 @@
+               <h2>ACE {{ dispIdx(displayedAce.idx) }}</h2>
+               <button type="button" class="subtle-btn" @click="openDryer(displayedAce)">{{ say('烘干','Drying') }} · {{ dryPhaseLabel(displayedAce) }}</button>
+             </div>
+-            <button v-for="slot in displayedAce.slots" :key="slot.idx" type="button" class="ace-slot-choice"
+-                    :class="homeSlot(displayedAce,slot).tone" :aria-pressed="dashboardSlot===slot.idx"
+-                    @click="selectDashboard(slot)">
+-              <span class="ace-spool-dot" :class="{empty:!homeSlot(displayedAce,slot).present}"
+-                    :style="{'--filament':slot.color || 'var(--border)'}" aria-hidden="true"></span>
+-              <span class="ace-slot-name">
+-                <strong>{{ dispIdx(slot.idx) }} {{ say('号槽','slot') }}<template v-if="homeSlot(displayedAce,slot).present && slot.material"> · {{ slot.material }}</template></strong>
+-                <small v-if="targetHead(slot)">{{ dispIdx(targetHead(slot).idx) }} {{ say('号喷头','toolhead') }}</small>
+-                <small v-else>{{ say('未绑定喷头','No toolhead assigned') }}</small>
+-              </span>
+-              <span class="ace-slot-state" :class="homeSlot(displayedAce,slot).tone">{{ homeSlot(displayedAce,slot).label }}</span>
+-            </button>
++            <div v-for="slot in displayedAce.slots" :key="slot.idx" class="ace-slot-row"
++                 :class="homeSlot(displayedAce,slot).tone" :data-selected="dashboardSlot===slot.idx">
++              <button type="button" class="ace-slot-choice" :aria-pressed="dashboardSlot===slot.idx"
++                      @click="selectDashboard(slot)">
++                <span class="ace-spool-dot" :class="{unassigned:!slot.color}"
++                      :style="slot.color ? {'--filament':slot.color} : null" aria-hidden="true"></span>
++                <span class="ace-slot-name">
++                  <strong>{{ dispIdx(slot.idx) }} {{ say('号槽','slot') }}<template v-if="homeSlot(displayedAce,slot).present && slot.material"> · {{ slot.material }}</template></strong>
++                  <small v-if="targetHead(slot)">{{ dispIdx(targetHead(slot).idx) }} {{ say('号喷头','toolhead') }}</small>
++                  <small v-else>{{ say('未绑定喷头','No toolhead assigned') }}</small>
++                </span>
++                <span class="ace-slot-state" :class="homeSlot(displayedAce,slot).tone">{{ homeSlot(displayedAce,slot).label }}</span>
++              </button>
++              <button type="button" class="ace-slot-edit"
++                      :aria-label="say('编辑 '+dispIdx(slot.idx)+' 号槽耗材','Edit filament in slot '+dispIdx(slot.idx))"
++                      :disabled="!homeSlot(displayedAce,slot).present"
++                      @click="dashboardSlot=slot.idx; openPicker(displayedAce,slot)">{{ say('编辑','Edit') }}</button>
++            </div>
+           </div>
+           <aside class="ace-slot-detail dash-detail" v-if="selectedSlot" :key="displayedAce.idx + '/' + selectedSlot.idx">
+             <div class="ace-detail-title">
+@@ -584,6 +591,13 @@
+               <div><dt>{{ say('对应喷头','Toolhead') }}</dt><dd>{{ selectedHead() ? dispIdx(selectedHead().idx) : '—' }}</dd></div>
+               <div><dt>{{ say('槽口','Inlet') }}</dt><dd>{{ displayedAce.connected !== true ? '—' : homeSlot(displayedAce,selectedSlot).present ? say('有料','Present') : selectedSlot.state === 'empty' ? say('空','Empty') : '—' }}</dd></div>
+               <div v-if="selectedSlot.brand"><dt>{{ say('品牌','Brand') }}</dt><dd>{{ selectedSlot.brand }}</dd></div>
++              <div v-if="homeSlot(displayedAce,selectedSlot).present || selectedSlot.color">
++                <dt>{{ say('颜色','Color') }}</dt>
++                <dd class="ace-detail-color">
++                  <span v-if="selectedSlot.color" class="ace-spool-dot" :style="{'--filament':selectedSlot.color}" aria-hidden="true"></span>
++                  {{ selectedSlot.color ? selectedSlot.color.toUpperCase() : say('未设置','Unassigned') }}
++                </dd>
++              </div>
+             </dl>
+             <p v-if="slotActionText(displayedAce,selectedSlot) && (homeSlot(displayedAce,selectedSlot).tone !== 'fault' || slotActiveOperation(displayedAce,selectedSlot))" class="ace-next" role="status">{{ slotActionText(displayedAce,selectedSlot) }}</p>
+             <div v-if="homeSlot(displayedAce,selectedSlot).tone === 'fault'" class="ace-next fault">
+@@ -609,7 +623,6 @@
+                         type="button" @click="slotAction(displayedAce,selectedSlot,'eject')"
+                         :disabled="!stateFresh || slotActionDisabled(displayedAce,selectedSlot,'eject')">{{ say('退出 ACE','Eject from ACE') }}</button>
+               </template>
+-              <button v-if="displayedAce.connected === true" type="button" @click="openPicker(displayedAce,selectedSlot)">{{ say('编辑耗材','Edit filament') }}</button>
+             </div>
+             <p v-if="selectedSlot.state === 'empty' && homeSlot(displayedAce,selectedSlot).tone !== 'fault'" class="ace-detail-hint">{{ say('把料尖插到槽口，等待自动短吸。','Insert filament into the inlet and wait for the short grip.') }}</p>
+             <details class="ace-slot-more">
+--- a/web/frontend/filament-console.css
++++ b/web/frontend/filament-console.css
+@@ -76,20 +76,22 @@
+ .ace-unit-name { font-size:16px; line-height:1.25; }
+ .ace-unit-dots { display:flex; gap:5px; }
+ .ace-unit-dots i { width:16px; height:5px; border-radius:2px; background:var(--filament); border:1px solid color-mix(in srgb,var(--filament) 62%,var(--fg)); }
+-.ace-unit-dots i.muted { background:var(--border); border-color:var(--border); }
+-.ace-unit-dots i.fault { background:var(--error); border-color:var(--error); }
++.ace-unit-dots i.unassigned { background:transparent; border-color:var(--muted); }
++.ace-unit-dots i.fault { border-color:var(--error); }
+ .ace-unit-picker small { color:var(--nt-fg2); }
+ .ace-console-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:var(--console-gap); align-items:start; }
+ .ace-slot-list,#app .ace-slot-detail { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
+ .ace-list-heading { padding:0 0 12px; }
+ .ace-list-heading h2 { margin:0; font-size:21px; }
+-#app .ace-slot-choice { display:grid; width:100%; grid-template-columns:28px minmax(0,1fr) max-content; align-items:center; gap:10px; text-align:left; padding:10px; min-height:60px; margin:0 0 6px; border:1px solid transparent; background:var(--nt-bg2); color:var(--fg); }
+-#app .ace-slot-choice:last-child { margin-bottom:0; }
+-#app .ace-slot-choice[aria-pressed="true"] { border-color:var(--accent); }
+-#app .ace-slot-choice.loaded { background:color-mix(in srgb,var(--accent) 12%,var(--card)); }
+-#app .ace-slot-choice.fault { background:color-mix(in srgb,var(--error) 7%,var(--card)); }
++.ace-slot-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:4px; min-height:60px; padding-inline-end:8px; margin-block-end:6px; border:1px solid transparent; border-radius:10px; background:var(--nt-bg2); }
++.ace-slot-row:last-child { margin-block-end:0; }
++.ace-slot-row[data-selected="true"] { border-color:var(--accent); }
++.ace-slot-row.loaded { background:color-mix(in srgb,var(--accent) 12%,var(--card)); }
++.ace-slot-row.fault { background:color-mix(in srgb,var(--error) 7%,var(--card)); }
++#app .ace-slot-choice { display:grid; width:100%; grid-template-columns:26px minmax(0,1fr) max-content; align-items:center; gap:8px; min-height:58px; margin:0; padding:8px; text-align:left; border:0; background:transparent; color:var(--fg); }
++#app .ace-slot-edit { min-height:36px; margin:0; padding:6px 9px; border:1px solid var(--border); background:var(--card); color:var(--fg); white-space:nowrap; }
+ .ace-spool-dot { width:26px; height:26px; background:var(--filament); border:1px solid color-mix(in srgb,var(--filament) 62%,var(--fg)); border-radius:50%; }
+-.ace-spool-dot.empty { background:transparent; border:1px dashed var(--muted); }
++.ace-spool-dot.unassigned { background:transparent; border:1px dashed var(--muted); }
+ .ace-slot-name { min-width:0; display:grid; gap:2px; }
+ .ace-slot-name strong,.ace-slot-name small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+ .ace-slot-name small,.ace-detail-path { color:var(--nt-fg2); }
+@@ -103,6 +105,8 @@
+ .ace-detail-facts div { display:flex; align-items:baseline; gap:7px; }
+ .ace-detail-facts dt,.ace-detail-hint { color:var(--nt-fg2); }
+ .ace-detail-facts dd { margin:0; }
++.ace-detail-color { display:inline-flex; align-items:center; gap:6px; }
++.ace-detail-color .ace-spool-dot { display:inline-block; width:14px; height:14px; }
+ .ace-next { background:var(--nt-bg2); border-radius:8px; padding:10px 12px; margin:0 0 12px; overflow-wrap:anywhere; }
+ .ace-next.fault { border-inline-start:3px solid var(--error); }
+ .ace-next button { margin-top:8px; }

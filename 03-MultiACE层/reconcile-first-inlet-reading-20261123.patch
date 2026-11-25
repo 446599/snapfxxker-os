@@ -1,0 +1,36 @@
+--- a/klipper/extras/ace_insert_policy.py
++++ b/klipper/extras/ace_insert_policy.py
+@@ -332,7 +332,7 @@
+         finally:
+             self.changing = False
+ 
+-    def invalidate(self, idx, slot):
++    def invalidate(self, idx, slot, *, insertion_changed):
+         a, key = self.ace, (idx, slot)
+         with self.wire_lock:
+             self.scan_origins.pop(key, None)
+@@ -341,9 +341,10 @@
+             getattr(a, name, {}).pop(key, None)
+         for name in ('_v2_filament_info_pending', '_v2_filament_info_empty'):
+             getattr(a, name, {}).get(idx, {}).pop(slot, None)
+-        epochs = getattr(a, '_insert_epochs', None)
+-        if epochs is None: epochs = a._insert_epochs = {}
+-        epochs[key] = epochs.get(key, 0) + 1
++        if insertion_changed:
++            epochs = getattr(a, '_insert_epochs', None)
++            if epochs is None: epochs = a._insert_epochs = {}
++            epochs[key] = epochs.get(key, 0) + 1
+         a._persist_tag_reads()
+ 
+     def observe(self, idx, entry, snapshot):
+@@ -354,7 +355,9 @@
+                 if travel is not None:
+                     travel.reset_route(idx, slot)
+             if previous is None or previous[slot] != snapshot['epochs'][slot]:
+-                self.invalidate(idx, slot)
++                # The first report establishes the baseline. Clear cached tag
++                # reads, but count an insertion change only against a prior report.
++                self.invalidate(idx, slot, insertion_changed=previous is not None)
+         entry['epochs'] = list(snapshot['epochs'])
+ 
+     def _gate_context(self, idx, slot):

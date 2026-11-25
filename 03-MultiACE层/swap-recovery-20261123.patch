@@ -1,0 +1,716 @@
+diff --git a/klipper/extras/ace.py b/klipper/extras/ace.py
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -1649,6 +1649,7 @@
+         # before pausing if a swap is in flight (else RESUME traverse-rams from
+         # swap-park). Cleared at swap end.
+         self._swap_saved_pos = None
++        self._failed_unload_origin = None
+         self._swap_orig_ext_name = None
+         self._swap_switched_head = False
+         # Live print target of the swap head, captured at swap start - the
+@@ -2069,6 +2070,7 @@
+         self.printer.register_event_handler('klippy:ready', self._handle_ready)
+         self.printer.register_event_handler('klippy:disconnect', self._handle_disconnect)
+ 
++        self.printer.register_event_handler('print_stats:paused', self._restore_failed_unload_origin)
+         self.printer.register_event_handler('print_stats:start', self._on_print_start)
+         self.printer.register_event_handler('print_stats:stop', self._on_print_end)
+         if self._dry_cycles.printing:
+@@ -4726,6 +4728,7 @@
+         return motion
+ 
+     def _on_print_start(self, *args):
++        self._failed_unload_origin = None
+         if self._dry_cycles.printing:
+             self._dry_cycles.printing.begin()
+         # Sniffed per print. print_stats:start fires on start AND on resume
+@@ -4992,6 +4995,7 @@
+             })
+ 
+     def _on_print_end(self, *args):
++        self._failed_unload_origin = None
+         if self._dry_cycles.printing:
+             self._dry_cycles.printing.release()
+         self._auto_feed_enabled = False
+@@ -5123,6 +5127,48 @@
+         logging.error(msg)
+         self.gcode.respond_raw(f"!! {msg}")
+ 
++    def _file_swap_origin(self, xyz, extruder_name):
++        sd = self.printer.lookup_object('virtual_sdcard', None)
++        if sd is None or not sd.is_cmd_from_sd() or sd.current_file is None:
++            return None
++        head = 0 if extruder_name == 'extruder' else int(extruder_name[len('extruder'):])
++        return sd.current_file, sd.file_position, xyz, head
++
++    def _restore_failed_unload_origin(self, *args):
++        # U1 emits print_stats:paused after PAUSE_BASE has saved PAUSE_STATE
++        # and before the same SD line can be retried. Change only the resume
++        # destination here. No movement is appropriate on a failed unload.
++        origin = self._failed_unload_origin
++        self._failed_unload_origin = None
++        if origin is None:
++            return
++        file, offset, xyz, head = origin
++        sd = self.printer.lookup_object('virtual_sdcard')
++        if sd.current_file is not file or sd.file_position != offset:
++            return
++        if not self.printer.lookup_object('pause_resume').is_paused:
++            return
++        move = self.printer.lookup_object('gcode_move')
++        state = move.saved_states['PAUSE_STATE']
++        resume = self.printer.lookup_object('gcode_macro INNER_RESUME')
++        variables = resume.get_status(self.reactor.monotonic())
++        if variables['last_extruder_index'] != head:
++            # INNER_RESUME selects and heats this head before RESUME_BASE.
++            # Use the target it saved for the original head at the pause.
++            target = variables['extruder%d_temp' % head]
++            self.gcode.run_script_from_command(
++                'SET_GCODE_VARIABLE MACRO=INNER_RESUME VARIABLE=last_extruder_temp VALUE=%s'
++                % target)
++            self.gcode.run_script_from_command(
++                'SET_GCODE_VARIABLE MACRO=INNER_RESUME VARIABLE=last_extruder_index VALUE=%d'
++                % head)
++        # RESTORE_GCODE_STATE subtracts the saved base before applying the
++        # resume-time offsets. Keep E and the pause macro's other settings.
++        state['last_position'][:3] = [v + base for v, base in
++                                      zip(xyz, state['base_position'][:3])]
++        logging.info('[multiACE] SD unload pause at byte %d: resume head %d at '
++                     'X%.3f Y%.3f Z%.3f', offset, head + 1, *xyz)
++
+     def _restore_pos_for_pause(self, saved_pos):
+ 
+         if not saved_pos:
+@@ -5147,21 +5193,13 @@
+                 '[multiACE] Swap PAUSE: pos restore failed: %s' % e)
+ 
+     def _swap_back_to_orig_for_pause(self, switched_head, orig_ext_name):
+-
+         if not switched_head:
+             return
+-        try:
+-            orig_head_idx = (0 if orig_ext_name == 'extruder'
+-                             else int(orig_ext_name.replace('extruder', '')))
+-            logging.info(
+-                '[multiACE] Swap PAUSE: switching active extruder back '
+-                'to %s before pause (was on swap head)' % orig_ext_name)
+-            self.gcode.run_script_from_command('T%d A0' % orig_head_idx)
+-            self.toolhead.wait_moves()
+-        except Exception as e:
+-            logging.info(
+-                '[multiACE] Swap PAUSE: T-switch back to %s failed: %s'
+-                % (orig_ext_name, e))
++        orig_head_idx = 0 if orig_ext_name == 'extruder' else int(orig_ext_name[len('extruder'):])
++        logging.info('[multiACE] Swap PAUSE: switching back to %s', orig_ext_name)
++        # A failed dock/pick must abort before callers traverse to saved XYZ.
++        self.gcode.run_script_from_command('T%d A0' % orig_head_idx)
++        self.toolhead.wait_moves()
+ 
+     def _restore_machine_state_for_resume(self):
+         # The stock RESUME guard (pause_resume.cmd_RESUME) only allows a resume
+@@ -22685,6 +22723,14 @@
+         prev_ace_src = prev_source['ace_index'] if prev_source else None
+         prev_slot_src = prev_source['slot'] if prev_source else None
+ 
++        gcode_move = self.printer.lookup_object('gcode_move')
++        saved_pos = gcode_move.get_status()['gcode_position'][:3]
++        saved_speed = gcode_move.speed
++        saved_absolute = gcode_move.absolute_coord
++        saved_absolute_extrude = gcode_move.absolute_extrude
++        orig_ext_name = self.toolhead.get_extruder().get_name()
++        origin = None if initial_swap else self._file_swap_origin(saved_pos, orig_ext_name)
++
+         self._swap_in_progress = True
+         self._swap_phase = 'unload'
+         # A FULL swap flushes + wipes on its own - the post-(re)start no-op
+@@ -22707,10 +22753,6 @@
+ 
+         try:
+ 
+-            gcode_move = self.printer.lookup_object('gcode_move')
+-            saved_pos = self.toolhead.get_position()[:3]
+-            saved_speed = gcode_move.speed
+-            saved_absolute = gcode_move.absolute_coord
+             saved_e_base = gcode_move.base_position[3]
+             saved_e_last = gcode_move.last_position[3]
+             logging.info('[multiACE] Swap: saved pos X=%.2f Y=%.2f Z=%.2f (pre-T-switch)' % (
+@@ -22724,7 +22766,6 @@
+                    gcode_move.absolute_extrude,
+                    anti_ooze))
+ 
+-            orig_ext_name = self.toolhead.get_extruder().get_name()
+             target_ext = 'extruder' if head == 0 else 'extruder%d' % head
+             switched_head = (orig_ext_name != target_ext)
+             # Expose to the comms-loss PAUSE (reactor timer) so it can move back
+@@ -22839,6 +22880,7 @@
+                             'ACE_UNLOAD_HEAD HEAD=%d KEEP_HEAT=%d' % (head, swap_temp))
+                         logging.info('[multiACE] Swap: unload done (per-ACE retract_length, heat held @ %d)' % swap_temp)
+                 except Exception:
++                    self._failed_unload_origin = origin
+                     swap_status = 'unload_failed'
+                     raise
+                 unload_end_ts = time.monotonic()
+@@ -23044,9 +23086,6 @@
+                 self.gcode.run_script_from_command('G0 Z%.3f F600' % (saved_pos[2] + 2.0))
+             self.toolhead.wait_moves()
+ 
+-            if saved_absolute:
+-                self.gcode.run_script_from_command('G90')
+-
+             self.gcode.run_script_from_command('G1 F%d' % (saved_speed * 60))
+             self._fa_log.info(
+                 '[swap-trace] EXIT last_pos=%.3f base=%.3f '
+@@ -23097,6 +23136,10 @@
+                     ],
+                 )
+         finally:
++            # G90/G91 and M82/M83 set these flags. Restore them even when
++            # an error prevents any further G-code from running.
++            gcode_move.absolute_coord = saved_absolute
++            gcode_move.absolute_extrude = saved_absolute_extrude
+             self._swap_in_progress = False
+             self._swap_saved_pos = None
+             # Backstop: a raised feed error can escape a dwell-fan window
+@@ -23107,7 +23150,8 @@
+             # Terminal event for any non-success exit (recovery pause, raised
+             # error): the success path set swap_phase='done' above; anything
+             # else is a failure/abort the host should observe.
+-            if self._swap_phase != 'done':
++            swap_failed = self._swap_phase != 'done'
++            if swap_failed:
+                 # Normalise ONCE and use it for both channels. The status dict
+                 # already maps a stale 'ok' to 'error' here, and the event
+                 # must say the same - 'ok' is not a legal value for this
+@@ -23124,10 +23168,14 @@
+                                 slot=slot, status=swap_fail_status)
+             self._swap_phase = 'idle'
+ 
+-            self._auto_feed_enabled = fa_prev_auto
+-            self._fa_context = fa_prev_context
+-
+-            if fa_prev_auto:
++            # A failed print unload has just STOPped the old spool. Re-arming
++            # here used to send start_feed_assist before the stock PAUSE ran.
++            # print_stats:start re-enables normal assist after RESUME.
++            print_swap_failed = swap_failed and origin is not None
++            self._auto_feed_enabled = fa_prev_auto and not print_swap_failed
++            self._fa_context = 'idle' if print_swap_failed else fa_prev_context
++
++            if self._auto_feed_enabled:
+                 try:
+                     active_ext = self.toolhead.get_extruder().get_name()
+                     active_head = (0 if active_ext == 'extruder'
+@@ -23141,8 +23189,8 @@
+                             '[multiACE] post-swap FA: active head %d has no head_source, skipping start' % active_head)
+                 except Exception as e:
+                     logging.info('[multiACE] post-swap FA start failed: %s' % e)
+-            self._fa_trace('gate restored (context=%s auto=%s) after ACE_SWAP_HEAD'
+-                           % (fa_prev_context, fa_prev_auto))
++            self._fa_trace('after ACE_SWAP_HEAD: context=%s auto=%s'
++                           % (self._fa_context, self._auto_feed_enabled))
+             self._audit_state('SWAP_HEAD', {'head': head, 'ace': ace_index, 'slot': slot})
+ 
+             def _dur_ms(start, end):
+diff --git a/klipper/extras/ace_fixed_park.py b/klipper/extras/ace_fixed_park.py
+--- a/klipper/extras/ace_fixed_park.py
++++ b/klipper/extras/ace_fixed_park.py
+@@ -33,6 +33,8 @@
+     FAST_APPROACH_RESERVE_MM = 16
+     POLL_S = 0.04
+     FALLING_EDGE_SETTLE_S = .25
++    # Upstream unwind pacing allows 2s for firmware start/stop overhead.
++    HEAD_CLEAR_STARTUP_ALLOWANCE_S = 2.0
+     IDLE_STATES = ('standby', 'complete', 'cancelled', 'error')
+ 
+     def __init__(self, ace, idx, slot, head, *, foreground=False):
+@@ -198,7 +200,8 @@
+         self.pending = request
+         start = self.reactor.monotonic()
+         observed = 0.0
+-        clear_deadline = start + head_clear_mm / speed if head_clear_mm is not None else None
++        clear_deadline = (start + head_clear_mm / speed + self.HEAD_CLEAR_STARTUP_ALLOWANCE_S
++                          if head_clear_mm is not None else None)
+         head_cleared = not start_pin
+         saw_rollback = False
+         try:
+@@ -258,7 +261,7 @@
+                 if edge is None and (head_clear_mm is None or head_cleared) and now >= poll_gate_at:
+                     self._gate()
+                     poll_gate_at = now + .8
+-                if wait_native and (head_clear_mm is None or head_cleared) and now >= ready_poll_at:
++                if wait_native and now >= ready_poll_at:
+                     ready_poll_at = now + .55
+                     try:
+                         state = self.actions._lane_states(self.idx, monitor=self.check).get(self.slot)
+@@ -268,13 +271,17 @@
+                         if state == 'rollback':
+                             saw_rollback = True
+                         elif state == 'ready':
++                            if head_clear_mm is not None and not head_cleared:
++                                continue
+                             if head_clear_mm is None:
+                                 break
+                             if saw_rollback and now + .75 < nominal_end - .55:
+                                 raise RuntimeError('原槽提前结束退料，未确认回停')
+                             if now >= nominal_end and (saw_rollback or start_pin):
+                                 break
+-                        else:
++                        elif not (head_clear_mm is not None and not head_cleared
++                                  and not saw_rollback and now - start <= 1.0
++                                  and state == 'assist_error'):
+                             raise RuntimeError('长退期间原槽状态异常')
+                 if stop_at is not None and now >= poll_at:
+                     sample = self._feed_sample()
+diff --git a/klipper/extras/ace_slot_actions.py b/klipper/extras/ace_slot_actions.py
+--- a/klipper/extras/ace_slot_actions.py
++++ b/klipper/extras/ace_slot_actions.py
+@@ -18,6 +18,8 @@
+ RECOVERY_MARGIN_MM = 1
+ MOTION_STARTUP_SECONDS = 1.0
+ MOTION_STARTUP_ZERO_MM = 8
++# Upstream unwind pacing reserves 2s for firmware start/stop overhead.
++HEAD_CLEAR_STARTUP_ALLOWANCE_S = 2.0
+ STOP_SECONDS = 18.0
+ STOPPED_STATES = frozenset(('ready', 'feed_error', 'rollback_error',
+     'assist_error', 'preload_error', 'stuck_error', 'tangled_error', 'motor_error'))
+@@ -1044,12 +1046,12 @@
+         # tip pull. Its switch can already have cleared before ACE takes over.
+         tip_released = False
+ 
+-        def read_head():
++        def read_head(reject_retrigger=True):
+             nonlocal tip_released
+             pin = raw_head_state(a, head)
+             if type(pin) is not bool:
+                 raise RuntimeError('喷头传感器不可用')
+-            if pin and tip_released:
++            if pin and tip_released and reject_retrigger:
+                 raise RuntimeError('喷头到料信号重新触发')
+             tip_released = not pin
+             return pin
+@@ -1101,9 +1103,11 @@
+             self.state.update(state='running', message='正在连续退出喷头和 ACE', limit=MAX_MM)
+             self._continuous_head = head
+             motion_start = a.reactor.monotonic()
+-            head_deadline = motion_start + min(float(short_mm), 140.0) / SPEED_MM_S
++            head_deadline = (motion_start + min(float(short_mm), 140.0) / SPEED_MM_S
++                             + HEAD_CLEAR_STARTUP_ALLOWANCE_S)
+             motion_deadline = min(deadline, motion_start + MAX_MM / SPEED_MM_S + 15.0)
+             head_clear_at = motion_start if tip_released else None
++            preflight_released = tip_released
+             head_clear = False
+ 
+             def motion_check():
+@@ -1111,15 +1115,18 @@
+                 self._original_monitor(idx, slot, transport, motion_deadline,
+                                        allow_removal=True, allow_target_loaded=True)
+                 now = a.reactor.monotonic()
+-                pin = read_head()
++                pin = read_head(reject_retrigger=head_clear or preflight_released)
+                 if not head_clear:
+-                    if now >= head_deadline:
+-                        raise RuntimeError('喷头未在短退时限内稳定释放')
+                     if pin is False:
+                         if head_clear_at is None:
+-                            head_clear_at = now
++                            if now < head_deadline:
++                                head_clear_at = now
+                         elif now - head_clear_at >= .04:
+                             head_clear = True
++                    else:
++                        head_clear_at = None
++                    if not head_clear and now >= head_deadline and head_clear_at is None:
++                        raise RuntimeError('喷头未在短退时限内稳定释放')
+                 if not head_clear and (getattr(a, '_insert_epochs', {}) or {}).get((idx, slot)) != self._eject_epoch:
+                     raise RuntimeError('喷头释放前原槽插料代次改变')
+ 
+@@ -1127,9 +1134,22 @@
+             logging.info('[multiACE] continuous EXIT start ACE=%d slot=%d head=%d limit=%dmm speed=%dmm/s',
+                          idx + 1, slot + 1, head, MAX_MM, SPEED_MM_S)
+             self._send_eject_motion(idx, slot, MAX_MM, SPEED_MM_S, motion_check)
++            lane_poll_at = a.reactor.monotonic()
+             while not head_clear:
+                 motion_check()
+-                a.reactor.pause(min(head_deadline, a.reactor.monotonic() + .02))
++                if a.reactor.monotonic() >= lane_poll_at:
++                    state = self._lane_states(idx, monitor=motion_check).get(slot)
++                    now = a.reactor.monotonic()
++                    startup = now - motion_start <= MOTION_STARTUP_SECONDS
++                    if state not in ('ready', 'rollback') and not (
++                            startup and proof['slot_status'] == 'assist_error'
++                            and state == 'assist_error'):
++                        raise RuntimeError('目标槽退料实际错误: %s' % state)
++                    lane_poll_at = now + .25
++                wake = min(motion_deadline, a.reactor.monotonic() + .02)
++                if head_clear_at is None:
++                    wake = min(wake, head_deadline)
++                a.reactor.pause(wake)
+             seen_motion = False
+             while True:
+                 motion_check()
+diff --git a/tests/test_continuous_exit.py b/tests/test_continuous_exit.py
+--- a/tests/test_continuous_exit.py
++++ b/tests/test_continuous_exit.py
+@@ -23,6 +23,8 @@
+         self.stops = 0
+         self.commit = 0
+         self.behavior = 'normal'
++        self.release_times = None
++        self.finished_at = None
+         self.owner = object()
+         self.ace = SimpleNamespace(
+             reactor=self.clock, _serials={0: self.transport},
+@@ -65,6 +67,8 @@
+     def check(self, idx, slot, transport=None, **kwargs):
+         if transport is not None and self.ace._serials.get(idx) is not transport:
+             raise RuntimeError('reconnected')
++        if self.behavior == 'late_fault' and self.start is not None and self.clock.monotonic() - self.start >= 2.1:
++            raise RuntimeError('real fault')
+ 
+     def bind(self, idx, slot, transport, **kw):
+         a = self.action
+@@ -92,7 +96,7 @@
+         if self.behavior == 'ack_lost':
+             raise RuntimeError('ACK lost')
+         # Model delayed ACK: monitor keeps running while the command is in flight.
+-        for _ in range(10):
++        for _ in range(100 if self.behavior == 'slow_ack_missed' else 10):
+             self.clock.pause(self.clock.monotonic() + .02)
+             monitor()
+ 
+@@ -100,7 +104,13 @@
+         if self.start is None:
+             return
+         elapsed = self.clock.monotonic() - self.start
+-        if self.behavior != 'missed' and elapsed >= .10:
++        if self.release_times is not None:
++            self.pin = not any(begin <= elapsed < end for begin, end in self.release_times)
++            if elapsed >= .35:
++                self.gate = False
++            return
++        release_at = 2.1 if self.behavior == 'late_clear' else .10
++        if self.behavior not in ('missed', 'slow_ack_missed', 'late_fault', 'late_lane_fault') and elapsed >= release_at:
+             self.pin = False
+         if self.behavior == 'bounce' and elapsed >= .12:
+             self.pin = True
+@@ -116,6 +126,8 @@
+                 self.ace._insert_epochs[(0, 1)] = 8
+         if self.behavior == 'fault' and elapsed >= .2:
+             self.lane = 'motor_error'
++        if self.behavior == 'late_lane_fault' and elapsed >= 2.1:
++            self.lane = 'motor_error'
+ 
+     def states(self, idx, monitor):
+         monitor()
+@@ -129,6 +141,7 @@
+         self.assertFalse(self.pin)
+         self.assertFalse(self.gate)
+         self.assertEqual(self.stops, 2)
++        self.finished_at = self.clock.monotonic() - self.start
+         self.commit += 1
+ 
+     def run_exit(self):
+@@ -144,6 +157,67 @@
+         self.behavior = 'natural_removal'
+         self.assertTrue(self.run_exit())
+         self.assertEqual(self.moves, 1)
++
++    def test_delayed_head_clear_succeeds_with_single_motion(self):
++        self.behavior = 'late_clear'
++        self.assertTrue(self.run_exit())
++        self.assertGreater(self.clock.monotonic() - self.start, 140 / 80)
++        self.assertEqual((self.moves, self.stops, self.commit), (1, 2, 1))
++
++    def test_bounce_before_confirmation_requires_a_new_stable_interval(self):
++        self.release_times = [(.10, .12), (.18, 100)]
++        self.assertTrue(self.run_exit())
++        self.assertGreaterEqual(self.finished_at, .22)
++        self.assertEqual((self.moves, self.stops, self.commit), (1, 2, 1))
++
++    def test_release_before_deadline_can_settle_after_deadline(self):
++        deadline = 140 / 80 + actions.HEAD_CLEAR_STARTUP_ALLOWANCE_S
++        self.release_times = [(deadline - .02, 100)]
++        self.assertTrue(self.run_exit())
++        self.assertGreater(self.finished_at, deadline)
++        self.assertEqual((self.moves, self.stops, self.commit), (1, 2, 1))
++
++    def test_bounce_after_deadline_does_not_reopen_window(self):
++        deadline = 140 / 80 + actions.HEAD_CLEAR_STARTUP_ALLOWANCE_S
++        self.release_times = [(deadline - .02, deadline + .01), (deadline + .04, 100)]
++        with self.assertRaisesRegex(RuntimeError, '短退时限'):
++            self.run_exit()
++        self.assertEqual((self.moves, self.stops, self.commit), (1, 2, 0))
++
++    def test_retrigger_after_confirmed_release_stops(self):
++        self.release_times = [(.10, .22)]
++        with self.assertRaisesRegex(RuntimeError, '重新触发'):
++            self.run_exit()
++        self.assertEqual((self.moves, self.stops, self.commit), (1, 2, 0))
++
++    def test_delayed_ack_does_not_restart_short_deadline(self):
++        self.behavior = 'slow_ack_missed'
++        with self.assertRaisesRegex(RuntimeError, '短退时限'):
++            self.run_exit()
++        self.assertLess(self.clock.monotonic() - self.start, 140 / 80 + 2.1)
++        self.assertEqual((self.moves, self.stops, self.commit), (1, 2, 0))
++
++    def test_fault_during_extra_window_stops_without_replay(self):
++        self.behavior = 'late_fault'
++        with self.assertRaisesRegex(RuntimeError, 'real fault'):
++            self.run_exit()
++        self.assertLess(self.clock.monotonic() - self.start, 2.2)
++        self.assertEqual((self.moves, self.stops, self.commit), (1, 2, 0))
++
++    def test_lane_fault_before_head_clear_stops_without_replay(self):
++        self.behavior = 'late_lane_fault'
++        with self.assertRaisesRegex(RuntimeError, 'motor_error'):
++            self.run_exit()
++        self.assertLess(self.clock.monotonic() - self.start, 2.5)
++        self.assertEqual((self.moves, self.stops, self.commit), (1, 2, 0))
++
++    def test_total_deadline_still_limits_head_wait(self):
++        self.behavior = 'missed'
++        with patch.object(actions, 'MAX_SECONDS', 2.4):
++            with self.assertRaisesRegex(RuntimeError, '超过时限'):
++                self.run_exit()
++        self.assertLess(self.clock.monotonic() - self.start, 2.5)
++        self.assertEqual((self.moves, self.stops, self.commit), (1, 2, 0))
+ 
+     def test_unowned_returns_false_without_any_motion(self):
+         for changes in ((3, 0, 1, 1, self.transport, self.identity),
+@@ -163,7 +237,7 @@
+                 self.assertEqual(self.commit, 0)
+                 self.assertEqual(self.stops, 2)
+                 if scenario == 'missed':
+-                    self.assertLess(self.clock.monotonic() - self.start, 150 / 80)
++                    self.assertLess(self.clock.monotonic() - self.start, 140 / 80 + 2.1)
+                 self.doCleanups()
+ 
+     def test_stop_failure_latches_and_no_commit(self):
+diff --git a/tests/test_continuous_park.py b/tests/test_continuous_park.py
+--- a/tests/test_continuous_park.py
++++ b/tests/test_continuous_park.py
+@@ -19,12 +19,45 @@
+         self.assertFalse(a.runout_buttun_state)
+         self.assertTrue(a._gate(0,0))
+ 
++    def test_startup_delay_does_not_turn_a_valid_short_pull_into_failure(self):
++        a = ParkWire(120)
++        a.acceleration_s = 1.0
++        self.run_park(a)
++        self.assertEqual(len(a.motion_commands), 1)
++        self.assertIsNone(a.active_move)
++        self.assertFalse(a.runout_buttun_state)
++
+     def test_stuck_head_stops_early_without_replay(self):
+         a=ParkWire(900)
+         with self.assertRaisesRegex(RuntimeError, '短退范围内'):
+             self.run_park(a)
+         self.assertEqual(len(a.motion_commands),1)
+-        self.assertLess(900-a.position,155)
++        stop_time = next(t for method, _, t in a.calls if method == 'stop_feed_filament')
++        self.assertLess(stop_time, 150 / 80 + 2.1)
++        self.assertIsNone(a.active_move)
++
++    def test_fault_during_extended_clear_window_stops_without_replay(self):
++        a = ParkWire(900)
++        def require_no_fault(**kwargs):
++            if a.reactor.monotonic() >= 2.1:
++                raise RuntimeError('real fault')
++        a._require_no_stop_fault = require_no_fault
++        with self.assertRaisesRegex(RuntimeError, 'real fault'):
++            self.run_park(a)
++        stop_time = next(t for method, _, t in a.calls if method == 'stop_feed_filament')
++        self.assertLess(stop_time, 2.2)
++        self.assertEqual(len(a.motion_commands), 1)
++        self.assertIsNone(a.active_move)
++
++    def test_lane_fault_before_head_clear_stops_without_replay(self):
++        a = ParkWire(900)
++        a._lane_states = lambda idx, monitor=None: {
++            0: 'motor_error' if a.reactor.monotonic() >= 2.1 else 'rollback'}
++        with self.assertRaisesRegex(RuntimeError, '原槽状态异常'):
++            self.run_park(a)
++        stop_time = next(t for method, _, t in a.calls if method == 'stop_feed_filament')
++        self.assertLess(stop_time, 2.8)
++        self.assertEqual(len(a.motion_commands), 1)
+         self.assertIsNone(a.active_move)
+ 
+     def test_retrigger_after_head_cleared(self):
+diff --git a/tests/test_swap_resume_origin.py b/tests/test_swap_resume_origin.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_swap_resume_origin.py
+@@ -0,0 +1,171 @@
++"""Replay the layer-13 unload error through the production swap and pause callbacks."""
++from types import SimpleNamespace
++import unittest
++from unittest.mock import MagicMock
++
++from test_native_buffer import actual_methods
++
++
++methods = actual_methods('cmd_ACE_SWAP_HEAD', '_file_swap_origin',
++                         '_restore_failed_unload_origin', '_swap_back_to_orig_for_pause')
++
++
++class SwapResumeOriginTest(unittest.TestCase):
++    def setUp(self):
++        self.start = (161.39, 250., 4.04)
++        self.chute = (159.89, 300.50, 6.04)
++        self.sd = SimpleNamespace(current_file=object(), file_position=695324,
++                                  is_cmd_from_sd=lambda: True)
++        self.pause = SimpleNamespace(is_paused=True)
++        self.variables = dict(last_extruder_index=2, extruder1_temp=215.)
++        self.saved = dict(base_position=[1., -3., .4, 52.],
++                          last_position=[*self.chute, 193.])
++        self.move = SimpleNamespace(get_status=lambda: {'gcode_position': self.start},
++                                    speed=40., absolute_coord=True,
++                                    absolute_extrude=False, last_position=[0., 0., 0., 0.],
++                                    base_position=[0., 0., 0., 0.],
++                                    saved_states={'PAUSE_STATE': self.saved})
++        self.origin_tool = 'extruder2'
++        self.a = a = MagicMock()
++        self.objects = {
++            'virtual_sdcard': self.sd, 'gcode_move': self.move, 'pause_resume': self.pause,
++            'gcode_macro INNER_RESUME': SimpleNamespace(get_status=lambda t: self.variables),
++        }
++        a.printer.lookup_object.side_effect = self.objects.get
++        a.swap_anti_ooze_retract = 0.
++        a._ace_mode = 'multi'
++        a._ghost_heads = a._fa_load_disable = a._bg_left_empty = set()
++        a._gate_status_per_ace = a._feed_assist_per_ace = {}
++        a._head_source = {2: {'ace_index': 1, 'slot': 2}}
++        a._active_device_index = 1
++        a._auto_feed_enabled = False
++        a._failed_unload_origin = None
++        a.get_swap_retract_length.return_value = 0
++        a._get_swap_temp.return_value = 215
++        a.toolhead.get_position.return_value = [999., 999., 999., 0.]
++        a.toolhead.get_extruder.return_value.get_name.side_effect = lambda: self.origin_tool
++        a._file_swap_origin.side_effect = lambda move, name: methods._file_swap_origin(a, move, name)
++        self.commands = []
++        self.fail_unload = True
++        def dispatch(command):
++            self.commands.append(command)
++            if command in ('G90', 'G91'):
++                self.move.absolute_coord = command == 'G90'
++            if command in ('M82', 'M83'):
++                self.move.absolute_extrude = command == 'M82'
++            if self.fail_unload and command.startswith('ACE_UNLOAD_HEAD'):
++                raise RuntimeError('短退范围内喷头仍有料')
++        a.gcode.run_script_from_command.side_effect = dispatch
++
++    def swap(self, initial=0):
++        command = MagicMock()
++        params = dict(HEAD=2, ACE=2, SLOT=2, INITIAL=initial)
++        command.get_int.side_effect = lambda key, default=None: params.get(key, default)
++        command.get_float.return_value = 0.
++        methods.cmd_ACE_SWAP_HEAD(self.a, command)
++
++    def unload_at_chute(self, initial=0):
++        with self.assertRaisesRegex(RuntimeError, '短退'):
++            self.swap(initial)
++        self.assertIsNone(self.a._swap_saved_pos)
++        self.assertTrue(self.commands[-1].startswith('ACE_UNLOAD_HEAD'))
++        self.commands.clear()
++
++    def on_pause(self):
++        methods._restore_failed_unload_origin(self.a)
++
++    def test_third_head_retry_returns_to_print_coordinates_with_offsets(self):
++        for attempt in range(2):
++            self.saved['last_position'][:3] = self.chute
++            self.unload_at_chute()
++            self.on_pause()
++            last, base = self.saved['last_position'], self.saved['base_position']
++            self.assertEqual(tuple(round(x-b, 3) for x, b in zip(last[:3], base)), self.start)
++            self.assertEqual((last[3], base[3]), (193., 52.))
++            self.assertEqual(self.commands, [])
++            self.assertIsNone(self.a._failed_unload_origin)
++
++    def test_cross_head_uses_original_heads_saved_temperature(self):
++        self.origin_tool = 'extruder1'
++        self.unload_at_chute()
++        self.on_pause()
++        self.assertEqual(self.commands, [
++            'SET_GCODE_VARIABLE MACRO=INNER_RESUME VARIABLE=last_extruder_temp VALUE=215.0',
++            'SET_GCODE_VARIABLE MACRO=INNER_RESUME VARIABLE=last_extruder_index VALUE=1',
++        ])
++
++    def test_new_file_even_at_identical_offset(self):
++        self.unload_at_chute()
++        self.sd.current_file = object()
++        self.on_pause()
++        self.assertEqual(tuple(self.saved['last_position'][:3]), self.chute)
++
++    def test_seek_and_unrelated_pause(self):
++        self.unload_at_chute()
++        self.sd.file_position += 80
++        self.on_pause()
++        self.sd.file_position -= 80
++        self.on_pause()
++        self.assertEqual(tuple(self.saved['last_position'][:3]), self.chute)
++
++    def test_does_not_rewrite_state_when_native_pause_failed(self):
++        self.unload_at_chute()
++        self.pause.is_paused = False
++        self.on_pause()
++        self.assertEqual(tuple(self.saved['last_position'][:3]), self.chute)
++
++    def test_interactive_unload_does_not_arm_print_recovery(self):
++        self.sd.is_cmd_from_sd = lambda: False
++        self.unload_at_chute()
++        self.assertIsNone(self.a._failed_unload_origin)
++
++    def test_initial_loading_retains_its_own_parking_rules(self):
++        self.unload_at_chute(initial=1)
++        self.assertIsNone(self.a._failed_unload_origin)
++
++    def test_failed_unload_stays_stopped_and_preserves_modes(self):
++        self.a._auto_feed_enabled = True
++        self.a._fa_context = 'print'
++        self.move.absolute_coord = False
++        self.move.absolute_extrude = True
++        self.unload_at_chute()
++        self.assertFalse(self.a._auto_feed_enabled)
++        self.assertEqual(self.a._fa_context, 'idle')
++        self.a._arm_fa_for.assert_not_called()
++        self.assertFalse(self.move.absolute_coord)
++        self.assertTrue(self.move.absolute_extrude)
++
++    def test_dock_error_prevents_follow_on_position_restore(self):
++        self.origin_tool = 'extruder1'
++        self.fail_unload = False
++        self.a._last_unload_ok = False
++        self.a._swap_back_to_orig_for_pause.side_effect = (
++            lambda switched, name: methods._swap_back_to_orig_for_pause(self.a, switched, name))
++        def reject_return(command):
++            self.commands.append(command)
++            if command == 'T1 A0':
++                raise RuntimeError('failed to return to park position')
++        self.a.gcode.run_script_from_command.side_effect = reject_return
++        with self.assertRaisesRegex(RuntimeError, 'failed to return to park'):
++            self.swap()
++        self.assertEqual(self.commands[-1], 'T1 A0')
++        self.a._restore_pos_for_pause.assert_not_called()
++
++    def test_success_uses_print_coordinates_and_restores_modes(self):
++        self.fail_unload = False
++        self.move.absolute_coord = False
++        self.move.absolute_extrude = True
++        self.a._last_unload_ok = self.a._last_load_ok = True
++        self.a.gate_status = [1] * 4
++        self.a._resistance_pause_pending = None
++        self.a.swap_post_retract_wipe = False
++        self.a._fa_context = 'print'
++        self.a._auto_feed_enabled = True
++        self.swap()
++        self.assertIn('G0 Y250.000 F12000', self.commands)
++        self.assertIn('G0 X161.390 F12000', self.commands)
++        self.assertIn('G0 Z6.040 F600', self.commands)
++        self.assertFalse(self.move.absolute_coord)
++        self.assertTrue(self.move.absolute_extrude)
++        self.assertTrue(self.a._auto_feed_enabled)
++        self.assertIsNone(self.a._failed_unload_origin)

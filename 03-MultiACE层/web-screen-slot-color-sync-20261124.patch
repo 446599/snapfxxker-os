@@ -1,0 +1,116 @@
+--- a/web/backend/main.py
++++ b/web/backend/main.py
+@@ -376,7 +376,7 @@
+     return values[0]
+ 
+ 
+-def _parse_state(status: dict) -> dict:
++def _parse_state(status: dict, screen_lanes: dict | None = None) -> dict:
+     """
+     Translate the raw multi-object status block into the dashboard schema.
+ 
+@@ -548,6 +548,14 @@
+ 
+             override = None if _override_key(i, s) in removed_overrides else _override_for(i, s)
+             loaded_t = loaded_by_source.get((i, s))
++            screen_color = None
++            if gate == 1 and a.get("connected") is True and screen_lanes:
++                # HelixScreen T0–T3 are the heads; ACE bays start at T4.
++                lane = str(4 + i * SLOT_COUNT + s)
++                record = screen_lanes.get("T" + lane)
++                if (isinstance(record, dict) and record.get("writer") == "helixscreen"
++                        and record.get("lane") == lane):
++                    screen_color = _declared_color(record.get("color"))
+             known_color = None
+             if not is_empty:
+                 bound_spool = spools.get(spool_binding.get(_override_key(i, s)) or "", {}) or {}
+@@ -555,10 +563,12 @@
+                     sd.get("color"),
+                     declared=bool((sd.get("material", "") or sd.get("type", "")).strip()),
+                 )
+-                loaded_color = (_ptc_at(loaded_t) or {}).get("color") if loaded_t is not None else None
+                 known_color = ((rfid_data or {}).get("color") or
+                                _declared_color(bound_spool.get("color")) or
+-                               raw_color or _declared_color(loaded_color))
++                               raw_color)
++            color_fallback = known_color or screen_color or _declared_color(
++                (_ptc_at(loaded_t) or {}).get("color") if loaded_t is not None else None
++            )
+             # Identity precedence: Override > RFID > (only if loaded into a
+             # head) job config > none. `source` exposes provenance to the UI
+             # badge.
+@@ -630,7 +640,8 @@
+                         "brand":     ptc_overlay["brand"],
+                         "sku":       ptc_overlay["sku"],
+                         "subtype":   disp_subtype,
+-                        "color":     _declared_color(ptc_overlay["color"]) or known_color,
++                        "color":     (screen_color if source == "derived" and not known_color
++                                      else None) or _declared_color(ptc_overlay["color"]) or color_fallback,
+                         "color_rgb": None,
+                         # Same two fields as the no-identity branch below:
+                         # a slot WITH an identity (RFID/override/spool)
+@@ -656,7 +667,7 @@
+                         "brand":     sd.get("brand", ""),
+                         "sku":       sd.get("sku", ""),
+                         "subtype":   disp_subtype,
+-                        "color":     known_color,
++                        "color":     color_fallback,
+                         "color_rgb": sd.get("color"),
+                         # Card UID of the last host read (also for a
+                         # UID-only read without identity) - seeds a new
+@@ -1089,6 +1100,28 @@
+         r.raise_for_status()
+         return r.json()
+ 
++_screen_lanes: dict = {}
++_screen_lanes_until = 0.0
++_screen_lanes_lock = asyncio.Lock()
++
++
++async def _dashboard_state(status: dict) -> dict:
++    """Read the touchscreen's saved lane colors for dashboard display."""
++    global _screen_lanes, _screen_lanes_until
++    if not _homing_active() and time.monotonic() >= _screen_lanes_until:
++        async with _screen_lanes_lock:
++            if not _homing_active() and time.monotonic() >= _screen_lanes_until:
++                try:
++                    data = await asyncio.wait_for(
++                        _mr_get("/server/database/item?namespace=lane_data"), timeout=0.75
++                    )
++                    lanes = data.get("result", {}).get("value")
++                    _screen_lanes = lanes if isinstance(lanes, dict) else {}
++                except (httpx.HTTPError, TimeoutError, ValueError):
++                    _screen_lanes = {}
++                _screen_lanes_until = time.monotonic() + 2.0
++    return _parse_state(status, screen_lanes=_screen_lanes)
++
+ async def _mr_post(path: str, body: dict | None = None, timeout: float = 30.0) -> dict:
+     async with httpx.AsyncClient(timeout=timeout) as client:
+         r = await client.post(f"{MOONRAKER_URL}{path}", json=body or {})
+@@ -2240,7 +2273,7 @@
+         return {"error": f"moonraker: {e}"}
+     except httpx.HTTPError as e:
+         return {"error": f"moonraker: {e}"}
+-    return _parse_state(status)
++    return await _dashboard_state(status)
+ 
+ @app.get("/api/aces")
+ async def list_aces() -> dict:
+@@ -2249,7 +2282,7 @@
+         status = await _query_state_gated()
+     except httpx.HTTPError as e:
+         return {"aces": [], "error": f"moonraker: {e}"}
+-    parsed = _parse_state(status)
++    parsed = await _dashboard_state(status)
+     return {"aces": parsed["aces"], "active_device": parsed["active_device"]}
+ 
+ @app.get("/api/debug")
+@@ -5618,7 +5651,7 @@
+                 # for the brief homing window; it resumes on the next tick.
+                 try:
+                     status = await _query_state()
+-                    payload = _parse_state(status)
++                    payload = await _dashboard_state(status)
+                     payload["type"] = "state"
+                     payload["ts"] = now
+                     await websocket.send_json(payload)
