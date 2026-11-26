@@ -38,7 +38,7 @@ jobs:
           (cd output && sha256sum -c SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: U1-233-1902.3-candidate
+          name: U1-233-1902.4-candidate
           path: output/
           if-no-files-found: error
           compression-level: 0

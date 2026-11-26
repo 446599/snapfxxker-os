@@ -8,12 +8,13 @@ from pathlib import Path
 import re
 import shutil
 import tarfile
+from screen_compat import patch_engine, patch_web
 
 BASE_PROVIDER = '1.27b-233.20261122-flow.15.112'
 BASE_PROVIDER_SHA = '0d21c8d2d4b4477c68588c075a68c9b645d3892e72b4b6befa44ccd4f6957b25'
 FIELD_VERSION = '1.90.2-233.20261126'
 FIELD_SHA = 'd16535002703f19f43282c990385c1810c48d63a1d0ebff0d25335d924c9faea'
-PROVIDER = FIELD_VERSION + '-paxx.3'
+PROVIDER = FIELD_VERSION + '-paxx.4'
 APP_ROOT = '/userdata/233-apps/multiace'
 APP = APP_ROOT + '/latest'
 
@@ -158,8 +159,12 @@ def compose(root, field, common_source, work):
     engine = new / 'klipper/extras/ace.py'
     field_engine_hash = sha(engine)
     require('SharedAce2Discovery' in engine.read_text() and 'official or explicitly_configured' in engine.read_text(), 'field discovery patch missing')
-    engine.write_text(patch_preload(engine.read_text()))
+    engine.write_text(patch_engine(patch_preload(engine.read_text())))
     engine_hash = sha(engine)
+    web = new / 'web/backend/main.py'
+    field_web_hash = sha(web)
+    web.write_text(patch_web(web.read_text()))
+    web_hash = sha(web)
     # Keep the field-tested 1.90.2 code; carry over only offline libraries and
     # optional MCU image files, never the old backend or Klipper Python modules.
     oldvendor = old / 'web/backend/vendor'
@@ -261,9 +266,11 @@ def compose(root, field, common_source, work):
     # full release and the existing versioned /oem/apps provider directory.
     oldpkg.unlink()
     require(sha(engine) == engine_hash, 'field-tested engine unexpectedly changed')
+    require(sha(web) == web_hash, 'patched web backend unexpectedly changed')
     result = {'provider': PROVIDER, 'provider_archive': str(package.relative_to(root)),
               'provider_sha256': digest, 'field_archive_sha256': FIELD_SHA,
-              'field_engine_sha256': field_engine_hash, 'engine_sha256': engine_hash, 'provider_install_root': APP_ROOT, 'required_files': required,
+              'field_engine_sha256': field_engine_hash, 'engine_sha256': engine_hash,
+              'field_web_sha256': field_web_hash, 'web_sha256': web_hash, 'provider_install_root': APP_ROOT, 'required_files': required,
               'scope': 'PAXX/233 test candidate; existing screen and non-root partitions unchanged; no MCU flash',
               'hardware_verified': False}
     (work / 'composition.json').write_text(json.dumps(result, indent=2)+'\n')
