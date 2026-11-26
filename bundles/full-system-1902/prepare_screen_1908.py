@@ -20,6 +20,28 @@ def prepare(root):
     }
 ''','''    get_print_tune_overlay().show(parent_screen_, api_, printer_state_);
 ''')
+    # The missing compact print-controls module leaves two unresolved calls.
+    # Select the existing responsive print-status body together with the
+    # maintained full tuning panel; do not invent the omitted LCD policy.
+    s=replace(s,'''    // Select the structural XML branch once, from the display rather than an
+    // overlay/container whose dimensions change during navigation transitions.
+    lcd_layout_for_tree_ = helix::ui::uses_compact_print_controls(printer_state_, parent);
+''','''    // The pinned source has no compact print-controls module.
+    lcd_layout_for_tree_ = false;
+''')
+    s=replace(s,'''    // A cached overlay must retain the structural branch it was created with.
+    // With no tree, use a live display screen: parent_screen_ can name a former
+    // navigation container that has already been deleted. create() uses its
+    // explicitly supplied live parent to choose the new tree's display.
+    lv_obj_t* screen = lv_display_get_default() ? lv_screen_active() : nullptr;
+    const bool compact = overlay_root_
+                             ? lcd_layout_for_tree_
+                             : helix::ui::uses_compact_print_controls(printer_state_, screen);
+''','''    // Keep the selected structural layout for an existing tree.
+    const bool compact = overlay_root_ && lcd_layout_for_tree_;
+''')
+    if 'uses_compact_print_controls' in s or 'get_compact_print_tune_overlay' in s:
+        raise ValueError('missing compact print-controls module still referenced')
     p.write_text(s)
     # patch_batch_task_view already routes single-slot eject through preview.
     # Verify the existing connection rather than re-applying a second edit.
