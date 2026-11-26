@@ -1,3 +1,4 @@
+import os
 import tempfile
 import time
 import unittest
@@ -120,7 +121,10 @@ class DiscoveryTests(unittest.TestCase):
             detector, v2, k = SharedAce2Discovery(), codec('v2'), codec('ace2k')
             import threading
             done = threading.Event()
-            detector.pending[path] = {'done': done, 'token': detector._token(path), 'result': None}
+            # identify() keys pending/cache by realpath; on macOS /var is a
+            # symlink to /private/var, so seeding with the raw path would miss.
+            key = os.path.realpath(path)
+            detector.pending[key] = {'done': done, 'token': detector._token(path), 'result': None}
             budget = [1]
             self.assertIsNone(detector.identify(path, Reactor(), budget, v2, k))
             self.assertEqual(budget, [1])

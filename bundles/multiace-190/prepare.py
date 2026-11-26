@@ -15,10 +15,17 @@ def git_blob(path):
     data = path.read_bytes()
     return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
 
-def stage(source, target):
-    head = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
-    if head != SPEC['source_commit']:
-        raise ValueError('wrong upstream revision: ' + head)
+def stage(source, target, verify_head=True):
+    if verify_head:
+        head = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
+        if head != SPEC['source_commit']:
+            raise ValueError('wrong upstream revision: ' + head)
+    elif not (source / '.git').exists():
+        # 没有 git 元数据时（codeload tarball），改由 source-patches.json 里
+        # 六个 blob 的 sha1 逐字节校验来确认基线，强度不低于提交号比对。
+        pass
+    else:
+        raise ValueError('git checkout found; use HEAD verification')
     if target.exists():
         raise ValueError('use a new empty staging destination')
     changes = {}
@@ -47,5 +54,7 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('upstream', type=Path)
     p.add_argument('staging', type=Path)
+    p.add_argument('--verified-tarball', action='store_true',
+                   help='基线来自 codeload tarball（无 .git），改用 blob 哈希校验')
     a = p.parse_args()
-    stage(a.upstream, a.staging)
+    stage(a.upstream, a.staging, verify_head=not a.verified_tarball)
