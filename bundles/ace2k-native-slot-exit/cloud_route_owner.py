@@ -26,7 +26,7 @@ class Route:
         if (not isinstance(self.uid, str) or not self.uid
                 or not isinstance(self.port, str) or not self.port
                 or type(self.lane) is not int or not 0 <= self.lane < 4
-                or not isinstance(self.reader, str) or not self.reader
+                or not isinstance(self.reader, str)
                 or not isinstance(self.heads, tuple)
                 or any(type(h) is not int or not 0 <= h < 4 for h in self.heads)
                 or len(set(self.heads)) != len(self.heads)):
@@ -34,10 +34,11 @@ class Route:
 
     def conflicts(self, other):
         # A replaced unit on the same port must not evade a recovery hold.
-        return (self.port == other.port and self.uid != other.uid
-                or self.uid == other.uid and self.port != other.port
-                or self.uid == other.uid and
-                    (self.lane == other.lane or self.reader == other.reader)
+        same_identity = self.uid == other.uid or self.port == other.port
+        moved_identity = self.uid != other.uid or self.port != other.port
+        return (same_identity and
+                    (self.lane == other.lane or bool(self.reader) and self.reader == other.reader
+                     or moved_identity and bool(self.reader and other.reader))
                 or bool(set(self.heads) & set(other.heads)))
 
 
@@ -73,7 +74,7 @@ class RouteOwner:
                     route = Route(**fields)
                     token = row["token"]
                     if (not isinstance(token, str) or not token or token in self._claims
-                            or row["state"] not in ("reserved", "dispatched", "recovery")
+                            or row["state"] not in ("reserved", "dispatched", "verified", "recovery")
                             or any(route.conflicts(c.route) for c in self._claims.values())):
                         raise ValueError("invalid persisted claim")
                     self._claims[token] = Claim(token, route, "recovery")
@@ -153,6 +154,16 @@ class RouteOwner:
             if current.state != "reserved":
                 raise RouteBusy("already dispatched or recovering")
             updated = Claim(current.token, current.route, "dispatched")
+            self._change({**self._claims, updated.token: updated})
+            return updated
+
+    def mark_verified(self, claim):
+        """Persist verified completion while keeping the motion reservation."""
+        with self._mutex:
+            current = self._get(claim)
+            if current.state != "dispatched":
+                raise RouteBusy("no dispatched operation to complete")
+            updated = Claim(current.token, current.route, "verified")
             self._change({**self._claims, updated.token: updated})
             return updated
 

@@ -23,6 +23,7 @@ class Job:
     deadline: float = 0.
     timed_out: bool = False
     proof: str = ''
+    anchor: tuple = None
 
 
 class NativeExitWorker:
@@ -68,7 +69,11 @@ class NativeExitWorker:
         link = self.link
         op = Operation(uid, self.guard.epoch, lane, link._next_seq(lane), link._now())
         wire = NativeUnloadWire(link, op, lambda: self.jobs.get(lane) is job, self.pack)
-        job = Job(token, wire)
+        anchor = p.get('park_anchor')
+        if anchor is not None and (not isinstance(anchor, list) or len(anchor) != 2
+                or any(type(n) is not int for n in anchor)):
+            raise ValueError('invalid parked counter anchor')
+        job = Job(token, wire, anchor=tuple(anchor) if anchor is not None else None)
         self.jobs[lane] = job
         try:
             job.hold = self.guard.reserve(wire)
@@ -82,6 +87,8 @@ class NativeExitWorker:
         pair = self.guard._read_lane(job.hold)
         if pair is None:
             return False
+        if job.anchor is not None and (pair[0].encoder, pair[0].motor) != job.anchor:
+            raise RuntimeError('verified parking counters changed')
         first = self.guard._samples.get(lane)
         now = self.link._now()
         if first is not None and fresh_sample(first[0], after=job.hold.after, now=now):

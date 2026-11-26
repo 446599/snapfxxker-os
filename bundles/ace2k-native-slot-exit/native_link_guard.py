@@ -32,6 +32,7 @@ class NativeExitLinkGuard:
         self.epoch = uuid.uuid4().hex
         self._holds = {}
         self._quiet = {}
+        self.recovery_mask = 0
         self._samples = {}
         self._post = {}
         self._invalid = False
@@ -48,11 +49,11 @@ class NativeExitLinkGuard:
 
     def blocked(self, lane):
         return (type(lane) is int and 0 <= lane < 4
-                and (lane in self._holds or lane in self._quiet))
+                and (lane in self._holds or lane in self._quiet or bool(self.recovery_mask & (1 << lane))))
 
     def mask(self):
         return (sum(1 << lane for lane in self._holds)
-                | sum(1 << lane for lane in self._quiet))
+                | sum(1 << lane for lane in self._quiet) | self.recovery_mask)
 
     def reserve_quiet_lane(self, token, lane):
         """Protect a different unit's same-head lane, no motion or G-code.
