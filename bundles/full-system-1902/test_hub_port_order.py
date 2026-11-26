@@ -27,7 +27,8 @@ def methods():
     tree = ast.parse(patch_engine(provider_text()))
     cls = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                and any(isinstance(n, ast.FunctionDef) and n.name == '_order_units' for n in node.body))
-    names = {'_order_hub_ports', '_unit_devices_status', '_unit_state_join', '_unit_state_split', '_unit_state_remap', '_reconcile_unit_state'}
+    names = {'_order_hub_ports', '_unit_devices_status', '_unit_state_join', '_unit_state_split',
+             '_unit_state_remap', '_unit_state_unpark', '_reconcile_unit_state'}
     cls = ast.ClassDef(name='Harness', bases=[], keywords=[], decorator_list=[],
                        body=[n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in names])
     tree = ast.fix_missing_locations(ast.Module(body=[cls], type_ignores=[]))
@@ -161,7 +162,6 @@ class PortOrderTests(unittest.TestCase):
                                                                      for i, v in enumerate('abcd')}})
         obj.save_variable = lambda k, v, write=False: obj.save_variables.allVariables.update({k: v})
         obj.write_variables = lambda: None
-        obj._unit_state_unpark = lambda *args: None
         obj._unit_tag_reads_remap = lambda *args: None
         records = {'%d_0' % i: {'ace': i, 'slot': 0, 'material': v}
                    for i, v in enumerate('ABCD')}
@@ -172,6 +172,15 @@ class PortOrderTests(unittest.TestCase):
         parked = obj.save_variables.allVariables['parked']
         self.assertEqual(parked['uid:a']['overrides']['0']['material'], 'A')
         self.assertEqual(parked['uid:d']['overrides']['0']['material'], 'D')
+        # When the missing units reconnect, their records return to their
+        # actual sockets and retain their material and corrected ACE index.
+        obj._ace_devices = list(PORTS)
+        newkeys[:] = ['uid:d', 'uid:a', 'uid:b', 'uid:c']
+        obj._reconcile_unit_state('late join')
+        self.assertEqual(records, {'0_0': {'ace': 0, 'slot': 0, 'material': 'D'},
+                                   '1_0': {'ace': 1, 'slot': 0, 'material': 'A'},
+                                   '2_0': {'ace': 2, 'slot': 0, 'material': 'B'},
+                                   '3_0': {'ace': 3, 'slot': 0, 'material': 'C'}})
 
     def test_interrupted_retract_follows_its_device(self):
         cls = methods()
