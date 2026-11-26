@@ -1,0 +1,146 @@
+--- a/web/frontend/app.js
++++ b/web/frontend/app.js
+@@ -2229,15 +2229,6 @@
+       // lives on the printer so phone and desktop cannot disagree).
+       try { localStorage.setItem("multiace.panelAce", String(id)); } catch (e) {}
+     }
+-    // Unload is per HEAD. Multi wires slot N to head N; in head mode only
+-    // the ACE head unloads, and only its own slots offer it.
+-    function panelSlotHead(aceIdx, slotIdx) {
+-      if (state.mode === "head") {
+-        const h = state.ace_head;
+-        return (headAceOf(h) === aceIdx) ? h : null;
+-      }
+-      return slotIdx;
+-    }
+     // Which head this slot currently FEEDS, for the card's "T2" corner.
+     // head_source is the truth in both modes: multi wires slot N to head N,
+     // but that says nothing about whether it is loaded, and head mode maps
+@@ -2439,6 +2430,13 @@
+         th.ace === aceIdx && th.slot === slotIdx &&
+         th.filament_at_extruder === false &&
+         !toolheadOps.value[th.idx]);
++    }
++    function unloadSlot(aceIdx, slotIdx) {
++      if (_blockIfPrinting()) return;
++      const head = panelSlotHeadLoaded(aceIdx, slotIdx);
++      if (head === null) return;
++      if (!_confirmCmd("ui.confirm.unload_head", {head: dispIdx(head)})) return;
++      run("ACE_UNLOAD_HEAD", {HEAD: head, ACE: aceIdx, SLOT: slotIdx});
+     }
+     function unloadHead(idx) {
+       if (_blockIfPrinting()) return;
+@@ -2909,7 +2907,7 @@
+         && th.ace === a && th.slot === sl);
+       const unload = !!(th && th.head_source_known && !directLoad
+         && (state.mode === "head" || th.ace !== a));
+-      return {ace: a, slot: sl, head: h, unload};
++      return {ace: a, slot: sl, head: h, unload: unload ? {HEAD: h, ACE: th.ace, SLOT: th.slot} : null};
+     }
+     const paCalibrating = ref(false);
+     const paLoading = ref(false);
+@@ -2942,7 +2940,7 @@
+         let loaded = false;
+         try {
+           if (plan.unload) {
+-            const u = enqueue("ACE_UNLOAD_HEAD", {HEAD: plan.head});
++            const u = enqueue("ACE_UNLOAD_HEAD", plan.unload);
+             const l = enqueue("ACE_LOAD_HEAD", {HEAD: plan.head, ACE: plan.ace, SLOT: plan.slot});
+             loaded = (await u) && (await l);
+           } else {
+@@ -4993,7 +4991,7 @@
+         const directLoad = !!(th && !th.filament_at_extruder
+           && th.ace === aceIdx && th.slot === slotIdx);
+         if (th && th.head_source_known && !directLoad) {
+-          enqueue("ACE_UNLOAD_HEAD", {HEAD: h});
++          enqueue("ACE_UNLOAD_HEAD", {HEAD: h, ACE: th.ace, SLOT: th.slot});
+         }
+         enqueue("ACE_LOAD_HEAD", {HEAD: h, ACE: aceIdx, SLOT: slotIdx});
+         return;
+@@ -5008,11 +5006,9 @@
+               ace: dispIdx(aceIdx), slot: dispIdx(slotIdx)})) return;
+       const th = state.toolheads.find(tt => tt.idx === slotIdx);
+       if (th && th.head_source_known && th.ace !== aceIdx) {
+-        enqueue("ACE_UNLOAD_HEAD", {HEAD: slotIdx});
+-        enqueue("ACE_LOAD_HEAD",   {HEAD: slotIdx, ACE: aceIdx});
+-        return;
+-      }
+-      enqueue("ACE_LOAD_HEAD", {HEAD: slotIdx, ACE: aceIdx});
++        enqueue("ACE_UNLOAD_HEAD", {HEAD: slotIdx, ACE: th.ace, SLOT: th.slot});
++      }
++      enqueue("ACE_LOAD_HEAD", {HEAD: slotIdx, ACE: aceIdx, SLOT: slotIdx});
+     }
+     // Load a head without ACE (feeder, or manual in multi) via its native
+     // stock side feeder.
+@@ -5963,7 +5959,7 @@
+       } catch (e) { setMacroLog(`${t("ui.common.error")}: ${e}`); }
+     }
+     async function loadSnapshot() {
+-      if (!selectedSnapshot.value) return;
++      if (_blockIfPrinting() || !selectedSnapshot.value) return;
+       const name = selectedSnapshot.value;
+       let plan;
+       try {
+@@ -6002,6 +5998,7 @@
+           }
+           enqueue("MULTIACE_REFRESH_OVERRIDES", {}, {silent: true});
+         }
++        if (_blockIfPrinting()) return;
+         for (const a of actions) {
+           enqueue(a.name, a.args || {});
+         }
+@@ -10197,7 +10194,7 @@
+       calibrationClearUndo,
+       calibrationVerifyConfigured, calibrationAction, calibrationApply,
+       calibrationVerifyValues,
+-      panelMode, panelAce, panelAceIdx, panelSlotHead, panelPages, panelPage, panelPageId, panelFeederHeads, setPanelPage,
++      panelMode, panelAce, panelAceIdx, unloadSlot, panelPages, panelPage, panelPageId, panelFeederHeads, setPanelPage,
+       panelSlotHeadLoaded, panelSlotActive, panelSlotLabel, panelSlotOp,
+       panelMini, fullUiHref, uiTheme, uiThemeChoice, uiLight, setUiTheme, spoolPct, gaugeColor, thSettingsOpen, slotGaugePct, slotGaugeLabel, headGaugePct, headGaugeText,
+       slotTitle, switchAce, loadSlot, slotIsEmpty, aceFlashEngine, aceHasDryer, aceHasDecoder, loadFeederHead, slotLoadedInHead, loadAll, unloadHead, unloadAll, cancelUnloadAll, anyUnloading, setHeadManual, setHeadFeeder, setHeadAce, headToggle, headSelect, aceOptionsForHead, headAceOf, aceProtoTitle, unitDriverLabel, assignUnit, forgetUnit, renameUnit, locateUnit, devNameValue, devNameInput, devNameCommit, deviceStatus, deviceDriver, driverOnlyActive, driverToggle, driverNote, driversRestartNeeded, perAceCount, aceCfwTitle, visibleAces, unwiredAces, gridAces, openHeadPicker, isToolheadOccupied, slotHeadHasNoAce, needsReload, toolheadOps, bgEnabledFor, multiBgPossible, setBgHead, bgMode, setBgMode, setPickupCleaning, setConfirmCommands, setRememberFilament, setPaSync, setAutoDry, autoDryValue, autoDryInput, autoDryCommit, autoDryPairInvalid, autoDryFieldError, autoDryEnable, autoDrySetMaster, autoDryMasters, spoolmanUrl, spoolmanBusy, spoolmanStatusText, saveSpoolmanUrl, setSpoolmanAuto, spoolmanSync,
+--- a/web/frontend/index.html
++++ b/web/frontend/index.html
+@@ -194,8 +194,8 @@
+                  (that is how the user thinks about it) and mapped to the head
+                  this slot actually feeds. -->
+             <button class="panel-btn warn"
+-                    @click="unloadHead(panelSlotHead(panelAce.idx, slot.idx))"
+-                    :disabled="isPrinting || panelSlotHead(panelAce.idx, slot.idx) === null"
++                    @click="unloadSlot(panelAce.idx, slot.idx)"
++                    :disabled="isPrinting || panelSlotHeadLoaded(panelAce.idx, slot.idx) === null"
+                     :title="isPrinting ? t('ui.dashboard.blocked_printing') : ''">{{
+                 t('ui.dashboard.unload') }}</button>
+           </div>
+@@ -776,7 +776,7 @@
+             {{ s.name }}{{ s.saved ? ' · ' + s.saved.slice(0,16) : '' }}
+           </option>
+         </select>
+-        <button @click="loadSnapshot" :disabled="!selectedSnapshot">{{ t('ui.common.apply') }}</button>
++        <button @click="loadSnapshot" :disabled="!selectedSnapshot || isPrinting">{{ t('ui.common.apply') }}</button>
+         <button @click="saveSnapshot" class="primary">{{ t('ui.dashboard.save_current') }}</button>
+         <button @click="deleteSnapshot" :disabled="!selectedSnapshot" class="warn">×</button>
+       </div>
+--- a/web/backend/main.py
++++ b/web/backend/main.py
+@@ -5834,7 +5834,9 @@
+         if (d is None
+             or d.get("ace") != ct.get("ace")
+             or d.get("slot") != ct.get("slot")):
+-            actions.append({"name": "ACE_UNLOAD_HEAD", "args": {"HEAD": idx}})
++            actions.append({"name": "ACE_UNLOAD_HEAD", "args": {
++                "HEAD": idx, "ACE": ct["ace"], "SLOT": ct["slot"],
++            }})
+ 
+     by_ace: dict[int, list[int]] = {}
+     for idx, dt in desired.items():
+@@ -5855,7 +5857,9 @@
+ 
+     for ace_idx in sorted(by_ace):
+         for head in sorted(by_ace[ace_idx]):
+-            actions.append({"name": "ACE_LOAD_HEAD", "args": {"HEAD": head, "ACE": ace_idx}})
++            actions.append({"name": "ACE_LOAD_HEAD", "args": {
++                "HEAD": head, "ACE": ace_idx, "SLOT": desired[head].get("slot"),
++            }})
+ 
+     # Feeder heads (head mode): restore the saved filament identity straight to
+     # the head's print_task_config (no ACE load - the user reloads by hand).

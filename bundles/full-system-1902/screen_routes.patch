@@ -1,0 +1,335 @@
+diff --git a/include/multiace_status.h b/include/multiace_status.h
+index ac866e1..e924fb4 100644
+--- a/include/multiace_status.h
++++ b/include/multiace_status.h
+@@ -206,7 +206,7 @@ candidate_bays(Mode mode, int head, const std::array<int, kHeadCount>& head_ace,
+ /// bare form leaves the bay to the engine, which is well-defined only in HEAD
+ /// mode and for a head the ACE does not feed.
+ [[nodiscard]] std::string load_gcode(int head, std::optional<std::pair<int, int>> bay);
+-[[nodiscard]] std::string unload_gcode(int head);
++[[nodiscard]] std::string unload_gcode(int head, std::optional<std::pair<int, int>> bay = std::nullopt);
+ [[nodiscard]] std::string unload_all_gcode();
+ [[nodiscard]] std::string dry_gcode(int ace, int temp_c, int duration_min);
+ [[nodiscard]] std::string stop_dry_gcode(int ace);
+diff --git a/include/u1_filament_overview.h b/include/u1_filament_overview.h
+index a5629d4..de89b5c 100644
+--- a/include/u1_filament_overview.h
++++ b/include/u1_filament_overview.h
+@@ -80,7 +80,7 @@ class U1FilamentOverview {
+     void close_color(bool accept);
+     void save_edit();
+     void refresh_edit_summary();
+-    bool head_can_unload(const AmsBackend& backend, int head, bool external) const;
++    bool head_can_unload(const AmsBackend& backend, int head, int global_slot) const;
+     const SlotCard* selected_slot() const;
+     int dryer_unit(const AmsSystemInfo& info) const;
+     void schedule_color_layout();
+diff --git a/src/printer/ams_backend_multiace.cpp b/src/printer/ams_backend_multiace.cpp
+index 050b755..bddd3e3 100644
+--- a/src/printer/ams_backend_multiace.cpp
++++ b/src/printer/ams_backend_multiace.cpp
+@@ -906,7 +906,7 @@ AmsError AmsBackendMultiAce::do_load_filament(int slot_index) {
+             pending_load_->unload_answered_at = std::chrono::steady_clock::now();
+         }
+     };
+-    auto err = dispatch_feed(multiace::unload_gcode(head), answered,
++    auto err = dispatch_feed(multiace::unload_gcode(head, recorded), answered,
+                              [this, id, answered](const MoonrakerError& e) {
+                                  if (e.type == MoonrakerErrorType::TIMEOUT) {
+                                      // The unload may still be running; the frames decide.
+@@ -991,7 +991,15 @@ void AmsBackendMultiAce::advance_pending_load() {
+             dropped = fmt::format("toolhead {} did not empty in time after its unload",
+                                   helix::ui::lane_number(pending.head));
+         } else if (empty) {
+-            send = true;
++            const int target = multiace::bay_global(pending.bay.first, pending.bay.second);
++            const auto* unit = system_info_.unit_for_slot(target);
++            const auto* slot = system_info_.get_slot_global(target);
++            if (!unit || !unit->connected || unit->absent || !slot || !slot->is_present() ||
++                head_for_global_locked(target) != pending.head || system_info_.path_held(pending.head)) {
++                dropped = "the selected bay is no longer available for this toolhead";
++            } else {
++                send = true;
++            }
+         } else {
+             return;
+         }
+@@ -1019,6 +1027,7 @@ void AmsBackendMultiAce::advance_pending_load() {
+ 
+ AmsError AmsBackendMultiAce::do_unload_filament(int slot_index) {
+     int head = slot_index;
++    std::optional<std::pair<int, int>> expected_bay;
+     bool engine = false;
+     {
+         std::lock_guard<std::mutex> lock(mutex_);
+@@ -1027,11 +1036,21 @@ AmsError AmsBackendMultiAce::do_unload_filament(int slot_index) {
+             head = system_info_.current_slot;
+         }
+         if (head >= kHeads) {
++            expected_bay = multiace::bay_of(head);
+             const auto h = head_for_global_locked(head);
+-            if (!h || routed_bay_locked(*h) != multiace::bay_of(head)) {
++            if (!h || !engine) return AmsErrorHelper::not_loaded();
++            head = *h;
++            const auto& physical = head_physical_source_[static_cast<size_t>(head)];
++            if (physical && std::make_pair(physical->ace, physical->slot) != expected_bay)
++                return AmsErrorHelper::not_loaded();
++            // A position hold hides its route from the inventory. Its existing
++            // recovery check still permits an unload when both sources agree.
++            if (system_info_.path_held(head)) {
++                if (!confirmed_ace_filament_at_head_locked(head))
++                    return AmsErrorHelper::not_loaded();
++            } else if (routed_bay_locked(head) != expected_bay) {
+                 return AmsErrorHelper::not_loaded();
+             }
+-            head = *h;
+         }
+     }
+     if (auto refusal = unload_path_hold_refusal(head))
+@@ -1045,7 +1064,7 @@ AmsError AmsBackendMultiAce::do_unload_filament(int slot_index) {
+         return AmsErrorHelper::not_loaded();
+     }
+     // Every head, ACE-fed or not: the engine owns the feed state machine.
+-    AmsError err = dispatch_feed(multiace::unload_gcode(head), kEventUnloadComplete);
++    AmsError err = dispatch_feed(multiace::unload_gcode(head, expected_bay), kEventUnloadComplete);
+     if (err.success()) {
+         cancel_pending_load("an unload");
+     }
+@@ -1103,6 +1122,7 @@ AmsError AmsBackendMultiAce::do_park_active_tool() {
+ 
+ AmsError AmsBackendMultiAce::do_filament_batch(const std::vector<int>& slots, bool load) {
+     std::vector<int> heads;
++    std::array<std::optional<std::pair<int, int>>, kHeads> selected_bays{};
+     bool engine = false;
+     bool any_ace = false;
+     {
+@@ -1119,6 +1139,7 @@ AmsError AmsBackendMultiAce::do_filament_batch(const std::vector<int>& slots, bo
+                                  : "Batch unload of unrouted ACE bays");
+                     }
+                     head = *h;
++                    selected_bays[static_cast<size_t>(head)] = multiace::bay_of(s);
+                 }
+                 if (head < 0 || head >= kHeads) {
+                     return validate_slot_index_locked(head);
+@@ -1152,27 +1173,6 @@ AmsError AmsBackendMultiAce::do_filament_batch(const std::vector<int>& slots, bo
+         }
+     }
+ 
+-    if (!load) {
+-        std::vector<int> loaded_heads;
+-        for (int h = 0; h < kHeads; ++h) {
+-            if (AmsBackendSnapmaker::slot_has_filament_at_toolhead(h)) {
+-                loaded_heads.push_back(h);
+-            }
+-        }
+-        std::vector<int> sorted = heads;
+-        std::sort(sorted.begin(), sorted.end());
+-        if (!loaded_heads.empty() && sorted == loaded_heads) {
+-            // The engine's own unload-all: its loop walks all four heads and
+-            // unloads every one whose motion sensor sees filament, ACE-fed,
+-            // feeder and manual alike (its _unload_all_heads).
+-            AmsError err = dispatch_feed(multiace::unload_all_gcode(), kEventUnloadComplete);
+-            if (err.success()) {
+-                cancel_pending_load("a batch operation");
+-            }
+-            return err;
+-        }
+-    }
+-
+     // One engine command per head; Klipper stops the script at the first one
+     // that raises.
+     std::string script;
+@@ -1180,7 +1180,8 @@ AmsError AmsBackendMultiAce::do_filament_batch(const std::vector<int>& slots, bo
+         if (!script.empty()) {
+             script += "\n";
+         }
+-        script += load ? multiace::load_gcode(h, std::nullopt) : multiace::unload_gcode(h);
++        script += load ? multiace::load_gcode(h, std::nullopt)
++                       : multiace::unload_gcode(h, selected_bays[static_cast<size_t>(h)]);
+     }
+     AmsError err =
+         dispatch_feed(std::move(script), load ? kEventLoadComplete : kEventUnloadComplete);
+diff --git a/src/printer/multiace_status.cpp b/src/printer/multiace_status.cpp
+index 2cc4caf..1033426 100644
+--- a/src/printer/multiace_status.cpp
++++ b/src/printer/multiace_status.cpp
+@@ -469,7 +469,10 @@ std::string load_gcode(int head, std::optional<std::pair<int, int>> bay) {
+     return fmt::format("ACE_LOAD_HEAD HEAD={} ACE={} SLOT={}", head, bay->first, bay->second);
+ }
+ 
+-std::string unload_gcode(int head) {
++std::string unload_gcode(int head, std::optional<std::pair<int, int>> bay) {
++    if (bay) {
++        return fmt::format("ACE_UNLOAD_HEAD HEAD={} ACE={} SLOT={}", head, bay->first, bay->second);
++    }
+     return fmt::format("ACE_UNLOAD_HEAD HEAD={}", head);
+ }
+ 
+diff --git a/src/ui/filament/u1_filament_overview.cpp b/src/ui/filament/u1_filament_overview.cpp
+index b5edabc..d4494fd 100644
+--- a/src/ui/filament/u1_filament_overview.cpp
++++ b/src/ui/filament/u1_filament_overview.cpp
+@@ -859,10 +859,8 @@ void U1FilamentOverview::apply_hub_data() {
+     const bool can_load = can_act && !loaded && card->head >= 0 && !info.path_held(card->head) &&
+         (external ? load_eligibility == Eligibility::Eligible : card->inlet_has_filament);
+     lv_label_set_text(lv_obj_get_child(actions_.front(), 0),
+-                      loaded ? "已进料" :
++                      loaded ? (external || card->current ? "已进料" : "喷头有料") :
+                       load_eligibility == Eligibility::Empty ? "请先插入耗材" : "进料");
+-    // A connected ACE route still exposes the head action when its sensor is
+-    // empty so that the operator can get the explanation and the slot action.
+     const auto lifecycle = get_printer_state().print_state().get_print_lifecycle();
+     const bool can_confirm_source = card && card->connected && backend && !external &&
+         card->inlet_has_filament && card->head >= 0 && card->head < 4 &&
+@@ -870,8 +868,7 @@ void U1FilamentOverview::apply_hub_data() {
+         material_workspace::head_physical_presence(backend, card->head) == true &&
+         !material_workspace::head_physical_source(backend, card->head);
+     const bool head_action = can_confirm_source || (can_act && card->head >= 0 &&
+-        (external ? head_can_unload(*backend, card->head, true)
+-                  : card->inlet_has_filament || head_can_unload(*backend, card->head, false)));
++        head_can_unload(*backend, card->head, card->global_index));
+     const bool can_eject = can_act && !external && card->inlet_has_filament;
+     const bool can_dry = card && card->connected && backend && !external &&
+         helix::dryer_info(*backend, card->backend_unit).supported;
+@@ -1191,11 +1188,10 @@ void U1FilamentOverview::save_edit() {
+     refresh();
+ }
+ 
+-bool U1FilamentOverview::head_can_unload(const AmsBackend& backend, int head, bool external) const {
++bool U1FilamentOverview::head_can_unload(const AmsBackend& backend, int head, int global_slot) const {
+     if (head < 0 || head >= 4) return false;
+-    if (external) return backend.slot_has_filament_at_toolhead(head);
+-    return material_workspace::head_physical_presence(&backend, head) == true &&
+-        material_workspace::head_physical_source(&backend, head).has_value();
++    if (global_slot == head) return backend.slot_has_filament_at_toolhead(head);
++    return material_workspace::head_physical_source(&backend, head) == global_slot;
+ }
+ 
+ void U1FilamentOverview::on_action_load() {
+@@ -1227,7 +1223,7 @@ void U1FilamentOverview::on_action_unload() {
+         return;
+     }
+     if (!slot || !slot->connected || !backend ||
+-        !head_can_unload(*backend, head, slot->ace < 0)) {
++        !head_can_unload(*backend, head, slot->global_index)) {
+         const auto presence = material_workspace::head_physical_presence(backend, head);
+         show_feedback(slot && slot->ace >= 0 && slot->inlet_has_filament && presence != true
+             ? "喷头未检测到耗材。要取下这卷料，请用「退出 ACE」。"
+@@ -1287,7 +1283,7 @@ void U1FilamentOverview::open_confirm(ConfirmKind kind) {
+             : fmt::format("ACE {} · {} 槽  →  喷头 {}", slot->ace + 1, slot->local_slot + 1,
+                           confirm_head_ + 1);
+         body = confirm_external_ ? "从外置入口装入耗材，请确认耗材已插入。"
+-                                  : "将所选耗材装入喷头，已有耗材会先退料。";
++                                  : "将所选耗材装入喷头。";
+     } else {
+         const auto bay = confirm_source_ ? multiace::bay_of(*confirm_source_) : std::nullopt;
+         target = bay ? fmt::format("当前供料  ACE {} · {} 槽  →  喷头 {}",
+@@ -1340,19 +1336,17 @@ void U1FilamentOverview::confirm_action() {
+         lv_label_set_text(confirm_body_, "喷头供料已变化，请返回后重试");
+         return;
+     }
+-    // Head unload follows the actual source shown in the dialog, not the
+-    // selected card. The backend checks the live head and bound source.
+     if (load && info.path_held(confirm_head_)) {
+         lv_label_set_text(confirm_body_, "耗材料路位置待确认，请先完成位置恢复");
+         return;
+     }
+     if ((load && !confirm_external_ && !slot->is_present()) ||
+-        (!load && !head_can_unload(*backend, confirm_head_, confirm_external_))) {
++        (!load && !head_can_unload(*backend, confirm_head_, confirm_global_))) {
+         lv_label_set_text(confirm_body_, "耗材状态已变化，请返回后重试");
+         return;
+     }
+     const auto result = load ? backend->load_filament(confirm_global_)
+-                             : backend->unload_filament(confirm_head_);
++                             : backend->unload_filament(confirm_global_);
+     show_hub();
+     show_feedback(result.success() ? "命令已受理，等待实际料路确认" : result.user_msg,
+                   result.success() ? FeedbackKind::Info : FeedbackKind::Attention);
+diff --git a/tests/unit/test_ams_backend_multiace.cpp b/tests/unit/test_ams_backend_multiace.cpp
+index af562e3..4e18ef2 100644
+--- a/tests/unit/test_ams_backend_multiace.cpp
++++ b/tests/unit/test_ams_backend_multiace.cpp
+@@ -199,6 +199,10 @@ TEST_CASE_METHOD(MultiAceFixture, "position hold only permits unloading a confir
+         REQUIRE(backend.unload_filament(1).success());
+         REQUIRE(backend.sent.size() == 1);
+         CHECK(backend.sent[0] == "ACE_UNLOAD_HEAD HEAD=1");
++        REQUIRE(backend.unload_filament(multiace::bay_global(1, 1)).success());
++        CHECK(backend.sent.back() == "ACE_UNLOAD_HEAD HEAD=1 ACE=1 SLOT=1");
++        CHECK_FALSE(backend.unload_filament(multiace::bay_global(0, 1)).success());
++        CHECK(backend.sent.size() == 2);
+     }
+ 
+     SECTION("an empty head remains blocked") {
+@@ -610,8 +614,18 @@ TEST_CASE_METHOD(MultiAceFixture, "load into an occupied head unloads first", "[
+     // Head 0 is routed from ACE 1 bay 1; loading bay 2 unloads it first, alone.
+     REQUIRE(b.load_filament(multiace::bay_global(0, 1)).success());
+     REQUIRE(b.sent.size() == 1);
+-    CHECK(b.sent[0] == "ACE_UNLOAD_HEAD HEAD=0");
++    CHECK(b.sent[0] == "ACE_UNLOAD_HEAD HEAD=0 ACE=0 SLOT=0");
+ 
++    SECTION("the target spool was removed while the first head was unloading") {
++        b.answer_ok();
++        auto changed = ace_frame("head_mode_4ace.json");
++        changed["ace"]["aces"][0]["slots"][1]["status"] = "empty";
++        changed["ace"]["aces"][0]["gate_status"][1] = 0;
++        changed["ace"]["head_source"] = json::object();
++        changed.update(feed_frame(0, "preload_finish"));
++        b.frame(changed);
++        CHECK(b.sent.size() == 1);
++    }
+     SECTION("the load goes once a frame shows the head empty") {
+         b.answer_ok();
+         CHECK(b.sent.size() == 1);
+@@ -680,7 +694,7 @@ TEST_CASE_METHOD(MultiAceFixture, "a refused op leaves a pending bay load standi
+     // behind the head's unload.
+     REQUIRE(b.load_filament(multiace::bay_global(0, 1)).success());
+     REQUIRE(b.sent.size() == 1);
+-    CHECK(b.sent[0] == "ACE_UNLOAD_HEAD HEAD=0");
++    CHECK(b.sent[0] == "ACE_UNLOAD_HEAD HEAD=0 ACE=0 SLOT=0");
+     b.answer_ok();
+ 
+     // A tap on an empty bay is refused - and must not take the deferred load
+@@ -767,7 +781,7 @@ TEST_CASE_METHOD(MultiAceFixture, "a routed bay unloads and selects through its
+     REQUIRE(b.unload_filament(multiace::bay_global(2, 3)).success());
+     REQUIRE(b.select_slot(multiace::bay_global(2, 3)).success());
+     REQUIRE(b.sent.size() == 2);
+-    CHECK(b.sent[0] == "ACE_UNLOAD_HEAD HEAD=2");
++    CHECK(b.sent[0] == "ACE_UNLOAD_HEAD HEAD=2 ACE=2 SLOT=3");
+     CHECK(b.sent[1] == "T2");
+ 
+     b.sent.clear();
+@@ -798,10 +812,10 @@ TEST_CASE_METHOD(MultiAceFixture, "batch ops with ACE-fed heads", "[multiace]")
+         CHECK(b.load_filament_batch({0, 2}).result == AmsResult::NOT_SUPPORTED);
+         CHECK(b.sent.empty());
+     }
+-    SECTION("unloading every loaded head is the engine's unload-all") {
++    SECTION("a stale inventory never expands the selected heads") {
+         REQUIRE(b.unload_filament_batch({2, 0}).success());
+         REQUIRE(b.sent.size() == 1);
+-        CHECK(b.sent[0] == "ACE_UNLOAD_ALL_HEADS");
++        CHECK(b.sent[0] == "ACE_UNLOAD_HEAD HEAD=2\nACE_UNLOAD_HEAD HEAD=0");
+     }
+     SECTION("a partial selection unloads head by head") {
+         b.frame(feed_frame(1, "load_finish"));
+@@ -1039,7 +1053,7 @@ TEST_CASE_METHOD(MultiAceFixture, "a load the firmware fails marks its head unco
+         b.frame(ace_frame("head_mode_4ace.json"));
+         b.frame(json{{"toolhead", {{"extruder", "extruder"}}}});
+         REQUIRE(b.load_filament(multiace::bay_global(0, 1)).success());
+-        REQUIRE(b.sent.back() == "ACE_UNLOAD_HEAD HEAD=0");
++        REQUIRE(b.sent.back() == "ACE_UNLOAD_HEAD HEAD=0 ACE=0 SLOT=0");
+         b.answer_ok();
+         json emptied = {{"ace", {{"head_source", {{"2", {{"ace_index", 2}, {"slot", 3}}}}}}}};
+         emptied.update(feed_frame(0, "preload_finish"));
+diff --git a/tests/unit/test_multiace_status.cpp b/tests/unit/test_multiace_status.cpp
+index 1a8145a..cf8724d 100644
+--- a/tests/unit/test_multiace_status.cpp
++++ b/tests/unit/test_multiace_status.cpp
+@@ -376,6 +376,7 @@ TEST_CASE("multiace gcode spellings", "[multiace]") {
+     CHECK(load_gcode(1, std::nullopt) == "ACE_LOAD_HEAD HEAD=1");
+     CHECK(load_gcode(2, std::make_pair(1, 3)) == "ACE_LOAD_HEAD HEAD=2 ACE=1 SLOT=3");
+     CHECK(unload_gcode(3) == "ACE_UNLOAD_HEAD HEAD=3");
++    CHECK(unload_gcode(3, std::make_pair(0, 3)) == "ACE_UNLOAD_HEAD HEAD=3 ACE=0 SLOT=3");
+     CHECK(unload_all_gcode() == "ACE_UNLOAD_ALL_HEADS");
+     CHECK(dry_gcode(2, 45, 240) == "ACE_DRY ACE=2 TEMP=45 DURATION=240");
+     CHECK(stop_dry_gcode(2) == "ACE_STOP_DRYING ACE=2");

@@ -8,7 +8,7 @@ REPO=$(cd "$HERE/../.." && pwd)
 BASE=$(realpath "${1:?usage: build.sh base-upgrade.bin output-directory}")
 mkdir -p "${2:?output directory required}"
 OUT=$(realpath "$2")
-VERSION=2.1.2-233-1902.4
+VERSION=2.1.2-233-1902.5
 BASE_SHA=0d7b4039696a0a3b98df093b58a333fb0de5b5372ab665bf4d6a9d3165b942bf
 FIELD="$REPO/bundles/multiace-190/artifacts/multiace-1.90.2-233.20261126.tar.gz"
 COMMON="$REPO/overlays/mods/multiace/70-app-multiace/root/usr/local/share/multiace/common.sh"
@@ -69,6 +69,11 @@ done
 while IFS= read -r path; do
     unsquashfs -cat "$READBACK" "$path" | cmp - "$ROOT/$path"
 done < <(python3 -c 'import json,sys;print("\n".join(json.load(open(sys.argv[1]))["runtime_files"]))' "$WORK/composition.json")
+# The native route patch is source-tested only in this candidate. Read back
+# the exact release screen so the artifact and acceptance notes agree.
+SCREEN_PKG=usr/local/share/233-firmware/helixscreen-233-1.2.0-233.20261124.4.tar.gz
+SCREEN_SHA=2a967f0884c33993c547c4cc4a4260662e04dabb0de4b9d9e7bbbfc830f22ff5
+[[ $(unsquashfs -cat "$READBACK" "$SCREEN_PKG" | sha256sum | cut -d' ' -f1) == "$SCREEN_SHA" ]]
 cp "$WORK/composition.json" "$OUT/composition.json"
 cp "$WORK/rootfs-capacity.json" "$OUT/rootfs-capacity.json"
 mv "$WORK/$FILE" "$OUT/$FILE"

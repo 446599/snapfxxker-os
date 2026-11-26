@@ -69,3 +69,31 @@ On the actual 1902.2 printer, SSH and 7136 recovered, but S47 stopped on a histo
 ## 1902.4 screen compatibility candidate
 
 The vendored 233 screen bay editor calls POST /api/slot-override/sync but 1.90.2 only registers POST /api/slot-override. Restore this exact path as an adapter to the existing atomic slot override store, retain omitted metadata and report actual disk failures (no successful response if saving fails). The explicit load's tool activation previously could consult the old head_source before FEED_AUTO; skip old-route activation while a load owns the head, recheck the requested active unit after tool selection, and reject deferred feed assist whose captured head/source no longer matches. No new motion strategy or changes to RFID, LEDs, MCU, provider storage or the screen binary. These are source-confirmed compatibility/routing defects; the exact wrong-slot and other-lane blink symptoms still require real command/driver logs and physical reproduction. Keep the verified 1902.3 package for rollback. Tests exercise the exact pinned field archive rather than the latest upstream source. The report includes both engine and web hashes.
+
+## 1902.5 filament routing candidate
+
+The embedded provider is 1.90.2-233.20261126-paxx.5. Web bay cards match the
+head's recorded ACE and slot. Bay unloads, queued changes and snapshot restore
+carry explicit source/destination addresses. Klipper checks a bay unload again
+after waiting for background work. A disconnected retract source or exhausted
+command-rejection retries now fail the operation; an unverified unload retains
+its source. Cleanup of a single head scopes feed assist to its route. Global
+stop and explicit all-head operations remain available. If a previous retract on
+the same head was interrupted on a different bay, an explicit load preserves
+the original recovery record and returns before moving either spool.
+
+This firmware keeps the 20261124.4 native screen from the pinned release.
+Its existing bay-card unload can submit a head-only command and unload a
+different ACE supplying that head. Use the MultiACE web bay card for a
+slot-specific unload on this build. The native source correction is recorded
+in screen_routes.patch against the 02-屏幕层/233-screen tree at
+4edbd50feb36e47d072b5cd4e516b9792b8b4ea9. That source snapshot references
+a compact print tune overlay whose header and implementation are absent.
+A complete source rebuild is needed before claiming the native correction
+on a printer. The colors/RFID display issue remains a separate acceptance item.
+
+For hardware acceptance, record each requested, reported and physically
+moving ACE/slot. With ACE 1 slot 4 feeding head 4, check that the web card
+for ACE 4 slot 4 offers no unload and that unloading the actual source moves
+only ACE 1 slot 4. Check the old and new source on a same-head spool change
+and preserve the command / device reply when a retract ends early.

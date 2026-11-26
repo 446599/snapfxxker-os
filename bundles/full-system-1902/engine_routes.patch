@@ -1,0 +1,365 @@
+--- a/klipper/extras/ace.py
++++ b/klipper/extras/ace.py
+@@ -9559,7 +9559,14 @@
+         except Exception as e:
+             logging.info('[multiACE] send stop_feed_assist to MMU %d failed: %s' % (idx, e))
+ 
+-    def _disable_feed_assist_all(self):
++    def _disable_feed_assist_for_head(self, head):
++        if not self.head_uses_ace(head):
++            return
++        source = self._head_source.get(head) or getattr(self, '_unload_slot_hint', {}).get(head)
++        if source:
++            self._disable_feed_assist_all(only_route=(source['ace_index'], source['slot']))
++
++    def _disable_feed_assist_all(self, only_route=None):
+         def _noop_cb(self, response):
+             if response.get('code', 0) != 0:
+                 self.log_error(self._t('msg.ace_error_generic', error=response.get('msg')))
+@@ -9567,7 +9574,7 @@
+         any_running = False
+         for idx in sorted(list(self._feed_assist_per_ace.keys())):
+             slot = self._feed_assist_per_ace.get(idx, -1)
+-            if slot == -1:
++            if slot == -1 or (only_route is not None and (idx, slot) != only_route):
+                 continue
+ 
+             if not self._connected_per_ace.get(idx, False):
+@@ -9611,8 +9618,10 @@
+             except Exception as e:
+                 logging.info(
+                     '[multiACE] _disable_feed_assist_all: error on idx %d: %s' % (idx, e))
+-        if self._feed_assist_index != -1:
++        if only_route is None:
+             self._feed_assist_index = -1
++        elif only_route[0] == self._active_device_index:
++            self._feed_assist_index = self._feed_assist_per_ace.get(self._active_device_index, -1)
+         if any_running:
+             self.dwell(0.3)
+ 
+@@ -12229,9 +12238,8 @@
+                 % (idx, index, length, resp.get('msg'), attempt + 1,
+                    RETRACT_SEND_RETRIES + 1))
+             if attempt >= RETRACT_SEND_RETRIES:
+-                self.log_error(self._t('msg.ace_error_generic',
+-                                       error=resp.get('msg')))
+-                return True
++                raise self.printer.command_error(self._t('msg.ace_error_generic',
++                                                         error=resp.get('msg')))
+             if self._cap(idx, 'needs_fa_prestop'):
+                 try:
+                     self.send_request_to(idx, {
+@@ -18484,6 +18492,15 @@
+             t_slot = gcmd.get_int('SLOT', None)
+         except Exception:
+             t_ace = t_slot = None
++        if t_ace is not None and t_slot is not None:
++            for entry in pend.values():
++                old = (entry['ace'], entry['slot'])
++                if entry.get('head') == head and old != (t_ace, t_slot):
++                    self._last_load_ok = False
++                    raise gcmd.error(
++                        '[multiACE] Previous retract from MMU %d / Slot %d was interrupted. '
++                        'Recover that bay before loading this one.' %
++                        (self._disp(old[0]), self._disp(old[1])))
+         for key, e in list(pend.items()):
+             if e.get('head') != head:
+                 continue
+@@ -20398,7 +20415,12 @@
+             head = -1
+         if self._manual_op_in_running_print(gcmd, head):
+             return
+-        self._finish_interrupted_retract(gcmd, head)
++        bay_request = gcmd.get('ACE', None) is not None and gcmd.get('SLOT', None) is not None
++        if bay_request and (not 0 <= head <= 3 or not self.head_uses_ace(head)):
++            self._last_load_ok = False
++            raise gcmd.error('[multiACE] Selected head is not MMU-driven')
++        if not bay_request:
++            self._finish_interrupted_retract(gcmd, head)
+         self._loading_heads.add(head)
+         # A load gives the head a mapping; an unload verdict held for it
+         # (no slot to retract) is obsolete from here on.
+@@ -20431,6 +20453,10 @@
+         # Hand feeding without the feeder is the display's own manual-load
+         # mode.
+         self._wait_bg_op(head, gcmd)
++        bay_request = gcmd.get('ACE', None) is not None and gcmd.get('SLOT', None) is not None
++        if bay_request and not self.head_uses_ace(head):
++            self._last_load_ok = False
++            raise gcmd.error('[multiACE] Selected head is not MMU-driven')
+         # Head mode: the head is wired 1:1 to ONE ACE (head_ace_for). Default
+         # a missing ACE to that wiring - NOT to whichever unit happens to be
+         # globally active - and default a missing SLOT via _ace_slot_for_head
+@@ -20453,8 +20479,11 @@
+                     # on with an unloaded head: pause, resumable.
+                     self._mmu_missing_stop(gcmd, ace_index, head,
+                         'MMU %d not available' % self._disp(ace_index))
+-                self.log_always(self._t('msg.ace_not_available',
+-                    ace=self._disp(ace_index)))
++                self._last_load_ok = False
++                msg = self._t('msg.ace_not_available', ace=self._disp(ace_index))
++                if bay_request:
++                    raise gcmd.error(msg)
++                self.log_always(msg)
+                 return
+             if slot < 0 or slot > 3:
+                 raise self._ace_error(gcmd, 'SLOT must be 0-3', code=200,
+@@ -20484,6 +20513,12 @@
+         # load (the feed's pre-poll push seats the tip, its sensor stop
+         # fires immediately, grip/flush run normally); on a mismatch refuse
+         # loudly - two filaments must not share the path.
++        current = self._head_source.get(head)
++        if (bay_request and current
++                and (current.get('ace_index'), current.get('slot')) != (ace_index, slot)
++                and self._head_is_loaded(head)):
++            self._last_load_ok = False
++            raise gcmd.error('[multiACE] Head is already loaded from a different bay')
+         _staged = getattr(self, '_bg_staged', {}).get(head)
+         if _staged is not None and self.head_uses_ace(head):
+             if int(_staged[0]) == int(ace_index) \
+@@ -20519,11 +20554,19 @@
+                 self.log_always(self._t('msg.load_head_already_loaded',
+                     head=self._disp(head)))
+                 return
+-            if self._head_source.get(head) is not None:
++            current = self._head_source.get(head)
++            if current is not None:
++                if bay_request and (current.get('ace_index'), current.get('slot')) != (ace_index, slot):
++                    self._last_load_ok = False
++                    raise gcmd.error('[multiACE] Head is already loaded from a different bay')
+                 self.log_always(self._t('msg.load_head_already_loaded',
+                     head=self._disp(head)))
+                 return
+ 
++            if bay_request and (len(self._ace_devices) != 1 or _hm or slot != head):
++                self._last_load_ok = False
++                raise gcmd.error(self._t('msg.load_head_no_source_recorded',
++                    head=self._disp(head), count=len(self._ace_devices)))
+             if len(self._ace_devices) == 1:
+                 only_idx = 0
+                 info = self._info_per_ace.get(only_idx, self._make_default_info(only_idx))
+@@ -20580,10 +20623,15 @@
+             _gate = (_gates[slot] if _gates is not None and slot < len(_gates)
+                      else self.gate_status[slot])
+             if _gate == GATE_EMPTY:
+-                self.log_always(self._t('msg.load_slot_no_filament',
+-                    ace=self._disp(ace_index), slot=self._disp(slot)))
++                self._last_load_ok = False
++                msg = self._t('msg.load_slot_no_filament', ace=self._disp(ace_index), slot=self._disp(slot))
++                if bay_request:
++                    raise gcmd.error(msg)
++                self.log_always(msg)
+                 return
+ 
++        if bay_request:
++            self._finish_interrupted_retract(gcmd, head)
+         # Log the command's actual selection, not a display's one-based label.
+         logging.info('[multiACE] LOAD_ROUTE head=%d ace=%d slot=%d requested_ace=%s requested_slot=%s',
+                      head, ace_index, slot, gcmd.get('ACE', None), gcmd.get('SLOT', None))
+@@ -20838,8 +20886,15 @@
+         'Usage: ACE_UNLOAD_HEAD HEAD=0 [RETRACT_LENGTH=<mm>] '
+         '[KEEP_HEAT=<temp>] [CALIBRATION_PREPARE=1 ACE=0 SLOT=0]')
+     def cmd_ACE_UNLOAD_HEAD(self, gcmd):
++        head = gcmd.get_int('HEAD')
+         with self._object_exclusion_suspended('ACE_UNLOAD_HEAD'):
+-            return self._cmd_ACE_UNLOAD_HEAD_body(gcmd)
++            try:
++                return self._cmd_ACE_UNLOAD_HEAD_body(gcmd)
++            except Exception:
++                self._last_unload_ok = False
++                raise
++            finally:
++                getattr(self, '_unload_slot_hint', {}).pop(head, None)
+ 
+     def _cmd_ACE_UNLOAD_HEAD_body(self, gcmd):
+ 
+@@ -20884,6 +20939,15 @@
+             selected_source = self._calibration_prepare_unload_source(
+                 gcmd, head, requested_ace, requested_slot)
+         self._wait_bg_op(head, gcmd)
++        if not calibration_prepare and (requested_ace is not None or requested_slot is not None):
++            source = self._head_source.get(head)
++            route = ((source.get('ace_index'), source.get('slot')) if source
++                     else self._bg_staged.get(head))
++            if (requested_ace is None or requested_slot is None
++                    or not self.head_uses_ace(head)
++                    or route != (requested_ace, requested_slot)):
++                self._last_unload_ok = False
++                raise gcmd.error('[multiACE] Selected bay is no longer the source of this head')
+         # Genuinely empty head (no ACE mapping AND toolhead sensor clear) ->
+         # no-op. A stale web queue (e.g. Unload All already cleared it, then a
+         # re-load enqueued an unload-before-load) would otherwise run a real ACE
+@@ -20922,15 +20986,14 @@
+             logging.info(self._t('msg.unload_sensor_no_filament', head=self._raw(head)))
+ 
+         source = self._head_source.get(head)
++        staged = None
+         if source is None:
+-            staged = getattr(self, '_bg_staged', {}).pop(head, None)
++            staged = getattr(self, '_bg_staged', {}).get(head)
+             if staged is not None:
+                 # A bg load abort left this filament STAGED at the sensor
+                 # with no head_source - route the unload to the staged slot
+                 # instead of the armed/first-loaded guess (wrong-slot
+                 # class). The bg-skip flag goes with it.
+-                self._bg_left_empty.discard(head)
+-                self._save_bg_staged()
+                 source = {'ace_index': int(staged[0]), 'slot': int(staged[1])}
+                 # The feed module resolves its retract slot from head_source;
+                 # a staged head has none, so hand it the slot explicitly
+@@ -21103,6 +21166,9 @@
+             if not cancelled:
+                 if calibration_prepare:
+                     self._calibration_unload_finish()
++                if not self._swap_in_progress:
++                    self.gcode.run_script_from_command(
++                        'SET_FILAMENT_SENSOR SENSOR=e%d_filament ENABLE=1' % head)
+                 raise
+         finally:
+             self._retract_length_override = None
+@@ -21155,6 +21221,10 @@
+         if hasattr(self, '_unload_no_mapping'):
+             self._unload_no_mapping.pop(head, None)
+         if unload_verified:
++            if staged is not None and self._bg_staged.get(head) == staged:
++                del self._bg_staged[head]
++                self._bg_left_empty.discard(head)
++                self._save_bg_staged()
+             self._head_source[head] = None
+             self._save_head_source()
+             # A verified unload obsoletes any pending bg pick-check state -
+@@ -21199,6 +21269,11 @@
+         else:
+             self.log_always(self._t('msg.unload_head_success', head=self._disp(head)))
+         self._audit_state('UNLOAD_HEAD', {'head': head})
++        if (not unload_verified and not calibration_prepare
++                and requested_ace is not None and requested_slot is not None):
++            self._last_unload_ok = False
++            raise gcmd.error('[multiACE] Selected bay unload did not finish (%s)' %
++                             self._last_unload_reason)
+ 
+     cmd_ACE_TEST_help = (
+         '[multiACE] Run load/unload test. PLAN items (comma-sep): '
+--- a/klipper/extras/filament_feed_ace.py
++++ b/klipper/extras/filament_feed_ace.py
+@@ -1655,7 +1655,7 @@
+                                 self.channel_error[ch] = FEED_OK
+                             else:
+ 
+-                                self.ace._disable_feed_assist_all()
++                                self.ace._disable_feed_assist_for_head(self.filament_ch[ch])
+                                 self.ace.wait_ace_ready()
+                                 _head_idx = self.filament_ch[ch]
+                                 _ace_slot = self.ace._ace_slot_for_head(_head_idx)
+@@ -2656,7 +2656,7 @@
+                         self.ace._fa_context = 'idle'
+                         self.ace._fa_trace('gate CLOSE (context=idle) via FEED_ACT_LOAD finally')
+                         try:
+-                            self.ace._disable_feed_assist_all()
++                            self.ace._disable_feed_assist_for_head(self.filament_ch[ch])
+                         except Exception as fa_e:
+                             logging.info(
+                                 '[multiACE] FA disable after load failed: %s' % fa_e)
+@@ -2700,7 +2700,7 @@
+                             '[multiACE] V2 arm FA for FEED_ACT_UNLOAD failed: %s' % fa_e)
+ 
+                 if self.ace is not None:
+-                    self.ace._disable_feed_assist_all()
++                    self.ace._disable_feed_assist_for_head(self.filament_ch[ch])
+ 
+                 self.exception_code[ch] = 70
+                 if stage not in [None, FEED_UNLOAD_STAGE_PREPARE, FEED_UNLOAD_STAGE_DOING,
+@@ -2883,14 +2883,16 @@
+                                          or {}).get(head_idx)
+                                 if _hint:
+                                     source = _hint
+-                            if source and source['ace_index'] != self.ace._active_device_index:
+-                                logging.info('[multiACE] FEED_AUTO UNLOAD: switching to MMU %d for retract' % source['ace_index'])
+-                                self.ace._switch_ace_for_head_target(source['ace_index'])
++                            retract_ace = source['ace_index'] if source else self.ace._active_device_index
++                            if retract_ace != self.ace._active_device_index:
++                                if not self.ace._switch_ace_for_head_target(retract_ace):
++                                    raise self.printer.command_error('[multiACE] Cannot reach MMU %d for retract' %
++                                                                     self.ace._disp(retract_ace))
+ 
+                             unload_max = self.ace.unload_retry if self.ace is not None else 3
+                             unload_ok = False
+                             unload_reason = 'toolhead'
+-                            _ace_slot = (_hint['slot'] if _hint
++                            _ace_slot = (source['slot'] if source
+                                          else self.ace._ace_slot_for_head(head_idx))
+                             if _ace_slot != head_idx:
+                                 logging.info(
+@@ -2989,10 +2991,10 @@
+                                 self.ace.wait_ace_ready()
+                                 _smseq = self._unit_motion_seq()
+                                 _usp = self.ace._retract_with_decoder_span(
+-                                    self.ace._active_device_index, _ace_slot,
++                                    retract_ace, _ace_slot,
+                                     lambda: self.ace._retract(
+                                         _ace_slot, _short_retract,
+-                                        _retract_speed, head=head_idx))
++                                        _retract_speed, head=head_idx, ace=retract_ace))
+                                 self.ace.wait_ace_ready()
+                                 self.ace._check_calibration_unload_cancel()
+                                 self._unload_dec_log(
+@@ -3185,10 +3187,10 @@
+                                     _rmseq = self._unit_motion_seq()
+                                     _rest_t0 = self.reactor.monotonic()
+                                     _rsp = self.ace._retract_with_decoder_span(
+-                                        self.ace._active_device_index, _ace_slot,
++                                        retract_ace, _ace_slot,
+                                         lambda: self.ace._retract(
+                                             _ace_slot, _rest,
+-                                            _retract_speed, head=head_idx))
++                                            _retract_speed, head=head_idx, ace=retract_ace))
+                                     self.ace.wait_ace_ready()
+                                     self.ace._check_calibration_unload_cancel()
+                                     self.ace._dwell_fan(False)
+@@ -3404,14 +3406,16 @@
+                                          or {}).get(head_idx)
+                                 if _hint:
+                                     source = _hint
+-                            if source and source['ace_index'] != self.ace._active_device_index:
+-                                logging.info('[multiACE] FEED_AUTO UNLOAD: switching to MMU %d for retract' % source['ace_index'])
+-                                self.ace._switch_ace_for_head_target(source['ace_index'])
++                            retract_ace = source['ace_index'] if source else self.ace._active_device_index
++                            if retract_ace != self.ace._active_device_index:
++                                if not self.ace._switch_ace_for_head_target(retract_ace):
++                                    raise self.printer.command_error('[multiACE] Cannot reach MMU %d for retract' %
++                                                                     self.ace._disp(retract_ace))
+ 
+                             unload_max = self.ace.unload_retry if self.ace is not None else 3
+                             unload_ok = False
+                             unload_reason = 'toolhead'
+-                            _ace_slot = (_hint['slot'] if _hint
++                            _ace_slot = (source['slot'] if source
+                                          else self.ace._ace_slot_for_head(head_idx))
+                             if _ace_slot != head_idx:
+                                 logging.info(
+@@ -3510,10 +3514,10 @@
+                                 self.ace.wait_ace_ready()
+                                 _smseq = self._unit_motion_seq()
+                                 _usp = self.ace._retract_with_decoder_span(
+-                                    self.ace._active_device_index, _ace_slot,
++                                    retract_ace, _ace_slot,
+                                     lambda: self.ace._retract(
+                                         _ace_slot, _short_retract,
+-                                        _retract_speed, head=head_idx))
++                                        _retract_speed, head=head_idx, ace=retract_ace))
+                                 self.ace.wait_ace_ready()
+                                 self.ace._check_calibration_unload_cancel()
+                                 self._unload_dec_log(
+@@ -3706,10 +3710,10 @@
+                                     _rmseq = self._unit_motion_seq()
+                                     _rest_t0 = self.reactor.monotonic()
+                                     _rsp = self.ace._retract_with_decoder_span(
+-                                        self.ace._active_device_index, _ace_slot,
++                                        retract_ace, _ace_slot,
+                                         lambda: self.ace._retract(
+                                             _ace_slot, _rest,
+-                                            _retract_speed, head=head_idx))
++                                            _retract_speed, head=head_idx, ace=retract_ace))
+                                     self.ace.wait_ace_ready()
+                                     self.ace._check_calibration_unload_cancel()
+                                     self.ace._dwell_fan(False)

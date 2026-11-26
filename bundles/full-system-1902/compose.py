@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import tarfile
 from screen_compat import patch_engine, patch_web
 
@@ -14,7 +15,7 @@ BASE_PROVIDER = '1.27b-233.20261122-flow.15.112'
 BASE_PROVIDER_SHA = '0d21c8d2d4b4477c68588c075a68c9b645d3892e72b4b6befa44ccd4f6957b25'
 FIELD_VERSION = '1.90.2-233.20261126'
 FIELD_SHA = 'd16535002703f19f43282c990385c1810c48d63a1d0ebff0d25335d924c9faea'
-PROVIDER = FIELD_VERSION + '-paxx.4'
+PROVIDER = FIELD_VERSION + '-paxx.5'
 APP_ROOT = '/userdata/233-apps/multiace'
 APP = APP_ROOT + '/latest'
 
@@ -160,11 +161,19 @@ def compose(root, field, common_source, work):
     field_engine_hash = sha(engine)
     require('SharedAce2Discovery' in engine.read_text() and 'official or explicitly_configured' in engine.read_text(), 'field discovery patch missing')
     engine.write_text(patch_engine(patch_preload(engine.read_text())))
-    engine_hash = sha(engine)
     web = new / 'web/backend/main.py'
     field_web_hash = sha(web)
     web.write_text(patch_web(web.read_text()))
+    for patch in ('engine_routes.patch', 'web_routes.patch'):
+        subprocess.run(['patch', '--batch', '--fuzz=0', '--no-backup-if-mismatch', '-p1',
+                        '-i', str(Path(__file__).resolve().with_name(patch))], cwd=new, check=True)
+    engine_hash = sha(engine)
     web_hash = sha(web)
+    route_files = ('klipper/extras/ace.py', 'klipper/extras/filament_feed_ace.py',
+                   'web/backend/main.py', 'web/frontend/app.js', 'web/frontend/index.html')
+    for name in route_files:
+        if name.endswith('.py'):
+            compile((new / name).read_text(), name, 'exec')
     # Keep the field-tested 1.90.2 code; carry over only offline libraries and
     # optional MCU image files, never the old backend or Klipper Python modules.
     oldvendor = old / 'web/backend/vendor'
@@ -271,7 +280,8 @@ def compose(root, field, common_source, work):
               'provider_sha256': digest, 'field_archive_sha256': FIELD_SHA,
               'field_engine_sha256': field_engine_hash, 'engine_sha256': engine_hash,
               'field_web_sha256': field_web_hash, 'web_sha256': web_hash, 'provider_install_root': APP_ROOT, 'required_files': required,
-              'scope': 'PAXX/233 test candidate; existing screen and non-root partitions unchanged; no MCU flash',
+              'scope': 'U1 1902.5 web and engine routing candidate; retains the base screen binary; hardware acceptance pending',
+              'route_file_sha256': {name: sha(new / name) for name in route_files},
               'hardware_verified': False}
     (work / 'composition.json').write_text(json.dumps(result, indent=2)+'\n')
     print(json.dumps(result, indent=2))

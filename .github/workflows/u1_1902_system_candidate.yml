@@ -11,7 +11,7 @@ concurrency:
 jobs:
   candidate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Install host build tools
@@ -23,6 +23,18 @@ jobs:
           bash -n bundles/full-system-1902/build.sh
           python3 -m unittest discover -s bundles/full-system-1902 -v
           sh bundles/multiace-190/test_paxx_1902_mounts.sh
+      - name: Compile and test the maintained screen route changes on the build host
+        run: |
+          set -euo pipefail
+          pin=4edbd50feb36e47d072b5cd4e516b9792b8b4ea9
+          screen="$RUNNER_TEMP/233-screen"
+          mkdir -p "$screen"
+          git fetch --quiet --depth=1 origin "$pin"
+          git archive "$pin:02-屏幕层/233-screen" | tar -x -C "$screen"
+          git -C "$screen/lib/lvgl" apply --include=src/misc/lv_helix_thread_check.h ../../patches/lvgl_thread_check_hook.patch
+          git -C "$screen/lib/libhv" apply --include=base/dns_resolv.c --include=base/dns_resolv.h ../../patches/libhv-dns-resolver-fallback.patch
+          patch -d "$screen" --batch --fuzz=0 -p1 < bundles/full-system-1902/screen_routes.patch
+          bash bundles/full-system-1902/test_screen_routes.sh "$screen"
       - name: Fetch exact released base firmware
         run: |
           mkdir -p inputs
@@ -36,9 +48,11 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" output
           git rev-parse HEAD > output/SOURCE_COMMIT.txt
           (cd output && sha256sum -c SHA256SUMS.txt)
+          cat output/SHA256SUMS.txt
+          cat output/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: U1-233-1902.4-candidate
+          name: U1-233-1902.5-candidate
           path: output/
           if-no-files-found: error
           compression-level: 0

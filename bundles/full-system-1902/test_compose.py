@@ -93,12 +93,14 @@ class CompositionTest(unittest.TestCase):
                 write(field, 'klipper/' + row.split()[0], '# field module\n')
             engine = write(field, 'klipper/extras/ace.py', field_text('klipper/extras/ace.py'))
             expected_engine = c.sha(engine)
-            for rel in ('config/extended/multiace/ace_vars.cfg','tools/merge_ace_cfg.py','tools/post_process_virtual_toolheads.py','web/backend/requirements.txt','web/frontend/index.html','web/backend/ace2k_flasher.py'):
+            for rel in ('config/extended/multiace/ace_vars.cfg','tools/merge_ace_cfg.py','tools/post_process_virtual_toolheads.py','web/backend/requirements.txt','web/backend/ace2k_flasher.py'):
                 write(field, rel, '# field file\n')
             write(field, 'VERSION', c.FIELD_VERSION+'\n')
             write(field, 'config/extended/ace.cfg', '[ace]\nenable_ace2k: true\nlanguage: zh\n')
             write(field, 'web/backend/vendor/ace2k_flash.pyz', 'new tool')
-            write(field, 'web/backend/main.py', field_text('web/backend/main.py'))
+            for rel in ('web/backend/main.py', 'web/frontend/app.js', 'web/frontend/index.html',
+                        'klipper/extras/filament_feed_ace.py'):
+                write(field, rel, field_text(rel))
             fieldpkg = tar(field, p/'field.tar.gz')
             with patch.object(c, 'BASE_PROVIDER_SHA', oldhash), patch.object(c, 'FIELD_SHA', c.sha(fieldpkg)), contextlib.redirect_stdout(io.StringIO()):
                 new = c.compose(root, fieldpkg, common_path, work)
