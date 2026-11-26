@@ -11,8 +11,8 @@
         "        if (ace2k_rfid_watch_bit(in->moving, lane) || ace2k_rfid_watch_bit(in->loading, lane)) {\n"
       ],
       [
-        " * in use still long enough. */",
-        " * on both lanes still long enough. */"
+        "/* The reader can take a tie-break: alive, no session or read on command on it, and its lanes not\n * in use still long enough. */",
+        "/* The reader can take a tie-break: alive, no session or read on command on it, and both lanes\n * still long enough. */"
       ],
       [
         "    uint8_t n = ace2k_rfid_neighbour(lane);\n    return (bool)(ace2k_rfid_watch_bit(idle_mask, n) || ace2k_rfid_watch_bit(in_use, n));",
@@ -58,6 +58,10 @@
   [
     "firmware/src/ace2k/feed/feed_start.c",
     [
+      [
+        "#include \"feed/feed_internal.h\"\n",
+        "#include \"feed/feed_internal.h\"\n#include \"rfid/watch.h\" /* ace2k_rfid_neighbour */\n"
+      ],
       [
         "    /* An accepted host start on the lane ends its grip.  It is cleared before the start, so that a",
         "    /* A bounded host move must not overlap the same reader's autonomous return.\n     * The existing BUSY retry for feed/retract can start it after the search is home. */\n    if (cmd == ACE2K_FEED_CMD_FEED || cmd == ACE2K_FEED_CMD_ROLLBACK ||\n        cmd == ACE2K_FEED_CMD_UNLOAD) {\n        const uint8_t neighbour = ace2k_rfid_neighbour(lane);\n        if (ace2k_feed_tiebreak_on(&self->l[neighbour])) {\n            ace2k_feed_load_preempt(self, neighbour, now_ms);\n            return ACE2K_FEED_REFUSED_BUSY;\n        }\n    }\n    /* An accepted host start on the lane ends its grip.  It is cleared before the start, so that a"
