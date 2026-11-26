@@ -16,11 +16,22 @@ class ReaderHold:
     after: float
 
 
+@dataclass(frozen=True)
+class QuietLaneHold:
+    token: str
+    lane: int
+    raw: object
+    uid: bytes
+    epoch: str
+    after: float
+
+
 class NativeExitLinkGuard:
     def __init__(self, link):
         self.link = link
         self.epoch = uuid.uuid4().hex
         self._holds = {}
+        self._quiet = {}
         self._samples = {}
         self._post = {}
         self._invalid = False
@@ -36,10 +47,79 @@ class NativeExitLinkGuard:
                 and link._dead is None and link._shutdown is None)
 
     def blocked(self, lane):
-        return type(lane) is int and 0 <= lane < 4 and lane // 2 in self._holds
+        return (type(lane) is int and 0 <= lane < 4
+                and (lane // 2 in self._holds or lane in self._quiet))
 
     def mask(self):
-        return sum(3 << (2 * group) for group in self._holds)
+        return (sum(3 << (2 * group) for group in self._holds)
+                | sum(1 << lane for lane in self._quiet))
+
+    def reserve_quiet_lane(self, token, lane):
+        """Protect a different unit's same-head lane, no motion or G-code.
+
+        Coordinator must hold the persistent physical route, serialize all
+        callers and acquire all required lanes before issuing native UNLOAD.
+        Caller must also obtain fresh stationary reports after each mask ACK.
+        """
+        link = self.link
+        with link._io:
+            if (not isinstance(token, str) or not token
+                    or type(lane) is not int or not 0 <= lane < 4
+                    or not self.live() or len(bytes(link.uid)) != 12 or not any(link.uid)
+                    or not link._lane_report() or link._in_use is None
+                    or self.blocked(lane) or link._in_use & (1 << lane)
+                    or any(lane in owners for owners in (link._jobs, link._follow,
+                        link._follow_want, link._tag_reads, link._sessions,
+                        getattr(link, '_native_unload_owners', {})))):
+                raise RuntimeError('shared head lane unavailable')
+            modes = link._feed[1].get('mode', ()) if link._fresh(link._feed) else ()
+            if len(modes) != 4 or modes[lane] != 0:
+                raise RuntimeError('shared head lane not idle')
+            hold = QuietLaneHold(token, lane, link._raw, bytes(link.uid), self.epoch, link._now())
+            self._quiet[lane] = hold
+            try:
+                link._in_use_sent = (0.0, None)
+                link._lanes_tick(link._now())
+                sent_at, mask = link._in_use_sent
+                if mask is None or not mask & (1 << lane) or sent_at < hold.after:
+                    raise RuntimeError('shared head lane mask not acknowledged')
+                hold = QuietLaneHold(token, lane, link._raw, bytes(link.uid), self.epoch, link._now())
+                self._quiet[lane] = hold
+                return hold
+            except BaseException:
+                # No native motion sent by this reservation; never authorize
+                # any start based on an unsuccessful mask exchange.
+                del self._quiet[lane]
+                raise
+
+    def _same_quiet(self, hold):
+        return (isinstance(hold, QuietLaneHold) and self.live()
+                and self._quiet.get(hold.lane) is hold and hold.epoch == self.epoch
+                and self.link._raw is hold.raw and bytes(self.link.uid) == hold.uid)
+
+    def quiet_sample(self, hold):
+        from .ace_protocol import native_sample
+        link = self.link
+        with link._io:
+            if not self._same_quiet(hold):
+                return None
+            _, mask = link._in_use_sent
+            if mask is None or not mask & (1 << hold.lane):
+                return None
+            return native_sample(link._evidence_sensors, link._feed,
+                                 link._evidence_enc, link._fg, hold.lane,
+                                 link._now(), after=hold.after)
+
+    def release_quiet_lane(self, hold, *, token):
+        """Coordinator-only; caller verifies no dispatch or completed route.
+
+        No timeout release, stale token, or release on a replaced connection.
+        Durable recovery on a dead link belongs to the host coordinator.
+        """
+        with self.link._io:
+            if not self._same_quiet(hold) or hold.token != token:
+                raise RuntimeError('stale shared head reservation')
+            del self._quiet[hold.lane]
 
     def _current(self, hold):
         link = self.link
@@ -67,7 +147,7 @@ class NativeExitLinkGuard:
             group = op.lane // 2
             pair = (2 * group, 2 * group + 1)
             mask = 3 << (2 * group)
-            if group in self._holds or link._in_use & mask or any(
+            if any(self.blocked(lane) for lane in pair) or link._in_use & mask or any(
                     lane in owners for lane in pair for owners in (
                         link._jobs, link._follow, link._follow_want, link._tag_reads,
                         link._sessions, getattr(link, '_native_unload_owners', {}))):
@@ -142,7 +222,7 @@ class NativeExitLinkGuard:
     def observe(self, event, received_at):
         """Real RX dispatch hook; consume only this exact native event."""
         lane = event.get('lane') if isinstance(event, dict) else None
-        if not self.blocked(lane):
+        if type(lane) is not int or not 0 <= lane < 4 or lane // 2 not in self._holds:
             return False
         hold = self._holds[lane // 2]
         wire = hold.wire

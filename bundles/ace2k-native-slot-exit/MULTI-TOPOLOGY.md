@@ -19,3 +19,14 @@ and apply them through the shared ownership coordinator, host motion
 entrances and native links before permitting a start, including reconnect
 recovery. No deployment or change to the MCU, RFID algorithm or saved
 filament configuration. Physical parked/clear-route evidence is still needed.
+
+Cross-unit primitive: NativeExitLinkGuard now accepts a token-bound quiet
+reservation for a peer unit's same-head lane under its existing I/O lock.
+Its mask is merged with the native reader-pair mask, and the real driver
+guards both ordinary and automatic lane starts. It refuses busy or
+unacknowledged reservations, reads fresh same-link lane samples and rejects
+stale release tokens and replaced transport. The coordinator must collect
+all peer reservations, verify standstill, persist ownership, and then
+perform the selected native exit. The individual quiet hold does NOT
+perform that orchestration or prove physical parking. Tests run against
+the exported/pinned field driver. No production installation.

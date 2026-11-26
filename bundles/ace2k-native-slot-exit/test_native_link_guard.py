@@ -195,6 +195,55 @@ class NativeDriverGuardTests(unittest.TestCase):
         self.link.dictionary.encode.assert_called_with('ace2k_feed_stop',lane=0)
         self.assertTrue(self.guard.blocked(0))
 
+    def test_other_unit_same_head_is_quiet_without_blocking_peer(self):
+        hold = self.guard.reserve_quiet_lane('task-A', 0)
+        self.assertEqual(self.guard.mask(), 1)
+        self.assertTrue(self.guard.blocked(0))
+        self.assertFalse(self.guard.blocked(1))
+        self.link._xfer.reset_mock()
+        self.assertEqual(self.link._start(0,0,100,30), (None,'busy'))
+        self.assertEqual(self.link._tag_read_load({'index':0},1)['code'],1)
+        self.link._xfer.assert_not_called()
+        self.assertIsNone(self.guard.quiet_sample(hold))
+        self.report(11)
+        a = self.guard.quiet_sample(hold)
+        self.report(12)
+        b = self.guard.quiet_sample(hold)
+        from field_native_guard_test.ace_protocol import still
+        self.assertTrue(still(a,b))
+        self.assertFalse(self.guard.observe({'lane':0,'kind':6},12))
+        self.link._xfer.return_value = {'accepted':1,'lane':1,'reason':0}
+        self.assertEqual(self.link._start(1,0,100,30),(17,'ok'))
+        with self.assertRaises(RuntimeError):
+            self.guard.release_quiet_lane(hold,token='wrong')
+        self.guard.release_quiet_lane(hold,token='task-A')
+        self.assertFalse(self.guard.blocked(0))
+
+    def test_shared_head_hold_conflicts_with_native_pair_on_same_unit(self):
+        hold = self.guard.reserve_quiet_lane('task-A', 0)
+        with self.assertRaises(RuntimeError):
+            self.guard.reserve(self.wire(1))
+        with self.assertRaises(RuntimeError):
+            self.guard.reserve_quiet_lane('task-B',0)
+        other = self.guard.reserve(self.wire(2))
+        self.assertEqual(self.guard.mask(),13)
+        self.guard.release_before_start(other)
+        self.guard.release_quiet_lane(hold,token='task-A')
+
+    def test_quiet_hold_lost_mask_ack_and_replacement(self):
+        self.link._xfer.return_value = None
+        with self.assertRaises(RuntimeError):
+            self.guard.reserve_quiet_lane('task-A',0)
+        self.assertEqual(self.guard.mask(),0)
+        self.link._xfer.return_value = True
+        hold = self.guard.reserve_quiet_lane('task-A',0)
+        self.report(11)
+        self.assertIsNotNone(self.guard.quiet_sample(hold))
+        self.link._raw = types.SimpleNamespace(is_open=True)
+        self.assertIsNone(self.guard.quiet_sample(hold))
+        with self.assertRaises(RuntimeError):
+            self.guard.release_quiet_lane(hold,token='task-A')
+
     def test_last_query_is_same_lane_and_does_not_fake_success(self):
         hold = self.guard.reserve(self.wire())
         self.report(11)
