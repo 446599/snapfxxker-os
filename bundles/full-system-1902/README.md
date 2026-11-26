@@ -36,10 +36,9 @@ sudo bash bundles/full-system-1902/build.sh /path/to/exact-base.bin output
 ```
 The build must pass all gates before exposing the final upgrade.bin:
 input hashes, complete runtime mappings, ARM64 offline library import,
-conservative rootfs size limit, unpacked final image and non-root partition
+A/B rootfs partition capacity (512-byte sectors), unpacked final image and non-root partition
 readback, embedded provider checksum, and the actual startup files.
-The three local synthetic composition tests passed; they are not an actual
-firmware build or boot test. No new candidate binary exists until CI succeeds.
+The 3 local synthetic composition tests and 10 capacity tests passed; they are not an actual firmware build or boot test. The first CI run 45746475707 passed software composition and ARM64 dependency checks but stopped at the previous old-image-size gate. The corrected gate derives both slot capacities from the verified base RKAF header (614400 sectors × 512 = 300 MiB each), checks archive padding, and verifies unchanged slot geometry on readback. The output includes rootfs-capacity.json and its SHA256. No new candidate binary exists until CI succeeds.
 
 ## Local test agent contract
 DeepSeek installs only the exact candidate artifact and checks SHA256 first.

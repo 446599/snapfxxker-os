@@ -19,7 +19,8 @@ for tool in make gcc unsquashfs mksquashfs qemu-aarch64-static python3; do comma
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/u1-system-1902.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 make -C "$REPO/tools" -j2
-"$REPO/scripts/helpers/unpack_firmware.sh" "$BASE" "$WORK/input"
+"$REPO/scripts/helpers/unpack_firmware.sh" "$BASE" "$WORK/input" | tee "$WORK/base-unpack.log"
+BASE_ROOTFS_BYTES=$(stat -c '%s' "$WORK/input/rk-unpacked/rootfs.img")
 (cd "$WORK/input/rk-unpacked" && find . -type f ! -path ./rootfs.img -print0 | sort -z | xargs -0 -r sha256sum) > "$WORK/base-partitions.sha256"
 ROOT="$WORK/rootfs"
 unsquashfs -d "$ROOT" "$WORK/input/rk-unpacked/rootfs.img"
@@ -39,15 +40,16 @@ cp -a "$WORK/field-provider/." "$SMOKE/provider"
 PROVIDER_PATH=$(find "$SMOKE/provider" -mindepth 1 -maxdepth 1 -type d -printf '%f\n')
 chroot "$ROOT" /233-1902-buildcheck/qemu /usr/bin/python3 -B -c "import sys;sys.path.insert(0,'/233-1902-buildcheck/provider/$PROVIDER_PATH/web/backend/vendor');import fastapi,uvicorn,httpx,pydantic,websockets,multipart,serial;print('ARM64 offline dependencies imported')"
 rm -rf "$SMOKE"
-# Preserve all other partitions, ownership and file types. Conservative size
-# gate: do not produce a larger rootfs than this exact released base.
+# Preserve all other partitions, ownership and file types. The RKAF header
+# reports A/B partition sizes in 512-byte sectors, not old image bytes.
 mksquashfs "$ROOT" "$WORK/rootfs-new.img" -comp zstd -noappend -processors 2
-[[ $(stat -c '%s' "$WORK/rootfs-new.img") -le $(stat -c '%s' "$WORK/input/rk-unpacked/rootfs.img") ]] || { echo 'rootfs grew; verify partition capacity before building' >&2; exit 1; }
+python3 "$HERE/rootfs_capacity.py" "$WORK/base-unpack.log" "$BASE_ROOTFS_BYTES" "$WORK/rootfs-new.img"
 mv "$WORK/rootfs-new.img" "$WORK/input/rk-unpacked/rootfs.img"
 printf '%s\n' "$VERSION" > "$WORK/input/UPFILE_VERSION"
 "$REPO/scripts/helpers/pack_firmware.sh" "$WORK/input" "$WORK/$FILE"
 # Read back the actual final file, not merely the staging folder.
-"$REPO/scripts/helpers/unpack_firmware.sh" "$WORK/$FILE" "$WORK/readback"
+"$REPO/scripts/helpers/unpack_firmware.sh" "$WORK/$FILE" "$WORK/readback" | tee "$WORK/readback-unpack.log"
+python3 "$HERE/rootfs_capacity.py" "$WORK/base-unpack.log" "$BASE_ROOTFS_BYTES" "$WORK/readback/rk-unpacked/rootfs.img" --readback-log "$WORK/readback-unpack.log" --report "$WORK/rootfs-capacity.json"
 [[ $(cat "$WORK/readback/UPFILE_VERSION") == "$VERSION" ]]
 diff -r "$WORK/input/rk-unpacked" "$WORK/readback/rk-unpacked"
 (cd "$WORK/readback/rk-unpacked" && sha256sum -c "$WORK/base-partitions.sha256")
@@ -62,6 +64,7 @@ for path in usr/local/share/multiace/common.sh etc/hooks/klipper.d/10-multiace.s
     unsquashfs -cat "$READBACK" "$path" | cmp - "$ROOT/$path"
 done
 cp "$WORK/composition.json" "$OUT/composition.json"
+cp "$WORK/rootfs-capacity.json" "$OUT/rootfs-capacity.json"
 mv "$WORK/$FILE" "$OUT/$FILE"
-(cd "$OUT" && sha256sum "$FILE" composition.json > SHA256SUMS.txt)
+(cd "$OUT" && sha256sum "$FILE" composition.json rootfs-capacity.json > SHA256SUMS.txt)
 echo "Candidate built and readback checked: $OUT/$FILE (not hardware-validated)"
