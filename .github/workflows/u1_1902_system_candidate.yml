@@ -1,12 +1,12 @@
 name: Build U1 233 1.90.2 system candidate
 on:
   push:
-    branches: [build/u1-1902-candidate]
+    branches: [build/u1-1902-filament-save]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: u1-1902-system-candidate
+  group: u1-1902-filament-save
   cancel-in-progress: true
 jobs:
   candidate:
@@ -52,7 +52,7 @@ jobs:
           cat output/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: U1-233-1902.5-candidate
+          name: U1-233-1902.7-filament-save-candidate
           path: output/
           if-no-files-found: error
           compression-level: 0

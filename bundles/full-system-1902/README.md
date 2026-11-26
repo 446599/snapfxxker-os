@@ -97,3 +97,8 @@ moving ACE/slot. With ACE 1 slot 4 feeding head 4, check that the web card
 for ACE 4 slot 4 offers no unload and that unloading the actual source moves
 only ACE 1 slot 4. Check the old and new source on a same-head spool change
 and preserve the command / device reply when a retract ends early.
+
+
+## 1902.7 manual filament persistence candidate (RFID work deferred)
+
+This candidate is based on 1902.5, not the optional 1902.6 MCU work. It retains the released screen binary, previous provider storage migration and existing motion/route fixes. It does not change any ACE MCU binary, serial protocol, RFID session, UID attribution, decoder, feed or retract function. The released screen reads ace.aces[].slots, while its POST writes the manual override file. Publish that manual label in the serialized slot status, preserve the original tag identity separately for the web parser, and refresh on changed values as well as added/deleted keys. A disconnected/default empty bay does not erase a saved label: require a connected unit's observed present-to-empty transition with the existing debounce. A fresh manual save cancels a pending eject; write failure remains an HTTP error. Existing remember-filament policy on a genuine eject and subsequent RFID refill is retained. Tests execute extracted functions against the pinned field archive; physical verification and actual provider/HTTP/file checks remain mandatory. No MCU flash is part of this work.
