@@ -18,3 +18,15 @@ jobs:
           python3 -m unittest discover -s bundles/multiace-190 -p 'test_lane*.py' -v
       - name: Check unchanged full-system composition
         run: python3 -m unittest discover -s bundles/full-system-1902 -v
+      - name: Verify native screen batch selection and pinned source patch
+        run: |
+          set -euo pipefail
+          d=bundles/ace2k-native-slot-exit
+          g++ -std=c++17 -Wall -Wextra -Werror "$d/test_screen_batch_selection.cpp" -o "$RUNNER_TEMP/screen-batch"
+          "$RUNNER_TEMP/screen-batch"
+          pin=4edbd50feb36e47d072b5cd4e516b9792b8b4ea9
+          screen="$RUNNER_TEMP/233-batch-screen"
+          mkdir -p "$screen"
+          git fetch --quiet --depth=1 origin "$pin"
+          git archive "$pin:02-屏幕层/233-screen" include/u1_filament_overview.h src/ui/filament/u1_filament_overview.cpp | tar -x -C "$screen"
+          python3 "$d/patch_batch_screen.py" "$screen"
