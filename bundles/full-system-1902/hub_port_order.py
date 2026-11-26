@@ -36,6 +36,11 @@ METHOD = '''    def _order_hub_ports(self, scan):
                                    'kind': self._unit_kind_of_path(path)}
         places = [None] * MAX_ACE_UNITS
         ordered = []
+        # Retain names for missing units, but never infer their socket from
+        # the old UID-based index. The absent sentinel names the socket.
+        missing = {(e or {}).get('key'): e for e in previous
+                   if e and e.get('key') and e['key'] not in keys
+                   and e['key'] not in self._unit_excluded}
         for i in range(MAX_ACE_UNITS):
             if i in assigned:
                 path = assigned[i]
@@ -46,11 +51,10 @@ METHOD = '''    def _order_hub_ports(self, scan):
             else:
                 old = previous[i] if i < len(previous) else None
                 key = (old or {}).get('key') or ''
-                if key and key not in keys and key not in self._unit_excluded:
-                    places[i] = old
-                    ordered.append(ABSENT_UNIT_PREFIX + key)
-                else:
-                    ordered.append(FREE_UNIT_PATH)
+                if key not in missing:
+                    key = next(iter(missing), '')
+                places[i] = missing.pop(key, None)
+                ordered.append(ABSENT_UNIT_PREFIX + 'port:' + os.path.basename(paths[i]))
         if places != self._unit_places:
             self._unit_places = places
             self._save_unit_places('assigned by USB socket')
@@ -82,6 +86,17 @@ def patch_engine(text):
         """    def cmd_ACE_UNIT_ASSIGN(self, gcmd):
         if self._hub_port_order:
             raise self._ace_error(gcmd, '[multiACE] ACE numbering is fixed by hub_port_order', 200)
+""")
+    text = replace_once(text, "        for i, ent in enumerate(places):\n            key = (ent or {}).get('key') or ''\n            if not key:\n",
+        """        for i, ent in enumerate(places):
+            if (self._hub_port_order and
+                    (i >= len(self._ace_devices) or not self._unit_is_real(i))):
+                socket = os.path.basename(self._hub_port_order[i])
+                out.append({'place': i, 'key': 'port:' + socket, 'name': '', 'kind': '',
+                            'path': socket, 'present': False, 'connected': False, 'removed': False})
+                continue
+            key = (ent or {}).get('key') or ''
+            if not key:
 """)
     text = replace_once(text, "            ('overrides', getattr(self, '_slot_overrides', {}),\n             getattr(self, '_save_slot_overrides', None)),\n",
         """            ('overrides', getattr(self, '_slot_overrides', {}),

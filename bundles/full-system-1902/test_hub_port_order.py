@@ -1,4 +1,5 @@
 import ast
+import json
 import logging
 import os
 from pathlib import Path
@@ -26,11 +27,12 @@ def methods():
     tree = ast.parse(patch_engine(provider_text()))
     cls = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                and any(isinstance(n, ast.FunctionDef) and n.name == '_order_units' for n in node.body))
-    names = {'_order_hub_ports', '_unit_state_join', '_unit_state_split', '_unit_state_remap'}
+    names = {'_order_hub_ports', '_unit_devices_status', '_unit_state_join', '_unit_state_split', '_unit_state_remap', '_reconcile_unit_state'}
     cls = ast.ClassDef(name='Harness', bases=[], keywords=[], decorator_list=[],
                        body=[n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in names])
     tree = ast.fix_missing_locations(ast.Module(body=[cls], type_ignores=[]))
-    ns = {'MAX_ACE_UNITS': 4, 'ABSENT_UNIT_PREFIX': 'absent:', 'FREE_UNIT_PATH': 'free:', 'os': os}
+    ns = {'MAX_ACE_UNITS': 4, 'ABSENT_UNIT_PREFIX': 'absent:', 'FREE_UNIT_PATH': 'free:',
+          'os': os, 'json': json, 'logging': logging}
     exec(compile(tree, '<provider methods>', 'exec'), ns)
     return ns['Harness']
 
@@ -83,8 +85,30 @@ class PortOrderTests(unittest.TestCase):
         obj = self.make(keys)
         obj._unit_places = [{'key': k, 'name': '', 'kind': 'ace2k'} for k in keys]
         result = obj._order_hub_ports([PORTS[0], PORTS[2], PORTS[3]])
-        self.assertEqual(result, [PORTS[0], 'absent:uid:b', PORTS[2], PORTS[3]])
+        self.assertEqual(result, [PORTS[0], 'absent:port:' + os.path.basename(PORTS[1]), PORTS[2], PORTS[3]])
         self.assertEqual(obj._last_scan_place_of_path[PORTS[2]], 2)
+
+    def test_missing_devices_do_not_inherit_previous_uid_positions(self):
+        # The saved UID-based order was [A, B, C, D], while the current
+        # sockets are [D, A, B, C]. Only the last two sockets respond.
+        keys = ['uid:d', 'uid:a', 'uid:b', 'uid:c']
+        obj = self.make(keys)
+        obj._unit_places = [{'key': k, 'name': k, 'kind': 'ace2k'}
+                            for k in ('uid:a', 'uid:b', 'uid:c', 'uid:d')]
+        result = obj._order_hub_ports([PORTS[2], PORTS[3]])
+        self.assertEqual(result[:2], ['absent:port:' + os.path.basename(PORTS[0]),
+                                      'absent:port:' + os.path.basename(PORTS[1])])
+        self.assertEqual(result[2:], list(PORTS[2:]))
+        # Offline names are retained without using a UID as an absent socket.
+        self.assertEqual({e['key'] for e in obj._unit_places if e}, set(keys))
+        obj._ace_devices = result
+        obj._unit_is_real = lambda idx: not result[idx].startswith('absent:')
+        obj._unit_key = lambda idx: keys[idx]
+        obj._connected_per_ace = {2: True, 3: True}
+        status = obj._unit_devices_status()
+        self.assertEqual(status[0]['key'], 'port:' + os.path.basename(PORTS[0]))
+        self.assertFalse(status[0]['present'])
+        self.assertEqual(status[1]['key'], 'port:' + os.path.basename(PORTS[1]))
 
     def test_device_swaps_follow_sockets_but_keep_uid_names(self):
         keys = ['uid:d', 'uid:a', 'uid:b', 'uid:c']
@@ -122,6 +146,32 @@ class PortOrderTests(unittest.TestCase):
                          {'1_0': (1, 'M0'), '2_0': (2, 'M1'),
                           '3_0': (3, 'M2'), '0_0': (0, 'M3')})
         self.assertEqual(writes, [True])
+
+    def test_partial_port_migration_parks_absent_devices_data(self):
+        from types import SimpleNamespace
+        obj = methods()()
+        obj.VARS_UNIT_KEYS, obj.VARS_UNIT_PARKED = 'keys', 'parked'
+        obj._ace_devices = ['absent:port:' + os.path.basename(PORTS[0]),
+                            'absent:port:' + os.path.basename(PORTS[1]),
+                            PORTS[2], PORTS[3]]
+        newkeys = ['port:' + os.path.basename(PORTS[0]), 'port:' + os.path.basename(PORTS[1]),
+                   'uid:b', 'uid:c']
+        obj._unit_key = lambda idx: newkeys[idx]
+        obj.save_variables = SimpleNamespace(allVariables={'keys': {str(i): 'uid:' + v
+                                                                     for i, v in enumerate('abcd')}})
+        obj.save_variable = lambda k, v, write=False: obj.save_variables.allVariables.update({k: v})
+        obj.write_variables = lambda: None
+        obj._unit_state_unpark = lambda *args: None
+        obj._unit_tag_reads_remap = lambda *args: None
+        records = {'%d_0' % i: {'ace': i, 'slot': 0, 'material': v}
+                   for i, v in enumerate('ABCD')}
+        obj._unit_state_stores = lambda: [('overrides', records, lambda: None)]
+        obj._reconcile_unit_state('test partial hub')
+        self.assertEqual(records, {'2_0': {'ace': 2, 'slot': 0, 'material': 'B'},
+                                   '3_0': {'ace': 3, 'slot': 0, 'material': 'C'}})
+        parked = obj.save_variables.allVariables['parked']
+        self.assertEqual(parked['uid:a']['overrides']['0']['material'], 'A')
+        self.assertEqual(parked['uid:d']['overrides']['0']['material'], 'D')
 
     def test_interrupted_retract_follows_its_device(self):
         cls = methods()
