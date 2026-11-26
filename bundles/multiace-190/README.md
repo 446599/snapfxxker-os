@@ -60,9 +60,11 @@ actual ACE4 slots 2/3 isolation tests pass.
 包内 `klipper/extras/` 的 20 个 .py 必须**整目录**同步到
 `/home/lava/klipper/klippy/extras/`，不是只拷 `ace*.py`：
 
-- `filament_feed.py` 是 ACE 感知版（原厂同名文件只有 102 KB、零处 ACE
-  逻辑）。漏装时表现为送料状态机在 `load_prepare` 直接报
-  `no_filament`，且"退出耗材"只做一次短回退。
+- 包内给的是 `filament_feed_ace.py`，必须**改名**安装为
+  `filament_feed.py`（klipper 只按 `[filament_feed ...]` 段名加载）。
+  原厂同名文件只有 102 KB、零处 ACE 逻辑；装错时送料状态机在
+  `load_prepare` 直接报 `no_filament`，"退出耗材"只做一次短回退。
+  用本目录的 `install-to-233.sh` 一次做对。
 - 拷完删 `__pycache__/ace*.pyc`、`__pycache__/filament_feed*.pyc`，
   再 `/etc/init.d/S60klipper restart`。
 - 校准、料号、`ace_vars.cfg` 都在 `/home/lava/printer_data/config/extended/multiace/`，
