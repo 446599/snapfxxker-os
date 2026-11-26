@@ -10,10 +10,32 @@ import struct
 from native_eject_contract import fresh_sample, native_start_fields, outcome, start_gate, terminal_event
 
 
+def start_once(link, fields, pack_block, timeout=0.5):
+    """One Klipper frame, no retransmission after a missing response.
+
+    Uses the existing link's codec and transport sequence. A missing ACK or
+    partial write is uncertain; the caller must STOP and keep the lane held.
+    The caller holds the link's I/O lock.
+    """
+    payload = link.dictionary.encode('ace2k_feed_start', **fields)
+    seq = link.seq
+    frame = bytes([0x7e]) + pack_block(seq, payload)
+    # Once write begins, even an exception can mean the unit saw this seq.
+    # The existing STOP exchange can resynchronize from an explicit NAK.
+    link.seq = (seq + 1) & 0x0f
+    written = link._raw.write(frame)
+    if written != len(frame):
+        raise IOError('partial native UNLOAD start frame')
+    answer, heard = link._wait('ace2k_feed_start_response', seq, timeout)
+    if answer is None and heard is not None and heard != link.seq:
+        link.seq = heard
+    return answer
+
+
 class NativeUnloadWire:
     """One lane on one existing Ace2kLink; never opens another serial port."""
 
-    def __init__(self, link, op, route_valid):
+    def __init__(self, link, op, route_valid, pack_block):
         self.link = link
         self.op = op
         self.uid = bytes(link.uid)
@@ -21,6 +43,7 @@ class NativeUnloadWire:
         self.uid_key = ('uid:' + '-'.join('%08x' % word for word in words)
                         if words and any(words) else '')
         self.route_valid = route_valid
+        self.pack_block = pack_block
         self.state = 'new'
         self.event = None
         self.event_at = None
@@ -87,8 +110,7 @@ class NativeUnloadWire:
             self.state = 'starting'
             self.start_at = self.link._now()
             try:
-                reply = self.link._call('ace2k_feed_start',
-                                        'ace2k_feed_start_response', **fields)
+                reply = start_once(self.link, fields, self.pack_block)
             except Exception as start_error:
                 self.link._lane_seq[lane] = self.op.seq
                 self.state = 'uncertain'

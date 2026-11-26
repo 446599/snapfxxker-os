@@ -16,7 +16,8 @@ native_eject_contract.py is a pure protocol and acceptance contract, not a trans
 `native_unload_wire.py` is an **unwired development prototype**, not a usable
 or deployable motion implementation. It exercises the existing link's
 sequence allocator and transport under its I/O lock, the native UNLOAD fields,
-targeted stop on an uncertain start, terminal-event matching and a single
+a single non-replayed start frame, targeted stop on an uncertain start,
+terminal-event matching and a single
 last-event query. The tests include the real pinned 1.90.2 link class with a
 simulated serial transport. The prototype's per-link reservation is visible
 only to itself: the production driver's normal motion, automatic RFID and

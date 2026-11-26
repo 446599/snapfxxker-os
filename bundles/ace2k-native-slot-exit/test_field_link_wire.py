@@ -40,15 +40,17 @@ class FieldLinkWireTest(unittest.TestCase):
 
     def test_native_start_uses_production_link_sequence_and_report_shape(self):
         now = [10.0]
-        link = self.driver.Ace2kLink(types.SimpleNamespace(is_open=True), clock=lambda: now[0])
+        raw = types.SimpleNamespace(is_open=True, write=Mock(side_effect=lambda data: len(data)))
+        link = self.driver.Ace2kLink(raw, clock=lambda: now[0])
         link.uid = struct.pack('<3I', 1, 2, 3)
-        link.dictionary = types.SimpleNamespace(has=lambda name: True,
+        encode = Mock(return_value=b'payload')
+        link.dictionary = types.SimpleNamespace(has=lambda name: True, encode=encode,
             constant=lambda name, default: {'ACE2K_LANE_SPEED_MIN_UM_S': 9000,
                                              'ACE2K_LANE_SPEED_MAX_UM_S': 80000}.get(name, default))
-        link._call = Mock(return_value={'lane': 2, 'accepted': 1, 'reason': 0})
+        link._wait = Mock(return_value=({'lane': 2, 'accepted': 1, 'reason': 0}, None))
         link._send = Mock(return_value=True)
         op = Operation('uid:00000001-00000002-00000003', 'boot-1', 2, 17, 10.0)
-        wire = NativeUnloadWire(link, op, lambda: True)
+        wire = NativeUnloadWire(link, op, lambda: True, self.driver.klipper_block)
 
         def sample(stamp):
             now[0] = stamp
@@ -64,8 +66,10 @@ class FieldLinkWireTest(unittest.TestCase):
                                     connection_epoch=op.connection_epoch,
                                     speed_um_s=60000), 'started')
         self.assertEqual(link._lane_seq[2], 17)
-        link._call.assert_called_once_with('ace2k_feed_start', 'ace2k_feed_start_response',
+        encode.assert_called_once_with('ace2k_feed_start',
             lane=2, mode=4, length_um=0, speed_um_s=60000, seq=17, free_tip=0)
+        raw.write.assert_called_once_with(b'\x7e' + self.driver.klipper_block(0, b'payload'))
+        link._wait.assert_called_once_with('ace2k_feed_start_response', 0, 0.5)
 
 
 if __name__ == '__main__':
