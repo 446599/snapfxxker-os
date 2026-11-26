@@ -10,22 +10,27 @@ class MultiModeRouteTests(unittest.TestCase):
                 route = multi_exit_route('multi', ace, slot)
                 self.assertEqual(route.head, slot)
                 self.assertTrue(all(route.blocks_motion(a, slot) for a in range(4)))
-                self.assertTrue(route.blocks_motion(ace, slot ^ 1))
-                self.assertEqual(sum(mask.bit_count() for mask in route.masks), 5)
+                self.assertFalse(route.blocks_motion(ace, slot ^ 1))
+                self.assertEqual(sum(mask.bit_count() for mask in route.masks), 4)
 
     def test_every_ordinary_motion_route(self):
         for ace, slot, a, s in itertools.product(range(4), repeat=4):
-            expected = s == slot or (a == ace and s == (slot ^ 1))
+            expected = s == slot
             self.assertEqual(ExitRoute(ace, slot).blocks_motion(a,s), expected)
 
     def test_every_pair_of_exit_plans(self):
         for ace, slot, a, s in itertools.product(range(4), repeat=4):
             first, second = ExitRoute(ace,slot), ExitRoute(a,s)
-            # Even different heads in the same reader pair overlap because
-            # each needs the other's selected-unit peer to stay still.
-            expected = slot // 2 == s // 2
+            expected = slot == s
             self.assertEqual(first.conflicts(second), expected)
             self.assertEqual(second.conflicts(first), expected)
+
+    def test_parked_exits_use_one_lane_and_all_distinct_slots_can_overlap(self):
+        for ace,slot,a,s in itertools.product(range(4),repeat=4):
+            first,second=ExitRoute(ace,slot,True),ExitRoute(a,s,True)
+            self.assertEqual(first.blocks_motion(a,s),(ace,slot)==(a,s))
+            self.assertEqual(first.conflicts(second),(ace,slot)==(a,s))
+            self.assertEqual(first.conflicts(ExitRoute(a,s)),slot==s)
 
     def test_actual_source_never_inferred_from_head(self):
         for ace, slot in itertools.product(range(4), repeat=2):

@@ -1,8 +1,8 @@
 """Explicit U1 Multi-mode topology, NOT a proof of filament position.
 
 Four ACEs, four slots each, slot N reaches head N across all units.
-Indices are zero based. Reserve the target head's path on every unit and
-both lanes of the target unit's RFID reader. Never derive the active source
+Indices are zero based. For a verified parked exit reserve only its lane;
+for a shared head route reserve the matching path on every unit. Never derive the active source
 ACE from the head index. This module plans resources; a host coordinator
 must atomically hold them across all motion entrances before sending a frame.
 """
@@ -17,9 +17,10 @@ def valid_index(value):
 class ExitRoute:
     ace: int
     slot: int
+    parked: bool = False
 
     def __post_init__(self):
-        if not valid_index(self.ace) or not valid_index(self.slot):
+        if not valid_index(self.ace) or not valid_index(self.slot) or type(self.parked) is not bool:
             raise ValueError('ACE and SLOT must be 0..3')
 
     @property
@@ -29,8 +30,8 @@ class ExitRoute:
     @property
     def masks(self):
         common = 1 << self.slot
-        reader = 3 << (2 * (self.slot // 2))
-        return tuple(reader if idx == self.ace else common for idx in range(4))
+        return tuple(common if not self.parked or idx == self.ace else 0
+                     for idx in range(4))
 
     def blocks_motion(self, ace, slot):
         if not valid_index(ace) or not valid_index(slot):
@@ -69,7 +70,7 @@ class ExitRoute:
         return 'selected_head_loaded'
 
 
-def multi_exit_route(mode, ace, slot):
+def multi_exit_route(mode, ace, slot, *, parked=False):
     if mode != 'multi':
         raise ValueError('this topology is only valid in Multi mode')
-    return ExitRoute(ace, slot)
+    return ExitRoute(ace, slot, parked)

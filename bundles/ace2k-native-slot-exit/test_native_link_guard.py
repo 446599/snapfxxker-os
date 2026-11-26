@@ -77,27 +77,28 @@ class NativeDriverGuardTests(unittest.TestCase):
         self.link._dispatch('ace2k_feed_event', {'lane':0,'seq':17,'mode':3,'kind':6})
         self.assertEqual(wire.event['kind'], 6)
         self.assertEqual(wire.event_at, 13)
-        self.assertTrue(self.guard.blocked(1))
+        self.assertFalse(self.guard.blocked(1))
         self.assertFalse(self.guard.blocked(2))
         with self.assertRaises(RuntimeError):
             self.guard.release_before_start(hold)
 
-    def test_pair_conflict_and_other_reader_parallel(self):
+    def test_same_lane_conflicts_but_four_independent_lanes_reserve(self):
         a = self.guard.reserve(self.wire(0))
-        self.assertEqual(self.guard.mask(), 3)
+        self.assertEqual(self.guard.mask(), 1)
         with self.assertRaises(RuntimeError):
-            self.guard.reserve(self.wire(1))
-        b = self.guard.reserve(self.wire(2))
+            self.guard.reserve(self.wire(0))
+        holds = [self.guard.reserve(self.wire(lane)) for lane in (1,2,3)]
         self.assertEqual(self.guard.mask(), 15)
         self.guard.release_before_start(a)
-        self.assertEqual(self.guard.mask(), 12)
-        self.guard.release_before_start(b)
+        self.assertEqual(self.guard.mask(), 14)
+        for hold in holds:
+            self.guard.release_before_start(hold)
         self.assertEqual(self.guard.mask(), 0)
 
-    def test_normal_host_and_auto_motion_blocked_on_pair_only(self):
+    def test_normal_host_and_auto_motion_blocked_on_lane_only(self):
         self.guard.reserve(self.wire(0))
         self.link._xfer.reset_mock()
-        for lane in (0,1):
+        for lane in (0,):
             self.assertEqual(self.link._start(lane,0,100,30), (None,'busy'))
             self.assertEqual(self.link._motion('start_feed_assist',{'index':lane},1)['code'],1)
             self.assertEqual(self.link._tag_read_load({'index':lane},1)['code'],1)
@@ -110,6 +111,34 @@ class NativeDriverGuardTests(unittest.TestCase):
         self.link._xfer.return_value = True
         self.assertTrue(self.link._stop_lane(0))
 
+    def test_four_native_starts_before_any_terminal_event(self):
+        holds = [self.guard.reserve(self.wire(n)) for n in range(4)]
+        self.report(11)
+        for hold in holds:
+            self.assertTrue(self.guard.capture(hold))
+        self.report(12)
+        for n, hold in enumerate(holds):
+            self.link._wait.return_value = ({'lane':n,'accepted':1,'reason':0},None)
+            self.assertEqual(self.guard.start(hold,60000),'started')
+        self.assertEqual(self.raw.write.call_count,4)
+        self.assertEqual(self.guard.mask(),15)
+        self.assertTrue(all(h.wire.event is None for h in holds))
+        self.link._dispatch('ace2k_feed_event', {'lane':1,'seq':17,'mode':3,'kind':6})
+        self.assertEqual(holds[1].wire.event['kind'],6)
+        self.assertTrue(all(holds[n].wire.event is None for n in (0,2,3)))
+
+    def test_neighbour_motion_does_not_block_unload_or_completion(self):
+        hold = self.guard.reserve(self.wire())
+        self.report(11, modes=(0,1,0,0))
+        self.guard.capture(hold)
+        self.report(12, modes=(0,1,0,0),fg=(3,99,5,6))
+        self.assertEqual(self.guard.start(hold,60000),'started')
+        self.link._dispatch('ace2k_feed_event', {'lane':0,'seq':17,'mode':3,'kind':6})
+        self.report(13, switches=14,modes=(0,1,0,0),fg=(3,100,5,6))
+        self.assertTrue(self.guard.capture_after_event(hold))
+        self.report(14, switches=14,modes=(0,1,0,0),fg=(3,101,5,6))
+        self.assertTrue(self.guard.finish(hold,Mock(return_value=True)))
+
     def test_lost_mask_ack_no_start(self):
         self.link._xfer.return_value = None
         with self.assertRaises(RuntimeError):
@@ -117,19 +146,19 @@ class NativeDriverGuardTests(unittest.TestCase):
         self.assertEqual(self.guard.mask(), 0)
         self.raw.write.assert_not_called()
 
-    def test_peer_movement_or_reused_reports_never_starts(self):
+    def test_selected_lane_movement_or_reused_reports_never_starts(self):
         hold = self.guard.reserve(self.wire())
         self.report(11)
         self.guard.capture(hold)
         with self.assertRaises(RuntimeError):
             self.guard.start(hold,60000)
-        self.report(12,fg=(3,5,5,6))
+        self.report(12,fg=(4,4,5,6))
         with self.assertRaises(RuntimeError):
             self.guard.start(hold,60000)
         self.raw.write.assert_not_called()
 
-    def test_queued_peer_and_wrong_connection_refused(self):
-        self.link._follow_want.add(1)
+    def test_queued_selected_lane_and_wrong_connection_refused(self):
+        self.link._follow_want.add(0)
         with self.assertRaises(RuntimeError):
             self.guard.reserve(self.wire())
         self.link._follow_want.clear()
@@ -219,14 +248,14 @@ class NativeDriverGuardTests(unittest.TestCase):
         self.guard.release_quiet_lane(hold,token='task-A')
         self.assertFalse(self.guard.blocked(0))
 
-    def test_shared_head_hold_conflicts_with_native_pair_on_same_unit(self):
+    def test_shared_head_hold_conflicts_only_with_native_same_lane(self):
         hold = self.guard.reserve_quiet_lane('task-A', 0)
         with self.assertRaises(RuntimeError):
-            self.guard.reserve(self.wire(1))
+            self.guard.reserve(self.wire(0))
         with self.assertRaises(RuntimeError):
             self.guard.reserve_quiet_lane('task-B',0)
-        other = self.guard.reserve(self.wire(2))
-        self.assertEqual(self.guard.mask(),13)
+        other = self.guard.reserve(self.wire(1))
+        self.assertEqual(self.guard.mask(),3)
         self.guard.release_before_start(other)
         self.guard.release_quiet_lane(hold,token='task-A')
 

@@ -1,4 +1,4 @@
-"""Driver-side reservation of an ACE2K RFID-reader pair.
+"""Driver-side reservation of one ACE2K lane.
 
 Not a public motion API. A host route coordinator must retain a durable claim
 on the actual tube/heads before calling reserve, and keep it through verified
@@ -9,7 +9,7 @@ import uuid
 
 
 @dataclass(frozen=True)
-class ReaderHold:
+class LaneHold:
     wire: object
     raw: object
     uid: bytes
@@ -48,10 +48,10 @@ class NativeExitLinkGuard:
 
     def blocked(self, lane):
         return (type(lane) is int and 0 <= lane < 4
-                and (lane // 2 in self._holds or lane in self._quiet))
+                and (lane in self._holds or lane in self._quiet))
 
     def mask(self):
-        return (sum(3 << (2 * group) for group in self._holds)
+        return (sum(1 << lane for lane in self._holds)
                 | sum(1 << lane for lane in self._quiet))
 
     def reserve_quiet_lane(self, token, lane):
@@ -124,16 +124,16 @@ class NativeExitLinkGuard:
     def _current(self, hold):
         link = self.link
         wire = hold.wire
-        return (self.live() and self._holds.get(wire.op.lane // 2) is hold
+        return (self.live() and self._holds.get(wire.op.lane) is hold
                 and wire.link is link and link._raw is hold.raw
                 and bytes(link.uid) == hold.uid and wire.op.connection_epoch == self.epoch
                 and wire.op.device_uid == wire.uid_key and wire.route_valid())
 
     def reserve(self, wire):
-        """Hold both reader lanes, acknowledge the MCU mask, then sample anew.
+        """Hold only the requested lane, acknowledge the MCU mask, then sample anew.
 
         Caller has already established actual route and persistent ownership;
-        no current or queued competing motion may exist in this reader group.
+        no current or queued competing motion may exist on this lane.
         No route proof is inferred from inlet state or head numbering.
         """
         link = self.link
@@ -144,29 +144,29 @@ class NativeExitLinkGuard:
                     or wire.state != 'new' or type(op.lane) is not int or not 0 <= op.lane < 4
                     or not link._lane_report() or link._in_use is None):
                 raise RuntimeError('native exit connection or route unavailable')
-            group = op.lane // 2
-            pair = (2 * group, 2 * group + 1)
-            mask = 3 << (2 * group)
+            group = op.lane
+            pair = (op.lane,)
+            mask = 1 << op.lane
             if any(self.blocked(lane) for lane in pair) or link._in_use & mask or any(
                     lane in owners for lane in pair for owners in (
                         link._jobs, link._follow, link._follow_want, link._tag_reads,
                         link._sessions, getattr(link, '_native_unload_owners', {}))):
-                raise RuntimeError('reader pair is in use')
+                raise RuntimeError('lane is in use')
             modes = link._feed[1].get('mode', ()) if link._fresh(link._feed) else ()
             if len(modes) != 4 or any(modes[lane] != 0 for lane in pair):
-                raise RuntimeError('reader pair is not idle')
+                raise RuntimeError('lane is not idle')
             # Publish the hold BEFORE sending the in-use mask, under the same
             # lock as ordinary starts and the automatic driver tick.
-            hold = ReaderHold(wire, link._raw, bytes(link.uid), link._now())
+            hold = LaneHold(wire, link._raw, bytes(link.uid), link._now())
             self._holds[group] = hold
             try:
                 link._in_use_sent = (0.0, None)
                 link._lanes_tick(link._now())
                 sent_at, sent_mask = link._in_use_sent
                 if sent_mask is None or sent_mask & mask != mask or sent_at < hold.after:
-                    raise RuntimeError('reader reservation mask not acknowledged')
+                    raise RuntimeError('lane reservation mask not acknowledged')
                 # The host MUST obtain two independent reports AFTER this ACK.
-                hold = ReaderHold(wire, link._raw, bytes(link.uid), link._now())
+                hold = LaneHold(wire, link._raw, bytes(link.uid), link._now())
                 self._holds[group] = hold
                 self._samples[group] = None
                 return hold
@@ -176,7 +176,7 @@ class NativeExitLinkGuard:
                 del self._holds[group]
                 raise
 
-    def _read_pair(self, hold):
+    def _read_lane(self, hold):
         from .ace_protocol import native_sample
         link = self.link
         lane = hold.wire.op.lane
@@ -185,20 +185,20 @@ class NativeExitLinkGuard:
         pair = tuple(native_sample(link._evidence_sensors, link._feed,
                                    link._evidence_enc, link._fg, n,
                                    link._now(), after=hold.after)
-                     for n in (lane, lane ^ 1))
+                     for n in (lane,))
         return pair if all(s is not None for s in pair) else None
 
     def capture(self, hold):
-        """Capture a fresh pair from the real link, not a caller-supplied sample."""
+        """Capture a fresh lane sample from the real link, not a caller-supplied sample."""
         with self.link._io:
-            pair = self._read_pair(hold)
+            pair = self._read_lane(hold)
             if pair is None:
                 return False
-            self._samples[hold.wire.op.lane // 2] = pair
+            self._samples[hold.wire.op.lane] = pair
             return True
 
     def start(self, hold, speed_um_s):
-        """Start once only after both lanes are still following mask ACK.
+        """Start once only after the selected lane is still following mask ACK.
 
         The host must mark its durable transaction dispatched BEFORE calling
         this method. Failed/uncertain starts retain the host's ownership.
@@ -207,14 +207,14 @@ class NativeExitLinkGuard:
         link = self.link
         with link._io:
             lane = hold.wire.op.lane
-            first = self._samples.get(lane // 2)
-            second = self._read_pair(hold)
+            first = self._samples.get(lane)
+            second = self._read_lane(hold)
             _, mask = link._in_use_sent
             if (first is None or second is None or mask is None
-                    or mask & (3 << (2 * (lane // 2))) != (3 << (2 * (lane // 2)))
+                    or not mask & (1 << lane)
                     or not all(still(a, b) for a, b in zip(first, second))
                     or not second[0].present):
-                raise RuntimeError('reader pair standstill not established')
+                raise RuntimeError('lane standstill not established')
             wire = hold.wire
             return wire.start(first[0], second[0], device_uid=wire.op.device_uid,
                               connection_epoch=self.epoch, speed_um_s=speed_um_s)
@@ -222,9 +222,9 @@ class NativeExitLinkGuard:
     def observe(self, event, received_at):
         """Real RX dispatch hook; consume only this exact native event."""
         lane = event.get('lane') if isinstance(event, dict) else None
-        if type(lane) is not int or not 0 <= lane < 4 or lane // 2 not in self._holds:
+        if type(lane) is not int or not 0 <= lane < 4 or lane not in self._holds:
             return False
-        hold = self._holds[lane // 2]
+        hold = self._holds[lane]
         wire = hold.wire
         # Do not require the route to still be safe to RECORD a terminal event.
         # A route failure must block success/release, never hide a STOP/fault.
@@ -237,7 +237,7 @@ class NativeExitLinkGuard:
 
     def _same_hold(self, hold):
         wire = hold.wire
-        return (self.live() and self._holds.get(wire.op.lane // 2) is hold
+        return (self.live() and self._holds.get(wire.op.lane) is hold
                 and wire.link is self.link and self.link._raw is hold.raw
                 and bytes(self.link.uid) == hold.uid and wire.op.connection_epoch == self.epoch)
 
@@ -268,10 +268,10 @@ class NativeExitLinkGuard:
             wire = hold.wire
             if not self._current(hold) or wire.event_at is None:
                 return False
-            pair = self._read_pair(hold)
+            pair = self._read_lane(hold)
             if pair is None or any(t <= wire.event_at for s in pair for t in s.stamp):
                 return False
-            self._post[wire.op.lane // 2] = pair
+            self._post[wire.op.lane] = pair
             return True
 
     def finish(self, hold, commit_release):
@@ -286,9 +286,9 @@ class NativeExitLinkGuard:
         from .ace_protocol import still
         with self.link._io:
             wire = hold.wire
-            group = wire.op.lane // 2
+            group = wire.op.lane
             first = self._post.get(group)
-            second = self._read_pair(hold)
+            second = self._read_lane(hold)
             now = self.link._now()
             if (first is None or second is None or wire.event_at is None
                     or any(t <= wire.event_at for pair in (first, second) for s in pair for t in s.stamp)
@@ -314,7 +314,7 @@ class NativeExitLinkGuard:
         with self.link._io:
             if not self._current(hold) or hold.wire.state != 'new':
                 raise RuntimeError('native motion may have started')
-            group = hold.wire.op.lane // 2
+            group = hold.wire.op.lane
             self._remove(group)
 
     # Unknown or failed tasks deliberately retain the hold. A host recovery
