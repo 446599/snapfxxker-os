@@ -54,3 +54,19 @@ OpenACE/ACE2K 220V firmware selection, screen, location records and route
 safety in the migration. Keep old install/rollback package available;
 publish a new version/checksum only after the entire managed build and
 actual ACE4 slots 2/3 isolation tests pass.
+
+## 部署到 233 设备（实测要点，2026-11-26）
+
+包内 `klipper/extras/` 的 20 个 .py 必须**整目录**同步到
+`/home/lava/klipper/klippy/extras/`，不是只拷 `ace*.py`：
+
+- `filament_feed.py` 是 ACE 感知版（原厂同名文件只有 102 KB、零处 ACE
+  逻辑）。漏装时表现为送料状态机在 `load_prepare` 直接报
+  `no_filament`，且"退出耗材"只做一次短回退。
+- 拷完删 `__pycache__/ace*.pyc`、`__pycache__/filament_feed*.pyc`，
+  再 `/etc/init.d/S60klipper restart`。
+- 校准、料号、`ace_vars.cfg` 都在 `/home/lava/printer_data/config/extended/multiace/`，
+  覆盖代码前备份该目录。
+
+根分区只有 16384 个 inode，接近满时 `save_variables` 会报
+`Unable to save variable`（Errno 28）。装任何依赖前先 `df -i /`。
