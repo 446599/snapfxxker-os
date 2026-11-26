@@ -61,9 +61,13 @@ jobs:
           from prepare_source import restore_font_sources
           restore_font_sources(Path(sys.argv[1]),json.loads(Path('bundles/native-ui/manifest.json').read_text())['source'])
           PY
+          python3 -m venv "$RUNNER_TEMP/1908-font-venv"
+          "$RUNNER_TEMP/1908-font-venv/bin/pip" install 'fonttools==4.61.1'
+          export PATH="$RUNNER_TEMP/1908-font-venv/bin:$PATH"
+          python3 bundles/full-system-1902/prepare_fonts_1908.py "$SCREEN_TREE"
           npm ci --prefix bundles/native-ui/font-tools --ignore-scripts --no-audit --no-fund
           fontconv="$GITHUB_WORKSPACE/bundles/native-ui/font-tools/node_modules/.bin/lv_font_conv"
-          LV_FONT_CONV="$fontconv" make -C "$SCREEN_TREE" regen-runtime-cjk-fonts SKIP_OPTIONAL_DEPS=1
+          LV_FONT_CONV="$fontconv" make -C "$SCREEN_TREE" regen-runtime-cjk-fonts SKIP_OPTIONAL_DEPS=1 FAST_LINK=0
       - name: Build U1 ARM64 screen with the actual cross toolchain
         run: |
           set -euo pipefail
