@@ -122,6 +122,10 @@ def patch_engine(text):
                 self._order_hub_ports([p for p in self._ace_devices if not self._is_unit_sentinel(p)])
                 self._reconcile_unit_state('hub identity established')
             self._hub_identity_pending.discard(idx)
+            if self._hub_port_order:
+                # A lane-mask report held during the handshake must be sent
+                # again on the next status update, not treated as delivered.
+                getattr(self, '_lane_report_sent', {}).pop(idx, None)
 """)
     text = replace_once(text, "                if ready_state['fired'] or on_ready is None:\n",
         "                if (ready_state['fired'] or on_ready is None\n                        or idx in self._hub_identity_pending or idx in self._hub_identity_changed):\n")

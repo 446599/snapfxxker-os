@@ -142,9 +142,11 @@ class PortOrderTests(unittest.TestCase):
         d._hub_port_order = PORTS
         d._unit_uid_by_path = {PORTS[0]: 'uid:00000001-00000002-00000003'}
         d._hub_identity_pending = {0}
+        d._lane_report_sent = {0: ((1, 0), 10)}
         callback = nested_method('_open_ace', 'uid_callback')(0, PORTS[0])
         callback(d, {'result': {'uid1': 1, 'uid2': 2, 'uid3': 3}})
         self.assertEqual(d._hub_identity_pending, set())
+        self.assertEqual(d._lane_report_sent, {})
         self.assertEqual(d._unit_uid_by_path[PORTS[0]], 'uid:00000001-00000002-00000003')
 
     def test_reconnect_different_device_is_held_without_reassigning_state(self):
