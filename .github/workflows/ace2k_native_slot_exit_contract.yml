@@ -1,0 +1,18 @@
+name: Staged native ACE2K slot exit contract
+on:
+  push:
+    branches: [dev/1902-native-slot-exit]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify native exit and existing lane contracts (no firmware build)
+        env:
+          PYTHONPATH: bundles/multiace-190
+        run: |
+          python3 -m unittest discover -s bundles/ace2k-native-slot-exit -v
+          python3 -m unittest discover -s bundles/multiace-190 -p 'test_lane*.py' -v
