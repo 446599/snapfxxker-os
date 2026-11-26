@@ -208,7 +208,8 @@ void U1FilamentOverview::stop_batch_task() {
             if (alive.expired()) return;
             batch_pending_=false;
             if (!error.empty()) show_feedback(error);
-            else if (data.value("state",std::string{})=="head_running")
+            else if (!data.value("accepted",false)) show_feedback("停止请求未受理，请查看任务状态");
+            else if (data.value("state",std::string{})=="after_head")
                 show_feedback("喷头操作将在安全边界停止",FeedbackKind::Info);
             poll_batch();
         },true);

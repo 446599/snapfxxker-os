@@ -11,7 +11,7 @@ import subprocess
 from contextlib import nullcontext
 
 from material_batch_runtime import MaterialBatchRuntime
-from patch_material_runtime import stage,patch_mount_map,MODULES
+from patch_material_runtime import stage,patch_mount_map,patch_device_service,MODULES
 
 HERE=Path(__file__).resolve().parent
 ROOT=HERE.parents[1]
@@ -128,6 +128,20 @@ class MaterialRuntimeTests(unittest.TestCase):
         self.assertEqual(self.preview('eject',[self.row(0,0)])['ticket'],'')
         self.print_state='printing'
         self.assertEqual(self.preview('eject',[self.row(0,1)])['ticket'],'')
+    def test_printer_becomes_busy_stops_running_native_only(self):
+        b=self.start(self.preview('eject',[self.row(0,0),self.row(0,1)]))
+        self.runtime.tick(10)
+        self.print_state='printing'
+        self.runtime.tick(11)
+        self.assertEqual([t['state'] for t in self.runtime.status(b['batch'])],['stopping','stopping'])
+        self.assertEqual([x.args[0] for x in self.n.cancel.call_args_list],['native-0','native-1'])
+        self.a.gcode.run_script_from_command.assert_not_called()
+    def test_printer_becomes_busy_before_dispatch(self):
+        b=self.start(self.preview('eject',[self.row(0,0)]))
+        self.print_state='printing'
+        self.runtime.tick(10)
+        self.assertEqual(self.runtime.status(b['batch'])[0]['state'],'rejected')
+        self.assertEqual(self.started,[])
     def test_preview_rejects_duplicates_and_identity_mismatch(self):
         with self.assertRaises(ValueError):self.preview('load',[self.row(0,0),self.row(1,0)])
         self.assertEqual(self.preview('eject',[dict(ace=0,slot=1,serial='uid:wrong')])['ticket'],'')
@@ -135,6 +149,22 @@ class MaterialRuntimeTests(unittest.TestCase):
 
 
 class ActualCompositionTests(unittest.TestCase):
+    def test_device_service_real_route_forwarding(self):
+        import ast
+        service=ROOT/'overlays/233-native-ui/root/usr/local/lib/u1-device-service/device_service.py'
+        src=patch_device_service(service.read_text())
+        tree=ast.parse(src)
+        branch=next(n for n in ast.walk(tree) if isinstance(n,ast.If)
+                    and 'route.startswith(\'/material/batch/\')' in ast.unparse(n.test))
+        scope={'self':types.SimpleNamespace(command='POST'),
+               'route':'/material/batch/preview','data':{'action':'eject','slots':[]},
+               'web':Mock(return_value={'ticket':'test','slots':[]})}
+        code=compile(ast.Module(body=branch.body,type_ignores=[]),'device_service_batch','exec')
+        exec(code,scope)
+        scope['web'].assert_called_once_with('material/batch/preview',scope['data'],'POST')
+        self.assertEqual(scope['result']['ticket'],'test')
+        scope['route']='/material/batch/unrecognized'
+        with self.assertRaises(ValueError):exec(code,scope)
     def test_full_staged_provider_and_mount_map(self):
         # Run against the exact original archive, then apply the 1902.7
         # source chain in its original order. NOT a synthetic isolated method.

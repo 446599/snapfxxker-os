@@ -166,6 +166,14 @@ void U1FilamentOverview::preview_batch(const std::string& action) {
         [this,alive,action,names](auto data, std::string error) {
             if (alive.expired()) return;
             batch_pending_ = false;
+            if (error.empty() && data.is_object() && data.value("ticket",std::string{}).empty()) {
+                std::string detail;
+                for (const auto& row:data.value("slots",nlohmann::json::array()))
+                    detail += fmt::format("ACE {} · 槽 {}：{}\n",row.value("ace",-1)+1,row.value("slot",-1)+1,
+                        row.value("detail",std::string("不可执行")));
+                apply_hub_data();
+                show_feedback(detail.empty() ? "没有可执行的槽位" : detail); return;
+            }
             if (!error.empty() || !batch_selection_current() || !data.is_object() ||
                 !data.contains("ticket") || !data["ticket"].is_string() ||
                 data["ticket"].template get<std::string>().empty()) {

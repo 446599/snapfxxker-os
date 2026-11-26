@@ -359,7 +359,13 @@ class MaterialBatchRuntime:
 
     def tick(self,eventtime):
         self._prune()
+        idle=self._idle()
         for t in tuple(self.tasks.values()):
+            if not idle and t.state in ('queued','sampling','awaiting_parking'):
+                t.state='rejected';t.detail='Printer no longer idle'
+                continue
+            if not idle and t.state=='native' and t.token and self.native.cancel(t.token):
+                t.state='stopping';t.detail='Printer no longer idle'
             if t.state=='sampling' and eventtime>=t.deadline:
                 t.state='rejected';t.detail='Lane telemetry timed out'
             if t.state in ('native','stopping') and t.token:
