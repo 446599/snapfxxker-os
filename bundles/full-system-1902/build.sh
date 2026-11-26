@@ -8,7 +8,8 @@ REPO=$(cd "$HERE/../.." && pwd)
 BASE=$(realpath "${1:?usage: build.sh base-upgrade.bin output-directory}")
 mkdir -p "${2:?output directory required}"
 OUT=$(realpath "$2")
-VERSION=2.1.2-233-1902.5
+VERSION=2.1.2-233-1902.6
+MCU_DIR=$(realpath "${3:?usage: build.sh base-upgrade.bin output-directory mcu-directory}")
 BASE_SHA=0d7b4039696a0a3b98df093b58a333fb0de5b5372ab665bf4d6a9d3165b942bf
 FIELD="$REPO/bundles/multiace-190/artifacts/multiace-1.90.2-233.20261126.tar.gz"
 COMMON="$REPO/overlays/mods/multiace/70-app-multiace/root/usr/local/share/multiace/common.sh"
@@ -26,7 +27,7 @@ ROOT="$WORK/rootfs"
 unsquashfs -d "$ROOT" "$WORK/input/rk-unpacked/rootfs.img"
 [[ $(stat -c '%u:%g' "$ROOT/etc/passwd") == 0:0 ]]
 [[ $(stat -c '%u:%g' "$ROOT/home/lava/bin/hwver.sh") == 1000:1000 ]]
-python3 "$HERE/compose.py" "$ROOT" "$FIELD" "$COMMON" "$WORK"
+python3 "$HERE/compose.py" "$ROOT" "$FIELD" "$COMMON" "$WORK" --mcu-dir "$MCU_DIR"
 python3 "$HERE/runtime_fixes.py" "$ROOT" "$WORK/composition.json"
 for path in /usr/local/share/multiace/common.sh /etc/hooks/klipper.d/10-multiace.sh /etc/init.d/S98multiace-web; do
     sh -n "$ROOT$path"
@@ -62,6 +63,14 @@ EXPECTED=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["provi
 READBACK="$WORK/readback/rk-unpacked/rootfs.img"
 ACTUAL=$(unsquashfs -cat "$READBACK" "$REL" | sha256sum | awk '{print $1}')
 [[ "$ACTUAL" == "$EXPECTED" ]]
+# Read back both actual MCU images from the final embedded provider.
+unsquashfs -cat "$READBACK" "$REL" > "$WORK/provider-readback.tar.gz"
+PREFIX=multiace-1.90.2-233.20261126-paxx.6/web/backend
+for image in ace2k-0.16.0-233b.bin ace2k-0.16.0-233c.bin; do
+    tar -xOzf "$WORK/provider-readback.tar.gz" "$PREFIX/firmware/$image" | cmp - "$MCU_DIR/$image"
+done
+FLASHER_SHA=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["mcu_flasher_sha256"])' "$WORK/composition.json")
+[[ $(tar -xOzf "$WORK/provider-readback.tar.gz" "$PREFIX/ace2k_flasher.py" | sha256sum | cut -d' ' -f1) == "$FLASHER_SHA" ]]
 unsquashfs -cat "$READBACK" usr/local/share/extended-pkg/multiace | grep -F "PKG_SHA256=\"$EXPECTED\""
 for path in usr/local/share/multiace/common.sh etc/hooks/klipper.d/10-multiace.sh etc/init.d/S98multiace-web; do
     unsquashfs -cat "$READBACK" "$path" | cmp - "$ROOT/$path"
@@ -77,5 +86,9 @@ SCREEN_SHA=2a967f0884c33993c547c4cc4a4260662e04dabb0de4b9d9e7bbbfc830f22ff5
 cp "$WORK/composition.json" "$OUT/composition.json"
 cp "$WORK/rootfs-capacity.json" "$OUT/rootfs-capacity.json"
 mv "$WORK/$FILE" "$OUT/$FILE"
-(cd "$OUT" && sha256sum "$FILE" composition.json rootfs-capacity.json > SHA256SUMS.txt)
+mkdir -p "$OUT/ACE2K"
+cp "$MCU_DIR"/ace2k-0.16.0-233{b,c}.{bin,dict} "$OUT/ACE2K/"
+cp "$MCU_DIR/BUILD_INFO.txt" "$OUT/ACE2K/"
+cp "$HERE/../ace2k-rfid-neighbor/README.md" "$OUT/ACE2K/README.md"
+(cd "$OUT" && sha256sum "$FILE" composition.json rootfs-capacity.json ACE2K/* > SHA256SUMS.txt)
 echo "Candidate built and readback checked: $OUT/$FILE (not hardware-validated)"

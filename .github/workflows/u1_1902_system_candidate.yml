@@ -1,12 +1,12 @@
-name: Build U1 233 1.90.2 system candidate
+name: Build U1 233 1.90.2 RFID MCU and full system candidate
 on:
   push:
-    branches: [build/u1-1902-candidate]
+    branches: [build/u1-1902-rfid-candidate]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: u1-1902-system-candidate
+  group: u1-1902-rfid-candidate
   cancel-in-progress: true
 jobs:
   candidate:
@@ -17,7 +17,17 @@ jobs:
       - name: Install host build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libssl-dev squashfs-tools qemu-user-static
+          sudo apt-get install -y --no-install-recommends build-essential libssl-dev squashfs-tools qemu-user-static gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: Compile and check 233c MCU with exact 233b patches
+        run: |
+          bash -n bundles/full-system-1902/build_mcu.sh
+          bash bundles/full-system-1902/build_mcu.sh inputs/ace2k
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ACE2K-0.16.0-233c-and-233b-rollback
+          path: inputs/ace2k/
+          if-no-files-found: error
+          retention-days: 14
       - name: Software composition and mapping checks
         run: |
           bash -n bundles/full-system-1902/build.sh
@@ -44,7 +54,7 @@ jobs:
           echo '0d7b4039696a0a3b98df093b58a333fb0de5b5372ab665bf4d6a9d3165b942bf  inputs/base.bin' | sha256sum -c -
       - name: Repack full candidate and verify actual readback
         run: |
-          sudo bash bundles/full-system-1902/build.sh inputs/base.bin output
+          sudo bash bundles/full-system-1902/build.sh inputs/base.bin output inputs/ace2k
           sudo chown -R "$(id -u):$(id -g)" output
           git rev-parse HEAD > output/SOURCE_COMMIT.txt
           (cd output && sha256sum -c SHA256SUMS.txt)
@@ -52,7 +62,7 @@ jobs:
           cat output/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: U1-233-1902.5-candidate
+          name: U1-233-1902.6-RFID-candidate
           path: output/
           if-no-files-found: error
           compression-level: 0

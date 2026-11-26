@@ -14,3 +14,6 @@ make -C /path/to/ace2k-source/firmware test-c
 Reference CI runs host C tests, not a flashable firmware build. The patch is not in the 1902.5 system image and changes no ACE on the device.
 
 Hardware acceptance: reproduce with both same-reader pairs (slots 1/2 and 3/4), each direction, adjacent tag pending and already read, feed and retract, ordinary RFID read after quiet, independent other reader, and printing follow. Capture the fault lane's raw feed mode, final event kind/seq and RFID pending/reading state; don't classify the field root cause without that evidence. A seq=0 loading error may be ignored by the current MultiACE host event handler when no host tag-read/job is associated; the MCU lane can still latch ERROR. Do not clear real faults automatically.
+
+## Integration update
+The exact 233b rebuild inputs were located at 4edbd50feb36e47d072b5cd4e516b9792b8b4ea9:04-自定义ACE固件/ACE2-233-Parallel. Use the integrated build script in bundles/full-system-1902/build_mcu.sh to apply both preserved 233b patches before the RFID change. The complete system build now packages 233c as an optional manual MCU image and retains the exact released 233b rollback. Do not infer physical validation from CI.

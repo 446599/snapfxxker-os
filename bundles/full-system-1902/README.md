@@ -97,3 +97,31 @@ moving ACE/slot. With ACE 1 slot 4 feeding head 4, check that the web card
 for ACE 4 slot 4 offers no unload and that unloading the actual source moves
 only ACE 1 slot 4. Check the old and new source on a same-head spool change
 and preserve the command / device reply when a retract ends early.
+
+## 1902.6 / ACE2K 0.16.0-233c RFID candidate
+
+The previously missing 233b recipe was found in the pinned maintained source
+branch 233screen_with_PAXX_Multiace, under 04-自定义ACE固件/ACE2-233-Parallel
+at 4edbd50feb36e47d072b5cd4e516b9792b8b4ea9. The upstream v0.16.0 baseline, parallel-lanes.patch and
+dryer-220v-rise-margin.patch are preserved; the same-reader RFID fix is applied
+on top. The released 233b binary is verified against its published SHA-256.
+The cloud toolchain may differ from the old GCC 14.2.1 build. The build checks
+both image CRCs, versions, protocol command names and the parallel-lane flag.
+The 233c image is a hardware-unverified candidate, not an upstream release.
+
+Rebuild:
+```sh
+bash bundles/full-system-1902/build_mcu.sh inputs/ace2k
+sudo bash bundles/full-system-1902/build.sh inputs/base.bin output inputs/ace2k
+```
+
+The provider version is paxx.6. The full U1 upgrade preserves the 1902.5 routing
+and existing screen binary, carries both MCU images with an explicit local
+upload allowlist and checks the bytes in the final unpacked provider. It never
+flashes an ACE MCU during the U1 update. Use the existing MultiACE firmware
+upload workflow on one selected idle ACE at a time; 233c and 233b are upload-only,
+not remote upstream downloads. The full artifact also has separate MCU binaries
+and dictionaries in ACE2K/ and the source and image checksums. Keep 233b for
+rollback. Test the adjacent slots physically before updating other units. The
+native screen source route fix remains uncompiled, and the color-save issue is
+not fixed by this MCU change.

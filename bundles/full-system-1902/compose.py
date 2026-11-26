@@ -10,12 +10,13 @@ import shutil
 import subprocess
 import tarfile
 from screen_compat import patch_engine, patch_web
+from mcu_bundle import bundle as bundle_mcu
 
 BASE_PROVIDER = '1.27b-233.20261122-flow.15.112'
 BASE_PROVIDER_SHA = '0d21c8d2d4b4477c68588c075a68c9b645d3892e72b4b6befa44ccd4f6957b25'
 FIELD_VERSION = '1.90.2-233.20261126'
 FIELD_SHA = 'd16535002703f19f43282c990385c1810c48d63a1d0ebff0d25335d924c9faea'
-PROVIDER = FIELD_VERSION + '-paxx.5'
+PROVIDER = FIELD_VERSION + '-paxx.6'
 APP_ROOT = '/userdata/233-apps/multiace'
 APP = APP_ROOT + '/latest'
 
@@ -144,7 +145,7 @@ def patch_klipper_hook(text):
     return replace_once(text, original, updated)
 
 
-def compose(root, field, common_source, work):
+def compose(root, field, common_source, work, mcu_dir=None):
     root = root.resolve(); work = work.resolve()
     require(root.is_dir() and (root / 'etc/passwd').is_file(), 'not an extracted rootfs')
     require(sha(field) == FIELD_SHA, 'wrong field-tested provider archive')
@@ -197,6 +198,7 @@ def compose(root, field, common_source, work):
         for image in oldimages.iterdir():
             if image.is_file() and not (dst / image.name).exists():
                 shutil.copy2(image, dst / image.name)
+    mcu_images = bundle_mcu(new, mcu_dir) if mcu_dir is not None else {}
     (newvendor / '.paxx-dependencies-ready').unlink(missing_ok=True)
     (new / 'VERSION').write_text(PROVIDER + '\n')
     config = new / 'config/extended/ace.cfg'
@@ -220,6 +222,9 @@ def compose(root, field, common_source, work):
                        'tools/merge_ace_cfg.py','tools/set_managed_web.py','tools/post_process_virtual_toolheads.py',
                        'web/backend/main.py','web/backend/requirements.txt','web/frontend/index.html',
                        'web/backend/vendor/ace2k_flash.pyz','web/backend/ace2k_flasher.py'})
+    if mcu_images:
+        required += ['web/backend/firmware/' + name for name in mcu_images]
+        required.append('web/backend/firmware/233-ace2k-images.json')
     for name in required:
         require((new / name).is_file(), 'missing 1.90.2 runtime: ' + name)
     # Save the original persistent config once before the first schema merge.
@@ -280,7 +285,10 @@ def compose(root, field, common_source, work):
               'provider_sha256': digest, 'field_archive_sha256': FIELD_SHA,
               'field_engine_sha256': field_engine_hash, 'engine_sha256': engine_hash,
               'field_web_sha256': field_web_hash, 'web_sha256': web_hash, 'provider_install_root': APP_ROOT, 'required_files': required,
-              'scope': 'U1 1902.5 web and engine routing candidate; retains the base screen binary; hardware acceptance pending',
+              'scope': 'U1 1902.6 with optional 233c ACE MCU and 233b rollback; retains the base screen binary; hardware acceptance pending',
+               'mcu_images': mcu_images,
+               'mcu_flasher_sha256': sha(new / 'web/backend/ace2k_flasher.py'),
+               'mcu_auto_flash': False,
               'route_file_sha256': {name: sha(new / name) for name in route_files},
               'hardware_verified': False}
     (work / 'composition.json').write_text(json.dumps(result, indent=2)+'\n')
@@ -292,5 +300,6 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
     for n in ('root','field','common','work'):
         p.add_argument(n, type=Path)
+    p.add_argument('--mcu-dir', type=Path)
     a = p.parse_args()
-    compose(a.root, a.field, a.common, a.work)
+    compose(a.root, a.field, a.common, a.work, a.mcu_dir)
