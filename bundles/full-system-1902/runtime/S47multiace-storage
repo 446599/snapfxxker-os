@@ -1,0 +1,8 @@
+#!/bin/sh
+# Relocate only verified, versioned MultiACE provider files before other services.
+set -eu
+[ "${1:-}" = start ] || [ "${1:-}" = restart ] || exit 0
+if [ "${U1_LOCKED_SERVICE:-}" != S47multiace-storage ]; then
+    exec /usr/bin/python3 -B /usr/local/lib/233-service-lock.py "$0" "$@"
+fi
+/usr/bin/python3 -B /usr/local/lib/multiace-relocate-storage.py

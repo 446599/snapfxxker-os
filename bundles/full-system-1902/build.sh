@@ -8,7 +8,7 @@ REPO=$(cd "$HERE/../.." && pwd)
 BASE=$(realpath "${1:?usage: build.sh base-upgrade.bin output-directory}")
 mkdir -p "${2:?output directory required}"
 OUT=$(realpath "$2")
-VERSION=2.1.2-233-1902.1
+VERSION=2.1.2-233-1902.2
 BASE_SHA=0d7b4039696a0a3b98df093b58a333fb0de5b5372ab665bf4d6a9d3165b942bf
 FIELD="$REPO/bundles/multiace-190/artifacts/multiace-1.90.2-233.20261126.tar.gz"
 COMMON="$REPO/overlays/mods/multiace/70-app-multiace/root/usr/local/share/multiace/common.sh"
@@ -27,6 +27,7 @@ unsquashfs -d "$ROOT" "$WORK/input/rk-unpacked/rootfs.img"
 [[ $(stat -c '%u:%g' "$ROOT/etc/passwd") == 0:0 ]]
 [[ $(stat -c '%u:%g' "$ROOT/home/lava/bin/hwver.sh") == 1000:1000 ]]
 python3 "$HERE/compose.py" "$ROOT" "$FIELD" "$COMMON" "$WORK"
+python3 "$HERE/runtime_fixes.py" "$ROOT" "$WORK/composition.json"
 for path in /usr/local/share/multiace/common.sh /etc/hooks/klipper.d/10-multiace.sh /etc/init.d/S98multiace-web; do
     sh -n "$ROOT$path"
 done
@@ -39,6 +40,8 @@ cp "$(command -v qemu-aarch64-static)" "$SMOKE/qemu"
 cp -a "$WORK/field-provider/." "$SMOKE/provider"
 PROVIDER_PATH=$(find "$SMOKE/provider" -mindepth 1 -maxdepth 1 -type d -printf '%f\n')
 chroot "$ROOT" /233-1902-buildcheck/qemu /usr/bin/python3 -B -c "import sys;sys.path.insert(0,'/233-1902-buildcheck/provider/$PROVIDER_PATH/web/backend/vendor');import fastapi,uvicorn,httpx,pydantic,websockets,multipart,serial;print('ARM64 offline dependencies imported')"
+# Check the existing native companion imports without running its server.
+chroot "$ROOT" /233-1902-buildcheck/qemu /usr/bin/python3 -B -c "import sys;sys.path.insert(0,'/usr/local/lib/u1-device-service');import device_service;print('ARM64 screen companion imports')"
 rm -rf "$SMOKE"
 # Preserve all other partitions, ownership and file types. The RKAF header
 # reports A/B partition sizes in 512-byte sectors, not old image bytes.
@@ -63,6 +66,9 @@ unsquashfs -cat "$READBACK" usr/local/share/extended-pkg/multiace | grep -F "PKG
 for path in usr/local/share/multiace/common.sh etc/hooks/klipper.d/10-multiace.sh etc/init.d/S98multiace-web; do
     unsquashfs -cat "$READBACK" "$path" | cmp - "$ROOT/$path"
 done
+while IFS= read -r path; do
+    unsquashfs -cat "$READBACK" "$path" | cmp - "$ROOT/$path"
+done < <(python3 -c 'import json,sys;print("\n".join(json.load(open(sys.argv[1]))["runtime_files"]))' "$WORK/composition.json")
 cp "$WORK/composition.json" "$OUT/composition.json"
 cp "$WORK/rootfs-capacity.json" "$OUT/rootfs-capacity.json"
 mv "$WORK/$FILE" "$OUT/$FILE"

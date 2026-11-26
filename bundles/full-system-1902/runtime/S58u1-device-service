@@ -1,0 +1,54 @@
+#!/bin/sh
+# Existing 233 screen companion service, with serialized startup and actual HTTP readiness.
+NAME=u1-device-service
+PIDFILE=/var/run/u1-device-service.pid
+LAUNCHER=/usr/local/lib/u1-device-service/launch.py
+LOGFILE=/tmp/u1-device-service.log
+CFG=/home/lava/printer_data/config/extended/extended2.cfg
+export PYTHONDONTWRITEBYTECODE=1
+if [ "${U1_LOCKED_SERVICE:-}" != S58u1-device-service ]; then
+    exec /usr/bin/python3 -B /usr/local/lib/233-service-lock.py "$0" "$@"
+fi
+alive() {
+    [ -s "$PIDFILE" ] || return 1
+    pid=$(cat "$PIDFILE")
+    kill -0 "$pid" 2>/dev/null && tr '\000' ' ' < "/proc/$pid/cmdline" | grep -Fq "$LAUNCHER"
+}
+ready() {
+    alive && curl -fsS --max-time 2 http://127.0.0.1:7136/firmware/status >/dev/null 2>&1
+}
+start() {
+    selected=$(/usr/local/bin/extended-config.py get "$CFG" components gui snapmaker 2>/dev/null)
+    [ "$selected" = helixscreen ] || return 0
+    if ready; then return 0; fi
+    if ! alive; then
+        rm -f "$PIDFILE"
+        [ -f "$LAUNCHER" ] || { echo "$NAME launcher missing" >&2; return 1; }
+        start-stop-daemon -S -b -m -p "$PIDFILE" -x /bin/sh -- -c \
+            'exec /usr/bin/python3 -B "$1" >>"$2" 2>&1' sh "$LAUNCHER" "$LOGFILE" || return 1
+    fi
+    i=0
+    while [ "$i" -lt 8 ]; do
+        if ready; then echo "$NAME ready"; return 0; fi
+        sleep 1
+        i=$((i+1))
+    done
+    logger -t "$NAME" "startup failed: $(tail -n 12 "$LOGFILE" 2>/dev/null)"
+    return 1
+}
+stop() {
+    if alive; then
+        start-stop-daemon -K -p "$PIDFILE" -s TERM || return 1
+        i=0
+        while alive && [ "$i" -lt 10 ]; do sleep 1; i=$((i+1)); done
+        if alive; then return 1; fi
+    fi
+    rm -f "$PIDFILE"
+}
+case "${1:-}" in
+    start) start ;;
+    stop) stop ;;
+    restart|reload) stop && start ;;
+    status) ready ;;
+    *) exit 2 ;;
+esac

@@ -57,3 +57,7 @@ Not yet verified: full system cold boot, screen API parity, RFID,
 custom complete slot-eject and custom two-image MCU selector.
 The candidate is not a production release; never infer that all features
 pass from the assembly tests or from an HTTP 200.
+
+## 1902.2 acceptance fixes
+
+The 1902.1 image passed two OS reboots with all four ACE2K units. Field testing then exposed OEM storage exhaustion, a pre-motion routing record left in RAM when SAVE_VARIABLE fails, duplicate web startup, and a missing/unhealthy screen companion listener. 1902.2 moves only recognized versioned MultiACE application directories to the separately mounted /userdata/233-apps/multiace, checks every copied entry before freeing the OEM copy and leaves compatibility symlinks; no printer_data, logs, settings, calibration or unrelated package is removed. The next provider is installed on userdata; existing config is preserved. The init scripts serialize service startup and check actual listener readiness. The native companion files are retained from the released base when complete; the recorded release sources are included if missing. The pre-load save error rolls back only the provisional RAM mapping and variable entries, then re-raises the error before FEED_AUTO. Do not consider RFID, wake/touch behavior, translation, thumbnails or drying duration fixed in this candidate. Physical boot and writable-state checks are required.

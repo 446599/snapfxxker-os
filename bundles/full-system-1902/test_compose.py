@@ -32,6 +32,20 @@ def tar(root, path):
     return path
 
 
+ENGINE = '''# SharedAce2Discovery
+# official or explicitly_configured
+class FakeAce:
+    def load(self, head):
+        # Provisional pre-load stamp (routing only)
+        if self.head_uses_ace(head):
+            self._head_source[head] = self._inherit_prev_capture(head)
+            self._save_head_source()
+
+        self.gcode.run_script_from_command(
+            "SET_FILAMENT_SENSOR SENSOR=e%d_filament ENABLE=1" % head)
+'''
+
+
 class CompositionTest(unittest.TestCase):
     def test_cfg_values_scope(self):
         old = '[ace]\nlanguage: zh\nenable_web: true\nweb_dir: /old\n[other]\nenable_web: true\n'
@@ -58,7 +72,7 @@ class CompositionTest(unittest.TestCase):
             oldpkg.parent.mkdir(parents=True)
             tar(old, oldpkg)
             oldhash = c.sha(oldpkg)
-            write(root, 'usr/local/share/extended-pkg/multiace', f'PKG_VERSION="{c.BASE_PROVIDER}"\nPKG_URL="file:///{oldpkg.name}"\nPKG_SHA256="{oldhash}"\npkg_post_install() {{\n    for required in \\\n        klipper/extras/ace.py; do\n        test -f "$required"\n    done\n}}\n')
+            write(root, 'usr/local/share/extended-pkg/multiace', f'PKG_VERSION="{c.BASE_PROVIDER}"\nPKG_URL="file:///{oldpkg.name}"\nPKG_SHA256="{oldhash}"\nPKG_APP_DIR="/oem/apps/multiace"\npkg_post_install() {{\n    for required in \\\n        klipper/extras/ace.py; do\n        test -f "$required"\n    done\n}}\n')
             write(root, 'etc/hooks/klipper.d/10-multiace.sh', 'case "$1" in\n start)\n        if multiace_enabled; then\n            multiace_activate\n        fi\n        ;;\nesac\n')
             write(root, 'etc/init.d/S98multiace-web', 'start() {\n    if ! multiace_seed_config; then\n        echo "$NAME cannot prepare its persistent configuration" >&2\n        return 1\n    fi\n}\n')
             common = CANDIDATE_COMMON.read_text()
@@ -69,7 +83,7 @@ class CompositionTest(unittest.TestCase):
             mapping = common.split("multiace_1902_module_map() {\n    cat <<'MAP'\n",1)[1].split('\nMAP',1)[0]
             for row in mapping.splitlines():
                 write(field, 'klipper/' + row.split()[0], '# field module\n')
-            engine = write(field, 'klipper/extras/ace.py', '# SharedAce2Discovery\n# official or explicitly_configured\n')
+            engine = write(field, 'klipper/extras/ace.py', ENGINE)
             expected_engine = c.sha(engine)
             for rel in ('config/extended/multiace/ace_vars.cfg','tools/merge_ace_cfg.py','tools/post_process_virtual_toolheads.py','web/backend/requirements.txt','web/frontend/index.html','web/backend/ace2k_flasher.py'):
                 write(field, rel, '# field file\n')
@@ -81,7 +95,11 @@ class CompositionTest(unittest.TestCase):
             with patch.object(c, 'BASE_PROVIDER_SHA', oldhash), patch.object(c, 'FIELD_SHA', c.sha(fieldpkg)), contextlib.redirect_stdout(io.StringIO()):
                 new = c.compose(root, fieldpkg, common_path, work)
             manifest = json.loads((work/'composition.json').read_text())
-            self.assertEqual(manifest['engine_sha256'], expected_engine)
+            self.assertEqual(manifest['field_engine_sha256'], expected_engine)
+            self.assertNotEqual(manifest['engine_sha256'], expected_engine)
+            self.assertEqual(manifest['engine_sha256'], c.sha(new/'klipper/extras/ace.py'))
+            self.assertEqual(manifest['provider_install_root'], c.APP_ROOT)
+            self.assertIn(c.APP_ROOT,(root/'usr/local/share/extended-pkg/multiace').read_text())
             self.assertEqual(c.sha(root/manifest['provider_archive']), manifest['provider_sha256'])
             self.assertFalse(oldpkg.exists())
             self.assertEqual((new/'web/backend/main.py').read_text(), 'new backend')
@@ -99,6 +117,35 @@ class CompositionTest(unittest.TestCase):
             for rel in ('etc/hooks/klipper.d/10-multiace.sh','etc/init.d/S98multiace-web','usr/local/share/multiace/common.sh','usr/local/share/extended-pkg/multiace'):
                 subprocess.run(['bash','-n',str(root/rel)],check=True)
             self.assertIn(manifest['provider_sha256'],(root/'usr/local/share/extended-pkg/multiace').read_text())
+
+    def test_preload_persistence_failure_rolls_back(self):
+        from types import SimpleNamespace
+        namespace = {}
+        exec(c.patch_preload(ENGINE), namespace)
+        a = namespace['FakeAce']()
+        a.VARS_ACE_HEAD_SOURCE = 'source'
+        a.VARS_ACE_REVISION = 'revision'
+        a._head_source = {0: None}
+        a._last_load_ok = True
+        a.save_variables = SimpleNamespace(allVariables={'revision': 3, 'unrelated': 8})
+        a.head_uses_ace = lambda head: True
+        a._inherit_prev_capture = lambda head: {'ace_index': 1, 'slot': 0}
+        calls = []
+        a.gcode = SimpleNamespace(run_script_from_command=calls.append)
+        def fail():
+            a.save_variables.allVariables.update(source={'0': a._head_source[0]}, revision=4)
+            raise OSError(28, 'No space left on device')
+        a._save_head_source = fail
+        with self.assertRaises(OSError):
+            a.load(0)
+        self.assertIsNone(a._head_source[0])
+        self.assertFalse(a._last_load_ok)
+        self.assertEqual(a.save_variables.allVariables, {'revision': 3, 'unrelated': 8})
+        self.assertEqual(calls, [])
+        a._save_head_source = lambda: None
+        a.load(0)
+        self.assertEqual(a._head_source[0], {'ace_index': 1, 'slot': 0})
+        self.assertEqual(len(calls), 1)
 
     def test_wrong_field_hash_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

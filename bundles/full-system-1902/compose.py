@@ -13,8 +13,9 @@ BASE_PROVIDER = '1.27b-233.20261122-flow.15.112'
 BASE_PROVIDER_SHA = '0d21c8d2d4b4477c68588c075a68c9b645d3892e72b4b6befa44ccd4f6957b25'
 FIELD_VERSION = '1.90.2-233.20261126'
 FIELD_SHA = 'd16535002703f19f43282c990385c1810c48d63a1d0ebff0d25335d924c9faea'
-PROVIDER = FIELD_VERSION + '-paxx.1'
-APP = '/oem/apps/multiace/latest'
+PROVIDER = FIELD_VERSION + '-paxx.2'
+APP_ROOT = '/userdata/233-apps/multiace'
+APP = APP_ROOT + '/latest'
 
 
 def sha(path):
@@ -67,6 +68,40 @@ def cfg_values(text, values):
 WEB_SETTINGS = {'enable_web': 'false', 'web_dir': APP + '/web', 'i18n_dir': APP + '/i18n'}
 
 
+def patch_preload(text):
+    """A failed pre-motion save must not publish a phantom loaded source."""
+    start = text.index('        # Provisional pre-load stamp (routing only)')
+    end = text.index('        self.gcode.run_script_from_command(\n            "SET_FILAMENT_SENSOR SENSOR=e%d_filament ENABLE=1" % head)', start)
+    block = text[start:end]
+    block = replace_once(block,
+        '        if self.head_uses_ace(head):\n            self._head_source[head] = self._inherit_prev_capture(',
+        '''        if self.head_uses_ace(head):
+            previous_source = self._head_source.get(head)
+            keys = (self.VARS_ACE_HEAD_SOURCE, self.VARS_ACE_REVISION)
+            variables = self.save_variables.allVariables
+            previous_vars = {key: variables[key] for key in keys if key in variables}
+            self._head_source[head] = self._inherit_prev_capture(''')
+    block = replace_once(block, '            self._save_head_source()\n',
+        '''            try:
+                self._save_head_source()
+            except Exception:
+                # No FEED_AUTO has run yet. Restore the old in-memory routing
+                # and the save_variables table, and propagate the real error.
+                self._head_source[head] = previous_source
+                variables = self.save_variables.allVariables
+                for key in keys:
+                    if key in previous_vars:
+                        variables[key] = previous_vars[key]
+                    else:
+                        variables.pop(key, None)
+                self._last_load_ok = False
+                raise
+''')
+    result = text[:start] + block + text[end:]
+    compile(result, 'ace.py', 'exec')
+    return result
+
+
 def compose(root, field, common_source, work):
     root = root.resolve(); work = work.resolve()
     require(root.is_dir() and (root / 'etc/passwd').is_file(), 'not an extracted rootfs')
@@ -81,8 +116,10 @@ def compose(root, field, common_source, work):
     new = unpack(field, work / 'field-provider')
     require((new / 'VERSION').read_text().strip() == FIELD_VERSION, 'wrong provider VERSION')
     engine = new / 'klipper/extras/ace.py'
-    engine_hash = sha(engine)
+    field_engine_hash = sha(engine)
     require('SharedAce2Discovery' in engine.read_text() and 'official or explicitly_configured' in engine.read_text(), 'field discovery patch missing')
+    engine.write_text(patch_preload(engine.read_text()))
+    engine_hash = sha(engine)
     # Keep the field-tested 1.90.2 code; carry over only offline libraries and
     # optional MCU image files, never the old backend or Klipper Python modules.
     oldvendor = old / 'web/backend/vendor'
@@ -122,7 +159,7 @@ def compose(root, field, common_source, work):
                       '''if old != new:\n    st=p.stat()\n    fd,name=tempfile.mkstemp(dir=p.parent,prefix='.ace-web-')\n    with os.fdopen(fd,'w') as f: f.write(new)\n    os.chmod(name,st.st_mode & 0o777)\n    os.chown(name,st.st_uid,st.st_gid)\n    os.replace(name,p)\n''')
     # The new mappings were already added in the coldboot branch. Keep the
     # old 1.27b path for rollback and require every new mapping in the archive.
-    common = common_source.read_text()
+    common = replace_once(common_source.read_text(), 'MULTIACE_INSTALL_DIR="/oem/apps/multiace"', 'MULTIACE_INSTALL_DIR="' + APP_ROOT + '"')
     mapping = common.split("multiace_1902_module_map() {\n    cat <<'MAP'\n",1)[1].split('\nMAP',1)[0]
     required = sorted({'klipper/' + row.split()[0] for row in mapping.splitlines()} |
                       {'VERSION','config/extended/ace.cfg','config/extended/multiace/ace_vars.cfg',
@@ -153,6 +190,11 @@ def compose(root, field, common_source, work):
     # MultiACE; never use clean/download (which remove the prior provider).
     hook = root / 'etc/hooks/klipper.d/10-multiace.sh'
     hook.write_text(replace_once(hook.read_text(), '        if multiace_enabled; then\n', '''        if multiace_enabled; then
+            # The early boot migration may have run before userdata mounted.
+            if ! /etc/init.d/S47multiace-storage start; then
+                echo "multiACE storage relocation failed; not extracting into OEM" >&2
+                exit 1
+            fi
             pkg=/usr/local/bin/extended-pkg
             if ! "$pkg" multiace check || "$pkg" multiace needs_upgrade; then
                 if ! "$pkg" multiace upgrade; then
@@ -181,6 +223,7 @@ def compose(root, field, common_source, work):
     digest = sha(package)
     newdef = replace_once(olddef, f'PKG_VERSION="{BASE_PROVIDER}"', f'PKG_VERSION="{PROVIDER}"')
     newdef = replace_once(newdef, oldpkg.name, package.name)
+    newdef = replace_once(newdef, 'PKG_APP_DIR="/oem/apps/multiace"', 'PKG_APP_DIR="' + APP_ROOT + '"')
     newdef = replace_once(newdef, BASE_PROVIDER_SHA, digest)
     newdef, count = re.subn(r'    for required in \\\n.*?; do\n',
                     lambda _: '    for required in \\\n' + ' \\\n'.join('        ' + n for n in required) + '; do\n', newdef, flags=re.S)
@@ -192,7 +235,7 @@ def compose(root, field, common_source, work):
     require(sha(engine) == engine_hash, 'field-tested engine unexpectedly changed')
     result = {'provider': PROVIDER, 'provider_archive': str(package.relative_to(root)),
               'provider_sha256': digest, 'field_archive_sha256': FIELD_SHA,
-              'engine_sha256': engine_hash, 'required_files': required,
+              'field_engine_sha256': field_engine_hash, 'engine_sha256': engine_hash, 'provider_install_root': APP_ROOT, 'required_files': required,
               'scope': 'PAXX/233 test candidate; existing screen and non-root partitions unchanged; no MCU flash',
               'hardware_verified': False}
     (work / 'composition.json').write_text(json.dumps(result, indent=2)+'\n')
