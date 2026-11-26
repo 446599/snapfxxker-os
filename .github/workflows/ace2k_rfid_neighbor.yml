@@ -1,0 +1,33 @@
+name: ACE2K RFID neighbour reference regression
+on:
+  push:
+    branches: [fix/ace2k-rfid-neighbor]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reference-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Get pinned upstream MCU source
+        run: |
+          git init "$RUNNER_TEMP/ace2k"
+          git -C "$RUNNER_TEMP/ace2k" fetch --depth=1 https://github.com/tobecwb/ace2k.git 27c564d210170f01aa1a57cd928a60c520247aff
+          git -C "$RUNNER_TEMP/ace2k" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/ace2k" rev-parse HEAD)" = "27c564d210170f01aa1a57cd928a60c520247aff"
+      - name: Apply and review targeted source change
+        run: |
+          python3 bundles/ace2k-rfid-neighbor/apply.py "$RUNNER_TEMP/ace2k"
+          git -C "$RUNNER_TEMP/ace2k" diff --check
+          git -C "$RUNNER_TEMP/ace2k" diff --stat
+      - name: Targeted RFID and feed regression
+        run: |
+          make -C "$RUNNER_TEMP/ace2k/firmware" -j2 tests/build/rfid/test_rfid_tiebreak tests/build/feed/test_feed_load
+          "$RUNNER_TEMP/ace2k/firmware/tests/build/rfid/test_rfid_tiebreak"
+          "$RUNNER_TEMP/ace2k/firmware/tests/build/feed/test_feed_load"
+      - name: Full upstream C regression (no MCU image)
+        run: make -C "$RUNNER_TEMP/ace2k/firmware" -j2 test-c

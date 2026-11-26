@@ -1,0 +1,101 @@
+[
+  [
+    "firmware/src/ace2k/rfid/watch_tiebreak.c",
+    [
+      [
+        "    uint8_t in_use = 0;\n    (void)ace2k_rfid_watch_in_use(w, &in_use); /* 0 when not valid: every lane counts */\n",
+        "    (void)w; /* movement of every lane matters, even a lane assigned to a head */\n"
+      ],
+      [
+        "        if (ace2k_rfid_watch_bit(in->moving, lane) && !ace2k_rfid_watch_bit(in_use, lane)) {\n",
+        "        if (ace2k_rfid_watch_bit(in->moving, lane) || ace2k_rfid_watch_bit(in->loading, lane)) {\n"
+      ],
+      [
+        " * in use still long enough. */",
+        " * on both lanes still long enough. */"
+      ],
+      [
+        "    uint8_t n = ace2k_rfid_neighbour(lane);\n    return (bool)(ace2k_rfid_watch_bit(idle_mask, n) || ace2k_rfid_watch_bit(in_use, n));",
+        "    uint8_t n = ace2k_rfid_neighbour(lane);\n    if (ace2k_rfid_watch_bit(w->in.moving, n) || ace2k_rfid_watch_bit(w->in.loading, n)) {\n        return false;\n    }\n    return (bool)(ace2k_rfid_watch_bit(idle_mask, n) || ace2k_rfid_watch_bit(in_use, n));"
+      ]
+    ]
+  ],
+  [
+    "firmware/src/ace2k/rfid/watch_tiebreak.h",
+    [
+      [
+        " * - The feed has the lane idle and its motor stopped.  The neighbour is idle too, or in use.\n * - The lanes of the reader that are not in use have been still for ACE2K_RFID_TIEBREAK_QUIET_MS.",
+        " * - The feed has the lane idle and its motor stopped.  The neighbour is idle too, or in use\n *   but not moving or loading.\n * - Both lanes of the reader have been still for ACE2K_RFID_TIEBREAK_QUIET_MS."
+      ],
+      [
+        "    /* For each reader, the clock when one of its lanes not in use last moved, or a strand went\n     * in. */",
+        "    /* For each reader, the clock when one of its lanes last moved, loaded, or a strand went in. */"
+      ],
+      [
+        " * of its reader, and restarts the reader's quiet time.  A lane that\n * moves and is not in use restarts it too.  While the mask of the lanes in use is not valid, every\n * lane counts. */",
+        " * of its reader, and restarts the reader's quiet time.  Movement or loading on either lane\n * restarts it too, including lanes in use. */"
+      ]
+    ]
+  ],
+  [
+    "firmware/src/ace2k/feed/feed_load.c",
+    [
+      [
+        "    if (!others_quiet(self, lane, true)) {\n        return ACE2K_FEED_REFUSED_OTHER_LANE;\n    }\n    if ((autonomous ? self->confirm_leg_um : self->search_um) == 0) {",
+        "    if (autonomous) {\n        /* Recheck under the feed binding's IRQ lock: a host move can start after\n         * the RFID task took its snapshot.  A resting follow is still allowed. */\n        const uint8_t n = ace2k_rfid_neighbour(lane);\n        const uint8_t mode = self->l[n].mode;\n        if (ace2k_lane_is_moving(self->lane, n) || mode == ACE2K_FEED_FEEDING ||\n            mode == ACE2K_FEED_ROLLING_BACK || mode == ACE2K_FEED_UNLOADING ||\n            mode == ACE2K_FEED_LOADING) {\n            return ACE2K_FEED_REFUSED_OTHER_LANE;\n        }\n    }\n    if (!others_quiet(self, lane, true)) {\n        return ACE2K_FEED_REFUSED_OTHER_LANE;\n    }\n    if ((autonomous ? self->confirm_leg_um : self->search_um) == 0) {"
+      ]
+    ]
+  ],
+  [
+    "firmware/src/ace2k/feed/feed.c",
+    [
+      [
+        "            ace2k_feed_yield_others(self, i);\n        }\n    }\n    for (uint8_t i = 0; i < ACE2K_LANE_COUNT; i++) {",
+        "            ace2k_feed_yield_others(self, i);\n            /* A same-reader autonomous search yields even to an in-use follow burst. */\n            ace2k_feed_yield_neighbour_tiebreak(self, i);\n        }\n    }\n    for (uint8_t i = 0; i < ACE2K_LANE_COUNT; i++) {"
+      ]
+    ]
+  ],
+  [
+    "firmware/src/ace2k/feed/feed_start.c",
+    [
+      [
+        "    /* An accepted host start on the lane ends its grip.  It is cleared before the start, so that a",
+        "    /* A bounded host move must not overlap the same reader's autonomous return.\n     * The existing BUSY retry for feed/retract can start it after the search is home. */\n    if (cmd == ACE2K_FEED_CMD_FEED || cmd == ACE2K_FEED_CMD_ROLLBACK ||\n        cmd == ACE2K_FEED_CMD_UNLOAD) {\n        const uint8_t neighbour = ace2k_rfid_neighbour(lane);\n        if (ace2k_feed_tiebreak_on(&self->l[neighbour])) {\n            ace2k_feed_load_preempt(self, neighbour, now_ms);\n            return ACE2K_FEED_REFUSED_BUSY;\n        }\n    }\n    /* An accepted host start on the lane ends its grip.  It is cleared before the start, so that a"
+      ]
+    ]
+  ],
+  [
+    "firmware/tests/rfid/test_rfid_tiebreak.c",
+    [
+      [
+        "    /* A lane of the reader moving, not in use, restarts the quiet time; one in use does not. */",
+        "    /* Movement on either lane restarts the quiet time, even when it is in use. */"
+      ],
+      [
+        "    tb_mask(&tw, 0x08);\n    tw.in.moving = 0x08;\n    tb_steps(&tw, NULL, 0, 1);\n    tw.in.moving = 0;\n    ASSERT_EQ(ace2k_rfid_tiebreak_pick(&tw.tb, &tw.w, all, tw.now), 2);\n    tb_mask(&tw, 0);",
+        "    tb_mask(&tw, 0x08);\n    tw.in.moving = 0x08;\n    tb_steps(&tw, NULL, 0, 1);\n    ASSERT_EQ(ace2k_rfid_tiebreak_pick(&tw.tb, &tw.w, 0x04, tw.now), -1);\n    tw.in.moving = 0;\n    tb_steps(&tw, NULL, 0, TB_STEPS_2S - 1);\n    ASSERT_EQ(ace2k_rfid_tiebreak_pick(&tw.tb, &tw.w, all, tw.now), -1);\n    tb_steps(&tw, NULL, 0, 1);\n    ASSERT_EQ(ace2k_rfid_tiebreak_pick(&tw.tb, &tw.w, all, tw.now), 2);\n    tb_mask(&tw, 0);"
+      ],
+      [
+        "/* A tie-break that changes nothing within its reach (no tag in view at all)",
+        "/* A moving in-use lane blocks its own reader, not the other reader. */\nTEST(moving_used_neighbour_blocks_only_its_reader_until_quiet)\n{\n    struct tbworld tw;\n    tb_init(&tw);\n    tw.sched_on = false;\n    tw.in.insert = 0x0F;\n    tb_mask(&tw, 0x0A);\n    tb_steps(&tw, NULL, 0, TB_STEPS_2S + 10);\n    ASSERT_EQ(ace2k_rfid_tiebreak_pick(&tw.tb, &tw.w, 0x0F, tw.now), 0);\n    tw.in.moving = 0x02;\n    tb_steps(&tw, NULL, 0, 1);\n    ASSERT_EQ(ace2k_rfid_tiebreak_pick(&tw.tb, &tw.w, 0x0D, tw.now), 2);\n    tw.in.moving = 0x0A;\n    tb_steps(&tw, NULL, 0, TB_STEPS_2S + 10);\n    ASSERT_EQ(ace2k_rfid_tiebreak_pick(&tw.tb, &tw.w, 0x05, tw.now), -1);\n    tw.in.moving = 0;\n    tb_steps(&tw, NULL, 0, TB_STEPS_2S - 1);\n    ASSERT_EQ(ace2k_rfid_tiebreak_pick(&tw.tb, &tw.w, 0x0F, tw.now), -1);\n    tb_steps(&tw, NULL, 0, 1);\n    ASSERT_EQ(ace2k_rfid_tiebreak_pick(&tw.tb, &tw.w, 0x0F, tw.now), 0);\n}\n\n/* A tie-break that changes nothing within its reach (no tag in view at all)"
+      ]
+    ]
+  ],
+  [
+    "firmware/tests/feed/test_feed_load.c",
+    [
+      [
+        "/* A host start on the other lane of the reader ends the tie-break at once, even on a lane the host\n * has in use; the tie-break goes back.  A start on the other reader's in-use lane leaves it\n * alone. */",
+        "/* A bounded host move on the other lane of the reader waits for the tie-break's return,\n * even on a lane the host has in use.  The other reader remains independent. */"
+      ],
+      [
+        "    ASSERT_EQ(ace2k_feed_start(&w.feed, 1, ACE2K_FEED_CMD_FEED, 20000, 30000, 111, w.now),\n              ACE2K_FEED_ACCEPTED);\n    step(&w, 4, 0);\n    ASSERT_EQ(w.feed.l[0].sub, ACE2K_FEED_SUB_RETURN);\n    ASSERT_EQ(ace2k_feed_search_end(&w.feed, 0), ACE2K_FEED_SEARCH_YIELD);\n    ASSERT_TRUE(w.run[0] && w.reverse[0]);\n    back_while(&w, ACE2K_FEED_SUB_RETURN, 400);\n    ASSERT_EQ(ace2k_feed_mode(&w.feed, 0), ACE2K_FEED_IDLE);",
+        "    ASSERT_EQ(ace2k_feed_start(&w.feed, 1, ACE2K_FEED_CMD_FEED, 20000, 30000, 111, w.now),\n              ACE2K_FEED_REFUSED_BUSY);\n    ASSERT_TRUE(!w.run[1]);\n    ASSERT_EQ(w.feed.l[0].sub, ACE2K_FEED_SUB_RETURN);\n    ASSERT_EQ(ace2k_feed_search_end(&w.feed, 0), ACE2K_FEED_SEARCH_YIELD);\n    ASSERT_TRUE(w.run[0] && w.reverse[0]);\n    ASSERT_EQ(ace2k_feed_start(&w.feed, 1, ACE2K_FEED_CMD_FEED, 20000, 30000, 111, w.now),\n              ACE2K_FEED_REFUSED_BUSY);\n    ASSERT_TRUE(!w.run[1]);\n    back_while(&w, ACE2K_FEED_SUB_RETURN, 400);\n    ASSERT_EQ(ace2k_feed_mode(&w.feed, 0), ACE2K_FEED_IDLE);\n    ASSERT_EQ(ace2k_feed_start(&w.feed, 1, ACE2K_FEED_CMD_FEED, 20000, 30000, 111, w.now),\n              ACE2K_FEED_ACCEPTED);"
+      ],
+      [
+        "/* A strand going in at the other lane of the reader ends the tie-break at once,",
+        "/* The feed start rechecks the other lane even if the watch's snapshot said it was quiet. */\nTEST(autonomous_search_refused_while_used_neighbour_has_a_bounded_move)\n{\n    struct world w;\n    world_init(&w);\n    w.in.insert = 0x03;\n    w.in.in_use = 0x02;\n    w.in.in_use_valid = true;\n    ace2k_feed_confirm_cfg_set(&w.feed, LEG_UM, LEG_UM_S);\n    step(&w, 0, 0);\n    ASSERT_EQ(ace2k_feed_start(&w.feed, 1, ACE2K_FEED_CMD_FEED, 20000, 30000, 112, w.now),\n              ACE2K_FEED_ACCEPTED);\n    ASSERT_EQ(ace2k_feed_tiebreak_start(&w.feed, 0, w.now), ACE2K_FEED_REFUSED_OTHER_LANE);\n    ASSERT_EQ(ace2k_feed_mode(&w.feed, 0), ACE2K_FEED_IDLE);\n    ASSERT_TRUE(!w.run[0]);\n}\n\n/* A strand going in at the other lane of the reader ends the tie-break at once,"
+      ]
+    ]
+  ]
+]
