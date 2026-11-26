@@ -13,6 +13,20 @@ Base: 5c0bcb37bc0bf226b5c802a46566574e03a9e5d9, 1902.7. Field report confirms fo
 
 native_eject_contract.py is a pure protocol and acceptance contract, not a transport or a motion API. It is deliberately not wired to the provider, screen, G-code or startup. Its tests cover the real native mode, unit/lane/seq binding, freshness, cancellation, terminal event and verified stillness. A caller must own the existing driver transport and route; never start a second serial driver.
 
+`native_unload_wire.py` is an **unwired development prototype**, not a usable
+or deployable motion implementation. It exercises the existing link's
+sequence allocator and transport under its I/O lock, the native UNLOAD fields,
+targeted stop on an uncertain start, terminal-event matching and a single
+last-event query. The tests include the real pinned 1.90.2 link class with a
+simulated serial transport. The prototype's per-link reservation is visible
+only to itself: the production driver's normal motion, automatic RFID and
+background paths do not yet honor it. It has no route lease, durable stop
+fault, safe reservation-release protocol, event subscription, screen API,
+or packaging hook. Do not call it on hardware or include it in a firmware
+candidate until those missing owners and release conditions are implemented
+and reviewed. In particular, a `LaneSample` has no embedded lane identity;
+the future caller must bind both samples to the actual connection and lane.
+
 ## Required integration before any test image
 
 1. Read the field audit/logs and reconcile the exact released screen binary's command/status/stop contracts with the installed 1902.7. Verify actual get_lane_state evidence for 16 lanes, exact unit UID and device mapping. No mutation during this audit.
