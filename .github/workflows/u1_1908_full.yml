@@ -45,6 +45,13 @@ jobs:
           git fetch --quiet --depth=1 origin "$pin"
           git archive "$pin:02-屏幕层/233-screen" | tar -x -C "$screen"
           git -C "$screen/lib/lvgl" apply --include=src/misc/lv_helix_thread_check.h ../../patches/lvgl_thread_check_hook.patch
+          # The archived LVGL contains the partial-upload implementation but omits its new header.
+          # Restore only the original new-file hunk; all existing sibling patches stay intact.
+          upload=src/drivers/display/drm/lv_linux_drm_egl_upload.h
+          test ! -e "$screen/lib/lvgl/$upload"
+          git -C "$screen/lib/lvgl" apply --include="$upload" ../../patches/lvgl-egl-partial-upload.patch
+          test -s "$screen/lib/lvgl/$upload"
+          [[ "$(git hash-object "$screen/lib/lvgl/$upload")" == 9fe236cf6* ]]
           git -C "$screen/lib/libhv" apply --include=base/dns_resolv.c --include=base/dns_resolv.h ../../patches/libhv-dns-resolver-fallback.patch
           patch -d "$screen" --batch --fuzz=0 -p1 < bundles/full-system-1902/screen_routes.patch
           python3 bundles/ace2k-native-slot-exit/patch_batch_screen.py "$screen"
