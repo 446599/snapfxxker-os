@@ -1,0 +1,45 @@
+name: Build U1 233 1.90.2 system candidate
+on:
+  push:
+    branches: [build/u1-1902-candidate]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: u1-1902-system-candidate
+  cancel-in-progress: true
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev squashfs-tools qemu-user-static
+      - name: Software composition and mapping checks
+        run: |
+          bash -n bundles/full-system-1902/build.sh
+          python3 -m unittest discover -s bundles/full-system-1902 -v
+          sh bundles/multiace-190/test_paxx_1902_mounts.sh
+      - name: Fetch exact released base firmware
+        run: |
+          mkdir -p inputs
+          curl --fail --location --retry 2 --max-time 300 \
+            https://github.com/446599/snapfxxker-os/releases/download/v2.1.2-233-paxx8d8af0d.2/U1_233_2.1.2-233-paxx8d8af0d.2_upgrade.bin \
+            -o inputs/base.bin
+          echo '0d7b4039696a0a3b98df093b58a333fb0de5b5372ab665bf4d6a9d3165b942bf  inputs/base.bin' | sha256sum -c -
+      - name: Repack full candidate and verify actual readback
+        run: |
+          sudo bash bundles/full-system-1902/build.sh inputs/base.bin output
+          sudo chown -R "$(id -u):$(id -g)" output
+          git rev-parse HEAD > output/SOURCE_COMMIT.txt
+          (cd output && sha256sum -c SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: U1-233-1902.1-candidate
+          path: output/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
