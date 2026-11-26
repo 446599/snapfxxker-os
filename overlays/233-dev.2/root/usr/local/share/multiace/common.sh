@@ -285,7 +285,73 @@ multiace_unmount_file() {
     fi
 }
 
+# 1.90.2 split runtime: this list mirrors its managed manifest. Keep the
+# 1.27b mount list below unchanged for the existing provider and rollback.
+multiace_1902_module_map() {
+    cat <<'MAP'
+extras/ace.py extras/ace.py
+extras/ace_macro_layout.py extras/ace_macro_layout.py
+extras/ace_protocol.py extras/ace_protocol.py
+extras/ace_protocol_v1.py extras/ace_protocol_v1.py
+extras/ace_protocol_v2.py extras/ace_protocol_v2.py
+extras/ace_protocol_cfs.py extras/ace_protocol_cfs.py
+extras/ace_protocol_ace2k.py extras/ace_protocol_ace2k.py
+extras/ace_bg_swap.py extras/ace_bg_swap.py
+extras/ace_tipform.py extras/ace_tipform.py
+extras/ace_rc522.py extras/ace_rc522.py
+extras/ace_gen1_tunnel.py extras/ace_gen1_tunnel.py
+extras/ace_resistance.py extras/ace_resistance.py
+extras/ace_display.py extras/ace_display.py
+extras/ace_spool.py extras/ace_spool.py
+extras/ace_settings.py extras/ace_settings.py
+extras/ace_swap.py extras/ace_swap.py
+extras/ace_unit.py extras/ace_unit.py
+extras/ace_drivers.py extras/ace_drivers.py
+extras/filament_feed_ace.py extras/filament_feed_ace.py
+extras/filament_feed_ace.py extras/filament_feed.py
+extras/filament_switch_sensor_ace.py extras/filament_switch_sensor_ace.py
+extras/filament_switch_sensor_ace.py extras/filament_switch_sensor.py
+kinematics/extruder_ace.py kinematics/extruder_ace.py
+kinematics/extruder_ace.py kinematics/extruder.py
+MAP
+}
+
+multiace_mount_1902_modules() {
+    # Validate the entire payload before binding any files.
+    while read -r source target; do
+        [ -f "$MULTIACE_APP_ROOT/klipper/$source" ] || {
+            echo "multiACE 1.90.2 package is missing $source" >&2
+            return 1
+        }
+    done <<MAP
+$(multiace_1902_module_map)
+MAP
+    while read -r source target; do
+        multiace_bind_file "$MULTIACE_APP_ROOT/klipper/$source" \
+            "/home/lava/klipper/klippy/$target" || return 1
+    done <<MAP
+$(multiace_1902_module_map)
+MAP
+    # Optional upstream diagnostic shipped in some candidate builds.
+    if [ -f "$MULTIACE_APP_ROOT/klipper/extras/bg_concurrency_probe.py" ]; then
+        multiace_bind_file "$MULTIACE_APP_ROOT/klipper/extras/bg_concurrency_probe.py" \
+            /home/lava/klipper/klippy/extras/bg_concurrency_probe.py || return 1
+    fi
+    return 0
+}
+
+multiace_unmount_1902_modules() {
+    while read -r source target; do
+        multiace_unmount_file "/home/lava/klipper/klippy/$target"
+    done <<MAP
+$(multiace_1902_module_map)
+MAP
+    multiace_unmount_file /home/lava/klipper/klippy/extras/bg_concurrency_probe.py
+}
+
 multiace_unmount_modules() {
+    # Also clean the 1.90.2 split modules when reverting to 1.27b.
+    multiace_unmount_1902_modules
     multiace_unmount_file /home/lava/klipper/klippy/extras/ace.py
     multiace_unmount_file /home/lava/klipper/klippy/extras/ace_native_guard.py
     multiace_unmount_file /home/lava/klipper/klippy/extras/ace_protocol.py
@@ -304,6 +370,13 @@ multiace_unmount_modules() {
 }
 
 multiace_mount_modules() {
+    provider_version="$(tr -d '\r\n' < "$MULTIACE_APP_ROOT/VERSION")" || return 1
+    case "$provider_version" in
+        1.90.2|1.90.2-*)
+            multiace_mount_1902_modules
+            return $?
+            ;;
+    esac
     multiace_bind_file "$MULTIACE_APP_ROOT/klipper/extras/ace.py" \
         /home/lava/klipper/klippy/extras/ace.py || return 1
     multiace_bind_file "$MULTIACE_APP_ROOT/klipper/extras/ace_native_guard.py" \
