@@ -1,0 +1,9 @@
+# Cloud continuation (1902.8 development, NOT a firmware image)
+
+Remote baseline: fa332d087413cdc170b244a3781a4986add76876. Separate branch so the original development ref and locally uncommitted route_journal.py, exit_transaction.py and native_event_router.py are not overwritten. These files are independent work; reconcile rather than replace local work.
+
+- cloud_route_owner.py: one exclusive process owner; serialized conflict check + durable reservation; explicit UID/port/slot/RFID reader/head resources, dispatch marker before wire write, no automatic expiry, restart holds, stale-token rejection. The actual reader/head topology must be provided by production code, not guessed. A coordinator must own the same journal across all competing motion sources and the verification callback must prove actual stop and route. No production caller is wired yet.
+- cloud_link_evidence.py: samples selected lane from the real link's native reports under its I/O lock, ties evidence to link/UID/connection epoch/slot; records matching events through a callback intended for the real driver receive path. Connection lifecycle and event dispatch must still be wired. No raw commands or firmware modifications.
+- Tests exercise races, crash recovery, failure to persist, stale owners, actual field driver report handling and wrong-lane/connection evidence. The existing wire contract stays unchanged.
+
+Do not deploy these modules. Remaining release gates: reconcile the local worktree; wire ALL existing motion/auto-RFID/background and MCU in-use ownership to the same route coordinator, establish the actual topology and parked/head-source evidence, connect terminal event delivery/cancel/last-query, add real Provider/screen interfaces and packaging, test, then single-lane physical acceptance followed by 16-lane/printing/persistence acceptance. Never flash ACE MCU or relabel 1902.7 as 1902.8.

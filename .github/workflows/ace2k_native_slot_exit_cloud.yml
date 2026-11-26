@@ -1,0 +1,20 @@
+name: Cloud 1902.8 native slot exit development checks
+on:
+  push:
+    branches: [dev/1902-native-slot-exit-cloud]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test route ownership, real field-link evidence and existing contracts
+        env:
+          PYTHONPATH: bundles/multiace-190
+        run: |
+          python3 -m unittest discover -s bundles/ace2k-native-slot-exit -v
+          python3 -m unittest discover -s bundles/multiace-190 -p 'test_lane*.py' -v
+      - name: Check unchanged full-system composition
+        run: python3 -m unittest discover -s bundles/full-system-1902 -v
