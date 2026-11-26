@@ -28,5 +28,9 @@ jobs:
           screen="$RUNNER_TEMP/233-batch-screen"
           mkdir -p "$screen"
           git fetch --quiet --depth=1 origin "$pin"
-          git archive "$pin:02-屏幕层/233-screen" include/u1_filament_overview.h src/ui/filament/u1_filament_overview.cpp | tar -x -C "$screen"
+          git archive "$pin:02-屏幕层/233-screen" | tar -x -C "$screen"
+          git -C "$screen/lib/lvgl" apply --include=src/misc/lv_helix_thread_check.h ../../patches/lvgl_thread_check_hook.patch
+          git -C "$screen/lib/libhv" apply --include=base/dns_resolv.c --include=base/dns_resolv.h ../../patches/libhv-dns-resolver-fallback.patch
+          patch -d "$screen" --batch --fuzz=0 -p1 < bundles/full-system-1902/screen_routes.patch
           python3 "$d/patch_batch_screen.py" "$screen"
+          bash bundles/full-system-1902/test_screen_routes.sh "$screen"

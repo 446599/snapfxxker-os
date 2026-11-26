@@ -9,8 +9,11 @@ import sys
 
 HERE=Path(__file__).resolve().parent
 PIN={
-    'include/u1_filament_overview.h':'a5629d4eb4561230fac245868aff424e08c587b2',
-    'src/ui/filament/u1_filament_overview.cpp':'b5edabc1b6079da41389691c5be8db8b80d8896c',
+    'include/u1_filament_overview.h':'de89b5ca94598ea2309b15eed75490098274401e',
+    'src/ui/filament/u1_filament_overview.cpp':'d4494fd80ad810889f2b5a7a79f6482856f4a711',
+    'include/multiace_status.h':'e924fb417b3856cf999842ce084006b307e91824',
+    'src/printer/multiace_status.cpp':'1033426b18a852edfe988c99861eed116e7792f0',
+    'src/printer/ams_backend_multiace.cpp':'bddd3e375616c76dced6260656fbcc74d6264e9a',
 }
 
 
@@ -27,6 +30,15 @@ def stage(root):
         if hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()!=sha:
             raise ValueError('screen source mismatch: '+path)
         src[path]=data.decode()
+    src['include/multiace_status.h']=replace(src['include/multiace_status.h'],
+        '    std::string protocol, model, firmware, status, connect_error;',
+        '    std::string protocol, model, firmware, status, connect_error, unit_key;')
+    src['src/printer/multiace_status.cpp']=replace(src['src/printer/multiace_status.cpp'],
+        '    unit.firmware = str_or_empty(u, "firmware");',
+        '    unit.firmware = str_or_empty(u, "firmware");\n    unit.unit_key = str_or_empty(u, "unit_key");')
+    src['src/printer/ams_backend_multiace.cpp']=replace(src['src/printer/ams_backend_multiace.cpp'],
+        '            unit.firmware_version = u.firmware;',
+        '            unit.firmware_version = u.firmware;\n            unit.serial_number = u.unit_key;')
     h=src['include/u1_filament_overview.h']
     h=replace(h,'#include "u1_filament_model.h"','#include "u1_filament_model.h"\n#include "screen_batch_selection.h"\n#include <memory>')
     h=replace(h,'    void on_action_load();','''    void toggle_batch_mode();
@@ -199,6 +211,10 @@ void U1FilamentOverview::start_batch() {
 
 void U1FilamentOverview::on_action_load() {''')
     # All anchor checks finished before writing any source.
+    from patch_batch_task_view import extend
+    h,c=extend(h,c)
+    for path in ('include/multiace_status.h','src/printer/multiace_status.cpp','src/printer/ams_backend_multiace.cpp'):
+        (root/path).write_text(src[path])
     (root/'include/screen_batch_selection.h').write_bytes((HERE/'screen_batch_selection.h').read_bytes())
     (root/'include/u1_filament_overview.h').write_text(h)
     (root/'src/ui/filament/u1_filament_overview.cpp').write_text(c)
