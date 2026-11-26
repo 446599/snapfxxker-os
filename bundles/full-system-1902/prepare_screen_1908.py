@@ -21,27 +21,14 @@ def prepare(root):
 ''','''    get_print_tune_overlay().show(parent_screen_, api_, printer_state_);
 ''')
     p.write_text(s)
-    # Single-slot exit must use the same new endpoint as multi-select, rather
-    # than the old material workspace endpoint that lacked native slot exit.
+    # patch_batch_task_view already routes single-slot eject through preview.
+    # Verify the existing connection rather than re-applying a second edit.
     p=root/'src/ui/filament/u1_filament_overview.cpp'
-    s=replace(p.read_text(),'''    ui::get_material_workspace().open_action(slot->head, slot->backend_unit - 1, "eject", {},
-                                              slot->local_slot, {}, slot->ace);
-''','''    auto* backend = AmsState::instance().get_backend();
-    auto* client = get_moonraker_client();
-    if (!backend || !client) { show_feedback("设备连接不可用"); return; }
-    const auto info = backend->get_system_info();
-    const auto* unit = info.unit_for_slot(slot->global_index);
-    if (!unit || unit->serial_number.empty()) { show_feedback("无法确认 ACE 身份"); return; }
-    batch_selection_.clear();
-    batch_backend_ = backend;
-    batch_connection_ = client->connection_generation();
-    batch_mode_ = true;
-    if (!batch_selection_.toggle({slot->ace, slot->local_slot, slot->global_index, unit->serial_number})) {
-        batch_mode_ = false; show_feedback("槽位不可用"); return;
-    }
-    preview_batch("eject");
-''')
-    p.write_text(s)
+    source=p.read_text()
+    start=source.index('void U1FilamentOverview::on_action_eject() {')
+    end=source.index('\n}',start)
+    if 'preview_batch("eject")' not in source[start:end]:
+        raise ValueError('single-slot native eject was not integrated')
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('root',type=Path);prepare(p.parse_args().root)
