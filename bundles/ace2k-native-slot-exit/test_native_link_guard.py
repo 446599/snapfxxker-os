@@ -1,0 +1,214 @@
+"""Run the real pinned field driver with the integration patch, no hardware."""
+import importlib
+from pathlib import Path
+import struct
+import sys
+import tarfile
+import tempfile
+import types
+import unittest
+from unittest.mock import Mock
+
+from native_eject_contract import Operation
+from native_unload_wire import NativeUnloadWire
+from patch_native_link import stage
+
+
+class NativeDriverGuardTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        root = Path(cls.tmp.name)
+        archive = (Path(__file__).resolve().parents[1] / 'multiace-190' / 'artifacts' /
+                   'multiace-1.90.2-233.20261126.tar.gz')
+        with tarfile.open(archive, 'r:gz') as t:
+            for name in ('ace_protocol.py', 'ace_protocol_ace2k.py'):
+                (root / name).write_bytes(t.extractfile(
+                    'multiace-1.90.2-233.20261126/klipper/extras/' + name).read())
+        stage(root)
+        pkg = types.ModuleType('field_native_guard_test')
+        pkg.__path__ = [str(root)]
+        sys.modules[pkg.__name__] = pkg
+        cls.driver = importlib.import_module(pkg.__name__ + '.ace_protocol_ace2k')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.now = [10.0]
+        self.raw = types.SimpleNamespace(is_open=True, write=Mock(side_effect=len), close=Mock())
+        self.link = self.driver.Ace2kLink(self.raw, clock=lambda: self.now[0])
+        self.link._ready = True
+        self.link.uid = struct.pack('<3I', 1, 2, 3)
+        self.link._in_use = 0
+        self.link.dictionary = types.SimpleNamespace(has=lambda n: True,
+            encode=Mock(return_value=b'payload'), constant=lambda n,d:d)
+        self.link._xfer = Mock(return_value=True)
+        self.link._wait = Mock(return_value=({'lane': 0, 'accepted': 1, 'reason': 0}, None))
+        self.guard = self.link._native_exit
+        self.report(10)
+
+    def report(self, t, modes=(0,0,0,0), switches=15, enc=(55,66,77,88), fg=(3,4,5,6)):
+        self.now[0] = t
+        self.link._dispatch('ace2k_sensors_state', {'switches': switches, 'age_ms': 0})
+        self.link._dispatch('ace2k_feed_state', {'mode': bytes(modes), 'seq': bytes([16]*4)})
+        self.link._dispatch('ace2k_lane_counters', {'encoder_um': struct.pack('<4i', *enc),
+                                                  'fg': struct.pack('<4I', *fg)})
+
+    def wire(self, lane=0, valid=lambda: True, epoch=None):
+        op = Operation('uid:00000001-00000002-00000003', epoch or self.guard.epoch,
+                       lane, 17, self.now[0])
+        return NativeUnloadWire(self.link, op, valid, self.driver.klipper_block)
+
+    def test_real_receive_path_no_fake_event_callback(self):
+        wire = self.wire()
+        hold = self.guard.reserve(wire)
+        self.report(11)
+        self.assertTrue(self.guard.capture(hold))
+        self.report(12)
+        self.assertEqual(self.guard.start(hold, 60000), 'started')
+        self.raw.write.assert_called_once()
+        self.link.dictionary.encode.assert_any_call('ace2k_feed_start', lane=0, mode=4,
+                      length_um=0, speed_um_s=60000, seq=17, free_tip=0)
+        self.report(13, modes=(3,0,0,0))
+        self.link._dispatch('ace2k_feed_event', {'lane':0,'seq':16,'mode':3,'kind':6})
+        self.assertIsNone(wire.event)
+        self.link._dispatch('ace2k_feed_event', {'lane':0,'seq':17,'mode':3,'kind':6})
+        self.assertEqual(wire.event['kind'], 6)
+        self.assertEqual(wire.event_at, 13)
+        self.assertTrue(self.guard.blocked(1))
+        self.assertFalse(self.guard.blocked(2))
+        with self.assertRaises(RuntimeError):
+            self.guard.release_before_start(hold)
+
+    def test_pair_conflict_and_other_reader_parallel(self):
+        a = self.guard.reserve(self.wire(0))
+        self.assertEqual(self.guard.mask(), 3)
+        with self.assertRaises(RuntimeError):
+            self.guard.reserve(self.wire(1))
+        b = self.guard.reserve(self.wire(2))
+        self.assertEqual(self.guard.mask(), 15)
+        self.guard.release_before_start(a)
+        self.assertEqual(self.guard.mask(), 12)
+        self.guard.release_before_start(b)
+        self.assertEqual(self.guard.mask(), 0)
+
+    def test_normal_host_and_auto_motion_blocked_on_pair_only(self):
+        self.guard.reserve(self.wire(0))
+        self.link._xfer.reset_mock()
+        for lane in (0,1):
+            self.assertEqual(self.link._start(lane,0,100,30), (None,'busy'))
+            self.assertEqual(self.link._motion('start_feed_assist',{'index':lane},1)['code'],1)
+            self.assertEqual(self.link._tag_read_load({'index':lane},1)['code'],1)
+            self.assertEqual(self.link._tag_read_motion({'index':lane},1)['code'],1)
+            self.assertEqual(self.link._start_piece({'slot':lane}),'busy')
+            self.assertIsNone(self.link._send('ace2k_feed_clear',lane=lane))
+        self.link._xfer.assert_not_called()
+        self.link._xfer.return_value = {'accepted':1,'lane':2,'reason':0}
+        self.assertEqual(self.link._start(2,0,100,30), (17,'ok'))
+        self.link._xfer.return_value = True
+        self.assertTrue(self.link._stop_lane(0))
+
+    def test_lost_mask_ack_no_start(self):
+        self.link._xfer.return_value = None
+        with self.assertRaises(RuntimeError):
+            self.guard.reserve(self.wire())
+        self.assertEqual(self.guard.mask(), 0)
+        self.raw.write.assert_not_called()
+
+    def test_peer_movement_or_reused_reports_never_starts(self):
+        hold = self.guard.reserve(self.wire())
+        self.report(11)
+        self.guard.capture(hold)
+        with self.assertRaises(RuntimeError):
+            self.guard.start(hold,60000)
+        self.report(12,fg=(3,5,5,6))
+        with self.assertRaises(RuntimeError):
+            self.guard.start(hold,60000)
+        self.raw.write.assert_not_called()
+
+    def test_queued_peer_and_wrong_connection_refused(self):
+        self.link._follow_want.add(1)
+        with self.assertRaises(RuntimeError):
+            self.guard.reserve(self.wire())
+        self.link._follow_want.clear()
+        with self.assertRaises(RuntimeError):
+            self.guard.reserve(self.wire(epoch='old'))
+        self.assertEqual(self.guard.mask(),0)
+
+    def test_route_loss_and_disconnect_no_start(self):
+        route = [True]
+        hold = self.guard.reserve(self.wire(valid=lambda:route[0]))
+        self.report(11)
+        self.guard.capture(hold)
+        self.report(12)
+        route[0] = False
+        with self.assertRaises(RuntimeError):
+            self.guard.start(hold,60000)
+        route[0] = True
+        self.guard.invalidate()
+        with self.assertRaises(RuntimeError):
+            self.guard.start(hold,60000)
+        self.raw.write.assert_not_called()
+
+    def test_release_needs_real_unloaded_and_independent_reports(self):
+        hold = self.guard.reserve(self.wire())
+        self.report(11)
+        self.guard.capture(hold)
+        self.report(12)
+        self.guard.start(hold, 60000)
+        commit = Mock(return_value=True)
+        self.report(13, switches=14)
+        self.assertFalse(self.guard.capture_after_event(hold))
+        self.assertFalse(self.guard.finish(hold,commit))
+        self.link._dispatch('ace2k_feed_event', {'lane':0,'seq':17,'mode':3,'kind':6})
+        self.report(14,switches=14)
+        self.assertTrue(self.guard.capture_after_event(hold))
+        self.assertFalse(self.guard.finish(hold,commit))
+        self.report(15,switches=14,fg=(4,4,5,6))
+        self.assertFalse(self.guard.finish(hold,commit))
+        self.report(16,switches=14,fg=(3,4,5,6))
+        commit.return_value = False
+        self.assertFalse(self.guard.finish(hold,commit))
+        self.assertTrue(self.guard.blocked(0))
+        self.guard.capture_after_event(hold)
+        self.report(17,switches=14,fg=(3,4,5,6))
+        commit.return_value = True
+        self.assertTrue(self.guard.finish(hold,commit))
+        self.assertFalse(self.guard.blocked(0))
+        self.assertNotIn(0,self.link._native_unload_owners)
+
+    def test_cancel_targets_current_operation_even_if_route_lost(self):
+        route = [True]
+        hold = self.guard.reserve(self.wire(valid=lambda:route[0]))
+        self.report(11)
+        self.guard.capture(hold)
+        self.report(12)
+        self.guard.start(hold,60000)
+        route[0] = False
+        self.link._xfer.reset_mock()
+        self.assertFalse(self.guard.cancel(hold,lane=1,seq=17,epoch=self.guard.epoch))
+        self.assertFalse(self.guard.cancel(hold,lane=0,seq=16,epoch=self.guard.epoch))
+        self.link._xfer.assert_not_called()
+        self.assertTrue(self.guard.cancel(hold,lane=0,seq=17,epoch=self.guard.epoch))
+        self.link.dictionary.encode.assert_called_with('ace2k_feed_stop',lane=0)
+        self.assertTrue(self.guard.blocked(0))
+
+    def test_last_query_is_same_lane_and_does_not_fake_success(self):
+        hold = self.guard.reserve(self.wire())
+        self.report(11)
+        self.guard.capture(hold)
+        self.report(12)
+        self.guard.start(hold,60000)
+        self.report(13,switches=14)
+        self.link._xfer.return_value = {'lane':0,'seq':17,'mode':3,'kind':6}
+        self.assertTrue(self.guard.query_last(hold))
+        self.link.dictionary.encode.assert_called_with('ace2k_feed_last_query',lane=0)
+        self.assertFalse(self.guard.query_last(hold))
+        self.assertFalse(self.guard.capture_after_event(hold))
+        self.assertTrue(self.guard.blocked(0))
+
+
+if __name__ == '__main__':
+    unittest.main()
