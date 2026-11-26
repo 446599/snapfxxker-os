@@ -8,7 +8,7 @@ REPO=$(cd "$HERE/../.." && pwd)
 BASE=$(realpath "${1:?usage: build.sh base-upgrade.bin output-directory}")
 mkdir -p "${2:?output directory required}"
 OUT=$(realpath "$2")
-VERSION=2.1.2-233-1902.2
+VERSION=2.1.2-233-1902.3
 BASE_SHA=0d7b4039696a0a3b98df093b58a333fb0de5b5372ab665bf4d6a9d3165b942bf
 FIELD="$REPO/bundles/multiace-190/artifacts/multiace-1.90.2-233.20261126.tar.gz"
 COMMON="$REPO/overlays/mods/multiace/70-app-multiace/root/usr/local/share/multiace/common.sh"

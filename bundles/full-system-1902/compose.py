@@ -13,7 +13,7 @@ BASE_PROVIDER = '1.27b-233.20261122-flow.15.112'
 BASE_PROVIDER_SHA = '0d21c8d2d4b4477c68588c075a68c9b645d3892e72b4b6befa44ccd4f6957b25'
 FIELD_VERSION = '1.90.2-233.20261126'
 FIELD_SHA = 'd16535002703f19f43282c990385c1810c48d63a1d0ebff0d25335d924c9faea'
-PROVIDER = FIELD_VERSION + '-paxx.2'
+PROVIDER = FIELD_VERSION + '-paxx.3'
 APP_ROOT = '/userdata/233-apps/multiace'
 APP = APP_ROOT + '/latest'
 
@@ -100,6 +100,46 @@ def patch_preload(text):
     result = text[:start] + block + text[end:]
     compile(result, 'ace.py', 'exec')
     return result
+
+
+def patch_klipper_hook(text):
+    """Do not abort the parent init script if storage relocation fails."""
+    original = '''        if multiace_enabled; then
+            if ! multiace_activate; then
+                echo "multiACE is enabled but could not be activated; starting stock Klipper paths." >&2
+            fi
+        else
+            multiace_deactivate
+        fi
+'''
+    updated = '''        if multiace_enabled; then
+            # The early boot migration may have run before userdata mounted.
+            if /etc/init.d/S47multiace-storage start; then
+                pkg=/usr/local/bin/extended-pkg
+                if ! "$pkg" multiace check || "$pkg" multiace needs_upgrade; then
+                    if ! "$pkg" multiace upgrade; then
+                        echo "multiACE pinned provider upgrade failed; keeping previous provider" >&2
+                    fi
+                fi
+                if ! multiace_activate; then
+                    echo "multiACE is enabled but could not be activated; starting stock Klipper paths." >&2
+                fi
+            else
+                echo "multiACE storage relocation failed; starting stock Klipper paths, no provider extraction" >&2
+                multiace_unmount_modules
+                # Remove only the integration's own include, never the
+                # user's configuration or an unrelated link. Keep the
+                # user's multiACE selection for the next successful boot.
+                if [ -L "$MULTIACE_CONFIG_LINK" ] &&
+                   [ "$(readlink "$MULTIACE_CONFIG_LINK")" = "$MULTIACE_CONFIG_FILE" ]; then
+                    rm -f "$MULTIACE_CONFIG_LINK"
+                fi
+            fi
+        else
+            multiace_deactivate
+        fi
+'''
+    return replace_once(text, original, updated)
 
 
 def compose(root, field, common_source, work):
@@ -189,19 +229,7 @@ def compose(root, field, common_source, work):
     # Install the pinned provider on boot only when the owner selected PAXX
     # MultiACE; never use clean/download (which remove the prior provider).
     hook = root / 'etc/hooks/klipper.d/10-multiace.sh'
-    hook.write_text(replace_once(hook.read_text(), '        if multiace_enabled; then\n', '''        if multiace_enabled; then
-            # The early boot migration may have run before userdata mounted.
-            if ! /etc/init.d/S47multiace-storage start; then
-                echo "multiACE storage relocation failed; not extracting into OEM" >&2
-                exit 1
-            fi
-            pkg=/usr/local/bin/extended-pkg
-            if ! "$pkg" multiace check || "$pkg" multiace needs_upgrade; then
-                if ! "$pkg" multiace upgrade; then
-                    echo "multiACE pinned provider upgrade failed; keeping previous provider" >&2
-                fi
-            fi
-'''))
+    hook.write_text(patch_klipper_hook(hook.read_text()))
     # The baked S98 service is the only managed web owner. It must not repeat
     # configuration migration or serve an old standalone tree.
     service = root / 'etc/init.d/S98multiace-web'

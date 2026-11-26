@@ -73,9 +73,64 @@ class StorageMigrationTest(unittest.TestCase):
         unknown = self.old/'multiace-custom'
         unknown.mkdir()
         (unknown/'VERSION').write_text('different-version')
-        with self.assertRaises(ValueError):
-            self.migrate()
+        self.assertEqual(self.migrate(),[self.name])
         self.assertTrue(unknown.is_dir())
+        self.assertEqual((unknown/'VERSION').read_text(),'different-version')
+
+    def test_50_legacy_links_and_6_real_providers(self):
+        import shutil
+        runtime = self.root/'userdata/multiace-provider-runtime'
+        runtime.mkdir(parents=True)
+        alias_target = runtime/'legacy-release'
+        alias_target.mkdir()
+        (alias_target/'sentinel').write_text('legacy contents must stay')
+        links = {}
+        for i in range(50):
+            link = self.old/('multiace-0-legacy-%02d' % i)
+            # Include existing, dangling and looping links. None should be
+            # traversed, rewritten or deleted, regardless of sort order.
+            target = alias_target if i < 48 else (runtime/'missing' if i == 48 else link)
+            link.symlink_to(target)
+            links[link] = os.readlink(link)
+        providers = {self.name: storage.fingerprint(self.src)}
+        for i in range(5):
+            name = 'multiace-1.27b-field-%d' % i
+            src = self.old/name
+            shutil.copytree(self.src,src,symlinks=True)
+            (src/'VERSION').write_text(name[len('multiace-'):]+'\n')
+            providers[name] = storage.fingerprint(src)
+        self.assertEqual(set(self.migrate()),set(providers))
+        for name, before in providers.items():
+            self.assertEqual(storage.fingerprint(self.new/name),before)
+            self.assertTrue((self.old/name).is_symlink())
+        for link, target in links.items():
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(os.readlink(link),target)
+        self.assertEqual((alias_target/'sentinel').read_text(),'legacy contents must stay')
+        self.assertEqual((self.new/'latest').resolve(),self.new/self.name)
+        self.assertEqual(self.migrate(),[])
+
+    def test_latest_points_to_legacy_link(self):
+        runtime = self.root/'userdata/multiace-provider-runtime'
+        runtime.mkdir(parents=True)
+        target = runtime/'standalone'
+        target.mkdir()
+        alias = self.old/'multiace-legacy-standalone'
+        alias.symlink_to(target)
+        (self.old/'latest').unlink()
+        (self.old/'latest').symlink_to(alias.name)
+        self.assertEqual(self.migrate(),[self.name])
+        self.assertEqual((self.old/'latest').resolve(),target)
+        # Do not promote an unverified external alias to new managed latest.
+        self.assertFalse(os.path.lexists(self.new/'latest'))
+
+    def test_incomplete_historical_directory_does_not_block(self):
+        incomplete = self.old/'multiace-0-incomplete'
+        incomplete.mkdir()
+        (incomplete/'partial').write_text('retain')
+        self.assertEqual(self.migrate(),[self.name])
+        self.assertEqual((incomplete/'partial').read_text(),'retain')
+
 
 if __name__ == '__main__':
     unittest.main()

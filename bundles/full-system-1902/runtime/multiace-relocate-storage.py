@@ -108,9 +108,12 @@ def migrate(old, new, verify_mounts=True, sync=os.sync):
         dest = new / name
         original = old / name
         if src.is_symlink():
-            if src.resolve() == dest.resolve() and dest.is_dir():
-                continue
-            raise RuntimeError('unexpected provider symlink: ' + str(src))
+            # Legacy standalone installers left versioned links into
+            # /userdata/multiace-provider-runtime. A link uses one OEM
+            # inode and is not a directory to reclaim. Do not follow,
+            # rewrite or delete it (including dangling/looping links).
+            print('preserved provider symlink: ' + str(src), flush=True)
+            continue
         if not src.is_dir():
             continue
         if verify_mounts:
@@ -122,7 +125,14 @@ def migrate(old, new, verify_mounts=True, sync=os.sync):
             if any(complete.get(k) != v for k, v in remaining.items()):
                 raise RuntimeError('interrupted provider copy does not match: ' + name)
         else:
-            validate_provider(src, name)
+            try:
+                validate_provider(src, name)
+            except (ValueError, FileNotFoundError) as exc:
+                # Unknown/incomplete historical trees are not proven
+                # providers. Leave them intact; do not let an inactive
+                # directory block relocation of the recognized releases.
+                print('preserved unrecognized provider: %s (%s)' % (src, exc), flush=True)
+                continue
             before = fingerprint(src)
             if not os.path.lexists(dest):
                 with tempfile.TemporaryDirectory(prefix='.copy-', dir=new) as tmp:

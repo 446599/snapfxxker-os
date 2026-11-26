@@ -73,7 +73,7 @@ class CompositionTest(unittest.TestCase):
             tar(old, oldpkg)
             oldhash = c.sha(oldpkg)
             write(root, 'usr/local/share/extended-pkg/multiace', f'PKG_VERSION="{c.BASE_PROVIDER}"\nPKG_URL="file:///{oldpkg.name}"\nPKG_SHA256="{oldhash}"\nPKG_APP_DIR="/oem/apps/multiace"\npkg_post_install() {{\n    for required in \\\n        klipper/extras/ace.py; do\n        test -f "$required"\n    done\n}}\n')
-            write(root, 'etc/hooks/klipper.d/10-multiace.sh', 'case "$1" in\n start)\n        if multiace_enabled; then\n            multiace_activate\n        fi\n        ;;\nesac\n')
+            write(root, 'etc/hooks/klipper.d/10-multiace.sh', 'case "$1" in\n start)\n        if multiace_enabled; then\n            if ! multiace_activate; then\n                echo "multiACE is enabled but could not be activated; starting stock Klipper paths." >&2\n            fi\n        else\n            multiace_deactivate\n        fi\n        ;;\nesac\n')
             write(root, 'etc/init.d/S98multiace-web', 'start() {\n    if ! multiace_seed_config; then\n        echo "$NAME cannot prepare its persistent configuration" >&2\n        return 1\n    fi\n}\n')
             common = CANDIDATE_COMMON.read_text()
             if '    if [ "$config_seeded" = "1" ]; then\n' not in common:
@@ -146,6 +146,47 @@ class CompositionTest(unittest.TestCase):
         a.load(0)
         self.assertEqual(a._head_source[0], {'ace_index': 1, 'slot': 0})
         self.assertEqual(len(calls), 1)
+
+    def test_failed_storage_does_not_exit_parent_init(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            cfg = write(p, 'ace.cfg', 'keep configuration')
+            link = p/'multiace.cfg'
+            link.symlink_to(cfg)
+            original = '''case "$1" in
+    start)
+        if multiace_enabled; then
+            if ! multiace_activate; then
+                echo "multiACE is enabled but could not be activated; starting stock Klipper paths." >&2
+            fi
+        else
+            multiace_deactivate
+        fi
+        ;;
+esac
+'''
+            script = c.patch_klipper_hook(original)
+            script = script.replace('/etc/init.d/S47multiace-storage start', 'false')
+            script = script.replace('/usr/local/bin/extended-pkg','/bin/false')
+            script = ('multiace_enabled() { return 0; }\n'
+                      'multiace_activate() { echo unexpected-activate; return 1; }\n'
+                      'multiace_unmount_modules() { echo unmounted; }\n'
+                      'multiace_deactivate() { echo unexpected-disable; }\n'
+                      f'MULTIACE_CONFIG_FILE="{cfg}"\n'
+                      f'MULTIACE_CONFIG_LINK="{link}"\n'
+                      'set -e\n' + script + '\necho parent-init-continues\n')
+            result = subprocess.run(['sh','-c',script,'hook','start'],
+                                    capture_output=True,text=True,check=True)
+            self.assertIn('unmounted',result.stdout)
+            self.assertIn('parent-init-continues',result.stdout)
+            self.assertNotIn('unexpected-',result.stdout)
+            self.assertFalse(link.is_symlink())
+            self.assertEqual(cfg.read_text(),'keep configuration')
+            other = write(p,'unrelated.cfg','unrelated')
+            link.symlink_to(other)
+            subprocess.run(['sh','-c',script,'hook','start'],
+                           capture_output=True,text=True,check=True)
+            self.assertEqual(link.resolve(),other)
 
     def test_wrong_field_hash_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
