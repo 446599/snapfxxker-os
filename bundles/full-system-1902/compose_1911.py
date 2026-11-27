@@ -17,6 +17,7 @@ import tarfile
 import compose as base
 import runtime_fixes
 from hub_port_order import patch_engine as patch_hub_port_order
+from offline_ace_scan import patch_engine as patch_offline_ace_scan
 
 HERE=Path(__file__).resolve().parent
 sys.path.insert(0,str(HERE.parent/'ace2k-native-slot-exit'))
@@ -54,7 +55,7 @@ def compose(root,field,common,work,screen,screen_report,commit):
     stage(new,companion)
     engine=new/'klipper/extras/ace.py'
     backend=new/'web/backend/main.py'
-    engine.write_text(patch_hub_port_order(engine.read_text()))
+    engine.write_text(patch_offline_ace_scan(patch_hub_port_order(engine.read_text())))
     require("register_command('ACE_SLOT_EXIT'" in engine.read_text()
             and "'multiace/material_batch'" in engine.read_text()
             and '/api/material/batch/{operation}' in backend.read_text()
