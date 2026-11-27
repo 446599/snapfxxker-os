@@ -112,6 +112,19 @@ def patch_driver(text):
             return ok({'index': slot, 'present': sample.present, 'state': state,
                        'move_admissible': admissible, 'fault_kind': fault_kind,
 ''')
+    text = replace(text, '''    modes = bytearray((feed or {}).get('mode', b''))
+    for i in range(4):
+''', '''    modes = bytearray((feed or {}).get('mode', b''))
+    faults = bytearray((feed or {}).get('error', b''))
+    for i in range(4):
+''')
+    text = replace(text, '''        slots.append(s)
+    out = {'status': 'ready', 'slots': slots}
+''', '''        if i < len(modes) and modes[i] == 7 and i < len(faults):
+            s['lane_error'] = KIND_NAMES.get(faults[i], 'kind_%d' % faults[i])
+        slots.append(s)
+    out = {'status': 'ready', 'slots': slots, 'sensor_switches': switches}
+''')
     text = replace(text, '''            self._end_tag_read(lane, name, moved)
             return
 ''', '''            if kind in ERROR_KINDS or name == 'blocked':

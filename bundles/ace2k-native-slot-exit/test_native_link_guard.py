@@ -96,6 +96,16 @@ class NativeDriverGuardTests(unittest.TestCase):
         self.link._clear_lane.assert_called_once_with(2, 'feed start')
         self.assertEqual(self.link._start.call_count, 2)
 
+    def test_raw_status_exposes_native_fault_and_sensor_bits(self):
+        status = self.driver.make_status(
+            0x127f, feed={'mode': bytes((0, 0, 0, 7)),
+                          'error': bytes((0, 0, 0, 9))})
+        self.assertEqual(status['sensor_switches'], 0x127f)
+        self.assertEqual(status['slots'][3]['lane_mode'], 'error')
+        self.assertEqual(status['slots'][3]['lane_error'], 'motor_stalled')
+        self.assertEqual(status['slots'][3]['status'], 'ready')  # presence only
+        self.assertNotIn('lane_error', status['slots'][0])
+
     def test_tag_blocked_event_records_distance_without_changing_verdict(self):
         self.link._tag_reads[2] = {'seq': 33}
         self.link._end_tag_read = Mock()
