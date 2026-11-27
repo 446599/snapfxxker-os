@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f7f2">
+  <meta name="color-scheme" content="light">
+  <title>U1 · 打印机控制台</title>
+  <link rel="stylesheet" href="./console.css">
+</head>
+<body>
+  <header class="top"><a href="#overview" class="brand"><b>U1</b><span>打印机控制台</span></a><span id="origin"></span></header>
+  <div class="layout">
+    <nav id="nav" aria-label="主导航">
+      <a href="#overview">总览</a><a href="#control">控制</a><a href="#material">耗材</a><a href="#jobs">打印任务</a><a href="#settings">设置</a>
+    </nav>
+    <main>
+      <header class="page-heading"><div><a id="parent" hidden></a><h1 id="title">总览</h1></div><a id="screen-link" href="#screen">机身屏幕</a></header>
+      <div id="login" hidden role="alert">打印机要求登录。<a href="/" target="_blank" rel="noopener">登录打印机</a>后，<button id="retry-login">重新连接</button></div>
+      <div id="page" aria-labelledby="title"><p>正在连接打印机…</p></div>
+      <noscript>请打开浏览器 JavaScript 以操作打印机。</noscript>
+    </main>
+  </div>
+  <div id="notice" role="status" aria-live="polite"></div>
+  <dialog id="confirm"><h2>确认操作</h2><p></p><form method="dialog" class="row"><button value="cancel" autofocus>取消</button><button value="ok" class="primary">确认</button></form></dialog>
+  <script type="module" src="./console.js"></script>
+</body>
+</html>

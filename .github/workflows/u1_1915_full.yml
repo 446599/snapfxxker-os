@@ -1,0 +1,61 @@
+name: Build complete U1 233 1902.15 unified web candidate
+on:
+  push:
+    branches: [codex/1915-unified-web]
+    paths:
+      - 'bundles/unified-web/**'
+      - 'bundles/full-system-1902/build_1915.sh'
+      - 'bundles/full-system-1902/compose_1915.py'
+      - 'bundles/full-system-1902/test_unified_web.py'
+      - '.github/workflows/u1_1915_full.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: u1-1915-full-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  full:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build and route-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev squashfs-tools nginx-core
+      - name: Validate the web bundle and authenticated nginx routes
+        run: |
+          set -euo pipefail
+          bash -n bundles/full-system-1902/build_1915.sh
+          for script in bundles/unified-web/*.js; do node --input-type=module --check < "$script"; done
+          python3 -m unittest discover -s bundles/full-system-1902 -p test_unified_web.py -v
+      - name: Exercise the unified console in Chrome with simulated printer responses
+        run: |
+          python3 -m venv "$RUNNER_TEMP/u1-browser"
+          "$RUNNER_TEMP/u1-browser/bin/pip" install 'playwright==1.52.0'
+          "$RUNNER_TEMP/u1-browser/bin/python" bundles/unified-web/tests/browser.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: U1-1902.15-web-fixture-previews
+          path: ${{ runner.temp }}/u1-web-preview/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Download the exact 1902.14 full build from run 46045154473
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api /repos/446599/snapfxxker-os/actions/artifacts/15224085696/zip > "$RUNNER_TEMP/base-1914.zip"
+      - name: Verify base, install the web console and read back the upgrade
+        run: |
+          sudo bash bundles/full-system-1902/build_1915.sh "$RUNNER_TEMP/base-1914.zip" output
+          (cd output && sha256sum -c SHA256SUMS.txt)
+          cat output/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: U1-233-1902.15-full-candidate
+          path: output/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
