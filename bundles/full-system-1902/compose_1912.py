@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compose a FULL 1902.11 candidate, including freshly compiled native UI.
+"""Compose a FULL 1902.12 candidate, including freshly compiled native UI.
 
 Retain the verified 1902.7 composition, then stage the reviewed native
 material runtime, map every module, pin the new screen runtime and check
@@ -22,10 +22,10 @@ from offline_ace_scan import patch_engine as patch_offline_ace_scan
 HERE=Path(__file__).resolve().parent
 sys.path.insert(0,str(HERE.parent/'ace2k-native-slot-exit'))
 from patch_material_runtime import stage, patch_mount_map, MODULES
-from package_screen_1911 import verify_screen, SCREEN_VERSION, SCREEN_PIN
+from package_screen_1912 import verify_screen, SCREEN_VERSION, SCREEN_PIN
 
-VERSION='2.1.2-233-1902.11'
-PROVIDER=base.FIELD_VERSION+'-paxx.11'
+VERSION='2.1.2-233-1902.12'
+PROVIDER=base.FIELD_VERSION+'-paxx.12'
 SCREEN_OLD='helixscreen-233-1.2.0-233.20261124.4.tar.gz'
 SCREEN_OLD_SHA='2a967f0884c33993c547c4cc4a4260662e04dabb0de4b9d9e7bbbfc830f22ff5'
 
@@ -112,7 +112,7 @@ def compose(root,field,common,work,screen,screen_report,commit):
                   screen_sha256=sm['sha256'],screen_binary_sha256=sm['binary_sha256'],
                   screen_source_pin=SCREEN_PIN,screen_package_version=SCREEN_VERSION,
                   integration_commit=commit,firmware_version=VERSION,
-                  scope='1902.11 feed fault recovery candidate; native screen and provider; ACE MCU unchanged; real parked route confirmation required; not hardware validated',
+                  scope='1902.12 offline ACE scan and feed fault recovery candidate; native screen and provider; ACE MCU unchanged; real parked route confirmation required; not hardware validated',
                   hardware_verified=False)
     files=set(report['runtime_files'])|{'usr/local/share/multiace/common.sh',
              'usr/local/share/extended-pkg/multiace','usr/local/share/extended-pkg/helixscreen','etc/FULLVERSION'}

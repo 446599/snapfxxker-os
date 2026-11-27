@@ -5,10 +5,10 @@ set -euo pipefail
 [[ $(id -u) -eq 0 ]] || { echo 'run as root on the build host' >&2; exit 1; }
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-BASE=$(realpath "${1:?usage: build_1911.sh base-upgrade.bin output-directory screen.tar.gz screen.json}")
+BASE=$(realpath "${1:?usage: build_1912.sh base-upgrade.bin output-directory screen.tar.gz screen.json}")
 mkdir -p "${2:?output directory required}"
 OUT=$(realpath "$2")
-VERSION=2.1.2-233-1902.11
+VERSION=2.1.2-233-1902.12
 SCREEN=$(realpath "${3:?fresh ARM64 screen archive required}")
 SCREEN_REPORT=$(realpath "${4:?screen provenance JSON required}")
 COMMIT=$(git -C "$REPO" rev-parse HEAD)
@@ -29,7 +29,7 @@ ROOT="$WORK/rootfs"
 unsquashfs -d "$ROOT" "$WORK/input/rk-unpacked/rootfs.img"
 [[ $(stat -c '%u:%g' "$ROOT/etc/passwd") == 0:0 ]]
 [[ $(stat -c '%u:%g' "$ROOT/home/lava/bin/hwver.sh") == 1000:1000 ]]
-python3 "$HERE/compose_1911.py" "$ROOT" "$FIELD" "$COMMON" "$WORK" "$SCREEN" "$SCREEN_REPORT" "$COMMIT"
+python3 "$HERE/compose_1912.py" "$ROOT" "$FIELD" "$COMMON" "$WORK" "$SCREEN" "$SCREEN_REPORT" "$COMMIT"
 for path in /usr/local/share/multiace/common.sh /etc/hooks/klipper.d/10-multiace.sh /etc/init.d/S98multiace-web; do
     sh -n "$ROOT$path"
 done
