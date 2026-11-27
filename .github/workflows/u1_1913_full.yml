@@ -55,7 +55,7 @@ jobs:
           git -C "$screen/lib/libhv" apply --include=base/dns_resolv.c --include=base/dns_resolv.h ../../patches/libhv-dns-resolver-fallback.patch
           patch -d "$screen" --batch --fuzz=0 -p1 < bundles/full-system-1902/screen_routes.patch
           python3 bundles/ace2k-native-slot-exit/patch_batch_screen.py "$screen"
-          python3 bundles/full-system-1902/prepare_screen_1908.py "$screen"
+          python3 bundles/full-system-1902/prepare_screen_1913.py "$screen"
           bash bundles/full-system-1902/test_screen_routes.sh "$screen"
           echo "SCREEN_TREE=$screen" >> "$GITHUB_ENV"
       - name: Restore the pinned font sources and regenerate runtime Chinese fonts

@@ -9,6 +9,8 @@ import re
 import sys
 import tarfile
 
+from prepare_screen_1913 import COMPACT_FILES, COMPACT_XML
+
 HERE=Path(__file__).resolve().parent
 REPO=HERE.parents[1]
 SCREEN_PIN='4edbd50feb36e47d072b5cd4e516b9792b8b4ea9'
@@ -16,7 +18,7 @@ SCREEN_VERSION='1.2.0-233.20261127.1913'
 NEEDED=('bin/helix-screen','bin/helix-splash','bin/helix-watchdog',
         'ui_xml/settings_panel.xml','ui_xml/firmware_settings.xml',
         'assets/config/themes/defaults/u1-warm.json','config/settings.json.template',
-        'assets/config/presets/snapmaker_u1.json')
+        'assets/config/presets/snapmaker_u1.json', *COMPACT_XML)
 BINARIES=NEEDED[:3]
 
 
@@ -48,7 +50,10 @@ def verify_screen(archive,report):
                 raise ValueError('screen executable mode missing')
         if report['binary_sha256']!=report['binaries']['bin/helix-screen']:
             raise ValueError('screen digest mismatch')
-        if not all( ('/material/batch/'+op).encode() in t.extractfile('helixscreen/bin/helix-screen').read() for op in ('preview','start','status','stop','parking_preview')):
+        gui=t.extractfile('helixscreen/bin/helix-screen').read()
+        if b'print_tune_compact_panel' not in gui:
+            raise ValueError('compiled binary missing U1 compact print controls')
+        if not all(('/material/batch/'+op).encode() in gui for op in ('preview','start','status','stop','parking_preview')):
             raise ValueError('compiled binary missing material batch endpoints')
     return True
 
@@ -80,7 +85,7 @@ def package(source,binaries,output,commit,started):
                     'include/u1_filament_overview.h','include/screen_batch_selection.h',
                     'src/ui/filament/u1_filament_overview.cpp',
                     'src/printer/ams_backend_multiace.cpp',
-                    'src/ui/print/ui_panel_print_status.cpp')},
+                    'src/ui/print/ui_panel_print_status.cpp', *COMPACT_FILES)},
                 bytes=output.stat().st_size,hardware_verified=False)
     verify_screen(output,record)
     output.with_suffix('.json').write_text(json.dumps(record,indent=2)+'\n')

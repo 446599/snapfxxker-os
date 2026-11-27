@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <api>
+    <prop name="title" type="string" default=""/>
+    <prop name="title_subject" type="string" default=""/>
+    <prop name="value_subject" type="string" default=""/>
+    <prop name="minus_disabled" type="string" default="1"/>
+    <prop name="plus_disabled" type="string" default="1"/>
+    <prop name="minus_id" type="string" default=""/>
+    <prop name="plus_id" type="string" default=""/>
+    <prop name="decrease" type="string" default="0"/>
+    <prop name="increase" type="string" default="0"/>
+  </api>
+  <consts>
+    <px name="compact_tune_value_width" value="66"/>
+  </consts>
+  <view extends="lv_obj" width="100%" height="#u1_touch_target" flex_flow="row"
+        style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#u1_card_gap"
+        scrollable="false">
+    <text_body width="0" flex_grow="1" text="$title" translation_tag="$title"
+               bind_text="$title_subject" long_mode="dots"/>
+    <ui_button name="$minus_id" width="#u1_touch_target" height="#u1_touch_target"
+               style_min_width="0" style_pad_all="0" style_radius="#u1_card_radius"
+               text="-" variant="secondary">
+      <bind_state_if cond="$minus_disabled" state="disabled"/>
+      <event_cb trigger="clicked" callback="on_compact_print_tune_adjust" user_data="$decrease"/>
+    </ui_button>
+    <text_body width="#compact_tune_value_width" bind_text="$value_subject"
+               style_text_align="center" long_mode="dots"/>
+    <ui_button name="$plus_id" width="#u1_touch_target" height="#u1_touch_target"
+               style_min_width="0" style_pad_all="0" style_radius="#u1_card_radius"
+               text="+" variant="secondary">
+      <bind_state_if cond="$plus_disabled" state="disabled"/>
+      <event_cb trigger="clicked" callback="on_compact_print_tune_adjust" user_data="$increase"/>
+    </ui_button>
+  </view>
+</component>

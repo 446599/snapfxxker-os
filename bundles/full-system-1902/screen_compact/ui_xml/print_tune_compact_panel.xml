@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <view name="print_tune_compact_panel" extends="overlay_panel" title="Tune" title_tag="Tune"
+        bg_color="#screen_bg">
+    <lv_obj name="overlay_content" width="100%" flex_grow="1" flex_flow="column"
+            style_pad_all="#u1_page_pad" style_pad_gap="#u1_card_gap"
+            scrollable="true" scroll_dir="ver" scrollbar_mode="auto">
+      <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+      <print_tune_compact_row name="compact_tune_speed_row" title="Print Speed"
+          value_subject="compact_tune_speed_text"
+          minus_id="btn_compact_speed_minus" plus_id="btn_compact_speed_plus"
+          decrease="-1" increase="1"
+          minus_disabled="nav_buttons_enabled ne 1 or compact_tune_speed_ready eq 0 or compact_tune_speed le compact_tune_speed_min"
+          plus_disabled="nav_buttons_enabled ne 1 or compact_tune_speed_ready eq 0 or compact_tune_speed ge compact_tune_speed_max"/>
+      <print_tune_compact_row name="compact_tune_fan_row" title="Model fan"
+          value_subject="compact_tune_fan_text"
+          minus_id="btn_compact_fan_minus" plus_id="btn_compact_fan_plus"
+          decrease="-2" increase="2"
+          minus_disabled="nav_buttons_enabled ne 1 or compact_tune_fan_ready eq 0 or compact_tune_fan le compact_tune_fan_min"
+          plus_disabled="nav_buttons_enabled ne 1 or compact_tune_fan_ready eq 0 or compact_tune_fan ge compact_tune_fan_max"/>
+      <print_tune_compact_row name="compact_tune_nozzle_row" title="Current nozzle target"
+          title_subject="compact_tune_nozzle_label" value_subject="compact_tune_nozzle_text"
+          minus_id="btn_compact_nozzle_minus" plus_id="btn_compact_nozzle_plus"
+          decrease="-3" increase="3"
+          minus_disabled="nav_buttons_enabled ne 1 or compact_tune_nozzle_ready eq 0 or compact_tune_nozzle le compact_tune_nozzle_min"
+          plus_disabled="nav_buttons_enabled ne 1 or compact_tune_nozzle_ready eq 0 or compact_tune_nozzle ge compact_tune_nozzle_max"/>
+      <print_tune_compact_row name="compact_tune_bed_row" title="Bed target temperature"
+          value_subject="compact_tune_bed_text"
+          minus_id="btn_compact_bed_minus" plus_id="btn_compact_bed_plus"
+          decrease="-4" increase="4"
+          minus_disabled="nav_buttons_enabled ne 1 or compact_tune_bed_ready eq 0 or compact_tune_bed le compact_tune_bed_min"
+          plus_disabled="nav_buttons_enabled ne 1 or compact_tune_bed_ready eq 0 or compact_tune_bed ge compact_tune_bed_max"/>
+    </lv_obj>
+  </view>
+</component>

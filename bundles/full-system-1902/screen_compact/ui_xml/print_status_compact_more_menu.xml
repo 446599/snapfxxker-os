@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="compact_more_width" value="212"/>
+  </consts>
+  <view name="print_status_compact_more_menu" extends="context_menu_backdrop">
+    <context_menu_card title="More actions" title_tag="More actions"
+                       width="#compact_more_width" pad_gap="#u1_compact_gap">
+      <ui_button name="btn_more_tune" width="100%" height="#u1_touch_target"
+                 icon="tune" text="Tune" translation_tag="Tune" variant="ghost"
+                 style_flex_main_place="start">
+        <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
+        <event_cb trigger="clicked" callback="print_status_more_tune_cb"/>
+      </ui_button>
+      <divider_horizontal color="#text_muted" opacity="38"/>
+      <lv_obj name="btn_more_chamber_light" width="100%" height="#u1_touch_target"
+              flex_flow="row" style_flex_cross_place="center" style_pad_all="#u1_compact_gap"
+              style_pad_gap="#u1_card_gap" style_radius="#u1_card_radius"
+              scrollable="false" clickable="true">
+        <style name="styles.press_wash" selector="pressed"/>
+        <bind_state_if cond="print_status_chamber_light_available eq 0 or nav_buttons_enabled ne 1" state="disabled"/>
+        <event_cb trigger="clicked" callback="print_status_more_chamber_light_cb"/>
+        <icon src="lightbulb_outline" size="xs" clickable="false" event_bubble="true"/>
+        <text_body text="Case light" translation_tag="Case light" flex_grow="1"
+                   clickable="false" event_bubble="true"/>
+        <text_small name="chamber_light_state" bind_text="print_status_chamber_light_text"
+                    style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+      </lv_obj>
+    </context_menu_card>
+  </view>
+</component>

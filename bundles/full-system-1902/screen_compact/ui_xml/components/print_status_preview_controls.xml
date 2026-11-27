@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (C) 2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <consts>
+    <px name="ps_lcd_preview_inset" value="-8"/>
+    <font name="ps_lcd_preview_label_font" value="noto_sans_12"/>
+  </consts>
+  <view extends="lv_obj" width="100%" height="100%" ignore_layout="true"
+        style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+    <if cond="print_status_lcd_layout">
+      <!-- A labelled, quiet control in the lower corner keeps mode switching
+           discoverable without a floating white cube in the model's upper-left. -->
+      <lv_obj name="ps_lcd_preview_controls" width="content" height="#u1_touch_target" align="bottom_right"
+              style_translate_x="#ps_lcd_preview_inset" style_translate_y="#ps_lcd_preview_inset"
+              flex_flow="row" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#u1_compact_gap"
+              style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+        <preview_icon_button name="btn_camera_toggle" icon="#icon_webcam" callback="on_print_status_camera_toggle"
+                             hidden_when="print_status_camera_available eq 0" style_bg_opa="0"/>
+        <lv_obj name="btn_view_toggle" width="content" height="#u1_touch_target" flex_flow="row"
+                style_flex_cross_place="center" style_pad_hor="#u1_compact_gap" style_pad_ver="0"
+                style_pad_gap="#space_xxs" style_bg_opa="0" style_border_width="0" style_radius="#u1_card_radius"
+                clickable="true" scrollable="false">
+          <style name="styles.press_wash" selector="pressed"/>
+          <bind_flag_if cond="gcode_viewer_mode eq 0 or print_status_camera_showing ne 0" flag="hidden"/>
+          <event_cb trigger="clicked" callback="on_view_toggle"/>
+          <lv_label name="btn_view_toggle_icon" bind_text="view_toggle_icon" style_text_font="mdi_icons_16"
+                    style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+          <text_small text="Preview" style_text_font="#ps_lcd_preview_label_font" style_text_color="#text_muted"
+                      clickable="false" event_bubble="true"/>
+        </lv_obj>
+      </lv_obj>
+      <else/>
+      <lv_obj name="preview_corner_buttons" width="content" height="content" ignore_layout="true" align="top_left" style_translate_x="#space_md" style_translate_y="#space_md" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm" style_bg_opa="0" style_border_width="0" clickable="false" scrollable="false">
+        <!-- Camera toggle: swaps the preview for the live camera and back -->
+        <preview_icon_button name="btn_camera_toggle" icon="#icon_webcam" callback="on_print_status_camera_toggle" hidden_when="print_status_camera_available eq 0"/>
+
+        <!-- View mode toggle: switches between progress (ghost layers) and complete view -->
+        <preview_icon_button name="btn_view_toggle" icon_subject="view_toggle_icon" icon_name="btn_view_toggle_icon" callback="on_view_toggle" hidden_when="gcode_viewer_mode eq 0 or print_status_camera_showing ne 0"/>
+      </lv_obj>
+    </if>
+  </view>
+</component>

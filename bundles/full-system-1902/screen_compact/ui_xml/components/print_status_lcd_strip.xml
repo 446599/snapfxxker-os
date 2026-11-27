@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (C) 2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- 480x320 landscape only. The panel publishes print_status_lcd_layout before
+     creation; all other sizes instantiate the existing print_status_strip path.
+     At 320px: header 44, preview 175, overview 36, progress 5, controls 60.
+     The floating navbar E-stop remains independent; its page-only XML offset
+     aligns it with these actions, with 8px margins and gaps on every side. -->
+<component>
+  <consts>
+    <px name="ps_lcd_overview_height" value="36"/>
+    <px name="ps_lcd_progress_height" value="5"/>
+    <px name="ps_lcd_controls_height" value="60"/>
+    <px name="ps_lcd_overview_pad" value="15"/>
+    <!-- 8px gap + 44px independent E-stop + 8px screen margin. -->
+    <px name="ps_lcd_estop_clearance" value="60"/>
+    <font name="ps_lcd_meta_font" value="noto_sans_12"/>
+    <px name="ps_lcd_time_max_width" value="64"/>
+    <px name="ps_lcd_layer_max_width" value="66"/>
+    <font name="ps_lcd_badge_font" value="noto_sans_10"/>
+    <font name="ps_lcd_percent_font" value="noto_sans_bold_24"/>
+  </consts>
+  <styles>
+    <!-- One action surface, also applied to the shared exclude-objects button. -->
+    <style name="lcd_action" bg_color="#elevated_bg" bg_opa="255"
+           border_width="#u1_border" border_side="full" border_color="#border" border_opa="255"
+           radius="#u1_card_radius" shadow_width="0" min_width="0"
+           min_height="#u1_touch_target" pad_hor="0" pad_ver="0" pad_gap="#space_xxs"/>
+  </styles>
+  <view extends="lv_obj" width="100%" height="content" flex_flow="column"
+        style_pad_all="0" style_pad_gap="0" style_bg_opa="0" style_border_width="0" scrollable="false">
+    <!-- Readings never share a flex row with the controls. The temperature
+         group keeps its intrinsic width; unusually long time/layer values dot
+         inside the remaining width instead of pushing temperatures offscreen. -->
+    <lv_obj name="ps_lcd_overview" width="100%" height="#ps_lcd_overview_height"
+            flex_flow="row" style_flex_cross_place="center" style_pad_hor="#ps_lcd_overview_pad"
+            style_pad_ver="0" style_pad_gap="#u1_compact_gap" style_bg_opa="0" style_border_width="0" scrollable="false">
+      <lv_obj name="ps_strip_progress" width="0" height="100%" flex_grow="1" style_min_width="0"
+              style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false">
+        <lv_obj name="ps_strip_print_line" width="100%" height="100%" flex_flow="row"
+                style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#u1_compact_gap"
+                style_bg_opa="0" style_border_width="0" scrollable="false">
+          <bind_flag_if_eq subject="preparing_visible" flag="hidden" ref_value="1"/>
+          <text_body name="print_percent" bind_text="print_progress_text" style_text_font="#ps_lcd_percent_font"/>
+          <text_small text="Remaining" style_text_font="#ps_lcd_meta_font" style_text_color="#text_muted"/>
+          <text_small name="print_remaining" width="content" style_max_width="#ps_lcd_time_max_width" style_min_width="0"
+                      bind_text="print_remaining" long_mode="dots" style_text_font="#ps_lcd_meta_font" style_text_color="#text_muted"/>
+          <lv_obj name="layer_cluster" width="0" height="100%" flex_grow="1" style_min_width="0"
+                  flex_flow="row" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#space_xxs"
+                  style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+            <style name="styles.press_wash" selector="pressed"/>
+            <bind_flag_if cond="printer_has_layer_pause and layer_pause_availability gt 0" flag="clickable"/>
+            <event_cb trigger="clicked" callback="on_layer_pause_open"/>
+            <text_small text="·" style_text_font="#ps_lcd_meta_font" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+            <text_small name="layer_progress_label" width="content" style_max_width="#ps_lcd_layer_max_width" style_min_width="0"
+                        bind_text="print_layer_text" long_mode="dots" style_text_font="#ps_lcd_meta_font"
+                        style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+            <text_small text="Layer" style_text_font="#ps_lcd_meta_font" style_text_color="#text_muted" clickable="false" event_bubble="true"/>
+            <!-- The layer row remains tappable. Only an actually scheduled pause
+                 gets a pause marker; availability alone adds no stray glyph. -->
+            <icon name="layer_pause_hint" src="pause" size="xs" variant="warning" clickable="false" event_bubble="true" hidden="true">
+              <bind_flag_if cond="printer_has_layer_pause and layer_pause_layer gt 0" flag="hidden" invert="true"/>
+            </icon>
+            <text_small name="layer_pause_chip_label" bind_text="layer_pause_layer" style_text_font="#ps_lcd_meta_font"
+                        style_text_color="#warning" clickable="false" event_bubble="true" hidden="true">
+              <bind_flag_if cond="printer_has_layer_pause and layer_pause_layer gt 0" flag="hidden" invert="true"/>
+            </text_small>
+          </lv_obj>
+        </lv_obj>
+        <lv_obj name="ps_strip_prepare_line" width="100%" height="100%" flex_flow="row"
+                style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#u1_compact_gap"
+                style_bg_opa="0" style_border_width="0" scrollable="false" hidden="true">
+          <bind_flag_if_eq subject="preparing_visible" flag="hidden" ref_value="0"/>
+          <text_small text="Preparing" style_text_font="#ps_lcd_meta_font"/>
+          <text_small name="preparing_eta" width="0" flex_grow="1" bind_text="print_start_time_left"
+                      long_mode="dots" style_text_font="#ps_lcd_meta_font" style_text_color="#text_muted"/>
+        </lv_obj>
+      </lv_obj>
+      <lv_obj name="ps_temperatures" width="content" height="content" flex_flow="row"
+              style_flex_cross_place="center" style_pad_left="#u1_compact_gap" style_pad_right="0"
+              style_pad_ver="0" style_pad_gap="#u1_card_gap" style_bg_opa="0"
+              style_border_width="#u1_border" style_border_side="left" style_border_color="#border" scrollable="false">
+        <lv_obj name="ps_chip_nozzle" width="content" height="content" flex_flow="row" style_flex_cross_place="center"
+                style_pad_all="0" style_pad_gap="#u1_compact_gap" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+          <lv_obj name="ps_lcd_nozzle_token" width="content" height="content" flex_flow="row"
+                  style_flex_cross_place="end" style_pad_all="0" style_pad_gap="#space_xxs"
+                  style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+            <icon name="nozzle_icon_glyph" src="nozzle_outline" size="xs" variant="muted" clickable="false"/>
+            <text_tiny name="tool_badge" bind_text="tool_badge_text" style_text_font="#ps_lcd_badge_font"
+                       style_text_color="#text_muted" hidden="true" clickable="false">
+              <bind_flag_if_eq subject="show_tool_badge" flag="hidden" ref_value="0"/>
+            </text_tiny>
+          </lv_obj>
+          <temp_display name="ps_nozzle_value" size="sm" show_target="false" bind_current="extruder_temp"/>
+        </lv_obj>
+        <lv_obj name="ps_chip_bed" width="content" height="content" flex_flow="row" style_flex_cross_place="center"
+                style_pad_all="0" style_pad_gap="#u1_compact_gap" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+          <icon src="radiator" name="bed_icon_glyph" size="xs" variant="muted" clickable="false"/>
+          <temp_display name="ps_bed_value" size="sm" show_target="false" bind_current="bed_temp"/>
+        </lv_obj>
+        <lv_obj name="ps_chip_chamber" width="content" height="content" flex_flow="row" style_flex_cross_place="center"
+                style_pad_all="0" style_pad_gap="#u1_compact_gap" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false">
+          <bind_flag_if_eq subject="printer_has_chamber" flag="hidden" ref_value="0"/>
+          <icon src="fridge_industrial" name="chamber_icon_glyph" size="xs" variant="muted" clickable="false"/>
+          <temp_display name="ps_chamber_value" size="sm" show_target="false" bind_current="chamber_temp"/>
+        </lv_obj>
+      </lv_obj>
+    </lv_obj>
+
+    <!-- No ancestor padding: both the track and its indicator span x=0..480.
+         Keep the native progress component and its pause-marker draw hooks. -->
+    <lv_obj name="ps_lcd_progress_track" width="100%" height="#ps_lcd_progress_height"
+            style_pad_all="0" style_bg_opa="0" style_border_width="0" scrollable="false">
+      <progress_bar name="print_progress" height="100%" bind_value="print_progress_display"
+                    style_radius="0" style_radius-indicator="0" style_border_width="0">
+        <bind_flag_if_eq subject="preparing_visible" flag="hidden" ref_value="1"/>
+      </progress_bar>
+      <progress_bar_estimate name="preparing_progress_bar" height="100%" bind_value="preparing_progress"
+                             style_radius="0" style_radius-indicator="0" style_border_width="0">
+        <bind_flag_if_eq subject="preparing_visible" flag="hidden" ref_value="0"/>
+      </progress_bar_estimate>
+    </lv_obj>
+
+    <lv_obj name="ps_strip_buttons" width="100%" height="#ps_lcd_controls_height" flex_flow="row"
+            style_pad_left="#u1_page_pad" style_pad_right="#ps_lcd_estop_clearance"
+            style_pad_top="#u1_card_gap" style_pad_bottom="#u1_card_gap" style_pad_gap="#u1_card_gap"
+            style_flex_cross_place="center" style_bg_opa="0" style_border_width="0" scrollable="false">
+      <!-- DOM and visual order: Pause / Stop (or terminal Reprint) / Skip / More. -->
+      <ui_button name="btn_pause" width="0" height="#u1_touch_target" flex_grow="1" variant="ghost"
+                 bind_icon="print_control_primary_icon" icon_size="xs" text="Pause" bind_text="print_control_primary_label">
+        <style name="lcd_action"/>
+        <bind_state_if_eq subject="print_control_primary_enabled" state="disabled" ref_value="0"/>
+        <event_cb trigger="clicked" callback="on_print_control_primary"/>
+      </ui_button>
+      <ui_button name="btn_cancel" width="0" height="#u1_touch_target" flex_grow="1" variant="ghost"
+                 icon="stop" icon_size="xs" text="Stop Print" style_text_color="#danger">
+        <style name="lcd_action"/>
+        <bind_flag_if_not_eq subject="print_outcome" flag="hidden" ref_value="0"/>
+        <bind_state_if_eq subject="print_control_stop_enabled" state="disabled" ref_value="0"/>
+        <event_cb trigger="clicked" callback="on_print_control_stop"/>
+      </ui_button>
+      <ui_button name="btn_reprint" width="0" height="#u1_touch_target" flex_grow="1" variant="ghost"
+                 icon="refresh" icon_size="xs" text="Reprint" hidden="true">
+        <style name="lcd_action"/>
+        <bind_flag_if_eq subject="print_outcome" flag="hidden" ref_value="0"/>
+        <event_cb trigger="clicked" callback="on_print_status_reprint"/>
+      </ui_button>
+      <exclude_objects_button name="btn_objects" width="0" height="#u1_touch_target" flex_grow="1"
+                              style_min_width="0" variant="ghost" callback="on_print_status_objects" hidden_when="0"
+                              disabled_when="exclude_objects_available eq 0 or print_controls_enabled eq 0">
+        <style name="lcd_action"/>
+      </exclude_objects_button>
+      <ui_button name="btn_more" width="0" height="#u1_touch_target" flex_grow="1" variant="ghost"
+                 icon="dots_vertical" icon_size="xs" text="More">
+        <style name="lcd_action"/>
+        <event_cb trigger="clicked" callback="on_print_status_more"/>
+      </ui_button>
+    </lv_obj>
+    <!-- Existing C++ requires these named widgets. Keep its lookup contract
+         without inserting a fifth toolbar action or a second tuning entry. -->
+    <lv_obj name="ps_lcd_compatibility" width="0" height="0" hidden="true">
+      <ui_button name="btn_tune" text="Tune">
+        <event_cb trigger="clicked" callback="on_print_status_tune"/>
+      </ui_button>
+      <ams_current_tool name="ams_current_tool_indicator" runout_subject="filament_runout_scoped"/>
+    </lv_obj>
+  </view>
+</component>

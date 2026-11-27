@@ -24,7 +24,8 @@ flags=(-std=c++17 -DLV_CONF_INCLUDE_SIMPLE -DHELIX_HAS_SNAPMAKER=1 -DHELIX_ENABL
        -isystem "$work/include")
 cxx=${CXX:-c++}
 "$cxx" "${flags[@]}" -fsyntax-only src/printer/ams_backend_multiace.cpp \
-    src/ui/filament/u1_filament_overview.cpp tests/unit/test_ams_backend_multiace.cpp \
+    src/ui/filament/u1_filament_overview.cpp src/ui/print/ui_print_tune_compact.cpp \
+    tests/unit/test_ams_backend_multiace.cpp \
     tests/unit/test_multiace_status.cpp
 "$cxx" "${flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     src/printer/multiace_status.cpp "$here/test_screen_routes.cpp" -o "$work/screen-routes"
