@@ -12,7 +12,7 @@ import tarfile
 HERE=Path(__file__).resolve().parent
 REPO=HERE.parents[1]
 SCREEN_PIN='4edbd50feb36e47d072b5cd4e516b9792b8b4ea9'
-SCREEN_VERSION='1.2.0-233.20261127.1912'
+SCREEN_VERSION='1.2.0-233.20261127.1913'
 NEEDED=('bin/helix-screen','bin/helix-splash','bin/helix-watchdog',
         'ui_xml/settings_panel.xml','ui_xml/firmware_settings.xml',
         'assets/config/themes/defaults/u1-warm.json','config/settings.json.template',

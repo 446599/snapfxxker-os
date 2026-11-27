@@ -1,16 +1,16 @@
-name: Build complete U1 233 1902.12 upgrade
+name: Build complete U1 233 1902.13 upgrade
 on:
   push:
-    branches: [codex/1912-offline-ace-scan]
+    branches: [codex/1913-batch-queue]
     paths:
       - 'bundles/full-system-1902/**'
       - 'bundles/ace2k-native-slot-exit/**'
-      - '.github/workflows/u1_1912_full.yml'
+      - '.github/workflows/u1_1913_full.yml'
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: u1-1912-full-${{ github.ref }}
+  group: u1-1913-full-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   contracts:
@@ -27,7 +27,7 @@ jobs:
           python3 -m unittest discover -s bundles/multiace-190 -p 'test_lane*.py' -v
           python3 -m unittest discover -s bundles/full-system-1902 -v
           sh bundles/multiace-190/test_paxx_1902_mounts.sh
-          bash -n bundles/full-system-1902/build_1912.sh
+          bash -n bundles/full-system-1902/build_1913.sh
   screen:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -83,10 +83,10 @@ jobs:
           docker run --rm -v "$SCREEN_TREE:/src" -w /src u1-1908-arm64 make PLATFORM_TARGET=snapmaker-u1 SKIP_OPTIONAL_DEPS=1 DBGLEVEL=0 FAST_LINK=0 ENABLE_REMOTE_CONTROL=yes ENABLE_DIAGNOSTIC_UPLOADS=no ENABLE_MOCKS=yes -j2
           sudo chown -R "$(id -u):$(id -g)" "$SCREEN_TREE"
           file "$SCREEN_TREE/build/snapmaker-u1/bin/helix-screen"
-          python3 bundles/full-system-1902/package_screen_1912.py "$SCREEN_TREE" "$SCREEN_TREE/build/snapmaker-u1/bin" "$RUNNER_TEMP/screen-output/screen.tar.gz" "$GITHUB_SHA" "$(cat "$RUNNER_TEMP/screen-start")"
+          python3 bundles/full-system-1902/package_screen_1913.py "$SCREEN_TREE" "$SCREEN_TREE/build/snapmaker-u1/bin" "$RUNNER_TEMP/screen-output/screen.tar.gz" "$GITHUB_SHA" "$(cat "$RUNNER_TEMP/screen-start")"
       - uses: actions/upload-artifact@v4
         with:
-          name: U1-1912-screen-build
+          name: U1-1913-screen-build
           path: ${{ runner.temp }}/screen-output/
           if-no-files-found: error
           compression-level: 0
@@ -99,7 +99,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: U1-1912-screen-build
+          name: U1-1913-screen-build
           path: screen-input/
       - name: Install firmware assembly tools
         run: |
@@ -112,14 +112,14 @@ jobs:
           echo '0d7b4039696a0a3b98df093b58a333fb0de5b5372ab665bf4d6a9d3165b942bf  inputs/base.bin' | sha256sum -c -
       - name: Compose and read back complete upgrade image
         run: |
-          sudo bash bundles/full-system-1902/build_1912.sh inputs/base.bin output screen-input/screen.tar.gz screen-input/screen.tar.json
+          sudo bash bundles/full-system-1902/build_1913.sh inputs/base.bin output screen-input/screen.tar.gz screen-input/screen.tar.json
           sudo chown -R "$(id -u):$(id -g)" output
           git rev-parse HEAD > output/SOURCE_COMMIT.txt
           (cd output && sha256sum -c SHA256SUMS.txt)
           cat output/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: U1-233-1902.12-full-candidate
+          name: U1-233-1902.13-full-candidate
           path: output/
           if-no-files-found: error
           compression-level: 0

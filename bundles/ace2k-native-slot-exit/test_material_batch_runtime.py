@@ -115,6 +115,84 @@ class MaterialRuntimeTests(unittest.TestCase):
         self.r.callbacks.pop(0)(10);self.runtime.tick(10)
         self.assertEqual(len(self.r.callbacks),1)
         self.assertEqual(sum(t['state']=='complete' for t in self.runtime.status(b['batch'])),1)
+    def test_own_homing_keeps_three_verified_unloads_queued_and_serial(self):
+        slots=(0,1,3)
+        for slot in slots:
+            self.sensors[slot]=True
+            self.a._head_source[slot]={'ace_index':0,'slot':slot}
+        b=self.start(self.preview('unload',[self.row(0,s) for s in slots]))
+        executed=[]
+        def unload(cmd):
+            slot=slots[len(executed)]
+            self.assertEqual(cmd,f'ACE_UNLOAD_HEAD HEAD={slot} ACE=0 SLOT={slot}')
+            executed.append(slot)
+            self.a._homing_active=True
+            self.runtime.tick(self.r.t)
+            self.assertEqual([t['state'] for t in self.runtime.status(b['batch'])],
+                             ['complete']*(len(executed)-1)+['head_running']+['queued']*(3-len(executed)))
+            self.assertEqual(self.r.callbacks,[])
+            self.assertEqual(self.preview('unload',[self.row(0,slot)])['ticket'],'')
+            self.a._homing_active=False
+            self.sensors[slot]=False
+            self.a._head_source[slot]=None
+            self.a._last_unload_ok=True
+        self.a.gcode.run_script_from_command.side_effect=unload
+        for _ in slots:
+            self.runtime.tick(self.r.t)
+            self.r.callbacks.pop(0)(self.r.t)
+        self.assertEqual(executed,list(slots))
+        self.assertEqual([t['state'] for t in self.runtime.status(b['batch'])],['complete']*3)
+
+    def test_own_homing_preserves_parking_and_native_but_print_still_stops(self):
+        self.sensors[0]=True
+        self.a._head_source[0]={'ace_index':0,'slot':0}
+        b=self.start(self.preview('eject',[self.row(0,0),self.row(1,1),self.row(2,2)]))
+        self.runtime.tick(10)
+        parked=self.runtime.tasks[b['tasks'][1]]
+        parked.state='awaiting_parking'
+        def unload(cmd):
+            self.a._homing_active=True
+            self.runtime.tick(10)
+            self.assertEqual(parked.state,'awaiting_parking')
+            self.assertEqual(self.runtime.tasks[b['tasks'][2]].state,'native')
+            self.n.cancel.assert_not_called()
+            self.print_state='paused'
+            self.runtime.tick(11)
+            self.assertEqual(parked.state,'rejected')
+            self.assertEqual(self.runtime.tasks[b['tasks'][2]].state,'stopping')
+            self.a._homing_active=False
+        self.a.gcode.run_script_from_command.side_effect=unload
+        self.r.callbacks.pop(0)(10)
+        self.assertEqual(parked.state,'rejected')
+        self.n.cancel.assert_called()
+
+    def test_sampling_ignores_old_reply_after_own_homing(self):
+        b=self.start(self.preview('eject',[self.row(0,1)]))
+        sent=[]
+        self.a.send_request_to=lambda idx,req,cb:sent.append(cb)
+        self.runtime.tick(10)
+        self.runtime._owns_head_motion=True
+        self.a._homing_active=True
+        self.runtime.tick(15)
+        self.assertEqual(self.runtime.status(b['batch'])[0]['state'],'queued')
+        self.a._homing_active=False
+        self.runtime._owns_head_motion=False
+        self.runtime.tick(15.25)
+        self.assertEqual(len(sent),2)
+        sample={'code':0,'result':dict(index=1,state='ready',present=True,encoder=11,motor=31,stamp=[10.]*4)}
+        sent[0](self.a,sample)
+        self.assertEqual(self.runtime.status(b['batch'])[0]['state'],'sampling')
+        self.assertEqual(self.started,[])
+        sent[1](self.a,sample)
+        self.assertEqual(self.runtime.status(b['batch'])[0]['state'],'native')
+
+    def test_external_homing_still_rejects_undispatched_tasks(self):
+        b=self.start(self.preview('eject',[self.row(0,1)]))
+        self.a._homing_active=True
+        self.runtime.tick(10)
+        self.assertEqual(self.runtime.status(b['batch'])[0]['state'],'rejected')
+        self.assertEqual(self.started,[])
+
     def test_stop_exact_task_and_no_fake_completion(self):
         b=self.start(self.preview('eject',[self.row(0,0),self.row(0,1)]))
         self.runtime.tick(10)

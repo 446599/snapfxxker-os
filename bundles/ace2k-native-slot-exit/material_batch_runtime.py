@@ -47,6 +47,7 @@ class Task:
     detail: str = ''
     token: str = ''
     deadline: float = 0.
+    sample_request: object = None
     cancel_requested: bool = False
 
     def public(self):
@@ -67,6 +68,7 @@ class MaterialBatchRuntime:
         self.tasks={}
         self.timer=None
         self.head_running=None
+        self._owns_head_motion=False
 
     def now(self):
         return self.ace.reactor.monotonic()
@@ -81,13 +83,21 @@ class MaterialBatchRuntime:
             self.timer=None
         self.tickets.clear()
 
-    def _idle(self):
+    def _print_idle(self):
         a=self.ace
         ps=a.printer.lookup_object('print_stats',None)
         return (ps is not None and ps.get_status(self.now()).get('state') in
                 ('standby','complete','cancelled','error')
-                and not getattr(a,'_homing_active',False)
                 and a._ace_mode=='multi')
+
+    def _idle(self):
+        return self._print_idle() and not getattr(self.ace,'_homing_active',False)
+
+    def _own_homing(self):
+        # The batch's own blocking G-code yields to reactor timers during
+        # homing. That is not an external print or a new batch admission.
+        return (self._owns_head_motion and self._print_idle()
+                and getattr(self.ace,'_homing_active',False))
 
     def _identity(self,ace,slot,uid):
         a=self.ace
@@ -291,9 +301,15 @@ class MaterialBatchRuntime:
             raise ValueError('Missing physical parking confirmation')
         t.state='sampling'
         t.deadline=self.now()+5.
+        request=t.sample_request=object()
         runtime=self
         def cb(self,response):
-            if t.state!='sampling':
+            if t.state!='sampling' or t.sample_request is not request:
+                return
+            if runtime._own_homing():
+                # This reply no longer proves a dispatch at an idle boundary.
+                # Resample and revalidate the original route after homing.
+                t.state='queued'
                 return
             try:
                 if not runtime._same(s) or runtime._route(s.ace,s.slot,'eject')!='inspect_parked':
@@ -327,6 +343,7 @@ class MaterialBatchRuntime:
                     # native exits are driven by their own asynchronous timers.
                     command='ACE_LOAD_HEAD' if s.route=='head_load' else 'ACE_UNLOAD_HEAD'
                     moved=True
+                    self._owns_head_motion=True
                     a.gcode.run_script_from_command('%s HEAD=%d ACE=%d SLOT=%d' %
                                                     (command,s.slot,s.ace,s.slot))
                     if not self._same(s):
@@ -354,26 +371,33 @@ class MaterialBatchRuntime:
                 t.state='recovery' if moved else 'rejected'
                 t.detail=str(e)[:200]
             finally:
+                self._owns_head_motion=False
                 self.head_running=None
         a.reactor.register_callback(run)
 
     def tick(self,eventtime):
         self._prune()
         idle=self._idle()
+        own_homing=not idle and self._own_homing()
         for t in tuple(self.tasks.values()):
-            if not idle and t.state in ('queued','sampling','awaiting_parking'):
+            if not idle and not own_homing and t.state in ('queued','sampling','awaiting_parking'):
                 t.state='rejected';t.detail='Printer no longer idle'
                 continue
-            if not idle and t.state=='native' and t.token and self.native.cancel(t.token):
+            if not idle and not own_homing and t.state=='native' and t.token and self.native.cancel(t.token):
                 t.state='stopping';t.detail='Printer no longer idle'
             if t.state=='sampling' and eventtime>=t.deadline:
-                t.state='rejected';t.detail='Lane telemetry timed out'
+                if own_homing:
+                    t.state='queued'
+                else:
+                    t.state='rejected';t.detail='Lane telemetry timed out'
             if t.state in ('native','stopping') and t.token:
                 job=self.native.jobs.get(t.token)
                 if job is None:
                     t.state='recovery';t.detail='Native task missing'
                 elif job.state in ('complete','cancelled','recovery'):
                     t.state=job.state;t.detail=job.reason
+        if not idle:
+            return eventtime+.25
         # Parked work must not be delayed by a queued toolhead command.
         for t in tuple(self.tasks.values()):
             if t.state!='queued' or t.selection.route!='inspect_parked':
