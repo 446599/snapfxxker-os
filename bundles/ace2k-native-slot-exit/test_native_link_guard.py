@@ -96,6 +96,30 @@ class NativeDriverGuardTests(unittest.TestCase):
         self.link._clear_lane.assert_called_once_with(2, 'feed start')
         self.assertEqual(self.link._start.call_count, 2)
 
+    def test_tag_blocked_event_records_distance_without_changing_verdict(self):
+        self.link._tag_reads[2] = {'seq': 33}
+        self.link._end_tag_read = Mock()
+        event = {'lane': 2, 'seq': 33, 'mode': 4, 'kind': 18,
+                 'motor_um': 61000, 'filament_um': 23000}
+        with self.assertLogs(level='WARNING') as captured:
+            self.link._on_event(event)
+        self.assertIn('tag lane 2 ended blocked seq=33 mode=4', captured.output[0])
+        self.assertIn('motor_um=61000 filament_um=23000', captured.output[0])
+        self.assertIn('plunger', captured.output[0])
+        self.link._end_tag_read.assert_called_once_with(2, 'blocked', 23.0)
+        self.assertEqual(self.link._tag_reads[2]['seq'], 33)
+
+    def test_unsolicited_fault_is_logged_without_clearing_or_restarting(self):
+        self.link._clear_lane = Mock()
+        event = {'lane': 3, 'seq': 0, 'mode': 4, 'kind': 7,
+                 'motor_um': 80000, 'filament_um': 56000}
+        with self.assertLogs(level='WARNING') as captured:
+            self.link._on_event(event)
+        self.assertIn('unmatched lane 3 fault stuck seq=0 mode=4', captured.output[0])
+        self.assertIn('motor_um=80000 filament_um=56000', captured.output[0])
+        self.link._clear_lane.assert_not_called()
+        self.assertEqual(self.link._jobs, {})
+
     def test_real_receive_path_no_fake_event_callback(self):
         wire = self.wire()
         hold = self.guard.reserve(wire)

@@ -100,7 +100,7 @@ def patch_engine(text):
 
 
 def patch_driver(text):
-    return replace(text, "            return ok({'index': slot, 'present': sample.present, 'state': state,\n",
+    text = replace(text, "            return ok({'index': slot, 'present': sample.present, 'state': state,\n",
                    '''            guard = getattr(self, '_native_exit', None)
             admissible = (slot not in self._jobs and slot not in self._tag_reads
                           and (guard is None or not guard.blocked(slot))
@@ -112,6 +112,27 @@ def patch_driver(text):
             return ok({'index': slot, 'present': sample.present, 'state': state,
                        'move_admissible': admissible, 'fault_kind': fault_kind,
 ''')
+    text = replace(text, '''            self._end_tag_read(lane, name, moved)
+            return
+''', '''            if kind in ERROR_KINDS or name == 'blocked':
+                logging.warning(self._lp + 'tag lane %d ended %s seq=%d mode=%s '
+                                'motor_um=%s filament_um=%s; %s',
+                                lane, name, seq, ev.get('mode'), ev.get('motor_um'),
+                                ev.get('filament_um'), self._lane_buffer_text(lane))
+            self._end_tag_read(lane, name, moved)
+            return
+''')
+    text = replace(text, '''        if job is None or job.get('seq') != seq or not seq:
+            return
+''', '''        if job is None or job.get('seq') != seq or not seq:
+            if 0 <= lane < 4 and kind in ERROR_KINDS:
+                logging.warning(self._lp + 'unmatched lane %d fault %s seq=%d mode=%s '
+                                'motor_um=%s filament_um=%s; %s',
+                                lane, name, seq, ev.get('mode'), ev.get('motor_um'),
+                                ev.get('filament_um'), self._lane_buffer_text(lane))
+            return
+''')
+    return text
 
 
 def stage(extras):
