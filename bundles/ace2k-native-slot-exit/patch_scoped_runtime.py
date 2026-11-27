@@ -95,6 +95,14 @@ def patch_engine(text):
 '''))
     text = replace(text, "        if request.get('method') not in TELEMETRY_METHODS:\n            info['status'] = 'busy'\n",
                    "        if (request.get('method') not in TELEMETRY_METHODS\n                and not (self._is_native_ace2k(idx) and request.get('method') in ('drying', 'drying_stop'))):\n            info['status'] = 'busy'\n")
+    def raw_probe(s):
+        return replace(s, "            self._v2_dispatch_and_wait(gcmd, idx, 'get_status', {})\n",
+                       "            self._v2_dispatch_and_wait(gcmd, idx, 'get_status', {})\n"
+                       "            if name == 'ace2k' and gcmd.get_int('LAST_EVENT', 0):\n"
+                       "                self._v2_dispatch_and_wait(gcmd, idx, 'get_last_feed_event', {'index': slot})\n")
+    text = method(text, 'cmd_ACE_RAW_PROBE', raw_probe)
+    text = replace(text, "request.get('method') in ('drying', 'drying_stop')",
+                   "request.get('method') in ('drying', 'drying_stop', 'get_last_feed_event')")
     compile(text, 'ace.py', 'exec')
     return text
 
@@ -111,6 +119,20 @@ def patch_driver(text):
             fault_kind = KIND_NAMES.get(fault_code, 'kind_%s' % fault_code) if fault_code is not None else None
             return ok({'index': slot, 'present': sample.present, 'state': state,
                        'move_admissible': admissible, 'fault_kind': fault_kind,
+''')
+    text = replace(text, "'get_lane_state', 'tag_read_motion',\n",
+                   "'get_lane_state', 'get_last_feed_event', 'tag_read_motion',\n")
+    text = replace(text, "        if method == 'get_lane_state':\n", '''        if method == 'get_last_feed_event':
+            slot = (request.get('params') or {}).get('index')
+            if type(slot) is not int or not 0 <= slot < 4:
+                return {'id': rid, 'code': FAILED, 'msg': 'bad lane', 'result': {}}
+            if not self.dictionary.has('ace2k_feed_last_query'):
+                return {'id': rid, 'code': UNSUPPORTED, 'msg': 'last event unsupported', 'result': {}}
+            event = self._call('ace2k_feed_last_query', 'ace2k_feed_last', lane=slot)
+            if not isinstance(event, dict) or event.get('lane') != slot:
+                return {'id': rid, 'code': FAILED, 'msg': 'last event unavailable', 'result': {}}
+            return ok({k: event.get(k) for k in ('lane', 'kind', 'mode', 'motor_um', 'filament_um', 'seq')})
+        if method == 'get_lane_state':
 ''')
     text = replace(text, '''    modes = bytearray((feed or {}).get('mode', b''))
     for i in range(4):

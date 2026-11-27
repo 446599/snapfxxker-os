@@ -46,7 +46,7 @@ class ScopedRuntimeTests(unittest.TestCase):
         s=patch_engine(source('ace.py'))
         d=patch_driver(source('ace_protocol_ace2k.py'))
         compile(d,'driver','exec')
-        names={'_is_native_ace2k','wait_ace_motion_ready_on','cmd_ACE_START_DRYING','cmd_ACE_STOP_DRYING','cmd_ACE_DRY'}
+        names={'_is_native_ace2k','wait_ace_motion_ready_on','cmd_ACE_START_DRYING','cmd_ACE_STOP_DRYING','cmd_ACE_DRY','cmd_ACE_RAW_PROBE'}
         methods=[n for n in ast.walk(ast.parse(s)) if isinstance(n,ast.FunctionDef) and n.name in names]
         assert {n.name for n in methods}==names
         node=ast.ClassDef(name='Subject',bases=[],keywords=[],body=methods,decorator_list=[])
@@ -64,6 +64,14 @@ class ScopedRuntimeTests(unittest.TestCase):
         a.dryer_temp=45; a.dryer_duration=120; a.gcode=Mock(); a._auto_dry_release=Mock(); a._close_dry_exhaust=Mock()
     def gcmd(self,**params):
         return types.SimpleNamespace(get_int=lambda k,default=None:params.get(k,default))
+    def test_raw_probe_last_event_is_opt_in_and_targets_selected_slot(self):
+        self.a._v2_dispatch_and_wait = Mock()
+        cmd = types.SimpleNamespace(get_int=lambda k, default=None, **kw: {'ACE': 0, 'SLOT': 2, 'LAST_EVENT': 1}.get(k, default),
+                                    respond_info=Mock())
+        self.a.cmd_ACE_RAW_PROBE(cmd)
+        self.assertEqual(self.a._v2_dispatch_and_wait.call_args_list[0].args[2:], ('get_status', {}))
+        self.assertEqual(self.a._v2_dispatch_and_wait.call_args_list[1].args[2:], ('get_last_feed_event', {'index': 2}))
+
     def test_ready_lane_does_not_wait_for_other_lanes(self):
         self.a._tipform_send.return_value=reply(2)
         self.a.wait_ace_motion_ready_on(0,2)

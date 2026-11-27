@@ -96,6 +96,23 @@ class NativeDriverGuardTests(unittest.TestCase):
         self.link._clear_lane.assert_called_once_with(2, 'feed start')
         self.assertEqual(self.link._start.call_count, 2)
 
+    def test_last_event_diagnostic_is_read_only_and_lane_scoped(self):
+        event = {'lane': 2, 'kind': 18, 'mode': 4, 'motor_um': 61000,
+                 'filament_um': 23000, 'seq': 33}
+        self.link._call = Mock(side_effect=lambda name, *args, **kwargs:
+                               event if name == 'ace2k_feed_last_query' else None)
+        self.link._pump = self.link._tick = self.link._tag_tick = self.link._dryer_tick = Mock()
+        self.link._start = self.link._clear_lane = self.link._stop_lane = Mock()
+        response = self.link._execute({'method': 'get_last_feed_event', 'params': {'index': 2}})
+        self.assertEqual(response['code'], 0)
+        self.assertEqual(response['result'], event)
+        self.link._call.assert_any_call('ace2k_feed_last_query', 'ace2k_feed_last', lane=2)
+        self.link._start.assert_not_called()
+        self.link._clear_lane.assert_not_called()
+        self.link._stop_lane.assert_not_called()
+        self.assertNotEqual(self.link._execute({'method': 'get_last_feed_event',
+                                                'params': {'index': 4}})['code'], 0)
+
     def test_raw_status_exposes_native_fault_and_sensor_bits(self):
         status = self.driver.make_status(
             0x127f, feed={'mode': bytes((0, 0, 0, 7)),
