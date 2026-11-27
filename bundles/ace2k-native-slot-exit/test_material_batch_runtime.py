@@ -59,6 +59,12 @@ class MaterialRuntimeTests(unittest.TestCase):
             return ident
         n.begin_parked=begin
         self.runtime=MaterialBatchRuntime(a,n)
+        self.tmp=tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        a.paths={'config_dir':self.tmp.name}
+        for i in range(4):
+            for slot in range(4):
+                self.runtime._park_store().record(a._unit_key(i),slot,1234)
     def row(self,i,s):return dict(ace=i,slot=s,serial='uid:unit'+str(i))
     def preview(self,action,rows):return self.runtime.preview(dict(action=action,slots=rows))
     def start(self,preview,confirm=True):return self.runtime.start(dict(ticket=preview['ticket'],confirm_parked=confirm))
@@ -89,7 +95,7 @@ class MaterialRuntimeTests(unittest.TestCase):
         b=self.start(p);self.runtime.tick(10)
         self.assertEqual([(x.ace,x.slot) for x in self.started],[(3,1)])
         def unload(cmd):
-            self.assertEqual(cmd,'ACE_UNLOAD_HEAD HEAD=0 ACE=2 SLOT=0')
+            self.assertEqual(cmd,'ACE_UNLOAD_HEAD HEAD=0 ACE=2 SLOT=0 RETRACT_LENGTH=1234')
             self.sensors[0]=False;self.a._head_source[0]=None;self.a._last_unload_ok=True
         self.a.gcode.run_script_from_command.side_effect=unload
         self.r.callbacks.pop(0)(10)
@@ -98,6 +104,46 @@ class MaterialRuntimeTests(unittest.TestCase):
         self.assertTrue(follow['needs_parking_confirmation'])
         self.start(follow);self.runtime.tick(10)
         self.assertEqual([(x.ace,x.slot) for x in self.started],[(3,1),(2,0)])
+    def test_missing_park_length_refuses_unload_without_motion(self):
+        self.sensors[0]=True
+        self.a._head_source[0]={'ace_index':2,'slot':0}
+        self.runtime._park_store().forget(self.a._unit_key(2),0)
+        p=self.preview('unload',[self.row(2,0)])
+        self.assertEqual(p['ticket'],'')
+        self.assertIn('No verified ACE park return',p['slots'][0]['detail'])
+        self.a.gcode.run_script_from_command.assert_not_called()
+
+    def test_runout_or_stale_inlet_is_not_success(self):
+        for empty in (True,False):
+            with self.subTest(empty=empty):
+                self.setUp()
+                self.sensors[0]=True
+                self.a._head_source[0]={'ace_index':2,'slot':0}
+                b=self.start(self.preview('unload',[self.row(2,0)]))
+                self.runtime.tick(self.r.t)
+                def unload(cmd):
+                    self.sensors[0]=False
+                    self.a._head_source[0]=None
+                    self.a._last_unload_ok=True
+                    def reply(idx,req,cb):
+                        stamp=self.r.t if empty else 10.
+                        cb(self=self.a,response={'code':0,'result':dict(index=0,
+                            state='ready',present=not empty,encoder=0,motor=0,stamp=[stamp]*4)})
+                    self.a.send_request_to=reply
+                self.a.gcode.run_script_from_command.side_effect=unload
+                self.r.callbacks.pop(0)(self.r.t)
+                self.assertEqual(self.runtime.status(b['batch'])[0]['state'],'recovery')
+
+    def test_park_length_rechecked_after_queue_delay(self):
+        self.sensors[0]=True
+        self.a._head_source[0]={'ace_index':2,'slot':0}
+        b=self.start(self.preview('unload',[self.row(2,0)]))
+        self.runtime.tick(self.r.t)
+        self.runtime._park_store().forget(self.a._unit_key(2),0)
+        self.r.callbacks.pop(0)(self.r.t)
+        self.a.gcode.run_script_from_command.assert_not_called()
+        self.assertEqual(self.runtime.status(b['batch'])[0]['state'],'rejected')
+
     def test_loaded_head_source_does_not_follow_wrong_selected_ace(self):
         self.sensors[0]=True;self.a._head_source[0]={'ace_index':2,'slot':0}
         p=self.preview('unload',[self.row(1,0)])
@@ -124,7 +170,7 @@ class MaterialRuntimeTests(unittest.TestCase):
         executed=[]
         def unload(cmd):
             slot=slots[len(executed)]
-            self.assertEqual(cmd,f'ACE_UNLOAD_HEAD HEAD={slot} ACE=0 SLOT={slot}')
+            self.assertEqual(cmd,f'ACE_UNLOAD_HEAD HEAD={slot} ACE=0 SLOT={slot} RETRACT_LENGTH=1234')
             executed.append(slot)
             self.a._homing_active=True
             self.runtime.tick(self.r.t)

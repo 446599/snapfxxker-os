@@ -11,7 +11,7 @@ from patch_scoped_runtime import replace
 
 HERE=Path(__file__).resolve().parent
 MODULES=('native_link_guard','native_eject_contract','native_unload_wire',
-         'native_exit_worker','cloud_route_owner','host_native_exit','material_batch_runtime')
+         'native_exit_worker','cloud_route_owner','host_native_exit','park_return','material_batch_runtime')
 
 
 def patch_engine(s):
@@ -29,6 +29,14 @@ def patch_engine(s):
             'multiace/material_batch', self._material_batch.webhook)
         self.gcode.register_command('ACE_SLOT_EXIT', self._material_batch.single_eject,
             desc='Native exit. Confirm actual parked tip using CONFIRM_PARKED=1 only after inspection.')
+        self.gcode.register_command('ACE_PARK_REFERENCE', self._material_batch.park_reference,
+            desc='Capture physically confirmed ACE park encoder reference')
+        self.gcode.register_command('ACE_PARK_MEASURE', self._material_batch.park_measure,
+            desc='Measure encoder travel at existing slot calibration sensor event')
+        self.gcode.register_command('ACE_PARK_RECORD', self._material_batch.park_record,
+            desc='Record physically verified full head return distance')
+        self.gcode.register_command('ACE_PARK_FORGET', self._material_batch.park_forget,
+            desc='Invalidate park return after tubing changes')
         self.gcode.register_command(
             'ACE_START_DRYING'""")
     s=replace(s,"            'native_exit_tasks': self._native_exit_host.status() if hasattr(self,'_native_exit_host') else [],\n",
@@ -89,8 +97,10 @@ def stage(provider,service=None):
     stage_host(extras)
     runtime=(HERE/'material_batch_runtime.py').read_text().replace(
         'from host_native_exit import','from .host_native_exit import')
+    runtime=runtime.replace('from park_return import','from .park_return import')
     compile(runtime,'material_batch_runtime.py','exec')
     (extras/'material_batch_runtime.py').write_text(runtime)
+    (extras/'park_return.py').write_text((HERE/'park_return.py').read_text())
     engine=extras/'ace.py'
     engine.write_text(patch_engine(engine.read_text()))
     web=provider/'web/backend/main.py'

@@ -16,6 +16,7 @@ from uuid import uuid4
 import json
 import logging
 from host_native_exit import ParkedProof
+from park_return import ParkReturnStore, encoder_distance_mm
 
 ACTIVE = frozenset(('queued','sampling','head_running','native','stopping','awaiting_parking','recovery'))
 ACTIONS = frozenset(('load','unload','eject'))
@@ -69,6 +70,7 @@ class MaterialBatchRuntime:
         self.timer=None
         self.head_running=None
         self._owns_head_motion=False
+        self._park_reference=None
 
     def now(self):
         return self.ace.reactor.monotonic()
@@ -82,6 +84,7 @@ class MaterialBatchRuntime:
             self.ace.reactor.unregister_timer(self.timer)
             self.timer=None
         self.tickets.clear()
+        self._park_reference=None
 
     def _print_idle(self):
         a=self.ace
@@ -117,6 +120,107 @@ class MaterialBatchRuntime:
         except ValueError:
             return False
 
+    def _park_store(self):
+        import os
+        return ParkReturnStore(os.path.join(self.ace.paths['config_dir'],
+            'extended','multiace','ace_park_return.json'))
+
+    def _park_length(self,s):
+        return self._park_store().length(s.uid,s.slot)
+
+    def _fresh_park_sample(self,s,after):
+        # Fresh independent native reports must all postdate completion.
+        deadline=self.now()+6.
+        while self.now()<deadline:
+            if not self._same(s):
+                raise RuntimeError('ACE connection changed during park verification')
+            replies=[]
+            def cb(self,response,replies=replies):
+                replies.append(response)
+            self.ace.send_request_to(s.ace,{'method':'get_lane_state',
+                'params':{'index':s.slot}},cb)
+            until=min(deadline,self.now()+1.5)
+            while not replies and self.now()<until:
+                self.ace.reactor.pause(min(until,self.now()+.05))
+            if replies and isinstance(replies[0],dict):
+                d=replies[0].get('result')
+                if isinstance(d,dict):
+                    stamps=d.get('stamp')
+                    fresh=(isinstance(stamps,(list,tuple)) and len(stamps)==4
+                           and all(type(v) in (int,float) and isfinite(v)
+                               and 0<=self.now()-v<=3.5 and v>after for v in stamps))
+                    if fresh and d.get('index')==s.slot and replies[0].get('code')==0:
+                        if d.get('present') is False:
+                            raise RuntimeError('ACE inlet is empty; park return failed')
+                        if d.get('state')=='ready':
+                            if not self._same(s):
+                                raise RuntimeError('ACE changed during sample')
+                            return self._sample(replies[0],s.slot)
+            self.ace.reactor.pause(min(deadline,self.now()+.1))
+        raise RuntimeError('No fresh stationary ACE inlet evidence')
+
+    def _park_selection(self,gcmd):
+        ace,slot=gcmd.get_int('ACE'),gcmd.get_int('SLOT')
+        a=self.ace
+        if not index(ace) or not index(slot) or ace>=len(a._ace_devices):
+            raise ValueError('Invalid ACE/slot')
+        if (not self._idle() or getattr(a,'_swap_in_progress',False)
+                or getattr(a,'_unload_all_active',False)
+                or any(t.state in ACTIVE for t in self.tasks.values())
+                or self.native.mask(ace)):
+            raise ValueError('Finish active material operations first')
+        uid=a._unit_key(ace)
+        port,link=self._identity(ace,slot,uid)
+        return Selection(ace,slot,uid,port,link,'park_reference')
+
+    def _park_empty_head(self,s):
+        a=self.ace
+        if (a._head_sensor_present(s.slot) is not False
+                or a._head_source.get(s.slot) is not None or a._bg_staged.get(s.slot)
+                or s.slot in a._loading_heads or s.slot in a._bg_lanes_on(s.ace)):
+            raise ValueError('Head must be empty and route stationary')
+
+    def park_reference(self,gcmd):
+        s=self._park_selection(gcmd)
+        self._park_empty_head(s)
+        if gcmd.get_int('CONFIRM_PARKED',0)!=1 or self.ace._calibration_route_occupied():
+            raise gcmd.error('Confirm physical ACE park before starting calibration')
+        sample=self._fresh_park_sample(s,self.now())
+        self._park_reference=(s,sample[0],getattr(self.ace,'_calibration_seq',0))
+        gcmd.respond_info('ACE park encoder reference captured; no motion issued')
+
+    def park_measure(self,gcmd):
+        s=self._park_selection(gcmd)
+        ref=self._park_reference
+        a=self.ace
+        cal=getattr(a,'_calibration',{})
+        if (not ref or ref[0]!=s or not self._same(ref[0])
+                or cal.get('state')!='at_sensor'
+                or (cal.get('ace'),cal.get('slot'),cal.get('head'))!=(s.ace,s.slot,s.slot)
+                or cal.get('scope')!='slot'
+                or getattr(a,'_calibration_seq',0)!=ref[2]+1
+                or a._head_sensor_present(s.slot) is not True):
+            raise gcmd.error('No matching park-to-head calibration sensor event')
+        sample=self._fresh_park_sample(s,self.now())
+        mm=encoder_distance_mm(ref[1],sample[0])
+        self._park_reference=None
+        gcmd.respond_info('Measured park-to-head sensor: %.1f mm. Proposal only; verify actual full return.'%mm)
+
+    def park_record(self,gcmd):
+        s=self._park_selection(gcmd)
+        self._park_empty_head(s)
+        if gcmd.get_int('CONFIRM_VERIFIED',0)!=1 or self.ace._calibration_route_occupied():
+            raise gcmd.error('Confirm verified full unload ended inside ACE')
+        self._fresh_park_sample(s,self.now())
+        self._park_store().record(s.uid,s.slot,gcmd.get_int('RETRACT_LENGTH'))
+        gcmd.respond_info('Verified route-specific ACE park return saved')
+
+    def park_forget(self,gcmd):
+        s=self._park_selection(gcmd)
+        self._park_store().forget(s.uid,s.slot)
+        self._park_reference=None
+        gcmd.respond_info('ACE park return invalidated')
+
     def _route(self,ace,slot,action):
         a=self.ace
         if not self._idle():
@@ -146,6 +250,7 @@ class MaterialBatchRuntime:
         if action=='unload' or selected:
             if not selected or detected is not True or (isinstance(source,dict) and source.get('load_failed')):
                 raise ValueError('Selected spool is not a verified source in the head')
+            self._park_store().length(a._unit_key(ace),slot)
             return 'head_unload'
         # No head_source entry is NOT proof of parking. The user must
         # explicitly inspect this exact strand before the common junction.
@@ -342,10 +447,13 @@ class MaterialBatchRuntime:
                     # Serialize only the existing toolhead movement; independent
                     # native exits are driven by their own asynchronous timers.
                     command='ACE_LOAD_HEAD' if s.route=='head_load' else 'ACE_UNLOAD_HEAD'
+                    line='%s HEAD=%d ACE=%d SLOT=%d'%(command,s.slot,s.ace,s.slot)
+                    if command=='ACE_UNLOAD_HEAD':
+                        line+=' RETRACT_LENGTH=%d'%self._park_length(s)
                     moved=True
                     self._owns_head_motion=True
-                    a.gcode.run_script_from_command('%s HEAD=%d ACE=%d SLOT=%d' %
-                                                    (command,s.slot,s.ace,s.slot))
+                    a.gcode.run_script_from_command(line)
+                    motion_end=self.now()
                     if not self._same(s):
                         raise RuntimeError('ACE disconnected during head operation')
                     src=a._head_source.get(s.slot)
@@ -359,6 +467,9 @@ class MaterialBatchRuntime:
                         if (a._last_unload_ok is not True or a._head_sensor_present(s.slot) is not False
                                 or src is not None or a._bg_staged.get(s.slot)):
                             raise RuntimeError('Head unload was not verified')
+                        self._fresh_park_sample(s,motion_end)
+                        if not self._same(s):
+                            raise RuntimeError('ACE changed after park verification')
                         if t.action=='eject' and not t.cancel_requested:
                             # Head clear does not prove the strand has crossed
                             # the common junction. A separate real inspection
