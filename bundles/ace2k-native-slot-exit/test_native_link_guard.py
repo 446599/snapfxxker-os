@@ -12,6 +12,7 @@ from unittest.mock import Mock
 from native_eject_contract import Operation
 from native_unload_wire import NativeUnloadWire
 from patch_native_link import stage
+from patch_scoped_runtime import patch_driver
 
 
 class NativeDriverGuardTests(unittest.TestCase):
@@ -26,6 +27,8 @@ class NativeDriverGuardTests(unittest.TestCase):
                 (root / name).write_bytes(t.extractfile(
                     'multiace-1.90.2-233.20261126/klipper/extras/' + name).read())
         stage(root)
+        driver = root / "ace_protocol_ace2k.py"
+        driver.write_text(patch_driver(driver.read_text()))
         pkg = types.ModuleType('field_native_guard_test')
         pkg.__path__ = [str(root)]
         sys.modules[pkg.__name__] = pkg
@@ -60,6 +63,38 @@ class NativeDriverGuardTests(unittest.TestCase):
         op = Operation('uid:00000001-00000002-00000003', epoch or self.guard.epoch,
                        lane, 17, self.now[0])
         return NativeUnloadWire(self.link, op, valid, self.driver.klipper_block)
+
+    def test_prior_fault_reports_kind_but_allows_existing_driver_recovery(self):
+        self.report(10, modes=(0, 0, 7, 0))
+        self.link._feed[1]['error'] = bytearray((0, 0, 9, 0))
+        self.link._call = Mock(return_value=None)
+        self.link._pump = Mock()
+        self.link._tick = self.link._tag_tick = self.link._dryer_tick = Mock()
+        request = {'method': 'get_lane_state', 'params': {'index': 2}}
+        state = self.link._execute(request)['result']
+        self.assertEqual((state['state'], state['fault_kind'], state['move_admissible']),
+                         ('feed_error', 'motor_stalled', True))
+        self.link._jobs[2] = {'kind': 'feed'}
+        self.assertFalse(self.link._execute(request)['result']['move_admissible'])
+        self.link._jobs.pop(2)
+        self.link._tag_reads[2] = {}
+        self.assertFalse(self.link._execute(request)['result']['move_admissible'])
+        self.link._tag_reads.pop(2)
+        self.report(10, modes=(0, 0, 0, 0))
+        hold = self.guard.reserve(self.wire(2))
+        self.report(10, modes=(0, 0, 7, 0))
+        self.link._feed[1]['error'] = bytearray((0, 0, 9, 0))
+        self.assertFalse(self.link._execute(request)['result']['move_admissible'])
+        self.guard.release_before_start(hold)
+
+        self.link._start = Mock(side_effect=[(None, 'in_error'), (17, 'ok')])
+        self.link._clear_lane = Mock()
+        self.link._move_max_mm = Mock(return_value=2000)
+        job = {'slot': 2, 'kind': 'feed', 'target': 100, 'done': 0,
+               'speed': 40, 'free_tip': 0, 'stop_when': False}
+        self.assertEqual(self.link._start_piece(job), 'ok')
+        self.link._clear_lane.assert_called_once_with(2, 'feed start')
+        self.assertEqual(self.link._start.call_count, 2)
 
     def test_real_receive_path_no_fake_event_callback(self):
         wire = self.wire()

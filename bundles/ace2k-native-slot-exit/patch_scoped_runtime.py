@@ -47,10 +47,12 @@ WAIT = '''    def _is_native_ace2k(self, idx):
             if isinstance(reply, dict) and reply.get('code') == 0:
                 data = reply.get('result')
                 if isinstance(data, dict) and type(data.get('index')) is int and data['index'] == slot:
-                    if data.get('state') == 'feed_error':
-                        self._raise_ace_gone(idx, '[multiACE] ACE %d slot %d feed error' %
-                                             (self._disp(idx), self._disp(slot)))
                     if data.get('move_admissible') is True:
+                        if data.get('state') == 'feed_error':
+                            logging.warning('[multiACE] ACE %d slot %d existing fault %s; '
+                                            'handing requested motion to ACE2K recovery',
+                                            self._disp(idx), self._disp(slot),
+                                            data.get('fault_kind') or 'unknown')
                         return
             self.reactor.pause(min(deadline, self.reactor.monotonic() + .25))
 
@@ -102,10 +104,13 @@ def patch_driver(text):
                    '''            guard = getattr(self, '_native_exit', None)
             admissible = (slot not in self._jobs and slot not in self._tag_reads
                           and (guard is None or not guard.blocked(slot))
-                          and (state == 'ready' or
+                          and (state in ('ready', 'feed_error') or
                                (sample.state == 'assisting' and slot in self._follow)))
+            faults = self._feed[1].get('error', ())
+            fault_code = faults[slot] if len(faults) == 4 and state == 'feed_error' else None
+            fault_kind = KIND_NAMES.get(fault_code, 'kind_%s' % fault_code) if fault_code is not None else None
             return ok({'index': slot, 'present': sample.present, 'state': state,
-                       'move_admissible': admissible,
+                       'move_admissible': admissible, 'fault_kind': fault_kind,
 ''')
 
 

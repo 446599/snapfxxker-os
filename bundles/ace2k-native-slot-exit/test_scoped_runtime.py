@@ -1,4 +1,5 @@
 import ast
+import logging
 from pathlib import Path
 import tarfile
 import tempfile
@@ -49,7 +50,7 @@ class ScopedRuntimeTests(unittest.TestCase):
         methods=[n for n in ast.walk(ast.parse(s)) if isinstance(n,ast.FunctionDef) and n.name in names]
         assert {n.name for n in methods}==names
         node=ast.ClassDef(name='Subject',bases=[],keywords=[],body=methods,decorator_list=[])
-        ns={}; exec(compile(ast.fix_missing_locations(ast.Module(body=[node],type_ignores=[])),'subject','exec'),ns)
+        ns={'logging':logging}; exec(compile(ast.fix_missing_locations(ast.Module(body=[node],type_ignores=[])),'subject','exec'),ns)
         cls.subject=ns['Subject']; cls.text=s
     def setUp(self):
         a=self.a=self.subject(); a.reactor=Reactor()
@@ -73,14 +74,19 @@ class ScopedRuntimeTests(unittest.TestCase):
         self.a.wait_ace_motion_ready_on(0,1)
         self.assertGreater(self.a.reactor.t,0)
         self.a.wait_ace_ready_on.assert_not_called()
-    def test_wrong_slot_timeout_and_real_fault_no_unit_reconnect(self):
+    def test_wrong_slot_timeout_no_unit_reconnect(self):
         self.a._tipform_send.return_value=reply(1)
         with self.assertRaisesRegex(RuntimeError,'motion not ready'):
             self.a.wait_ace_motion_ready_on(0,2,timeout=.5)
-        self.a._tipform_send.return_value=reply(2,'feed_error',False)
-        with self.assertRaisesRegex(RuntimeError,'feed error'):
-            self.a.wait_ace_motion_ready_on(0,2)
         self.a.wait_ace_ready_on.assert_not_called()
+    def test_existing_fault_reaches_original_driver_recovery_only_if_lane_free(self):
+        self.a._tipform_send.return_value=reply(2,'feed_error',True)
+        self.a.wait_ace_motion_ready_on(0,2)
+        self.a.wait_ace_ready_on.assert_not_called()
+    def test_fault_on_owned_lane_cannot_bypass_motion_guard(self):
+        self.a._tipform_send.return_value=reply(2,'feed_error',False)
+        with self.assertRaisesRegex(RuntimeError,'motion not ready'):
+            self.a.wait_ace_motion_ready_on(0,2,timeout=.5)
     def test_connection_replacement_during_wait_is_not_ready(self):
         def answer(*args):
             self.a._serials[0]=object()
