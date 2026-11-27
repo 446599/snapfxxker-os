@@ -13,6 +13,18 @@ from playwright.sync_api import expect, sync_playwright
 
 ASSETS = Path(__file__).resolve().parents[1]
 HEATERS = ["extruder", "extruder1", "extruder2", "extruder3"]
+PANEL_FIXTURES = {
+    "/multiace/": ("text/html", b"""<!doctype html><meta charset="utf-8">
+        <link rel="stylesheet" href="fixture-panel.css">
+        <p id="panel-status">Opening panel</p><script defer src="fixture-panel.js"></script>"""),
+    "/multiace/fixture-panel.css": ("text/css", b"#panel-status{color:rgb(24,86,140)}"),
+    "/multiace/fixture-panel.js": ("text/javascript", b"""
+        fetch('/multiace/api/fixture-read').then(r => r.json()).then(data => {
+            document.querySelector('#panel-status').textContent = data.status;
+        });
+    """),
+    "/multiace/api/fixture-read": ("application/json", b'{"status":"Original panel loaded"}'),
+}
 
 
 class Printer:
@@ -22,6 +34,7 @@ class Printer:
         self.selected = []
         self.setting = "off"
         self.fail_save = True
+        self.panel_auth = False
         self.config = "[ace]\nfeed_speed: 80  # printer setting\n"
         self.units = [
             dict(idx=a, unit_key=f"uid:ace{a}", connected=True, protocol="ace2k",
@@ -96,6 +109,22 @@ def serve(printer):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             path = urlsplit(self.path).path
+            if path == "/" and urlsplit(self.path).query == "workspace=1":
+                self.send(200, "text/html", b"""<!doctype html><title>Printer workspace</title>
+                    <button id="sign-in">Sign in to fixture</button><script>
+                    document.querySelector('#sign-in').onclick = () => {
+                        const key = 'user-token-' + location.host.replace(/[^a-zA-Z0-9]/g,'_');
+                        localStorage.setItem(key, 'fixture-printer-session');
+                    };</script>""")
+                return
+            if path in PANEL_FIXTURES or path == "/u1/device/firmware/settings":
+                if printer.panel_auth and self.headers.get("Authorization") != "Bearer fixture-printer-session":
+                    self.send(401, "application/json", b'{"detail":"Session required"}')
+                    return
+            if path in PANEL_FIXTURES:
+                media, content = PANEL_FIXTURES[path]
+                self.send(200, media, content)
+                return
             if self.command == "GET" and path in assets:
                 asset = assets[path]
                 self.send(200, mimetypes.guess_type(asset)[0], asset.read_bytes())
@@ -111,6 +140,7 @@ def serve(printer):
             self.send_response(status)
             self.send_header("Content-Type", media)
             self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(data)
 
@@ -126,6 +156,19 @@ def preview(page, name):
     root = os.getenv("RUNNER_TEMP")
     if not root:
         return
+    # Verify Chrome actually used a font with Chinese glyphs for this
+    # title. document.fonts.check can report true even for missing glyphs.
+    page.evaluate("document.fonts.ready")
+    session = page.context.new_cdp_session(page)
+    try:
+        session.send("DOM.enable")
+        session.send("CSS.enable")
+        document = session.send("DOM.getDocument")
+        title = session.send("DOM.querySelector", {"nodeId": document["root"]["nodeId"], "selector": "#title"})
+        used = session.send("CSS.getPlatformFontsForNode", {"nodeId": title["nodeId"]})["fonts"]
+        assert any("Noto Sans CJK" in face["familyName"] and face["glyphCount"] >= 2 for face in used), used
+    finally:
+        session.detach()
     folder = Path(root) / "u1-web-preview"
     folder.mkdir(parents=True, exist_ok=True)
     page.evaluate("""() => {
@@ -160,10 +203,14 @@ def exercise(page, origin, printer):
     slots = page.locator(".mat-slot")
     expect(slots).to_have_count(16)
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    if os.getenv("RUNNER_TEMP"):
-        page.set_viewport_size({"width": 1280, "height": 900})
-        preview(page, "desktop-material-simulated.png")
-        page.set_viewport_size({"width": 390, "height": 844})
+    for width, columns in ((390, 1), (940, 2), (1280, 4)):
+        page.set_viewport_size({"width": width, "height": 844 if width == 390 else 900})
+        page.wait_for_function("""count => {
+            const cards = [...document.querySelectorAll('.mat-unit')];
+            return cards.length === 4 && cards.filter(e => e.offsetTop === cards[0].offsetTop).length === count;
+        }""", arg=columns)
+    preview(page, "desktop-material-simulated.png")
+    page.set_viewport_size({"width": 390, "height": 844})
     slots.nth(0).click()
     slots.nth(4).click()
     expect(btn("装入喷头")).to_be_disabled()
@@ -228,6 +275,49 @@ def exercise(page, origin, printer):
     assert not errors, errors
 
 
+def check_integrated_panel(page, origin, printer):
+    page.goto(origin + "/u1/#printhub")
+    normal = page.frame_locator("#page iframe").locator("#panel-status")
+    expect(normal).to_have_text("Original panel loaded")
+    expect(normal).to_have_css("color", "rgb(24, 86, 140)")
+    expect(page).to_have_url(origin + "/u1/#printhub")
+    assert len(page.context.pages) == 1
+
+    # A protected printer with no signed-in session must not render the panel.
+    printer.panel_auth = True
+    page.reload()
+    expect(page.locator("#login")).to_be_visible()
+    expect(page.locator("#page iframe")).to_have_count(0)
+
+    # An inline workspace login supplies the host-specific token for native
+    # API requests. Reconnect must restore the section that requested login.
+    page.locator('#nav a[href="#settings"]').click()
+    expect(page.locator("#page .error-box")).to_contain_text("Session required")
+    page.locator("#open-login").click()
+    workspace = page.frame_locator('#page iframe[src="/?workspace=1"]')
+    workspace.get_by_role("button", name="Sign in to fixture").click()
+    expect(page).to_have_url(origin + "/u1/#fluidd")
+    page.locator("#retry-login").click()
+    expect(page).to_have_url(origin + "/u1/#settings")
+    expect(page.locator(".settings-group summary")).to_contain_text("设备")
+    expect(page.locator("#login")).to_be_hidden()
+    assert len(page.context.pages) == 1
+
+    # On a host that accepts only Authorization headers the old HTML panel
+    # stays protected even when native API reads now succeed.
+    page.goto(origin + "/u1/#printhub")
+    expect(page.locator("#page .error-box")).to_contain_text("打印机已确认登录")
+    expect(page.locator("#login")).to_be_hidden()
+    expect(page.locator("#page iframe")).to_have_count(0)
+
+    # A saved Fluidd hash arrives with the redirected /u1/ document, then
+    # the startup router transfers it intact to the original workspace.
+    page.goto(origin + "/?workspace=1")  # ensure the bookmark loads a fresh document
+    page.goto(origin + "/u1/#/jobs")
+    expect(page).to_have_url(origin + "/?workspace=1#/jobs")
+    expect(page.get_by_role("button", name="Sign in to fixture")).to_be_visible()
+
+
 def main():
     printer = Printer()
     server = serve(printer)
@@ -236,7 +326,9 @@ def main():
             browser = playwright.chromium.launch(channel="chrome", headless=True)
             try:
                 page = browser.new_page(viewport={"width": 390, "height": 844})
-                exercise(page, f"http://127.0.0.1:{server.server_port}", printer)
+                origin = f"http://127.0.0.1:{server.server_port}"
+                exercise(page, origin, printer)
+                check_integrated_panel(page, origin, printer)
             finally:
                 browser.close()
     finally:

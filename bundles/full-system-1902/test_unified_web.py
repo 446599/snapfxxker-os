@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from urllib.parse import urlsplit
 
 import compose_1915 as build
 
@@ -90,6 +91,10 @@ class NginxTests(unittest.TestCase):
             temp.chmod(0o755)
             web = temp / "web"
             shutil.copytree(build.WEB, web)
+            workspace = temp / "workspace"
+            workspace.mkdir()
+            (workspace / "index.html").write_text("existing printer workspace")
+            (workspace / "app.js").write_text("workspace script")
             upstream = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
             stack.callback(upstream.server_close)
             thread = threading.Thread(target=upstream.serve_forever, daemon=True)
@@ -116,6 +121,10 @@ http {{
  scgi_temp_path {temp}/scgi;
  server {{
    listen 127.0.0.1:{port};
+   root {workspace};
+   index index.html;
+   location / {{ try_files $uri $uri/ /index.html; }}
+   location = /index.html {{ add_header Cache-Control no-store; }}
    location = /auth_check {{
      internal;
      proxy_pass http://{target}/auth;
@@ -134,12 +143,13 @@ http {{
                 process.terminate()
                 process.wait(timeout=5)
             stack.callback(stop_nginx)
-            def request(path, method="GET", headers=None, body=None):
+            def request(path, method="GET", headers=None, body=None, response_header=None):
                 client = HTTPConnection("127.0.0.1", port, timeout=3)
                 try:
                     client.request(method, path, body=body, headers=headers or {})
                     result = client.getresponse()
-                    return result.status, result.read()
+                    payload = result.read()
+                    return result.status, result.getheader(response_header) if response_header else payload
                 finally:
                     client.close()
             for _ in range(60):
@@ -152,6 +162,13 @@ http {{
                 self.fail("nginx did not listen")
             self.assertEqual(status, 200)
             self.assertEqual(body, (web / "index.html").read_bytes())
+            status, destination = request("/", response_header="Location")
+            self.assertEqual(status, 302)
+            self.assertEqual(urlsplit(destination).path, "/u1/")
+            for path in ("/?workspace=1", "/?token=example", "/index.html", "/jobs/history"):
+                with self.subTest(workspace_path=path):
+                    self.assertEqual(request(path), (200, b"existing printer workspace"))
+            self.assertEqual(request("/app.js"), (200, b"workspace script"))
             self.assertEqual(request("/u1")[0], 302)
             self.assertEqual(request("/u1/console.js"), (200, (web / "console.js").read_bytes()))
             endpoint = "/u1/device/firmware/settings"

@@ -1,4 +1,4 @@
-:root{font-family:Inter,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#24251e;background:#f7f7f2;--accent:#ffcf42;--muted:#66675f;--line:#dddfd5;--card:#fff;--ink:#24251e;--r:16px}
+:root{font-family:Inter,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;color:#24251e;background:#f7f7f2;--accent:#ffcf42;--muted:#66675f;--line:#dddfd5;--card:#fff;--ink:#24251e;--r:16px}
 *{box-sizing:border-box}
 body{margin:0} [hidden]{display:none!important}
 button,select,input,textarea{font:inherit;color:inherit}

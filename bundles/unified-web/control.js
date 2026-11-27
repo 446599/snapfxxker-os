@@ -252,6 +252,7 @@ function controlPanel(ctx, overview) {
         : '位置未读取';
     });
     appendRow(movement, button('机身控制 · 移动、取放喷头与挤出', () => ctx.open('screen')));
+    movement.append(node('p','muted','取放喷头或手动挤出时，请在机身控制画面中确认目标喷头。'));
     columns.append(movement);
     const tuning = card('打印调节');
     for (const [name,label,statusKey,min,max] of [

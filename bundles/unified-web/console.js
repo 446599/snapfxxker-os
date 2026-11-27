@@ -46,12 +46,15 @@ function errorText(data) {
   }
   return detail?.message || '';
 }
+function accessToken() {
+  try { return localStorage.getItem('user-token-' + location.host.replace(/[^a-zA-Z0-9]/g,'_')); }
+  catch { return null; }
+}
 async function response(path, options = {}) {
   const url = new URL(path, location.href);
   if (url.origin !== location.origin) throw new Error('需要打印机同源地址');
   const headers = new Headers(options.headers);
-  let token;
-  try { token = localStorage.getItem('user-token-' + location.host.replace(/[^a-zA-Z0-9]/g,'_')); } catch {}
+  const token = accessToken();
   if (token) headers.set('Authorization','Bearer ' + token);
   let body = options.body;
   if (body != null && typeof body === 'object' && !(body instanceof FormData) && !(body instanceof Blob)) {
@@ -93,7 +96,7 @@ function errorBox(error, retry) {
     el('button',{type:'button',onclick:retry},'重试'));
 }
 const panelSource = {multiace:'/multiace/',printhub:'/multiace/',devices:'/multiace/',
-  calibration:'/multiace/',paxx:'/firmware-config/',fluidd:'/'};
+  calibration:'/multiace/',paxx:'/firmware-config/',fluidd:'/?workspace=1'};
 const initialTab = {printhub:'control',devices:'devices',calibration:'calibration',multiace:'dashboard'};
 
 async function integratedPanel(ctx, key) {
@@ -107,7 +110,15 @@ async function integratedPanel(ctx, key) {
     // A successful API fetch with a Bearer header alone does not authorize an iframe.
     const r = await fetch(path,{credentials:'same-origin',cache:'no-store',signal:ctx.signal});
     if (!r.ok || !r.headers.get('content-type')?.includes('text/html')) {
-      if (r.status === 401 || r.status === 403) login.hidden = false;
+      if (r.status === 401 || r.status === 403) {
+        if (path === '/multiace/' && accessToken()) {
+          const session = await response(path,{signal:ctx.signal});
+          if (session.headers.get('content-type')?.includes('text/html')) {
+            throw new Error('打印机已确认登录，但当前网络要求每次请求携带登录凭据，无法嵌入完整 MultiACE 面板。可返回「耗材」或「设置」使用对应控制项。');
+          }
+        }
+        login.hidden = false;
+      }
       throw new Error('原面板未能打开（HTTP ' + r.status + '）。');
     }
     if (ctx.signal.aborted) return;
@@ -220,6 +231,19 @@ function render() {
   window.scrollTo(0,0);
 }
 document.querySelector('#origin').textContent=location.host;
-document.querySelector('#retry-login').onclick=()=>{login.hidden=true;render();};
+let loginReturn = '';
+document.querySelector('#open-login').onclick = () => {
+  if (location.hash !== '#fluidd') loginReturn = location.hash || '#overview';
+};
+document.querySelector('#retry-login').onclick = () => {
+  login.hidden = true;
+  const target = loginReturn;
+  loginReturn = '';
+  if (location.hash === '#fluidd' && target && target !== location.hash) location.hash = target;
+  else render();
+};
 window.addEventListener('hashchange',render);
-render();
+// Browsers retain the fragment on the bare printer address redirect. Restore
+// older Fluidd and Mainsail hash routes inside the original frontend.
+if (location.hash.startsWith('#/')) location.replace('/?workspace=1' + location.hash);
+else render();

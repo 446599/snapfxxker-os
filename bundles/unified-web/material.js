@@ -40,12 +40,14 @@ export function mountMaterial(ctx) {
   const page = node('section', null, 'u1-material');
   const styles = node('style');
   styles.textContent = `
-    .u1-material {display:grid;gap:1rem;min-width:0}
+    .u1-material {display:grid;gap:1rem;min-width:0;container-type:inline-size}
     .u1-material [hidden] {display:none!important}
     .u1-material .mat-line,.u1-material .mat-actions {display:flex;flex-wrap:wrap;align-items:center;gap:.55rem}
     .u1-material .mat-line {justify-content:space-between}
     .u1-material h2,.u1-material h3,.u1-material p {margin:0}
-    .u1-material .mat-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,285px),1fr));gap:.85rem}
+    .u1-material .mat-grid {display:grid;grid-template-columns:minmax(0,1fr);gap:.85rem}
+    @container (min-width:500px) {.u1-material .mat-grid {grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @container (min-width:920px) {.u1-material .mat-grid {grid-template-columns:repeat(4,minmax(0,1fr))}}
     .u1-material .mat-unit,.u1-material .mat-box {display:grid;align-content:start;gap:.8rem;min-width:0}
     .u1-material .mat-slots {display:grid;grid-template-columns:1fr 1fr;gap:.45rem}
     .u1-material .mat-slot {background:var(--panel,#fff);color:inherit;text-align:left;display:grid;gap:.25rem;min-width:0;padding:.65rem;border:1px solid #c8c9c5;border-radius:.65rem;overflow-wrap:anywhere}
