@@ -1,0 +1,48 @@
+name: Build complete U1 233 1902.16 acceptance fixes
+on:
+  push:
+    branches: [codex/1916-acceptance-fixes]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: u1-1916-full-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  full:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install firmware assembly tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev squashfs-tools nginx-core
+      - name: Run native motion, OTA and unified web software contracts
+        env:
+          PYTHONPATH: bundles/multiace-190
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s bundles/ace2k-native-slot-exit -v
+          python3 -m unittest discover -s bundles/full-system-1902 -v
+          python3 -m unittest discover -s bundles/multiace-190 -p 'test_lane*.py' -v
+          for script in bundles/unified-web/*.js; do node --input-type=module --check < "$script"; done
+          bash -n bundles/full-system-1902/build_1916.sh
+      - name: Fetch the verified 1902.15 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api /repos/446599/snapfxxker-os/actions/artifacts/15225956077/zip > "$RUNNER_TEMP/base-1915.zip"
+      - name: Repack provider and screen installation identity and verify final image
+        run: |
+          sudo bash bundles/full-system-1902/build_1916.sh "$RUNNER_TEMP/base-1915.zip" output
+          (cd output && sha256sum -c SHA256SUMS.txt)
+          cat output/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: U1-233-1902.16-full-candidate
+          path: output/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

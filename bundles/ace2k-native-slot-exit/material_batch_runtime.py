@@ -11,6 +11,7 @@ parked native exits use the existing writer queue and do not wait for one
 another or for toolhead G-code to finish.
 """
 from dataclasses import dataclass
+from functools import wraps
 from math import isfinite
 from uuid import uuid4
 import json
@@ -21,6 +22,17 @@ from park_return import ParkReturnStore, encoder_distance_mm
 ACTIVE = frozenset(('queued','sampling','head_running','native','stopping','awaiting_parking','recovery'))
 ACTIONS = frozenset(('load','unload','eject'))
 TERMINAL = frozenset(('complete','cancelled','rejected','failed'))
+
+
+def park_command(fn):
+    """Expected user, telemetry and storage failures are G-code errors."""
+    @wraps(fn)
+    def command(self,gcmd):
+        try:
+            return fn(self,gcmd)
+        except (ValueError, RuntimeError, OSError) as exc:
+            raise gcmd.error(str(exc)) from exc
+    return command
 
 
 def index(n):
@@ -120,6 +132,61 @@ class MaterialBatchRuntime:
         except ValueError:
             return False
 
+    def ota_motion_idle(self):
+        """Report actual outstanding motion/recovery rather than invented legacy fields."""
+        a=self.ace
+        return not (self.head_running is not None
+                    or any(t.state in ACTIVE for t in self.tasks.values())
+                    or a._loading_heads or a._bg_staged or a._retract_pending
+                    or a._calibration_route_occupied())
+
+    def head_park_plan(self,head,requested_ace,requested_slot,override):
+        """One park-distance policy for batch and direct ACE2K Multi unloads.
+
+        This is a conservative interim guard, not a closed-loop thermal
+        return controller. Swaps keep their independent short-return path.
+        """
+        a=self.ace
+        if (a._ace_mode!='multi' or not a.head_uses_ace(head)
+                or getattr(a,'_swap_in_progress',False)):
+            return None,override
+        source=a._head_source.get(head)
+        staged=a._bg_staged.get(head)
+        route=((source.get('ace_index'),source.get('slot'))
+               if isinstance(source,dict) else staged)
+        detected=a._head_sensor_present(head)
+        if route is None:
+            if (detected is False and requested_ace is None
+                    and requested_slot is None):
+                return None,override  # ordinary empty-head no-op
+            if not any(getattr(p,'NAME','')=='ace2k'
+                       for p in a._protocols.values()):
+                return None,override
+            raise ValueError('Unconfirmed head source; inspect before returning filament')
+        if (not isinstance(route,(tuple,list)) or len(route)!=2
+                or not all(index(x) for x in route) or route[1]!=head):
+            raise ValueError('Unconfirmed Multi mode head route')
+        ace,slot=route
+        if getattr(a._protocols.get(ace),'NAME','')!='ace2k':
+            if not a._connected_per_ace.get(ace):
+                raise ValueError('Selected ACE is offline')
+            return None,override
+        if ((requested_ace is not None or requested_slot is not None)
+                and (requested_ace,requested_slot)!=(ace,slot)):
+            raise ValueError('Requested lane differs from the actual head source')
+        if detected is not True or (isinstance(source,dict)
+                                    and (source.get('load_failed') or source.get('gate_empty'))):
+            raise ValueError('Head/route position is not confirmed; inspect before retry')
+        if self.native.mask(ace)&(1<<slot):
+            raise ValueError('Selected lane has an unfinished native exit or recovery')
+        uid=a._unit_key(ace)
+        port,link=self._identity(ace,slot,uid)
+        selection=Selection(ace,slot,uid,port,link,'head_unload')
+        length=self._park_length(selection)
+        if override not in (0,length):
+            raise ValueError('Requested retract length differs from verified ACE park length')
+        return selection,length
+
     def _park_store(self):
         import os
         return ParkReturnStore(os.path.join(self.ace.paths['config_dir'],
@@ -180,6 +247,7 @@ class MaterialBatchRuntime:
                 or s.slot in a._loading_heads or s.slot in a._bg_lanes_on(s.ace)):
             raise ValueError('Head must be empty and route stationary')
 
+    @park_command
     def park_reference(self,gcmd):
         s=self._park_selection(gcmd)
         self._park_empty_head(s)
@@ -189,6 +257,7 @@ class MaterialBatchRuntime:
         self._park_reference=(s,sample[0],getattr(self.ace,'_calibration_seq',0))
         gcmd.respond_info('ACE park encoder reference captured; no motion issued')
 
+    @park_command
     def park_measure(self,gcmd):
         s=self._park_selection(gcmd)
         ref=self._park_reference
@@ -206,6 +275,7 @@ class MaterialBatchRuntime:
         self._park_reference=None
         gcmd.respond_info('Measured park-to-head sensor: %.1f mm. Proposal only; verify actual full return.'%mm)
 
+    @park_command
     def park_record(self,gcmd):
         s=self._park_selection(gcmd)
         self._park_empty_head(s)
@@ -215,6 +285,7 @@ class MaterialBatchRuntime:
         self._park_store().record(s.uid,s.slot,gcmd.get_int('RETRACT_LENGTH'))
         gcmd.respond_info('Verified route-specific ACE park return saved')
 
+    @park_command
     def park_forget(self,gcmd):
         s=self._park_selection(gcmd)
         self._park_store().forget(s.uid,s.slot)

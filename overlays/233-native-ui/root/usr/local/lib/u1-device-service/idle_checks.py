@@ -28,7 +28,26 @@ def require_ace_idle(ace):
         raise ValueError("无法确认 ACE 状态")
     if not ace:
         raise ValueError("无法确认 ACE 状态")
-    for key, flag in (("tag_op", "busy"), ("location_hold", "active")):
+    native_schema = "native_exit_tasks" in ace or "material_batch_tasks" in ace
+    flags = (("tag_op", "busy"),)
+    if native_schema:
+        # The 1902.x provider publishes real native and batch operations,
+        # not the legacy location_hold / slot_action objects.
+        flags += (("calibration_unload", "active"),)
+        if ace.get("material_motion_idle") is not True:
+            raise ValueError("请先结束耗材运动、回退恢复或校准")
+        for key, finished in (
+            ("native_exit_tasks", {"complete", "cancelled"}),
+            ("material_batch_tasks", {"complete", "cancelled", "rejected", "failed"}),
+        ):
+            tasks = ace.get(key)
+            if not isinstance(tasks, list) or any(
+                    not isinstance(task, dict) or task.get("state") not in finished
+                    for task in tasks):
+                raise ValueError("请先结束批量耗材操作并确认恢复状态")
+    else:
+        flags += (("location_hold", "active"),)
+    for key, flag in flags:
         if not isinstance(ace.get(key), dict) or ace[key].get(flag) is not False:
             raise ValueError("请先结束耗材操作并确认料路位置")
     if (ace.get("status") != "ready"
@@ -39,11 +58,16 @@ def require_ace_idle(ace):
             or (ace.get("location_hold") or {}).get("active")
             or (ace.get("calibration_unload") or {}).get("active")):
         raise ValueError("请先结束耗材操作并确认料路位置")
-    for key in ("slot_action", "calibration"):
+    operations = ("calibration",) if native_schema else ("slot_action", "calibration")
+    for key in operations:
         operation = ace.get(key)
+        finished = {"idle", "complete", "verified"} if native_schema else FINISHED
         if (not isinstance(operation, dict) or operation.get("busy")
-                or operation.get("state") not in FINISHED):
+                or operation.get("state") not in finished):
             raise ValueError("请先结束槽位操作、耗材校准或退料")
+        if native_schema and (operation.get("tip_position_mm") not in (None, 0)
+                              or operation.get("verify_position_mm") not in (None, 0)):
+            raise ValueError("请先确认校准耗材已回到停放位置")
     devices = ace.get("aces")
     if not isinstance(devices, list) or ace.get("device_count", len(devices)) != len(devices):
         raise ValueError("无法确认 ACE 设备状态")
@@ -79,7 +103,8 @@ def require_ace_idle(ace):
             continue
         if device is not ace and (device.get("status") != "ready"
                                  or device.get("connected") is not True
-                                 or device.get("fw_hold")):
+                                 or device.get("fw_hold")
+                                 or (native_schema and device.get("feed_assist") != -1)):
             raise ValueError("请先确认所有 ACE 已连接、空闲且没有固件更新")
         dryer = device.get("dryer_status")
         if (not isinstance(dryer, dict) or dryer.get("status") != "stop"

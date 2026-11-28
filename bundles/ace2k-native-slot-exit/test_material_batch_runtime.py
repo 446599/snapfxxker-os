@@ -104,6 +104,56 @@ class MaterialRuntimeTests(unittest.TestCase):
         self.assertTrue(follow['needs_parking_confirmation'])
         self.start(follow);self.runtime.tick(10)
         self.assertEqual([(x.ace,x.slot) for x in self.started],[(3,1),(2,0)])
+    def test_park_gcode_errors_do_not_escape_as_internal_exceptions(self):
+        class CommandError(Exception):
+            pass
+        gcmd=Mock()
+        gcmd.error.side_effect=lambda msg:CommandError(msg)
+        gcmd.get_int.side_effect=lambda name,default=None:{'ACE':3,'SLOT':0}.get(name,default)
+        self.a._connected_per_ace[3]=False
+        for cmd in ('park_reference','park_measure','park_record','park_forget'):
+            with self.subTest(cmd=cmd):
+                with self.assertRaisesRegex(CommandError,'unavailable'):
+                    getattr(self.runtime,cmd)(gcmd)
+        self.a.gcode.run_script_from_command.assert_not_called()
+
+    def test_park_gcode_expected_telemetry_and_storage_failures(self):
+        class CommandError(Exception):
+            pass
+        gcmd=Mock()
+        gcmd.error.side_effect=lambda msg:CommandError(msg)
+        for exc in (ValueError('bad input'),RuntimeError('telemetry timeout'),
+                    OSError('disk write failed')):
+            for cmd in ('park_reference','park_measure','park_record','park_forget'):
+                with self.subTest(cmd=cmd,exc=type(exc).__name__):
+                    self.runtime._park_selection=Mock(side_effect=exc)
+                    with self.assertRaisesRegex(CommandError,str(exc)):
+                        getattr(self.runtime,cmd)(gcmd)
+
+    def test_direct_head_return_uses_same_verified_route(self):
+        self.sensors[2]=True
+        self.a._head_source[2]={'ace_index':1,'slot':2}
+        s,mm=self.runtime.head_park_plan(2,None,None,0)
+        self.assertEqual((s.ace,s.slot,mm),(1,2,1234))
+        with self.assertRaises(ValueError):
+            self.runtime.head_park_plan(2,1,2,1950)
+        with self.assertRaises(ValueError):
+            self.runtime.head_park_plan(2,0,2,0)
+        self.runtime._park_store().forget(self.a._unit_key(1),2)
+        with self.assertRaisesRegex(ValueError,'No verified'):
+            self.runtime.head_park_plan(2,None,None,0)
+        self.a._swap_in_progress=True
+        self.assertEqual(self.runtime.head_park_plan(2,None,None,900),(None,900))
+
+    def test_ota_motion_idle_rejects_pending_retract_and_staged(self):
+        self.a._retract_pending={}
+        self.assertTrue(self.runtime.ota_motion_idle())
+        self.a._retract_pending={'route':{}}
+        self.assertFalse(self.runtime.ota_motion_idle())
+        self.a._retract_pending={}
+        self.a._bg_staged={0:(0,0)}
+        self.assertFalse(self.runtime.ota_motion_idle())
+
     def test_missing_park_length_refuses_unload_without_motion(self):
         self.sensors[0]=True
         self.a._head_source[0]={'ace_index':2,'slot':0}
