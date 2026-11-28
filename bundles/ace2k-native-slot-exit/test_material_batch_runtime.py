@@ -179,7 +179,13 @@ class MaterialRuntimeTests(unittest.TestCase):
                 a._last_load_ok=True
                 a._head_source[2]={'ace_index':1,'slot':2}
                 self.sensors[2]=True
-                runtime.record_load_park(2,anchor)
+                runtime.pending_load_park = anchor
+                seated = 30_000 + direction * 1_900_000
+                runtime._fresh_park_sample = Mock(return_value=(seated, 175))
+                runtime.mark_load_seated(2)
+                runtime.record_load_park(2, runtime.pending_load_park)
+                runtime.pending_load_park = None
+                runtime._fresh_park_sample.assert_called_with(anchor, runtime.now(), allow_assist=True)
                 self.assertTrue(self.preview('unload',[self.row(1,2)])['ticket'])
                 plan,probe=runtime.head_park_plan(2,1,2,0)
                 self.assertEqual((plan.route,probe),('encoder_unload',150))
@@ -202,12 +208,37 @@ class MaterialRuntimeTests(unittest.TestCase):
                 a._move_report_seq=lambda *args:len(moves)
                 a._move_report=lambda *args:{'seq':len(moves),'running':False,
                                             'kind':'retract','stop':'distance'}
-                runtime.thermal_retract(2,1,2,30)
+                runtime.thermal_retract(2,1,2,80)
                 runtime.verify_thermal_return()
-                self.assertEqual(moves,[(1500,30),(239,30),(57,15)])
+                self.assertEqual(moves,[(1500,60),(149,60),(57,15)])
                 a._head_source[2]=None
+                # The FG counter may change without moving the strand.
+                sample = (sample[0], sample[1] + 1)
                 next_load=runtime.capture_load_park(2,1,2,None)
-                self.assertEqual(next_load.anchor,anchor.anchor)
+                compensated = (30_000+direction*90_000,100)
+                self.assertEqual(next_load.anchor,compensated)
+                self.assertEqual(sample[0] - compensated[0], direction * 3000)
+                # A second cycle consumes a different amount after seating.
+                # The compensated coordinate moves but the physical endpoint
+                # and all retract segments stay the same.
+                a._head_source[2] = {'ace_index': 1, 'slot': 2}
+                self.sensors[2] = True
+                seated = compensated[0] + direction * 1_900_000
+                runtime.pending_load_park = next_load
+                runtime._fresh_park_sample.return_value = (seated, 300)
+                runtime.mark_load_seated(2)
+                runtime.record_load_park(2, runtime.pending_load_park)
+                runtime.pending_load_park = None
+                second_plan, _ = runtime.head_park_plan(2, 1, 2, 0)
+                sample = (seated + direction * 400_000, 400)
+                runtime.start_thermal_return(second_plan)
+                self.sensors[2] = False
+                shifted_origin = compensated[0] + direction * 400_000
+                sample = (shifted_origin + direction * 1_709_000, 430)
+                runtime.thermal_retract(2, 1, 2, 80)
+                runtime.verify_thermal_return()
+                self.assertEqual(moves[:3], moves[3:])
+                self.assertEqual(sample[0] - shifted_origin, direction * 3000)
                 self.assertFalse(runtime._park_store()._load()['routes'].get(
                     a._unit_key(1)+'/2/2'))
 
@@ -231,6 +262,10 @@ class MaterialRuntimeTests(unittest.TestCase):
                 self.sensors[2] = True
                 self.counters[1, 2] = (1_000_000, 100)
                 a._last_load_ok = True
+                runtime.pending_load_park = selection
+                runtime.mark_load_seated(2)
+                selection = runtime.pending_load_park
+                runtime.pending_load_park = None
                 runtime.record_load_park(2, selection)
                 batch = self.start(self.preview('unload', [self.row(1, 2)]))
                 runtime.tick(self.r.t)
@@ -304,12 +339,35 @@ class MaterialRuntimeTests(unittest.TestCase):
         a._last_load_ok=True
         a._head_source[2]={'ace_index':1,'slot':2}
         self.sensors[2]=True
-        runtime.record_load_park(2,anchor)
+        runtime.pending_load_park = anchor
+        self.counters[1, 2] = (1_990_000, 200)
+        runtime.mark_load_seated(2)
+        runtime.record_load_park(2, runtime.pending_load_park)
+        runtime.pending_load_park = None
+        self.assertTrue(self.preview('unload',[self.row(1,2)])['ticket'])
         a._serials[1]=object()
         p=self.preview('unload',[self.row(1,2)])
         self.assertEqual(p['ticket'],'')
         self.assertIn('No verified ACE park return',p['slots'][0]['detail'])
         a.gcode.run_script_from_command.assert_not_called()
+
+    def test_missing_preflush_reference_does_not_arm_absolute_return(self):
+        a, runtime = self.a, self.runtime
+        a._swap_in_progress = False
+        a._gate_status_per_ace = {1: [1] * 4}
+        runtime._park_store().forget(a._unit_key(1), 2)
+        selection = runtime.capture_load_park(2, 1, 2, None)
+        a._head_source[2] = {'ace_index': 1, 'slot': 2}
+        self.sensors[2] = True
+        a._last_load_ok = True
+        runtime.pending_load_park = selection
+        runtime._fresh_park_sample = Mock(side_effect=[(1000, 100), (2000, 101)])
+        runtime.mark_load_seated(2)
+        runtime.record_load_park(2, runtime.pending_load_park)
+        self.assertIsNone(runtime.pending_load_park.seated_encoder)
+        preview = self.preview('unload', [self.row(1, 2)])
+        self.assertEqual(preview['ticket'], '')
+        self.assertIn('No verified ACE park return', preview['slots'][0]['detail'])
 
     def test_runout_or_stale_inlet_is_not_success(self):
         for empty in (True,False):

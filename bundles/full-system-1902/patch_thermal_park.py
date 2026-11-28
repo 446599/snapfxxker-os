@@ -16,6 +16,13 @@ def patch_engine(source):
     load = replace_checked(load, anchor, anchor + '''        park_reference = self._material_batch.capture_load_park(
             head, ace_index, slot, _staged)
 ''')
+    anchor = '        self._in_internal_load_head = True\n'
+    load = replace_checked(load, anchor, anchor + '''        self._material_batch.pending_load_park = park_reference
+''')
+    anchor = '            self._in_internal_load_head = False\n'
+    load = replace_checked(load, anchor, anchor + '''            park_reference = self._material_batch.pending_load_park
+            self._material_batch.pending_load_park = None
+''')
     anchor = "        self._audit_state('LOAD_HEAD', {'head': head, 'ace': ace_index, 'slot': slot})\n"
     load = replace_checked(load, anchor, anchor + '''        self._material_batch.record_load_park(head, park_reference)
 ''')
@@ -47,6 +54,10 @@ def patch_engine(source):
 
 
 def patch_feed(source):
+    anchor = '                        self.gcode.run_script_from_command(_flush_cmd + "\\r\\n")\n'
+    source = replace_checked(source, anchor, '''                        if self.ace is not None:
+                            self.ace._material_batch.mark_load_seated(self.filament_ch[ch])
+''' + anchor)
     anchor = '                                _rest = _full_retract - _short_retract\n'
     source = replace_checked(source, anchor, anchor + '''                                if self.ace._material_batch.thermal_return is not None:
                                     try:

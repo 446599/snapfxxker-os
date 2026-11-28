@@ -50,6 +50,7 @@ class Selection:
     link: object
     route: str
     anchor: tuple = None
+    seated_encoder: int = None
 
 
 @dataclass
@@ -96,6 +97,7 @@ class MaterialBatchRuntime:
         self._loaded_park={}
         self._stopped_park={}
         self.thermal_return=None
+        self.pending_load_park=None
 
     def now(self):
         return self.ace.reactor.monotonic()
@@ -113,6 +115,7 @@ class MaterialBatchRuntime:
         self._loaded_park.clear()
         self._stopped_park.clear()
         self.thermal_return=None
+        self.pending_load_park=None
 
     def _print_idle(self):
         a=self.ace
@@ -234,20 +237,43 @@ class MaterialBatchRuntime:
             selection = Selection(ace, slot, uid, port, link, 'encoder_unload')
             stopped = self._settled_park_sample(selection)
             # Repeated cycles must return to the original point, not advance
-            # by the safety margin every time. Reuse it only at the exact
-            # previously verified end position on the same connection.
+            # by the safety margin every time. Reuse it when the stationary
+            # filament encoder still reads the previously verified endpoint.
             origin = stopped
-            if (previous is not None and self._same(previous[0])
-                    and previous[1] == stopped):
+            reused = (previous is not None and self._same(previous[0])
+                      and previous[1][0] == stopped[0])
+            if reused:
                 origin = previous[0].anchor
+            logging.info('[multiACE] load park ACE %d slot %d start_um=%d anchor_um=%d reused=%s',
+                         ace, slot, stopped[0], origin[0], reused)
             return replace(selection, anchor=origin)
         except (ValueError, RuntimeError, OSError) as exc:
             logging.warning('[multiACE] park reference unavailable for ACE %d slot %d: %s',
                             ace, slot, exc)
             return None
 
+    def mark_load_seated(self, head):
+        """Capture the seated tip before the flush starts consuming filament."""
+        selection = self.pending_load_park
+        if selection is None or head != selection.slot:
+            return
+        try:
+            if (not self._park_source_matches(head, selection)
+                    or self.ace._head_sensor_present(head) is not True):
+                raise RuntimeError('selected head is not seated')
+            first = self._fresh_park_sample(selection, self.now(), allow_assist=True)
+            second = self._fresh_park_sample(selection, self.now(), allow_assist=True)
+            if first[0] != second[0]:
+                raise RuntimeError('filament was still moving before flush')
+            self.pending_load_park = replace(selection, seated_encoder=second[0])
+            logging.info('[multiACE] load seated ACE %d slot %d encoder_um=%d',
+                         selection.ace, selection.slot, second[0])
+        except (ValueError, RuntimeError, OSError) as exc:
+            logging.warning('[multiACE] no seated encoder for ACE %d slot %d: %s',
+                            selection.ace, selection.slot, exc)
+
     def record_load_park(self, head, selection):
-        if selection is None:
+        if selection is None or selection.seated_encoder is None:
             return
         a = self.ace
         if (a._last_load_ok is True and a._head_sensor_present(head) is True
@@ -279,12 +305,29 @@ class MaterialBatchRuntime:
     def start_thermal_return(self, selection):
         self._thermal_route(selection, True)
         sample = self._settled_park_sample(selection)
-        delta = encoder_delta_mm(selection.anchor[0], sample[0])
+        origin, motor = selection.anchor
+        seated = selection.seated_encoder
+        if seated is None:
+            raise RuntimeError('ACE return has no seated encoder reference')
+        seating_travel = encoder_delta_mm(origin, seated)
+        direction = 1 if seating_travel > 0 else -1
+        # Forward travel after seating feeds the nozzle rather than extending
+        # the path to the tip. Account for it in the current encoder frame.
+        # A retraction after seating cannot give consumed filament back.
+        advance = direction * encoder_delta_mm(seated, sample[0])
+        consumed = max(0., advance)
+        consumed_um = direction * round(consumed * 1000)
+        target = ((origin + consumed_um + 2**31) % 2**32) - 2**31
+        distance = direction * encoder_delta_mm(target, sample[0])
         # Leave room for the stock tip-form and its bounded short probes.
         minimum = 200 + PROBE_MM * self.ace.unload_retry
-        if not minimum <= abs(delta) <= 5000:
+        if not minimum <= distance <= 5000:
             raise RuntimeError('ACE measured travel cannot safely use the thermal return path')
-        self.thermal_return = ThermalReturn(selection, 1 if delta > 0 else -1)
+        park = replace(selection, anchor=(target, motor), seated_encoder=None)
+        self.thermal_return = ThermalReturn(park, direction)
+        logging.info('[multiACE] return ACE %d slot %d seated_um=%d loaded_um=%d '
+                     'forward_after_seat_mm=%.3f target_um=%d',
+                     selection.ace, selection.slot, seated, sample[0], advance, target)
         self._loaded_park.pop(selection.slot, None)
 
     def _thermal_distance(self, task):
@@ -363,7 +406,7 @@ class MaterialBatchRuntime:
             self._thermal_route(selection, False)
             previous_seq = self._retract_event(selection)['seq']
             seq = self.ace._move_report_seq(ace, slot)
-            if self.ace._retract(slot, length, min(speed, 30 if coarse else 15),
+            if self.ace._retract(slot, length, min(speed, 60 if coarse else 15),
                                  head=head, ace=ace) is not True:
                 raise RuntimeError('ACE park retract did not start')
             report = self.ace._move_report(ace, slot) or {}
@@ -402,7 +445,7 @@ class MaterialBatchRuntime:
         logging.info('[multiACE] parked ACE %d slot %d at %.3f mm from origin',
                      selection.ace, selection.slot, remaining)
 
-    def _fresh_park_sample(self,s,after,present=True):
+    def _fresh_park_sample(self,s,after,present=True,*,allow_assist=False):
         # Fresh independent native reports must all postdate completion.
         deadline=self.now()+6.
         while self.now()<deadline:
@@ -426,10 +469,12 @@ class MaterialBatchRuntime:
                     if fresh and d.get('index')==s.slot and replies[0].get('code')==0:
                         if present and d.get('present') is False:
                             raise RuntimeError('ACE inlet is empty; park return failed')
-                        if d.get('state')=='ready' and d.get('present') is present:
+                        usable_state = d.get('state') == 'ready' or (
+                            allow_assist and d.get('state') == 'assisting')
+                        if usable_state and d.get('present') is present:
                             if not self._same(s):
                                 raise RuntimeError('ACE changed during sample')
-                            return self._sample(replies[0],s.slot,present)
+                            return self._sample(replies[0],s.slot,present,allow_assist=allow_assist)
             self.ace.reactor.pause(min(deadline,self.now()+.1))
         raise RuntimeError('No fresh stationary ACE inlet evidence')
 
@@ -542,7 +587,7 @@ class MaterialBatchRuntime:
             raise ValueError('Selected lane is staged in a toolhead')
         return 'inspect_parked'
 
-    def _sample(self,response,slot,present=True):
+    def _sample(self,response,slot,present=True,*,allow_assist=False):
         if not isinstance(response,dict) or type(response.get('code')) is not int or response['code']!=0:
             raise ValueError('Native lane telemetry unavailable')
         d=response.get('result')
@@ -555,7 +600,8 @@ class MaterialBatchRuntime:
                 or type(d.get('encoder')) is not int or not -(2**31)<=d['encoder']<2**31
                 or type(d.get('motor')) is not int or not 0<=d['motor']<2**32):
             raise ValueError('Lane telemetry is stale or incomplete')
-        if d.get('state')!='ready' or d.get('present') is not present:
+        allowed = ('ready', 'assisting') if allow_assist else ('ready',)
+        if d.get('state') not in allowed or d.get('present') is not present:
             raise ValueError('Selected slot is not stationary with filament' if present
                              else 'Selected slot is not stationary and empty')
         return d['encoder'],d['motor']
