@@ -1,0 +1,51 @@
+diff --git a/src/ui/filament/u1_filament_overview.cpp b/src/ui/filament/u1_filament_overview.cpp
+--- a/src/ui/filament/u1_filament_overview.cpp
++++ b/src/ui/filament/u1_filament_overview.cpp
+@@ -39,2 +39,16 @@
+     return presence ? *presence : backend.slot_has_filament_at_toolhead(head);
++}
++
++std::optional<int> confirmed_source(const AmsBackend* backend, int head, int bay) {
++    const auto physical = material_workspace::head_physical_source(backend, head);
++    if (physical || !backend || head < 0 || head >= 4 || !multiace::bay_of(bay) ||
++        material_workspace::head_physical_presence(backend, head).has_value()) {
++        return physical;
++    }
++    // Older providers publish the recorded route and the completed head load
++    // through separate objects. Both must identify this exact bay.
++    if (backend->upstream_slot(head) == bay && backend->slot_has_filament_at_toolhead(bay)) {
++        return bay;
++    }
++    return std::nullopt;
+ }
+@@ -820,13 +834,6 @@
+         if (card.connected && card.head >= 0) {
+-            const auto source = material_workspace::head_physical_source(backend, card.head);
++            const auto source = confirmed_source(backend, card.head, slot->global_index);
+             const auto presence = material_workspace::head_physical_presence(backend, card.head);
+             card.current = route.ace < 0 ? backend->slot_has_filament_at_toolhead(card.head)
+-                                        : presence == true && source == slot->global_index;
+-            // The 1.90.2 provider reports the routed bay and load_finish via
+-            // the legacy objects, without a dedicated physical-source frame.
+-            // The bay-indexed check requires that exact route and head latch.
+-            if (route.ace >= 0 && !presence.has_value() && !source.has_value()) {
+-                card.current = backend->slot_has_filament_at_toolhead(slot->global_index);
+-            }
+-
++                                        : source == slot->global_index;
+             card.source_unknown = route.ace >= 0 && presence == true && !source &&
+@@ -1245,3 +1252,3 @@
+     if (global_slot == head) return backend.slot_has_filament_at_toolhead(head);
+-    return material_workspace::head_physical_source(&backend, head) == global_slot;
++    return confirmed_source(&backend, head, global_slot) == global_slot;
+ }
+@@ -1608,3 +1615,3 @@
+     auto* backend = AmsState::instance().get_backend();
+-    confirm_source_ = material_workspace::head_physical_source(backend, confirm_head_);
++    confirm_source_ = confirmed_source(backend, confirm_head_, confirm_global_);
+     layout_confirm_page();
+@@ -1674,3 +1681,3 @@
+     }
+-    const auto source = material_workspace::head_physical_source(backend, confirm_head_);
++    const auto source = confirmed_source(backend, confirm_head_, confirm_global_);
+     if (source != confirm_source_) {

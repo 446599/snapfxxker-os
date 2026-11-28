@@ -7,6 +7,7 @@ REPO=$(cd "$HERE/../.." && pwd)
 BASE_ZIP=$(realpath "${1:?usage: build_1916.sh base.zip output-directory [profile [screen.tar.gz screen.json]]}")
 OUT=$(realpath -m "${2:?output directory required}")
 PROFILE=${3:-1916}
+COMPOSE="$HERE/compose_$PROFILE.py"
 case "$PROFILE" in
     1916)
         BASE_VERSION=2.1.2-233-1902.15
@@ -25,8 +26,13 @@ case "$PROFILE" in
         BASE_COMMIT=3b50fbbcc42d7cd60be4cab64cc907d6779b7b32
         BASE_SHA=7e6564245867dbabd5cf31474041a83c3cdc13a433c9a55b8770fe6b2a2d4c68
         VERSION=2.1.2-233-1902.18
-        SCREEN_ARCHIVE=$(realpath "${4:?screen archive required}")
-        SCREEN_PROVENANCE=$(realpath "${5:?screen provenance required}")
+        ;;
+    1919)
+        BASE_VERSION=2.1.2-233-1902.18
+        BASE_COMMIT=1c4dd6cbc859691f64d474b76434f62be12e50f1
+        BASE_SHA=a48dd44795050dda13e1fb433d647c35f0a3561120387a251e0d3a6de9b9107d
+        VERSION=2.1.2-233-1902.19
+        COMPOSE="$HERE/compose_1918.py"
         ;;
     *) echo 'unrecognized candidate profile' >&2; exit 1 ;;
 esac
@@ -50,11 +56,13 @@ unsquashfs -d "$ROOT" "$INPUT/rk-unpacked/rootfs.img"
 [[ $(stat -c '%u:%g' "$ROOT/home/lava/bin/hwver.sh") == 1000:1000 ]]
 COMMIT=$(git -C "$REPO" rev-parse HEAD)
 compose_args=("$ROOT" "$WORK/base/composition.json" "$WORK/composition.json" "$COMMIT")
-if [[ "$PROFILE" == 1918 ]]; then
-    compose_args+=("$SCREEN_ARCHIVE" "$SCREEN_PROVENANCE")
+if [[ "$PROFILE" == 1918 || "$PROFILE" == 1919 ]]; then
+    SCREEN_ARCHIVE=$(realpath "${4:?screen archive required}")
+    SCREEN_PROVENANCE=$(realpath "${5:?screen provenance required}")
+    compose_args+=("$SCREEN_ARCHIVE" "$SCREEN_PROVENANCE" --profile "$PROFILE")
     cp "$SCREEN_PROVENANCE" "$WORK/base/screen-provenance.json"
 fi
-python3 "$HERE/compose_$PROFILE.py" "${compose_args[@]}"
+python3 "$COMPOSE" "${compose_args[@]}"
 sh -n "$ROOT/etc/init.d/S58u1-device-service"
 bash -n "$ROOT/usr/local/bin/extended-pkg"
 mksquashfs "$ROOT" "$WORK/rootfs-new.img" -comp zstd -noappend -processors 2
