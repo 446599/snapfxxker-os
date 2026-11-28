@@ -54,6 +54,18 @@ def patch_engine(source):
 
 
 def patch_feed(source):
+    anchor = '''                                        if runout_detect == True:
+                                            self.ace._stop_feeding(_ace_slot)
+                                            self.channel_error[ch] = FEED_OK
+'''
+    source = replace_checked(source, anchor, '''                                        if runout_detect == True:
+                                            if not self.ace._stop_feeding(_ace_slot, idx=ace_idx):
+                                                self.channel_error[ch] = FEED_ERR_TIMEOUT
+                                                self.exception_code[ch] = 34
+                                                raise self.printer.command_error(
+                                                    '[multiACE] Head sensor triggered but ACE feed stop was not confirmed')
+                                            self.channel_error[ch] = FEED_OK
+''')
     anchor = '                        self.gcode.run_script_from_command(_flush_cmd + "\\r\\n")\n'
     source = replace_checked(source, anchor, '''                        if self.ace is not None:
                             self.ace._material_batch.mark_load_seated(self.filament_ch[ch])
