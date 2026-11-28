@@ -1,5 +1,9 @@
+import { createPrintActions } from './print-actions.js';
+
 const stats = 'print_stats=filename,state,print_duration,total_duration,filament_used,info,message';
-export const printObjects = stats + '&display_status=progress,message&virtual_sdcard=progress,file_position,file_size';
+export const printObjects = 'webhooks=state&' + stats
+  + '&display_status=progress,message&virtual_sdcard=progress,file_position,file_size'
+  + '&exclude_object=objects,excluded_objects,current_object';
 const states = {printing:'打印中', paused:'已暂停', complete:'打印完成', cancelled:'已取消', error:'打印失败'};
 const running = state => state === 'printing' || state === 'paused';
 const number = value => Number.isFinite(value) && value >= 0;
@@ -24,7 +28,21 @@ function remainingTime(elapsed, progress, metadata) {
   return undefined;
 }
 
-export function createPrintDetails(ctx) {
+function thumbnailPath(file, data) {
+  if (!Array.isArray(data?.thumbnails)) return '';
+  const relative = path => typeof path === 'string'
+    && path.split('/').every(part => part && part !== '.' && part !== '..' && !/[\\\x00-\x1f]/.test(part));
+  if (!relative(file)) return '';
+  const options = data.thumbnails.filter(thumb => relative(thumb?.relative_path)
+    && /\.(png|jpe?g|webp)$/i.test(thumb.relative_path)
+    && (!number(thumb.size) || thumb.size <= 3 * 1024 * 1024));
+  if (!options.length) return '';
+  options.sort((a,b) => (b.width || 0) - (a.width || 0));
+  const parts = file.split('/').slice(0,-1).concat(options[0].relative_path.split('/'));
+  return '/server/files/gcodes/' + parts.map(part => encodeURIComponent(part)).join('/');
+}
+
+export function createPrintDetails(ctx, options) {
   const {el} = ctx;
   const root = el('div', {class:'print-details'});
   const name = el('strong', {class:'print-file'});
@@ -39,9 +57,52 @@ export function createPrintDetails(ctx) {
     metrics.append(el('div', {}, el('dt', {}, label), value));
     values.set(label, value);
   }
-  root.append(el('div', {class:'print-summary'},
-    el('div', {class:'print-identity'}, badge, name), percent), progress, metrics, message);
-  let latest = {}, file = '', previousState, generation = 0, metadata;
+  const preview = el('figure', {class:'print-preview', hidden:true});
+  const previewState = el('span', {class:'muted'}, '正在读取预览…');
+  const body = el('div', {class:'print-main'}, preview, el('div', {class:'print-content'},
+    el('div', {class:'print-summary'}, el('div', {class:'print-identity'}, badge, name), percent),
+    progress, metrics, message));
+  const actions = createPrintActions(ctx, refresh, options);
+  root.append(body, actions.root);
+
+  let latest = {}, file = '', previousState, generation = 0, metadata, imageUrl;
+  let eventtime = -Infinity;
+
+  function releasePreview() {
+    preview.replaceChildren();
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
+    imageUrl = undefined;
+  }
+  ctx.onCleanup(releasePreview);
+
+  async function loadPreview(filename, data, request) {
+    const found = thumbnailPath(filename, data);
+    const proxy = '/multiace/api/thumbnail?' + new URLSearchParams({path:filename});
+    for (const path of [found, proxy].filter(Boolean)) {
+      if (request !== generation || ctx.signal.aborted) return;
+      let source;
+      try {
+        const response = await ctx.response(path, {signal:ctx.signal});
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/') || !blob.size || blob.size > 3 * 1024 * 1024)
+          throw new Error('Invalid thumbnail');
+        source = URL.createObjectURL(blob);
+        const image = el('img', {alt:'当前模型预览', src:source});
+        await image.decode();
+        if (request !== generation || ctx.signal.aborted) return;
+        releasePreview();
+        preview.append(image);
+        imageUrl = source;
+        source = undefined;
+        return;
+      } catch {
+        // Try the existing same-origin thumbnail proxy if the file URL fails.
+      } finally {
+        if (source) URL.revokeObjectURL(source);
+      }
+    }
+    if (request === generation && !ctx.signal.aborted) previewState.textContent = '暂无模型预览';
+  }
 
   function render() {
     const job = latest.print_stats || {};
@@ -82,27 +143,51 @@ export function createPrintDetails(ctx) {
     message.textContent = detail || '';
   }
 
-  function update(status) {
+  function update(status, timestamp) {
+    if (Number.isFinite(timestamp) && timestamp < eventtime) return;
+    if (Number.isFinite(timestamp)) eventtime = timestamp;
+    else if (!status.webhooks?.state) eventtime = -Infinity;
+    const previousDuration = latest.print_stats?.total_duration;
     latest = status;
+    actions.update(status);
     const job = status.print_stats || {};
     const next = Object.hasOwn(states, job.state) && typeof job.filename === 'string' ? job.filename : '';
-    const changed = file !== next || (running(job.state) && !running(previousState));
+    const restarted = running(job.state) && (!running(previousState) ||
+      (number(previousDuration) && number(job.total_duration) && job.total_duration < previousDuration));
+    const changed = file !== next || restarted;
     previousState = job.state;
     if (changed) {
       file = next;
       metadata = null;
       const request = ++generation;
+      releasePreview();
+      preview.hidden = !file;
       if (file) {
-        ctx.api('/server/files/metadata?' + new URLSearchParams({filename:file}), {signal:ctx.signal}).then(data => {
-          if (request !== generation || ctx.signal.aborted) return;
-          metadata = data.result || {};
-          render();
-        }).catch(() => {}); // Live telemetry still works without slicer metadata.
+        previewState.textContent = '正在读取预览…';
+        preview.append(previewState);
+        ctx.api('/server/files/metadata?' + new URLSearchParams({filename:file}), {signal:ctx.signal})
+          .then(data => data.result || null).catch(() => null).then(data => {
+            if (request !== generation || ctx.signal.aborted) return;
+            metadata = data;
+            render();
+            void loadPreview(next, data, request);
+          });
       }
     }
     render();
   }
 
+  async function refresh() {
+    try {
+      const data = await ctx.api('/printer/objects/query?' + printObjects, {signal:ctx.signal});
+      if (!ctx.signal.aborted) update(data.result?.status || {}, data.result?.eventtime);
+      return latest;
+    } catch (error) {
+      if (!ctx.signal.aborted) update({});
+      throw error;
+    }
+  }
+
   render();
-  return {root, update};
+  return {root, update, refresh};
 }

@@ -5,10 +5,11 @@ import os
 import re
 import struct
 import threading
+import time
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -46,6 +47,11 @@ class Printer:
         self.job = {"state": "standby"}
         self.print_progress = {}
         self.file_progress = {}
+        self.exclude_object = {}
+        self.pending_skip = None
+        self.thumbnail_requests = []
+        self.thumbnail_mode = 'metadata'
+        self.thumbnail_image = sample_image(b"\xd1\x9f\x44")
         self.camera = None
         self.webrtc_failure = False
         self.screen_revision = 1
@@ -79,14 +85,32 @@ class Printer:
             else:
                 status = dict(webhooks={"state": "ready"}, print_stats=self.job,
                               display_status=self.print_progress, virtual_sdcard=self.file_progress,
+                              exclude_object=self.exclude_object,
                               toolhead={"extruder": "extruder", "position": [20, 30, 40, 0]},
                               **{h: {"temperature": 35 + i, "target": 0} for i, h in enumerate(HEATERS + ["heater_bed"])})
-            return 200, {"result": {"status": status}}
+            return 200, {"result": {"status": status, "eventtime": time.monotonic()}}
         if path == "/multiace/api/print-control":
-            return 200, {"state": "standby", "speed_factor": 100, "extrude_factor": 100, "fan": 0}
+            if method == "POST":
+                self.job["state"] = {"pause":"paused", "resume":"printing", "cancel":"cancelled"}[body["verb"]]
+                return 200, {"ok": True}
+            return 200, {"state": self.job["state"], "speed_factor": 100, "extrude_factor": 100, "fan": 0}
+        if path == "/printer/gcode/script":
+            prefix = "EXCLUDE_OBJECT NAME="
+            assert method == "POST" and body["script"].startswith(prefix)
+            self.pending_skip = body["script"].removeprefix(prefix)
+            return 200, {"result": "ok"}
+        if path == "/multiace/api/history/reprint":
+            assert method == "POST" and body["filename"] == self.job["filename"]
+            self.job["state"] = "printing"
+            return 200, {"ok": True}
         if path == "/server/files/metadata":
             assert parse_qs(urlsplit(url).query)["filename"] == [self.job["filename"]]
-            return 200, {"result": {"estimated_time": 2400, "layer_count": 200}}
+            metadata = {"estimated_time": 2400, "layer_count": 200}
+            if self.thumbnail_mode == 'metadata':
+                metadata["thumbnails"] = [{"relative_path": ".thumbs/small.png", "width": 96},
+                                          {"relative_path": ".thumbs/预览 & 300.png", "width": 300},
+                                          {"relative_path": "../../unexpected.png", "width": 2000}]
+            return 200, {"result": metadata}
         if path == "/multiace/api/webcam/info":
             options = {"webrtc": {"signal_path": "/api/webcam/webrtc-signal"},
                        "mjpeg": {"proxy_path": "/api/webcam/stream"}}
@@ -163,6 +187,15 @@ def serve(printer):
             if path in PANEL_FIXTURES:
                 media, content = PANEL_FIXTURES[path]
                 self.send(200, media, content)
+                return
+            if self.command == "GET" and (path.startswith("/server/files/gcodes/") or path == "/multiace/api/thumbnail"):
+                target = unquote(path)
+                printer.thumbnail_requests.append(target)
+                if target.endswith("/.thumbs/预览 & 300.png") or (path == "/multiace/api/thumbnail"
+                                                                  and printer.thumbnail_mode == 'proxy'):
+                    self.send(200, "image/png", printer.thumbnail_image)
+                else:
+                    self.send(404, "application/json", b'{"detail":"No thumbnail"}')
                 return
             if self.command == "GET" and path == "/screen/snapshot":
                 tag = '"screen-%s"' % printer.screen_revision
@@ -408,6 +441,9 @@ def check_print_monitor(page, origin, printer):
     expect(details).to_contain_text("1.23 m")
     expect(details).to_contain_text("正在打印外壁")
     expect(details.get_by_role("progressbar")).to_have_attribute("value", "42.5")
+    expect(details.get_by_alt_text("当前模型预览")).to_be_visible()
+    assert "/server/files/gcodes/测试/.thumbs/预览 & 300.png" in printer.thumbnail_requests
+    assert not any(path.endswith("/unexpected.png") for path in printer.thumbnail_requests)
     expect(page.get_by_text("WebRTC 实时画面")).to_be_visible()
     assert printer.writes("/multiace/api/webcam/webrtc-signal")[-2:] == [
         {"type": "request"}, {"type": "answer", "id": "fixture-peer", "sdp": "answer-fixture"}]
@@ -444,6 +480,78 @@ def check_print_monitor(page, origin, printer):
     assert not printer.writes("/screen/touch")
 
 
+def check_print_actions(page, origin, printer):
+    name = "测试件.stl_id_0_copy_1"
+    unsafe = "Bad\nCANCEL_PRINT"
+    printer.camera = None
+    printer.job = {"state":"printing", "filename":"plate.gcode", "print_duration":100, "total_duration":120}
+    printer.exclude_object = {"objects":[{"name": name}, {"name":"Already_done"}, {"name":unsafe}],
+                              "current_object":name, "excluded_objects":["Already_done"]}
+    printer.thumbnail_mode = "proxy"
+    page.goto(origin + "/u1/#jobs")
+    details = page.locator(".print-details")
+    expect(details.get_by_alt_text("当前模型预览")).to_be_visible()
+    assert "/multiace/api/thumbnail" in printer.thumbnail_requests
+
+    page.get_by_text("跳过模型", exact=True).click()
+    skip = page.get_by_role("button", name="跳过 " + name, exact=True)
+    dialog = page.get_by_role("dialog")
+    expect(page.get_by_text("当前对象", exact=True)).to_be_visible()
+    expect(page.get_by_text("已跳过", exact=True)).to_have_count(1)
+    expect(page.get_by_text("名称不支持跳过", exact=True)).to_be_visible()
+    expect(page.locator(".print-object-row").filter(has_text="Bad").get_by_role("button")).to_be_disabled()
+
+    skip.click()
+    expect(dialog).to_contain_text(name)
+    dialog.get_by_role("button", name="取消", exact=True).click()
+    expect(skip).to_be_enabled()
+    assert not printer.writes("/printer/gcode/script")
+
+    # A new run of the same file is a different job.
+    skip.click()
+    printer.job = {**printer.job, "print_duration":1, "total_duration":3}
+    dialog.get_by_role("button", name="确认").click()
+    expect(page.locator("#notice")).to_contain_text("状态已变化")
+    expect(skip).to_be_enabled()
+    assert not printer.writes("/printer/gcode/script")
+
+    skip.click()
+    dialog.get_by_role("button", name="确认").click()
+    expect(page.get_by_text("等待设备确认", exact=True)).to_be_visible()
+    assert printer.writes("/printer/gcode/script") == [{"script":"EXCLUDE_OBJECT NAME=" + name}]
+    assert printer.pending_skip == name
+    printer.exclude_object["excluded_objects"].append(name)
+    expect(page.get_by_text("已跳过", exact=True)).to_have_count(2)
+
+    action = lambda label: page.get_by_role("button", name=label, exact=True)
+    action("暂停").click()
+    expect(details).to_contain_text("已暂停")
+    expect(action("继续")).to_be_enabled()
+    action("继续").click()
+    dialog.get_by_role("button", name="确认").click()
+    expect(details.locator(".print-state")).to_have_text("打印中")
+    action("取消打印").click()
+    dialog.get_by_role("button", name="确认").click()
+    expect(details).to_contain_text("已取消")
+    assert printer.writes("/multiace/api/print-control")[-3:] == [
+        {"verb":"pause"}, {"verb":"resume"}, {"verb":"cancel"}]
+
+    action("重新打印").click()
+    expect(dialog).to_contain_text("plate.gcode")
+    dialog.get_by_role("button", name="确认").click()
+    expect(details.locator(".print-state")).to_have_text("打印中")
+    assert printer.writes("/multiace/api/history/reprint") == [{"filename":"plate.gcode"}]
+
+    printer.exclude_object = {}
+    printer.thumbnail_mode = "missing"
+    printer.job = {**printer.job, "filename":"other.gcode"}
+    expect(details.get_by_text("暂无模型预览", exact=True)).to_be_visible()
+    expect(details.get_by_alt_text("当前模型预览")).to_have_count(0)
+    if not page.locator(".print-object-picker").evaluate("element => element.open"):
+        page.get_by_text("跳过模型", exact=True).click()
+    expect(page.get_by_text("当前任务未提供可跳过的对象。")).to_be_visible()
+
+
 def main():
     printer = Printer()
     server = serve(printer)
@@ -457,12 +565,14 @@ def main():
                 check_integrated_panel(page, origin, printer)
                 monitor = browser.new_page(viewport={"width": 390, "height": 844})
                 check_print_monitor(monitor, origin, printer)
+                actions = browser.new_page(viewport={"width":390, "height":844})
+                check_print_actions(actions, origin, printer)
             finally:
                 browser.close()
     finally:
         server.shutdown()
         server.server_close()
-    print("PASS unified console: operator workflows, live progress, WebRTC fallback and framebuffer refresh")
+    print("PASS unified console: operator workflows, live progress, model preview, guarded skip, playback and framebuffer refresh")
 
 
 if __name__ == "__main__":

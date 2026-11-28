@@ -5,7 +5,7 @@ import { createCameraCard, createMonitorMedia } from './monitor-media.js';
 // from the printer. Browsing a tool only changes the local selection.
 const apiBase = '/multiace/api';
 const heaters = ['extruder', 'extruder1', 'extruder2', 'extruder3'];
-const machineQuery = '/printer/objects/query?webhooks=state&' + printObjects + '&toolhead=position,homed_axes,extruder&heater_bed=temperature,target&'
+const machineQuery = '/printer/objects/query?' + printObjects + '&toolhead=position,homed_axes,extruder&heater_bed=temperature,target&'
   + heaters.map(name => name + '=temperature,target').join('&');
 const jobNames = {standby:'待机', printing:'打印中', paused:'已暂停', complete:'打印完成', cancelled:'已取消', error:'打印错误'};
 const numeric = value => typeof value === 'number' && Number.isFinite(value);
@@ -61,7 +61,7 @@ function controlPanel(ctx, overview) {
   const headPanel = card('喷头');
   const heads = node('div','op-heads');
   let selected = Number.isInteger(ctx.head) && ctx.head >= 0 && ctx.head < 4 ? ctx.head : 0;
-  let machine = {}, printControl = null, routes = null, cfg = {};
+  let machine = {}, machineTime, printControl = null, routes = null, cfg = {};
   let closed = false, pending = false, busy = false, poll = 0, revision = 0;
   const views = [];
   const enabled = [];
@@ -76,8 +76,11 @@ function controlPanel(ctx, overview) {
     for (const [element, allowed] of enabled) element.disabled = busy || !allowed();
   }
   async function readMachine() {
-    try { machine = readStatus(await ctx.api(machineQuery, {signal:ctx.signal})); }
-    catch (error) { machine = {}; throw error; }
+    try {
+      const data = await ctx.api(machineQuery, {signal:ctx.signal});
+      machine = readStatus(data);
+      machineTime = data.result?.eventtime;
+    } catch (error) { machine = {}; machineTime = undefined; throw error; }
   }
   async function refresh() {
     if (closed || busy || pending) return;
@@ -93,6 +96,7 @@ function controlPanel(ctx, overview) {
     if (closed || busy) return;
     if (revision !== version) { void refresh(); return; }
     machine = core.status === 'fulfilled' ? readStatus(core.value) : {};
+    machineTime = core.status === 'fulfilled' ? core.value.result?.eventtime : undefined;
     printControl = ctl.status === 'fulfilled' && typeof ctl.value?.state === 'string' ? ctl.value : null;
     routes = ace.status === 'fulfilled' && Array.isArray(ace.value?.toolheads) ? ace.value : null;
     if (config.status === 'fulfilled' && config.value) cfg = readStatus(config.value).configfile?.settings || {};
@@ -162,14 +166,9 @@ function controlPanel(ctx, overview) {
   headPanel.append(heads);
   const columns = node('div','op-section');
   const printCard = card('打印任务');
-  const printDetails = createPrintDetails(ctx);
+  const printDetails = createPrintDetails(ctx, {showTune:overview});
   printCard.append(printDetails.root);
-  onUpdate(() => printDetails.update(machine));
-  const may = states => () => ready() && Boolean(printControl) && states.includes(job().state);
-  appendRow(printCard,
-    action('暂停', may(['printing']), () => verb('pause')),
-    action('继续', may(['paused']), () => verb('resume'), '继续当前打印任务？'),
-    action('取消打印', may(['printing','paused']), () => verb('cancel'), '取消当前打印任务？取消后无法继续本次打印。', 'danger'));
+  onUpdate(() => printDetails.update(machine, machineTime));
   appendRow(printCard, button('文件与打印预检', () => ctx.open('jobs')));
   if (overview) pane.append(printCard, createMonitorMedia(ctx), headPanel, columns);
   else {

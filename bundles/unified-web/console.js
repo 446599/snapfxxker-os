@@ -1,7 +1,7 @@
 import { mountMaterial } from './material.js';
 import { mountOverview, mountControl } from './control.js';
 import { mountSettings, mountAceConfig } from './settings.js';
-import { createPrintDetails, printObjects } from './print-details.js';
+import { createPrintDetails } from './print-details.js';
 
 const page = document.querySelector('#page');
 const login = document.querySelector('#login');
@@ -149,10 +149,9 @@ async function mountJobs(ctx) {
     if (polling || document.hidden) return;
     polling = true;
     try {
-      const data = await ctx.api('/printer/objects/query?' + printObjects, {signal:ctx.signal});
-      if (!ctx.signal.aborted) details.update(data.result?.status || {});
+      await details.refresh();
     } catch {
-      if (!ctx.signal.aborted) details.update({});
+      // The shared print panel handles unavailable status.
     } finally {
       polling = false;
     }
