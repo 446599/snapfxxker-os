@@ -1,24 +1,39 @@
 #!/usr/bin/env bash
-# Input is the original ZIP of Actions artifact 15225956077 (1902.15).
+# Input is the pinned Actions ZIP selected by the build profile below.
 set -euo pipefail
 [[ $(id -u) == 0 ]] || { echo 'run as root to preserve squashfs ownership' >&2; exit 1; }
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-BASE_ZIP=$(realpath "${1:?usage: build_1916.sh base-1915.zip output-directory}")
+BASE_ZIP=$(realpath "${1:?usage: build_1916.sh base.zip output-directory [1917]}")
 OUT=$(realpath -m "${2:?output directory required}")
-VERSION=2.1.2-233-1902.16
+PROFILE=${3:-1916}
+case "$PROFILE" in
+    1916)
+        BASE_VERSION=2.1.2-233-1902.15
+        BASE_COMMIT=e8968dfb9e612a43d19d2127b688022095946428
+        BASE_SHA=2ab4caeee2665f8083b638fd7a375c9dfbd25e0ba779794857329eda57a7834e
+        VERSION=2.1.2-233-1902.16
+        ;;
+    1917)
+        BASE_VERSION=2.1.2-233-1902.16
+        BASE_COMMIT=aa8a76573b11f910d3a37de0e9bba2d57fc4c987
+        BASE_SHA=f01eb5d4a088bcda7f368ffe4ede1edd1b04c49afc6d7d2b68535b6c06b674e0
+        VERSION=2.1.2-233-1902.17
+        ;;
+    *) echo 'unrecognized candidate profile' >&2; exit 1 ;;
+esac
 FILE="U1_233_${VERSION}_upgrade.bin"
 [[ ! -e "$OUT/$FILE" ]] || { echo 'output image already exists' >&2; exit 1; }
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/u1-unified-web.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
-printf '%s  %s\n' 2ab4caeee2665f8083b638fd7a375c9dfbd25e0ba779794857329eda57a7834e "$BASE_ZIP" | sha256sum -c -
+printf '%s  %s\n' "$BASE_SHA" "$BASE_ZIP" | sha256sum -c -
 unzip -q "$BASE_ZIP" -d "$WORK/base"
 (cd "$WORK/base" && sha256sum -c SHA256SUMS.txt)
-[[ $(cat "$WORK/base/SOURCE_COMMIT.txt") == e8968dfb9e612a43d19d2127b688022095946428 ]]
+[[ $(cat "$WORK/base/SOURCE_COMMIT.txt") == "$BASE_COMMIT" ]]
 make -C "$REPO/tools" -j2
 INPUT="$WORK/input"
-"$REPO/scripts/helpers/unpack_firmware.sh" "$WORK/base/U1_233_2.1.2-233-1902.15_upgrade.bin" "$INPUT" | tee "$WORK/base-unpack.log"
-[[ $(cat "$INPUT/UPFILE_VERSION") == 2.1.2-233-1902.15 ]]
+"$REPO/scripts/helpers/unpack_firmware.sh" "$WORK/base/U1_233_${BASE_VERSION}_upgrade.bin" "$INPUT" | tee "$WORK/base-unpack.log"
+[[ $(cat "$INPUT/UPFILE_VERSION") == "$BASE_VERSION" ]]
 BASE_SIZE=$(stat -c %s "$INPUT/rk-unpacked/rootfs.img")
 (cd "$INPUT" && find . -maxdepth 1 -type f ! -name rk-rom.img ! -name update.img ! -name UPFILE_VERSION -print0 | sort -z | xargs -0 -r sha256sum) > "$WORK/base-outer.sha256"
 ROOT="$WORK/rootfs"
@@ -26,7 +41,7 @@ unsquashfs -d "$ROOT" "$INPUT/rk-unpacked/rootfs.img"
 [[ $(stat -c '%u:%g' "$ROOT/etc/passwd") == 0:0 ]]
 [[ $(stat -c '%u:%g' "$ROOT/home/lava/bin/hwver.sh") == 1000:1000 ]]
 COMMIT=$(git -C "$REPO" rev-parse HEAD)
-python3 "$HERE/compose_1916.py" "$ROOT" "$WORK/base/composition.json" "$WORK/composition.json" "$COMMIT"
+python3 "$HERE/compose_$PROFILE.py" "$ROOT" "$WORK/base/composition.json" "$WORK/composition.json" "$COMMIT"
 sh -n "$ROOT/etc/init.d/S58u1-device-service"
 bash -n "$ROOT/usr/local/bin/extended-pkg"
 mksquashfs "$ROOT" "$WORK/rootfs-new.img" -comp zstd -noappend -processors 2

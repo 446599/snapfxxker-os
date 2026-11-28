@@ -12,10 +12,13 @@ def key(uid,slot):
 def valid(mm):
     return type(mm) is int and 100<=mm<=5000
 
-def encoder_distance_mm(start,end):
+def encoder_delta_mm(start,end):
     if any(type(n) is not int or not -(2**31)<=n<2**31 for n in (start,end)):
         raise ValueError('Invalid native encoder counter')
-    mm=abs(((end-start+2**31)%2**32)-2**31)/1000.
+    return ((end-start+2**31)%2**32-2**31)/1000.
+
+def encoder_distance_mm(start,end):
+    mm=abs(encoder_delta_mm(start,end))
     if not 100<=mm<=5000:
         raise ValueError('Measured path outside bounds')
     return mm

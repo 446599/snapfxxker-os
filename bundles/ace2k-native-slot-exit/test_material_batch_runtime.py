@@ -163,6 +163,72 @@ class MaterialRuntimeTests(unittest.TestCase):
         self.assertIn('No verified ACE park return',p['slots'][0]['detail'])
         self.a.gcode.run_script_from_command.assert_not_called()
 
+    def test_first_load_enables_ordinary_unload_and_preserves_next_load_origin(self):
+        for direction in (1,-1):
+            with self.subTest(direction=direction):
+                self.setUp()
+                a=self.a
+                a._swap_in_progress=False
+                a._gate_status_per_ace={1:[1]*4}
+                a.unload_retry=3
+                runtime=self.runtime
+                runtime._park_store().forget(a._unit_key(1),2)
+                sample=(30_000,100)
+                runtime._settled_park_sample=Mock(side_effect=lambda _:sample)
+                anchor=runtime.capture_load_park(2,1,2,None)
+                a._last_load_ok=True
+                a._head_source[2]={'ace_index':1,'slot':2}
+                self.sensors[2]=True
+                runtime.record_load_park(2,anchor)
+                self.assertTrue(self.preview('unload',[self.row(1,2)])['ticket'])
+                plan,probe=runtime.head_park_plan(2,1,2,0)
+                self.assertEqual((plan.route,probe),('encoder_unload',150))
+                sample=(30_000+direction*1_990_000,200)
+                runtime.start_thermal_return(plan)
+                self.sensors[2]=False
+                sample=(30_000+direction*1_799_000,220)
+                moves=[]
+                event={'lane':2,'seq':5}
+                def retract(slot,length,speed,head,ace):
+                    nonlocal sample,event
+                    self.assertEqual((head,ace,slot),(2,1,2))
+                    moves.append((length,speed))
+                    sample=(sample[0]-direction*length*1000,sample[1]+1)
+                    event={'lane':2,'seq':len(moves)+5,'kind':0,'mode':2,
+                           'filament_um':-direction*length*1000}
+                    return True
+                a._retract=retract
+                a._tipform_send=lambda *args,**kwargs:{'code':0,'result':event}
+                a._move_report_seq=lambda *args:len(moves)
+                a._move_report=lambda *args:{'seq':len(moves),'running':False,
+                                            'kind':'retract','stop':'distance'}
+                runtime.thermal_retract(2,1,2,30)
+                runtime.verify_thermal_return()
+                self.assertEqual(moves,[(1500,30),(239,30),(57,15)])
+                a._head_source[2]=None
+                next_load=runtime.capture_load_park(2,1,2,None)
+                self.assertEqual(next_load.anchor,anchor.anchor)
+                self.assertFalse(runtime._park_store()._load()['routes'].get(
+                    a._unit_key(1)+'/2/2'))
+
+    def test_automatic_park_anchor_never_survives_a_changed_connection(self):
+        a=self.a
+        a._swap_in_progress=False
+        a._gate_status_per_ace={1:[1]*4}
+        runtime=self.runtime
+        runtime._park_store().forget(a._unit_key(1),2)
+        runtime._settled_park_sample=Mock(return_value=(30_000,100))
+        anchor=runtime.capture_load_park(2,1,2,None)
+        a._last_load_ok=True
+        a._head_source[2]={'ace_index':1,'slot':2}
+        self.sensors[2]=True
+        runtime.record_load_park(2,anchor)
+        a._serials[1]=object()
+        p=self.preview('unload',[self.row(1,2)])
+        self.assertEqual(p['ticket'],'')
+        self.assertIn('No verified ACE park return',p['slots'][0]['detail'])
+        a.gcode.run_script_from_command.assert_not_called()
+
     def test_runout_or_stale_inlet_is_not_success(self):
         for empty in (True,False):
             with self.subTest(empty=empty):

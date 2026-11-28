@@ -10,18 +10,20 @@ Toolhead motion goes through the existing Klipper G-code mutex. Independently
 parked native exits use the existing writer queue and do not wait for one
 another or for toolhead G-code to finish.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import wraps
 from math import isfinite
 from uuid import uuid4
 import json
 import logging
 from host_native_exit import ParkedProof
-from park_return import ParkReturnStore, encoder_distance_mm
+from park_return import ParkReturnStore, encoder_delta_mm, encoder_distance_mm
 
 ACTIVE = frozenset(('queued','sampling','head_running','native','stopping','awaiting_parking','recovery'))
 ACTIONS = frozenset(('load','unload','eject'))
 TERMINAL = frozenset(('complete','cancelled','rejected','failed'))
+PROBE_MM = 150
+RETURN_WINDOW_MM = 5
 
 
 def park_command(fn):
@@ -71,6 +73,13 @@ class Task:
                                  'none' if self.state=='recovery' or self.state in TERMINAL else 'targeted'))
 
 
+@dataclass
+class ThermalReturn:
+    selection: Selection
+    direction: int
+    result: tuple = None
+
+
 class MaterialBatchRuntime:
     TICKET_TTL = 120.
     MAX_PREVIEWS = 32
@@ -83,6 +92,9 @@ class MaterialBatchRuntime:
         self.head_running=None
         self._owns_head_motion=False
         self._park_reference=None
+        self._loaded_park={}
+        self._stopped_park={}
+        self.thermal_return=None
 
     def now(self):
         return self.ace.reactor.monotonic()
@@ -97,6 +109,9 @@ class MaterialBatchRuntime:
             self.timer=None
         self.tickets.clear()
         self._park_reference=None
+        self._loaded_park.clear()
+        self._stopped_park.clear()
+        self.thermal_return=None
 
     def _print_idle(self):
         a=self.ace
@@ -141,11 +156,7 @@ class MaterialBatchRuntime:
                     or a._calibration_route_occupied())
 
     def head_park_plan(self,head,requested_ace,requested_slot,override):
-        """One park-distance policy for batch and direct ACE2K Multi unloads.
-
-        This is a conservative interim guard, not a closed-loop thermal
-        return controller. Swaps keep their independent short-return path.
-        """
+        """Resolve the actual source and select its return policy."""
         a=self.ace
         if (a._ace_mode!='multi' or not a.head_uses_ace(head)
                 or getattr(a,'_swap_in_progress',False)):
@@ -182,6 +193,11 @@ class MaterialBatchRuntime:
         uid=a._unit_key(ace)
         port,link=self._identity(ace,slot,uid)
         selection=Selection(ace,slot,uid,port,link,'head_unload')
+        if source and self._print_idle() and not override:
+            captured=self._loaded_park.get(head)
+            if (captured is not None and (captured.ace,captured.slot)==(ace,slot)
+                    and self._park_link_intact(captured)):
+                return captured,PROBE_MM
         length=self._park_length(selection)
         if override not in (0,length):
             raise ValueError('Requested retract length differs from verified ACE park length')
@@ -194,6 +210,151 @@ class MaterialBatchRuntime:
 
     def _park_length(self,s):
         return self._park_store().length(s.uid,s.slot)
+
+    def _park_link_intact(self, selection):
+        gates = self.ace._gate_status_per_ace.get(selection.ace, ())
+        return (self._same(selection)
+                and (len(gates) <= selection.slot or gates[selection.slot] != 0))
+
+    def capture_load_park(self, head, ace, slot, staged):
+        """Sample at the existing load boundary, before any material moves."""
+        self._loaded_park.pop(head, None)
+        a = self.ace
+        if (not self._print_idle() or a._swap_in_progress or staged
+                or head != slot or not a.head_uses_ace(head)
+                or getattr(a._protocols.get(ace), 'NAME', '') != 'ace2k'
+                or a._head_sensor_present(head) is not False or a._head_source.get(head)
+                or self.native.mask(ace) or a._bg_lanes_on(ace)):
+            return None
+        uid = a._unit_key(ace)
+        previous = self._stopped_park.pop((uid, slot), None)
+        try:
+            port, link = self._identity(ace, slot, uid)
+            selection = Selection(ace, slot, uid, port, link, 'encoder_unload')
+            stopped = self._settled_park_sample(selection)
+            # Repeated cycles must return to the original point, not advance
+            # by the safety margin every time. Reuse it only at the exact
+            # previously verified end position on the same connection.
+            origin = stopped
+            if (previous is not None and self._same(previous[0])
+                    and previous[1] == stopped):
+                origin = previous[0].anchor
+            return replace(selection, anchor=origin)
+        except (ValueError, RuntimeError, OSError) as exc:
+            logging.warning('[multiACE] park reference unavailable for ACE %d slot %d: %s',
+                            ace, slot, exc)
+            return None
+
+    def record_load_park(self, head, selection):
+        if selection is None:
+            return
+        a = self.ace
+        if (a._last_load_ok is True and a._head_sensor_present(head) is True
+                and self._park_source_matches(head, selection) and self._park_link_intact(selection)):
+            self._loaded_park[head] = selection
+            logging.info('[multiACE] captured return origin for ACE %d slot %d',
+                         selection.ace, selection.slot)
+
+    def _park_source_matches(self, head, selection):
+        source = self.ace._head_source.get(head) or {}
+        return ((source.get('ace_index'), source.get('slot')) == (selection.ace, selection.slot)
+                and not source.get('load_failed') and not source.get('gate_empty'))
+
+    def _settled_park_sample(self, selection):
+        before = self._fresh_park_sample(selection, self.now())
+        after = self._fresh_park_sample(selection, self.now())
+        if before != after:
+            raise RuntimeError('ACE park counters have not settled')
+        return after
+
+    def _thermal_route(self, selection, head_has_filament):
+        slot = selection.slot
+        if (not self._print_idle() or not self._park_link_intact(selection)
+                or not self._park_source_matches(slot, selection)
+                or self.ace._head_sensor_present(slot) is not head_has_filament
+                or self.native.mask(selection.ace) & (1 << slot)):
+            raise RuntimeError('ACE park route or sensor state changed; inspect selected slot')
+
+    def start_thermal_return(self, selection):
+        self._thermal_route(selection, True)
+        sample = self._settled_park_sample(selection)
+        delta = encoder_delta_mm(selection.anchor[0], sample[0])
+        # Leave room for the stock tip-form and its bounded short probes.
+        minimum = 200 + PROBE_MM * self.ace.unload_retry
+        if not minimum <= abs(delta) <= 5000:
+            raise RuntimeError('ACE measured travel cannot safely use the thermal return path')
+        self.thermal_return = ThermalReturn(selection, 1 if delta > 0 else -1)
+        self._loaded_park.pop(selection.slot, None)
+
+    def _thermal_distance(self, task):
+        sample = self._settled_park_sample(task.selection)
+        return (task.direction * encoder_delta_mm(task.selection.anchor[0], sample[0]), sample)
+
+    def _retract_event(self, selection):
+        response = self.ace._tipform_send(selection.ace, {
+            'method': 'get_last_feed_event', 'params': {'index': selection.slot}}, timeout=3.)
+        event = (response or {}).get('result') or {}
+        if ((response or {}).get('code') != 0 or event.get('lane') != selection.slot
+                or type(event.get('seq')) is not int):
+            raise RuntimeError('ACE park return has no matching MCU event')
+        return event
+
+    def thermal_retract(self, head, ace, slot, speed):
+        task = self.thermal_return
+        selection = task.selection
+        if (head, ace, slot) != (selection.slot, selection.ace, selection.slot):
+            raise RuntimeError('ACE park return rejected a different retract route')
+        self._thermal_route(selection, False)
+        remaining, sample = self._thermal_distance(task)
+        if not 0 < remaining <= 5000:
+            raise RuntimeError('ACE park return position is outside the measured route')
+        # Single MCU moves on the supported ACE2K firmware. Leave a coarse
+        # reserve then trim at lower speed. A motion fault never retries.
+        segment_limit = 1500
+        coarse_reserve = 60
+        trim_reserve = 3
+        while remaining > RETURN_WINDOW_MM:
+            coarse = remaining > coarse_reserve + 5
+            length = min(segment_limit, int(remaining) - (coarse_reserve if coarse else trim_reserve))
+            if length < 5:
+                raise RuntimeError('ACE park return stopped outside the verified window')
+            self._thermal_route(selection, False)
+            previous = self._retract_event(selection)
+            seq = self.ace._move_report_seq(ace, slot)
+            if self.ace._retract(slot, length, min(speed, 30 if coarse else 15),
+                                 head=head, ace=ace) is not True:
+                raise RuntimeError('ACE park retract did not start')
+            self._thermal_route(selection, False)
+            event = self._retract_event(selection)
+            report = self.ace._move_report(ace, slot) or {}
+            if (event.get('kind') != 0 or event.get('seq') == previous['seq']
+                    or event.get('mode') != 2 or type(event.get('filament_um')) is not int
+                    or report.get('seq', 0) <= seq or report.get('running') is not False
+                    or report.get('kind') != 'retract'
+                    or report.get('stop') not in ('distance', 'lost_event')):
+                raise RuntimeError('ACE park retract did not reach a normal MCU terminal')
+            new_remaining, new_sample = self._thermal_distance(task)
+            travelled = remaining - new_remaining
+            logging.info('[multiACE] park retract ACE %d slot %d command=%d event=%r remaining=%.3f',
+                         ace, slot, length, event, new_remaining)
+            if (not 0 < new_remaining < remaining or sample[1] == new_sample[1]
+                    or abs(travelled - abs(event['filament_um']) / 1000.) > 2
+                    or abs(travelled - length) > 3
+                    or not coarse and new_remaining > RETURN_WINDOW_MM):
+                raise RuntimeError('ACE park retract did not match the stationary encoder and motor readings')
+            remaining, sample = new_remaining, new_sample
+        task.result = sample
+
+    def verify_thermal_return(self):
+        task = self.thermal_return
+        selection = task.selection
+        self._thermal_route(selection, False)
+        remaining, sample = self._thermal_distance(task)
+        if sample != task.result or not 0 < remaining <= RETURN_WINDOW_MM:
+            raise RuntimeError('ACE park return has no verified stationary endpoint')
+        self._stopped_park[selection.uid, selection.slot] = (selection, sample)
+        logging.info('[multiACE] parked ACE %d slot %d at %.3f mm from origin',
+                     selection.ace, selection.slot, remaining)
 
     def _fresh_park_sample(self,s,after):
         # Fresh independent native reports must all postdate completion.
@@ -321,7 +482,7 @@ class MaterialBatchRuntime:
         if action=='unload' or selected:
             if not selected or detected is not True or (isinstance(source,dict) and source.get('load_failed')):
                 raise ValueError('Selected spool is not a verified source in the head')
-            self._park_store().length(a._unit_key(ace),slot)
+            self.head_park_plan(slot,ace,slot,0)
             return 'head_unload'
         # No head_source entry is NOT proof of parking. The user must
         # explicitly inspect this exact strand before the common junction.
@@ -520,7 +681,9 @@ class MaterialBatchRuntime:
                     command='ACE_LOAD_HEAD' if s.route=='head_load' else 'ACE_UNLOAD_HEAD'
                     line='%s HEAD=%d ACE=%d SLOT=%d'%(command,s.slot,s.ace,s.slot)
                     if command=='ACE_UNLOAD_HEAD':
-                        line+=' RETRACT_LENGTH=%d'%self._park_length(s)
+                        plan,length=self.head_park_plan(s.slot,s.ace,s.slot,0)
+                        if plan.route=='head_unload':
+                            line+=' RETRACT_LENGTH=%d'%length
                     moved=True
                     self._owns_head_motion=True
                     a.gcode.run_script_from_command(line)
@@ -559,6 +722,13 @@ class MaterialBatchRuntime:
 
     def tick(self,eventtime):
         self._prune()
+        for head, selection in tuple(self._loaded_park.items()):
+            if (not self._park_link_intact(selection)
+                    or not self._park_source_matches(head, selection)):
+                del self._loaded_park[head]
+        for key,(selection,_) in tuple(self._stopped_park.items()):
+            if not self._park_link_intact(selection):
+                del self._stopped_park[key]
         idle=self._idle()
         own_homing=not idle and self._own_homing()
         for t in tuple(self.tasks.values()):
