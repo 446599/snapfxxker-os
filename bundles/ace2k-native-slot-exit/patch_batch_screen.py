@@ -223,7 +223,8 @@ void U1FilamentOverview::on_action_load() {''')
     h,c=extend(h,c)
     for path in ('include/multiace_status.h','src/printer/multiace_status.cpp','src/printer/ams_backend_multiace.cpp'):
         (root/path).write_text(src[path])
-    (root/'include/screen_batch_selection.h').write_bytes((HERE/'screen_batch_selection.h').read_bytes())
+    for header in ('screen_batch_selection.h', 'screen_batch_progress.h'):
+        (root/'include'/header).write_bytes((HERE/header).read_bytes())
     (root/'include/u1_filament_overview.h').write_text(h)
     (root/'src/ui/filament/u1_filament_overview.cpp').write_text(c)
 

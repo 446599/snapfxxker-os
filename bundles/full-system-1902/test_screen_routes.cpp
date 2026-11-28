@@ -1,5 +1,6 @@
 // Exercise the actual native command serializer without linking the display.
 #include "multiace_status.h"
+#include "screen_batch_progress.h"
 
 #include <cassert>
 #include <iostream>
@@ -21,5 +22,23 @@ int main() {
             }
         }
     }
-    std::cout << "64 explicit load/unload route pairs and 4 head-only unloads passed\n";
+    using helix::u1_filament::recover_material_batch;
+    using nlohmann::json;
+    const auto tasks = json::array({
+        {{"batch", "older"}, {"state", "queued"}},
+        {{"batch", "current"}, {"state", "head_running"}},
+        {{"batch", "current"}, {"state", "complete"}},
+        {{"batch", "last"}, {"state", "failed"}},
+        {{"batch", "bad"}, {"state", 123}},
+    });
+    assert(recover_material_batch(tasks) == "current");
+    assert(recover_material_batch(json::array({{{"batch", "park"}, {"state", "awaiting_parking"}}}))
+           == "park");
+    assert(recover_material_batch(json::array({
+        {{"batch", "done"}, {"state", "complete"}},
+        {{"batch", "stopped"}, {"state", "cancelled"}},
+        {{"batch", "error"}, {"state", "recovery"}},
+    })).empty());
+    assert(recover_material_batch(nullptr).empty());
+    std::cout << "64 explicit route pairs, 4 head-only unloads and batch recovery passed\n";
 }

@@ -7,6 +7,7 @@ def replace(s,a,b):
 
 def extend(h,c):
     h=replace(h,'    void start_batch();','''    void start_batch();
+    void recover_batch();
     void open_batch_progress();
     void poll_batch();
     void stop_batch_task();
@@ -14,22 +15,57 @@ def extend(h,c):
     void confirm_batch_parking();''')
     h=replace(h,'    std::string batch_ticket_, batch_action_;','''    std::string batch_ticket_, batch_action_, active_batch_;
     bool batch_parking_=false, batch_progress_=false, batch_polling_=false;
-    bool batch_awaiting_=false, batch_finished_=false;
+    bool batch_awaiting_=false, batch_finished_=false, batch_recovering_=false;
     std::vector<std::string> batch_task_ids_;
     std::vector<bool> batch_task_stoppable_;
     size_t batch_task_index_=0;
     uint64_t batch_view_generation_=0;
     lv_obj_t* batch_next_=nullptr;
+    lv_obj_t* batch_current_=nullptr;
     ui::LvglTimerGuard batch_timer_;''')
+    c=replace(c,'#include "u1_filament_overview.h"','#include "u1_filament_overview.h"\n#include "core/update_queue.h"\n#include "screen_batch_progress.h"')
     c=replace(c,'    batch_lifetime_.reset();','    batch_lifetime_.reset();\n    batch_timer_.reset();')
     c=replace(c,'    batch_action_.clear();\n    show_page(Page::Hub);','''    batch_action_.clear();
     batch_progress_=false;
     batch_parking_=false;
     ++batch_view_generation_;
     batch_timer_.reset();
-    show_page(Page::Hub);''')
-    c=replace(c,'fmt::format("多选{}", batch_selection_.entries().size()).c_str() : "多选");',
-        'fmt::format("多选{}", batch_selection_.entries().size()).c_str() :\n        (!active_batch_.empty() && !batch_finished_ ? "任务" : "多选"));')
+    show_page(Page::Hub);
+    layout_hub();
+    recover_batch();''')
+    c=replace(c,'    dim_ = make_box(hub_);','''    batch_current_ = make_soft_button(hub_, "当前任务", false, [](lv_event_t* e) {
+        if (auto* self = static_cast<U1FilamentOverview*>(lv_event_get_user_data(e)))
+            self->open_batch_progress();
+    }, this);
+    lv_obj_set_name(batch_current_, "u1_filament_current_task");
+    apply_font(lv_obj_get_child(batch_current_, 0), "font_small");
+    dim_ = make_box(hub_);''')
+    c=replace(c,'''    lv_obj_set_style_text_color(empty_label_, kMuted(), LV_PART_MAIN);
+    for (auto& card : cards_) {''','''    lv_obj_set_style_text_color(empty_label_, kMuted(), LV_PART_MAIN);
+    outline_obj(batch_current_, kElevated(), kBorder(), kCardRadius, 1);
+    lv_obj_set_style_text_color(lv_obj_get_child(batch_current_, 0), kText(), LV_PART_MAIN);
+    for (auto& card : cards_) {''')
+    c=replace(c,'''    const int action_count = external_only_ ? 2 : columns;
+    for (int i = 0; i < action_count; ++i) {
+        place_row_cell(actions_[static_cast<size_t>(i)], row_x, action_y, row_w, kActionH,
+                       i, action_count, kCardGap);
+    }''','''    const int slot_actions = external_only_ ? 2 : columns;
+    const bool has_task = !active_batch_.empty();
+    const int action_count = slot_actions + static_cast<int>(has_task);
+    for (int i = 0; i < slot_actions; ++i) {
+        place_row_cell(actions_[static_cast<size_t>(i)], row_x, action_y, row_w, kActionH,
+                       i, action_count, kCardGap);
+    }
+    lv_obj_set_hidden(batch_current_, !has_task);
+    if (has_task)
+        place_row_cell(batch_current_, row_x, action_y, row_w, kActionH,
+                       slot_actions, action_count, kCardGap);''')
+    c=replace(c,'''        network.get_nav_buttons_enabled_subject(), this,
+        [](U1FilamentOverview* self, int) { self->refresh(); },''','''        network.get_nav_buttons_enabled_subject(), this,
+        [](U1FilamentOverview* self, int online) {
+            self->refresh();
+            if (online == 1) self->recover_batch();
+        },''')
     c=replace(c,'    const bool can_eject = can_act && !external && card->inlet_has_filament;',
         '''    const bool can_eject = card && card->connected && backend && !external &&
         card->inlet_has_filament && !lv_subject_get_int(
@@ -41,9 +77,9 @@ def extend(h,c):
         return;
     }
     if (!batch_action_.empty()) { start_batch(); return; }''')
-    c=replace(c,'    if (batch_pending_) return;\n    batch_selection_.clear();','''    if (batch_pending_) return;
-    if (!active_batch_.empty() && !batch_finished_) { open_batch_progress(); return; }
-    batch_selection_.clear();''')
+    c=replace(c,'void U1FilamentOverview::preview_batch(const std::string& action) {','''void U1FilamentOverview::preview_batch(const std::string& action) {
+    if (batch_pending_) return;
+    if (!active_batch_.empty() && !batch_finished_) { open_batch_progress(); return; }''')
     c=replace(c,'    std::string names;\n    for (const auto& entry','    for (const auto& entry')
     c=replace(c,r'        names += fmt::format("ACE {} · 槽 {}\n", b.ace + 1, b.slot + 1);'+'\n','')
     c=replace(c,'[this,alive,action,names](auto data, std::string error)','[this,alive,action](auto data, std::string error)')
@@ -69,12 +105,19 @@ def extend(h,c):
             show_page(Page::Confirm);''')
     c=replace(c,'    if (batch_pending_ || batch_ticket_.empty() || !batch_selection_current()) return;',
         '    if (batch_pending_ || batch_ticket_.empty() || (!batch_selection_.empty() && !batch_selection_current())) return;')
-    c=replace(c,'material_workspace::request("/material/batch/start", {{"ticket",ticket}},',
-        'material_workspace::request("/material/batch/start", {{"ticket",ticket},{"confirm_parked",batch_parking_}},')
+    c=replace(c,'''    material_workspace::request("/material/batch/start", {{"ticket",ticket}},
+        [this,alive](auto data,std::string error) {''','''    const auto generation = batch_view_generation_;
+    material_workspace::request("/material/batch/start", {{"ticket",ticket},{"confirm_parked",batch_parking_}},
+        [this,alive,generation](auto data,std::string error) {''')
     c=replace(c,'                show_hub(); refresh();\n                show_feedback("批量任务已受理，完成以各槽状态为准",FeedbackKind::Info);','''                active_batch_=data["batch"].template get<std::string>();
                 batch_finished_=false;
                 batch_task_index_=0;
-                open_batch_progress();''')
+                if (generation == batch_view_generation_ && page_ == Page::Confirm)
+                    open_batch_progress();
+                else if (page_ == Page::Hub) {
+                    layout_hub();
+                    refresh();
+                }''')
     c=replace(c,'''    ui::get_material_workspace().open_action(slot->head, slot->backend_unit - 1, "eject", {},
                                               slot->local_slot, {}, slot->ace);''','''    if (!active_batch_.empty() && !batch_finished_) { open_batch_progress(); return; }
     auto* client=get_moonraker_client();
@@ -113,7 +156,39 @@ def extend(h,c):
     lv_label_set_text(lv_obj_get_child(confirm_cancel_,0),"取消");
     lv_obj_set_disabled(confirm_cancel_,false);
     lv_obj_set_disabled(confirm_ok_,false);''')
-    c=replace(c,'void U1FilamentOverview::on_action_load() {',r'''void U1FilamentOverview::open_batch_progress() {
+    c=replace(c,'void U1FilamentOverview::on_action_load() {',r'''void U1FilamentOverview::recover_batch() {
+    auto* client = get_moonraker_client();
+    if (!client || client->get_connection_state() != ConnectionState::CONNECTED ||
+        page_ != Page::Hub || batch_recovering_ || batch_pending_ || !active_batch_.empty())
+        return;
+
+    batch_recovering_ = true;
+    const auto connection = client->connection_generation();
+    const std::weak_ptr<int> alive = batch_lifetime_;
+    auto finish = [this, alive, client, connection](std::string batch) {
+        ui::queue_update("U1FilamentOverview::recover_batch",
+            [this, alive, client, connection, batch = std::move(batch)] {
+            if (alive.expired()) return;
+            batch_recovering_ = false;
+            if (client != get_moonraker_client() || connection != client->connection_generation() ||
+                batch_pending_ || !active_batch_.empty() || batch.empty())
+                return;
+            active_batch_ = batch;
+            batch_finished_ = false;
+            batch_task_index_ = 0;
+            if (page_ == Page::Hub) layout_hub();
+        });
+    };
+    const auto id = client->send_jsonrpc("printer.objects.query",
+        {{"objects", {{"ace", {"material_batch_tasks"}}}}},
+        [finish](const nlohmann::json& response) {
+            static const nlohmann::json::json_pointer tasks("/result/status/ace/material_batch_tasks");
+            finish(response.contains(tasks) ? u1_filament::recover_material_batch(response[tasks]) : "");
+        }, [finish](const MoonrakerError&) { finish(""); }, 4000, true);
+    if (!id) batch_recovering_ = false;
+}
+
+void U1FilamentOverview::open_batch_progress() {
     if (active_batch_.empty()) return;
     batch_progress_=true;
     batch_action_.clear();
@@ -159,8 +234,7 @@ void U1FilamentOverview::poll_batch() {
             batch_finished_=!data["tasks"].empty();
             for (const auto& t:data["tasks"]) {
                 const auto state=t.value("state",std::string{});
-                const bool terminal=state=="complete" || state=="cancelled" || state=="rejected" ||
-                    state=="failed" || state=="recovery";
+                const bool terminal=u1_filament::material_batch_slot_finished(state);
                 batch_finished_ &= terminal;
                 batch_awaiting_ |= state=="awaiting_parking";
                 batch_task_ids_.push_back(t.value("id",std::string{}));
@@ -176,7 +250,7 @@ void U1FilamentOverview::poll_batch() {
                     state=="awaiting_parking" ? "请检查停泊" : state=="head_running" ? "喷头操作中" :
                     state=="native" ? "退出中" : state=="stopping" ? "停止确认中" :
                     state=="sampling" ? "检查中" : "排队";
-                body += fmt::format("{} ACE {} · 槽 {}：{}\n",n++==batch_task_index_ ? "▶" : " ",
+                body += fmt::format("{} ACE {} · 槽 {}：{}\n",n++==batch_task_index_ ? ">" : " ",
                     t.value("ace",-1)+1,t.value("slot",-1)+1,label);
                 const auto detail=t.value("detail",std::string{});
                 if (!detail.empty()) body+=detail+"\n";
