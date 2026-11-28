@@ -78,6 +78,7 @@ class ThermalReturn:
     selection: Selection
     direction: int
     result: tuple = None
+    exit_confirmed: bool = False
 
 
 class MaterialBatchRuntime:
@@ -260,9 +261,9 @@ class MaterialBatchRuntime:
         return ((source.get('ace_index'), source.get('slot')) == (selection.ace, selection.slot)
                 and not source.get('load_failed') and not source.get('gate_empty'))
 
-    def _settled_park_sample(self, selection):
-        before = self._fresh_park_sample(selection, self.now())
-        after = self._fresh_park_sample(selection, self.now())
+    def _settled_park_sample(self, selection, present=True):
+        before = self._fresh_park_sample(selection, self.now(), present)
+        after = self._fresh_park_sample(selection, self.now(), present)
         if before != after:
             raise RuntimeError('ACE park counters have not settled')
         return after
@@ -299,6 +300,47 @@ class MaterialBatchRuntime:
             raise RuntimeError('ACE park return has no matching MCU event')
         return event
 
+    def _recover_thermal_exit(self, task, event, previous_seq):
+        selection = task.selection
+        a, head = self.ace, selection.slot
+        if (event.get('kind') != 4 or event['seq'] == previous_seq
+                or event.get('mode') != 2 or type(event.get('filament_um')) is not int
+                or not event['filament_um'] or not self._park_source_matches(head, selection)):
+            return
+        source = a._head_source[head]
+        self._settled_park_sample(selection, present=False)
+        if (not self._same(selection) or not self._print_idle()
+                or a._head_source.get(head) is not source
+                or a._head_sensor_present(head) is not False
+                or self.native.mask(selection.ace) & (1 << head)):
+            return
+
+        # The return missed its parking point. The verified empty route no
+        # longer owns the head, but the failed return stays in the history.
+        saved_variables = a.save_variables.allVariables.copy()
+        a._head_source[head] = None
+        try:
+            a._save_head_source()
+        except Exception:
+            a._head_source[head] = source
+            a.save_variables.allVariables = saved_variables
+            raise
+
+        task.exit_confirmed = True
+        a._clear_filament_display(head)
+        detail = ('[multiACE] Filament fully exited ACE %d slot %d during head return; '
+                  'reinsert before loading' % (selection.ace + 1, head + 1))
+        logging.warning(detail)
+        active = self.tasks.get(self.head_running)
+        if active and active.selection == replace(selection, route='head_unload', anchor=None):
+            active.state = 'failed'
+            active.detail = detail
+        raise RuntimeError(detail)
+
+    def thermal_exit_confirmed(self, head):
+        task = self.thermal_return
+        return task is not None and task.selection.slot == head and task.exit_confirmed
+
     def thermal_retract(self, head, ace, slot, speed):
         task = self.thermal_return
         selection = task.selection
@@ -319,15 +361,19 @@ class MaterialBatchRuntime:
             if length < 5:
                 raise RuntimeError('ACE park return stopped outside the verified window')
             self._thermal_route(selection, False)
-            previous = self._retract_event(selection)
+            previous_seq = self._retract_event(selection)['seq']
             seq = self.ace._move_report_seq(ace, slot)
             if self.ace._retract(slot, length, min(speed, 30 if coarse else 15),
                                  head=head, ace=ace) is not True:
                 raise RuntimeError('ACE park retract did not start')
+            report = self.ace._move_report(ace, slot) or {}
+            if (self._same(selection) and report.get('seq', 0) > seq
+                    and report.get('running') is False and report.get('kind') == 'retract'
+                    and report.get('stop') == 'runout'):
+                self._recover_thermal_exit(task, self._retract_event(selection), previous_seq)
             self._thermal_route(selection, False)
             event = self._retract_event(selection)
-            report = self.ace._move_report(ace, slot) or {}
-            if (event.get('kind') != 0 or event.get('seq') == previous['seq']
+            if (event.get('kind') != 0 or event.get('seq') == previous_seq
                     or event.get('mode') != 2 or type(event.get('filament_um')) is not int
                     or report.get('seq', 0) <= seq or report.get('running') is not False
                     or report.get('kind') != 'retract'
@@ -356,7 +402,7 @@ class MaterialBatchRuntime:
         logging.info('[multiACE] parked ACE %d slot %d at %.3f mm from origin',
                      selection.ace, selection.slot, remaining)
 
-    def _fresh_park_sample(self,s,after):
+    def _fresh_park_sample(self,s,after,present=True):
         # Fresh independent native reports must all postdate completion.
         deadline=self.now()+6.
         while self.now()<deadline:
@@ -378,12 +424,12 @@ class MaterialBatchRuntime:
                            and all(type(v) in (int,float) and isfinite(v)
                                and 0<=self.now()-v<=3.5 and v>after for v in stamps))
                     if fresh and d.get('index')==s.slot and replies[0].get('code')==0:
-                        if d.get('present') is False:
+                        if present and d.get('present') is False:
                             raise RuntimeError('ACE inlet is empty; park return failed')
-                        if d.get('state')=='ready':
+                        if d.get('state')=='ready' and d.get('present') is present:
                             if not self._same(s):
                                 raise RuntimeError('ACE changed during sample')
-                            return self._sample(replies[0],s.slot)
+                            return self._sample(replies[0],s.slot,present)
             self.ace.reactor.pause(min(deadline,self.now()+.1))
         raise RuntimeError('No fresh stationary ACE inlet evidence')
 
@@ -496,7 +542,7 @@ class MaterialBatchRuntime:
             raise ValueError('Selected lane is staged in a toolhead')
         return 'inspect_parked'
 
-    def _sample(self,response,slot):
+    def _sample(self,response,slot,present=True):
         if not isinstance(response,dict) or type(response.get('code')) is not int or response['code']!=0:
             raise ValueError('Native lane telemetry unavailable')
         d=response.get('result')
@@ -509,8 +555,9 @@ class MaterialBatchRuntime:
                 or type(d.get('encoder')) is not int or not -(2**31)<=d['encoder']<2**31
                 or type(d.get('motor')) is not int or not 0<=d['motor']<2**32):
             raise ValueError('Lane telemetry is stale or incomplete')
-        if d.get('state')!='ready' or d.get('present') is not True:
-            raise ValueError('Selected slot is not stationary with filament')
+        if d.get('state')!='ready' or d.get('present') is not present:
+            raise ValueError('Selected slot is not stationary with filament' if present
+                             else 'Selected slot is not stationary and empty')
         return d['encoder'],d['motor']
 
     def _prune(self):
@@ -713,8 +760,9 @@ class MaterialBatchRuntime:
                         else:
                             t.state='complete' if t.action=='unload' else 'cancelled'
             except Exception as e:
-                t.state='recovery' if moved else 'rejected'
-                t.detail=str(e)[:200]
+                if t.state != 'failed':
+                    t.state='recovery' if moved else 'rejected'
+                    t.detail=str(e)[:200]
             finally:
                 self._owns_head_motion=False
                 self.head_running=None

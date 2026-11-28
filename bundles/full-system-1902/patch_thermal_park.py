@@ -61,5 +61,14 @@ def patch_feed(source):
         '''                            elif (self.ace._material_batch.thermal_return is None
                                   and self.ace._head_source.get(head_idx) is not None):
 ''', count=2)
+    anchor = '                logging.error("[feed][unload] channel[%d]: auto unload error: %s", channel, raw_msg)\n'
+    source = replace_checked(source, anchor, anchor + '''                if (self.ace is not None and self.ace._material_batch.thermal_exit_confirmed(
+                        self.filament_ch[channel])):
+                    self.channel_error[channel] = FEED_OK
+                    self.channel_error_state[channel] = FEED_STA_NONE
+                    self.channel_action_state[channel] = FEED_STA_NONE
+                    self._set_channel_state(channel, FEED_STA_WAIT_INSERT, True)
+                    raise gcmd.error(message=raw_msg, action='none', oneshot=1, level=1) from e
+''')
     compile(source, 'filament_feed_ace.py', 'exec')
     return source

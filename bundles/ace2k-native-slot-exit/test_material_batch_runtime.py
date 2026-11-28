@@ -211,6 +211,88 @@ class MaterialRuntimeTests(unittest.TestCase):
                 self.assertFalse(runtime._park_store()._load()['routes'].get(
                     a._unit_key(1)+'/2/2'))
 
+    def test_thermal_exit_releases_only_a_verified_empty_route(self):
+        for condition in ('exit', 'occupied', 'stalled', 'old_event', 'wrong_slot',
+                          'moving', 'new_link', 'storage_error'):
+            with self.subTest(condition=condition):
+                self.setUp()
+                a, runtime = self.a, self.runtime
+                a._swap_in_progress = False
+                a._gate_status_per_ace = {1: [1] * 4}
+                a.unload_retry = 3
+                a._save_head_source = Mock(side_effect=OSError('write failed')
+                                           if condition == 'storage_error' else None)
+                a._clear_filament_display = Mock()
+                a.save_variables = types.SimpleNamespace(allVariables={})
+                source = {'ace_index': 1, 'slot': 2}
+                selection = runtime.capture_load_park(2, 1, 2, None)
+                a._head_source[2] = source
+                a._head_source[0] = {'ace_index': 3, 'slot': 0}
+                self.sensors[2] = True
+                self.counters[1, 2] = (1_000_000, 100)
+                a._last_load_ok = True
+                runtime.record_load_park(2, selection)
+                batch = self.start(self.preview('unload', [self.row(1, 2)]))
+                runtime.tick(self.r.t)
+                event = {'lane': 2, 'seq': 64}
+                report = {}
+
+                def retract(slot, length, speed, head, ace):
+                    self.assertEqual((head, ace, slot), (2, 1, 2))
+                    a._gate_status_per_ace[1][slot] = 0
+                    self.sensors[2] = condition == 'occupied'
+                    if condition == 'new_link':
+                        a._serials[1] = object()
+                    self.counters[1, 2] = (80_000, 200)
+                    event.update(lane=1 if condition == 'wrong_slot' else 2,
+                                 kind=3 if condition == 'stalled' else 4,
+                                 seq=64 if condition == 'old_event' else 65,
+                                 mode=2, filament_um=-920_000)
+                    report.update(seq=5, running=False, kind='retract', stop='runout')
+                    return True
+
+                def lane_status(ace, request, callback):
+                    slot = request['params']['index']
+                    gate = a._gate_status_per_ace[ace][slot] == 1
+                    encoder, motor = self.counters[ace, slot]
+                    moving_empty_lane = not gate and condition == 'moving'
+                    sample = dict(index=slot, present=gate, state='ready',
+                                  encoder=encoder, motor=motor + (len(self.sent) if moving_empty_lane else 0),
+                                  stamp=[self.r.t] * 4)
+                    self.sent.append(request)
+                    callback(self=a, response={'code': 0, 'result': sample})
+
+                a._retract = Mock(side_effect=retract)
+                a._tipform_send = lambda *args, **kwargs: {'code': 0, 'result': event}
+                a._move_report_seq = lambda *args: 4
+                a._move_report = lambda *args: report
+                a.send_request_to = lane_status
+                def unload(line):
+                    self.assertEqual(line, 'ACE_UNLOAD_HEAD HEAD=2 ACE=1 SLOT=2')
+                    runtime.start_thermal_return(selection)
+                    self.sensors[2] = False
+                    runtime.thermal_retract(2, 1, 2, 30)
+
+                a.gcode.run_script_from_command.side_effect = unload
+                self.r.callbacks.pop(0)(self.r.t)
+                task = runtime.status(batch['batch'])[0]
+                self.assertEqual(task['state'], 'failed' if condition == 'exit' else 'recovery')
+                self.assertIs(runtime.thermal_exit_confirmed(2), condition == 'exit')
+                self.assertFalse(runtime.thermal_exit_confirmed(0))
+                a._retract.assert_called_once()
+                self.assertEqual(a._head_source[0], {'ace_index': 3, 'slot': 0})
+                if condition != 'exit':
+                    self.assertIs(a._head_source[2], source)
+                    a._clear_filament_display.assert_not_called()
+                    continue
+                self.assertIn('fully exited', task['detail'])
+                self.assertIsNone(a._head_source[2])
+                a._save_head_source.assert_called_once()
+                a._clear_filament_display.assert_called_once_with(2)
+                a._gate_status_per_ace[1][2] = 1
+                self.assertEqual(self.preview('load', [self.row(1, 2)])['slots'][0]['state'],
+                                 'head_load')
+
     def test_automatic_park_anchor_never_survives_a_changed_connection(self):
         a=self.a
         a._swap_in_progress=False
