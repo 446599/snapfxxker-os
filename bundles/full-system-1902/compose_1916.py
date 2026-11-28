@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 
 from acceptance_1916 import patch_engine, patch_package_manager, replace_once
+from verify_screen_install_1916 import verify_screen_install
 
 HERE=Path(__file__).resolve().parent
 REPO=HERE.parents[1]
@@ -104,7 +105,9 @@ def compose(root,previous,output,commit):
     idle_source=REPO/'overlays/233-native-ui/root'/IDLE
     shutil.copyfile(idle_source,root/IDLE)
     compile((root/IDLE).read_text(),IDLE,'exec')
-    (root/PKGMGR).write_text(patch_package_manager((root/PKGMGR).read_text()))
+    manager=patch_package_manager((root/PKGMGR).read_text())
+    verify_screen_install(manager)
+    (root/PKGMGR).write_text(manager)
     (root/'etc/FULLVERSION').write_text(VERSION+'\n')
     changed={IDLE,PKGMGR,'etc/FULLVERSION',
              'usr/local/share/extended-pkg/multiace','usr/local/share/extended-pkg/helixscreen'}
