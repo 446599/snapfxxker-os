@@ -1,0 +1,17 @@
+diff --git a/src/ui/filament/u1_filament_overview.cpp b/src/ui/filament/u1_filament_overview.cpp
+--- a/src/ui/filament/u1_filament_overview.cpp
++++ b/src/ui/filament/u1_filament_overview.cpp
+@@ -798,6 +798,13 @@ void U1FilamentOverview::refresh() {
+             card.current = route.ace < 0 ? backend->slot_has_filament_at_toolhead(card.head)
+                                         : presence == true && source == slot->global_index;
++            // The 1.90.2 provider reports the routed bay and load_finish via
++            // the legacy objects, without a dedicated physical-source frame.
++            // The bay-indexed check requires that exact route and head latch.
++            if (route.ace >= 0 && !presence.has_value() && !source.has_value()) {
++                card.current = backend->slot_has_filament_at_toolhead(slot->global_index);
++            }
++
+             card.source_unknown = route.ace >= 0 && presence == true && !source &&
+                 backend->upstream_slot(card.head) == slot->global_index;
+         }
+         slots_.push_back(std::move(card));

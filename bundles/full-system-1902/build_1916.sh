@@ -4,7 +4,7 @@ set -euo pipefail
 [[ $(id -u) == 0 ]] || { echo 'run as root to preserve squashfs ownership' >&2; exit 1; }
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-BASE_ZIP=$(realpath "${1:?usage: build_1916.sh base.zip output-directory [1917]}")
+BASE_ZIP=$(realpath "${1:?usage: build_1916.sh base.zip output-directory [profile [screen.tar.gz screen.json]]}")
 OUT=$(realpath -m "${2:?output directory required}")
 PROFILE=${3:-1916}
 case "$PROFILE" in
@@ -19,6 +19,14 @@ case "$PROFILE" in
         BASE_COMMIT=aa8a76573b11f910d3a37de0e9bba2d57fc4c987
         BASE_SHA=f01eb5d4a088bcda7f368ffe4ede1edd1b04c49afc6d7d2b68535b6c06b674e0
         VERSION=2.1.2-233-1902.17
+        ;;
+    1918)
+        BASE_VERSION=2.1.2-233-1902.17
+        BASE_COMMIT=3b50fbbcc42d7cd60be4cab64cc907d6779b7b32
+        BASE_SHA=7e6564245867dbabd5cf31474041a83c3cdc13a433c9a55b8770fe6b2a2d4c68
+        VERSION=2.1.2-233-1902.18
+        SCREEN_ARCHIVE=$(realpath "${4:?screen archive required}")
+        SCREEN_PROVENANCE=$(realpath "${5:?screen provenance required}")
         ;;
     *) echo 'unrecognized candidate profile' >&2; exit 1 ;;
 esac
@@ -41,7 +49,12 @@ unsquashfs -d "$ROOT" "$INPUT/rk-unpacked/rootfs.img"
 [[ $(stat -c '%u:%g' "$ROOT/etc/passwd") == 0:0 ]]
 [[ $(stat -c '%u:%g' "$ROOT/home/lava/bin/hwver.sh") == 1000:1000 ]]
 COMMIT=$(git -C "$REPO" rev-parse HEAD)
-python3 "$HERE/compose_$PROFILE.py" "$ROOT" "$WORK/base/composition.json" "$WORK/composition.json" "$COMMIT"
+compose_args=("$ROOT" "$WORK/base/composition.json" "$WORK/composition.json" "$COMMIT")
+if [[ "$PROFILE" == 1918 ]]; then
+    compose_args+=("$SCREEN_ARCHIVE" "$SCREEN_PROVENANCE")
+    cp "$SCREEN_PROVENANCE" "$WORK/base/screen-provenance.json"
+fi
+python3 "$HERE/compose_$PROFILE.py" "${compose_args[@]}"
 sh -n "$ROOT/etc/init.d/S58u1-device-service"
 bash -n "$ROOT/usr/local/bin/extended-pkg"
 mksquashfs "$ROOT" "$WORK/rootfs-new.img" -comp zstd -noappend -processors 2

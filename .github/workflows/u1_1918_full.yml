@@ -1,0 +1,121 @@
+name: Build complete U1 233 1902.18 loaded-slot highlight
+on:
+  push:
+    branches: [codex/1918-screen-loaded-highlight]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: u1-1914-full-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native and full-system software contracts
+        env:
+          PYTHONPATH: bundles/multiace-190
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s bundles/ace2k-native-slot-exit -v
+          python3 -m unittest discover -s bundles/multiace-190 -p 'test_lane*.py' -v
+          python3 -m unittest discover -s bundles/full-system-1902 -v
+          sh bundles/multiace-190/test_paxx_1902_mounts.sh
+          bash -n bundles/full-system-1902/build_1916.sh
+  screen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Stage the actual 233 screen source and route changes
+        run: |
+          set -euo pipefail
+          pin=4edbd50feb36e47d072b5cd4e516b9792b8b4ea9
+          screen="$RUNNER_TEMP/233-1908-screen"
+          mkdir -p "$screen"
+          git fetch --quiet --depth=1 origin "$pin"
+          git archive "$pin:02-屏幕层/233-screen" | tar -x -C "$screen"
+          git -C "$screen/lib/lvgl" apply --include=src/misc/lv_helix_thread_check.h ../../patches/lvgl_thread_check_hook.patch
+          # The archived LVGL contains the partial-upload implementation but omits its new header.
+          # Restore only the original new-file hunk; all existing sibling patches stay intact.
+          upload=src/drivers/display/drm/lv_linux_drm_egl_upload.h
+          test ! -e "$screen/lib/lvgl/$upload"
+          git -C "$screen/lib/lvgl" apply --include="$upload" ../../patches/lvgl-egl-partial-upload.patch
+          test -s "$screen/lib/lvgl/$upload"
+          [[ "$(git hash-object "$screen/lib/lvgl/$upload")" == 9fe236cf6* ]]
+          git -C "$screen/lib/libhv" apply --include=base/dns_resolv.c --include=base/dns_resolv.h ../../patches/libhv-dns-resolver-fallback.patch
+          patch -d "$screen" --batch --fuzz=0 -p1 < bundles/full-system-1902/screen_routes.patch
+          python3 bundles/ace2k-native-slot-exit/patch_batch_screen.py "$screen"
+          python3 bundles/full-system-1902/prepare_screen_1913.py "$screen"
+          patch -d "$screen" --batch --fuzz=0 -p1 < bundles/full-system-1902/screen_loaded_highlight.patch
+          bash bundles/full-system-1902/test_screen_routes.sh "$screen"
+          echo "SCREEN_TREE=$screen" >> "$GITHUB_ENV"
+      - name: Restore the pinned font sources and regenerate runtime Chinese fonts
+        run: |
+          set -euo pipefail
+          python3 - "$SCREEN_TREE" <<'PY'
+          import sys,json
+          from pathlib import Path
+          sys.path.insert(0,'scripts/native-ui')
+          from prepare_source import restore_font_sources
+          restore_font_sources(Path(sys.argv[1]),json.loads(Path('bundles/native-ui/manifest.json').read_text())['source'])
+          PY
+          python3 -m venv "$RUNNER_TEMP/1908-font-venv"
+          "$RUNNER_TEMP/1908-font-venv/bin/pip" install 'fonttools==4.61.1'
+          export PATH="$RUNNER_TEMP/1908-font-venv/bin:$PATH"
+          python3 bundles/full-system-1902/prepare_fonts_1908.py "$SCREEN_TREE"
+          npm ci --prefix bundles/native-ui/font-tools --ignore-scripts --no-audit --no-fund
+          fontconv="$GITHUB_WORKSPACE/bundles/native-ui/font-tools/node_modules/.bin/lv_font_conv"
+          LV_FONT_CONV="$fontconv" make -C "$SCREEN_TREE" regen-runtime-cjk-fonts SKIP_OPTIONAL_DEPS=1 FAST_LINK=0
+      - name: Build U1 ARM64 screen with the actual cross toolchain
+        run: |
+          set -euo pipefail
+          docker build -t u1-1908-arm64 -f "$SCREEN_TREE/docker/Dockerfile.snapmaker-u1" "$SCREEN_TREE/docker"
+          date +%s > "$RUNNER_TEMP/screen-start"
+          docker run --rm -v "$SCREEN_TREE:/src" -w /src u1-1908-arm64 make PLATFORM_TARGET=snapmaker-u1 SKIP_OPTIONAL_DEPS=1 DBGLEVEL=0 FAST_LINK=0 ENABLE_REMOTE_CONTROL=yes ENABLE_DIAGNOSTIC_UPLOADS=no ENABLE_MOCKS=yes -j2
+          sudo chown -R "$(id -u):$(id -g)" "$SCREEN_TREE"
+          file "$SCREEN_TREE/build/snapmaker-u1/bin/helix-screen"
+          python3 bundles/full-system-1902/package_screen_1913.py "$SCREEN_TREE" "$SCREEN_TREE/build/snapmaker-u1/bin" "$RUNNER_TEMP/screen-output/screen.tar.gz" "$GITHUB_SHA" "$(cat "$RUNNER_TEMP/screen-start")" --version 1.2.0-233.20261128.1918
+      - uses: actions/upload-artifact@v4
+        with:
+          name: U1-1918-screen-build
+          path: ${{ runner.temp }}/screen-output/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+  full:
+    needs: [contracts,screen]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: U1-1918-screen-build
+          path: screen-input/
+      - name: Install firmware assembly tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev squashfs-tools
+      - name: Fetch the verified 1902.17 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api /repos/446599/snapfxxker-os/actions/artifacts/15261354432/zip > "$RUNNER_TEMP/base-1917.zip"
+      - name: Compose and read back complete upgrade image
+        run: |
+          sudo bash bundles/full-system-1902/build_1916.sh "$RUNNER_TEMP/base-1917.zip" output 1918 screen-input/screen.tar.gz screen-input/screen.tar.json
+          (cd output && sha256sum -c SHA256SUMS.txt)
+          cat output/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: U1-233-1902.18-loaded-highlight-candidate
+          path: output/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

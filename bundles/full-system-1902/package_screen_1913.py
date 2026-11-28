@@ -33,8 +33,8 @@ def arm64(h):
     return h[:6]==b'\x7fELF\x02\x01' and int.from_bytes(h[18:20],'little')==183
 
 
-def verify_screen(archive,report):
-    if report.get('source_pin')!=SCREEN_PIN or report.get('screen_version')!=SCREEN_VERSION:
+def verify_screen(archive,report,version=SCREEN_VERSION):
+    if report.get('source_pin')!=SCREEN_PIN or report.get('screen_version')!=version:
         raise ValueError('wrong screen source/version')
     if sha(archive)!=report.get('sha256'):
         raise ValueError('screen archive checksum mismatch')
@@ -58,7 +58,7 @@ def verify_screen(archive,report):
     return True
 
 
-def package(source,binaries,output,commit,started):
+def package(source,binaries,output,commit,started,version=SCREEN_VERSION):
     sys.path.insert(0,str(REPO/'scripts/native-ui'))
     from package_runtime import collect
     if not re.fullmatch('[0-9a-f]{40}',commit):raise ValueError('invalid integration commit')
@@ -77,7 +77,7 @@ def package(source,binaries,output,commit,started):
                 for name,p in sorted(files.items()):
                     t.add(p,arcname='helixscreen/'+name,recursive=False,
                           filter=lambda i:normalize(i))
-    record=dict(source_pin=SCREEN_PIN,screen_version=SCREEN_VERSION,
+    record=dict(source_pin=SCREEN_PIN,screen_version=version,
                 integration_commit=commit,sha256=sha(output),
                 binaries={x:sha(files[x]) for x in BINARIES},
                 binary_sha256=sha(files['bin/helix-screen']),
@@ -87,7 +87,7 @@ def package(source,binaries,output,commit,started):
                     'src/printer/ams_backend_multiace.cpp',
                     'src/ui/print/ui_panel_print_status.cpp', *COMPACT_FILES)},
                 bytes=output.stat().st_size,hardware_verified=False)
-    verify_screen(output,record)
+    verify_screen(output,record,version)
     output.with_suffix('.json').write_text(json.dumps(record,indent=2)+'\n')
     print(json.dumps(record,indent=2))
 
@@ -101,5 +101,6 @@ if __name__=='__main__':
     p=argparse.ArgumentParser()
     p.add_argument('source',type=Path);p.add_argument('binaries',type=Path)
     p.add_argument('output',type=Path);p.add_argument('commit');p.add_argument('started',type=float)
+    p.add_argument('--version',default=SCREEN_VERSION)
     a=p.parse_args()
-    package(a.source,a.binaries,a.output,a.commit,a.started)
+    package(a.source,a.binaries,a.output,a.commit,a.started,a.version)
