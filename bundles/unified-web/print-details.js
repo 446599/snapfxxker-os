@@ -59,6 +59,8 @@ export function createPrintDetails(ctx, options) {
   }
   const preview = el('figure', {class:'print-preview', hidden:true});
   const previewState = el('span', {class:'muted'}, '正在读取预览…');
+  const previewButton = el('button', {type:'button', class:'print-preview-trigger',
+    title:'打开模型俯视选图', 'aria-label':'打开模型俯视选图', onclick:() => actions.openPicker()});
   const body = el('div', {class:'print-main'}, preview, el('div', {class:'print-content'},
     el('div', {class:'print-summary'}, el('div', {class:'print-identity'}, badge, name), percent),
     progress, metrics, message));
@@ -91,7 +93,8 @@ export function createPrintDetails(ctx, options) {
         await image.decode();
         if (request !== generation || ctx.signal.aborted) return;
         releasePreview();
-        preview.append(image);
+        previewButton.replaceChildren(image);
+        preview.append(previewButton);
         imageUrl = source;
         source = undefined;
         return;
@@ -118,6 +121,7 @@ export function createPrintDetails(ctx, options) {
 
     badge.textContent = states[state] || (state === 'standby' ? '待机' : '状态不可用');
     badge.dataset.state = state || '';
+    previewButton.disabled = !running(state);
     name.textContent = file || (state === 'standby' ? '等待打印任务' : '未读取到打印任务');
     progress.hidden = percent.hidden = !file || p === undefined;
     if (!progress.hidden) {

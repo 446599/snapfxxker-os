@@ -81,9 +81,30 @@ dialog{width:min(450px,92vw);border:1px solid var(--line);border-radius:16px;pad
 .print-tune{padding:8px 5px;color:#525447;font-size:13px}
 .print-object-picker{border:1px solid var(--line);border-radius:9px;padding:9px 11px}
 .print-object-picker summary{cursor:pointer;font-size:14px;font-weight:650}
-.print-object-list{display:grid;gap:0;margin-top:8px}
-.print-object-list p{font-size:13px}
-.print-object-row{border-top:1px solid #e9eae2;padding:8px 0;display:flex;justify-content:space-between;align-items:center;gap:8px}
-.print-object-name{min-width:0;display:grid;gap:3px;overflow-wrap:anywhere;font-size:13px}
-.print-object-row button{flex:none;min-height:33px;padding:5px 8px;font-size:13px}
+.print-preview .print-preview-trigger{border:0;border-radius:0;padding:0;background:transparent;
+  width:100%;height:100%;min-height:0;display:block}
+.print-preview-trigger:disabled{opacity:1}
+.print-object-picker[open] summary{margin-bottom:10px}
+.print-plate-layout{display:grid;grid-template-columns:minmax(0,300px) minmax(130px,1fr);gap:14px;align-items:center}
+.print-plate-mount{min-width:0;width:100%;max-width:300px}
+.print-plate{position:relative;width:100%;aspect-ratio:1;overflow:hidden;border:1px solid #ccd0c2;border-radius:10px;
+  background:linear-gradient(#dce0d6 1px,transparent 1px),linear-gradient(90deg,#dce0d6 1px,transparent 1px),#f2f4ed;
+  background-size:10% 10%}
+.print-plate .print-plate-target{position:absolute;min-height:0;padding:0;border:0;border-radius:0;
+  background:#a9b49e;display:block;opacity:1;z-index:1}
+.print-plate .print-plate-target[data-state=current],.print-plate-legend [data-state=current]::before{background:#5894b1}
+.print-plate .print-plate-target[data-state=selected],.print-plate-legend [data-state=selected]::before{background:#ecb92c}
+.print-plate .print-plate-target[data-state=pending]{background:#c2a963}
+.print-plate .print-plate-target[data-state=skipped],.print-plate-legend [data-state=skipped]::before{background:#bfc1bc}
+.print-plate .print-plate-target:not(:disabled):hover,.print-plate .print-plate-target:focus-visible{filter:brightness(.86)}
+.print-plate .print-plate-marker-target{border-radius:50%;box-shadow:inset 0 0 0 1px #535d4c;z-index:0}
+.print-plate-mark{position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:2;
+  font-size:12px;font-weight:750;color:#24251e;line-height:1;text-shadow:0 0 4px #fff,0 0 4px #fff}
+.print-plate-mark[data-state=selected],.print-plate-mark[data-state=skipped]{font-size:16px}
+.print-plate-guide{display:grid;gap:10px;align-content:center;justify-items:start;font-size:13px;color:#525447}
+.print-selection-count{color:var(--ink);font-weight:650}
+.print-plate-legend{display:flex;flex-wrap:wrap;gap:5px 10px;font-size:12px}
+.print-plate-legend span::before{content:"";display:inline-block;border-radius:3px;width:9px;height:9px;margin-right:4px}
+.print-plate-note{font-size:13px;margin-top:8px}
+@media(max-width:530px){.print-plate-layout{grid-template-columns:1fr}}
 @media(max-width:460px){.print-main{gap:10px}.print-metrics{grid-template-columns:repeat(auto-fit,minmax(90px,1fr))}}

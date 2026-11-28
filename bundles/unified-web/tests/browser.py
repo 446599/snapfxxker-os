@@ -96,8 +96,9 @@ class Printer:
             return 200, {"state": self.job["state"], "speed_factor": 100, "extrude_factor": 100, "fan": 0}
         if path == "/printer/gcode/script":
             prefix = "EXCLUDE_OBJECT NAME="
-            assert method == "POST" and body["script"].startswith(prefix)
-            self.pending_skip = body["script"].removeprefix(prefix)
+            lines = body["script"].splitlines()
+            assert method == "POST" and lines and all(line.startswith(prefix) for line in lines)
+            self.pending_skip = [line.removeprefix(prefix) for line in lines]
             return 200, {"result": "ok"}
         if path == "/multiace/api/history/reprint":
             assert method == "POST" and body["filename"] == self.job["filename"]
@@ -482,10 +483,18 @@ def check_print_monitor(page, origin, printer):
 
 def check_print_actions(page, origin, printer):
     name = "测试件.stl_id_0_copy_1"
+    second = "THIN_COPY_2"
     unsafe = "Bad\nCANCEL_PRINT"
     printer.camera = None
     printer.job = {"state":"printing", "filename":"plate.gcode", "print_duration":100, "total_duration":120}
-    printer.exclude_object = {"objects":[{"name": name}, {"name":"Already_done"}, {"name":unsafe}],
+    printer.exclude_object = {"objects":[
+        {"name":name, "polygon":[[62,82],[96,82],[96,102],[80,111],[62,102]]},
+        {"name":"Already_done", "polygon":[[121,145],[155,145],[155,175],[121,175]]},
+        {"name":unsafe, "center":[180,120]},
+        {"name":second, "polygon":[[120,94],[151,94],[151,96],[120,96]]},
+        {"name":"No_geometry"},
+        {"name":"Shared_center_1", "center":[30,40]},
+        {"name":"Shared_center_2", "center":[30,40]}],
                               "current_object":name, "excluded_objects":["Already_done"]}
     printer.thumbnail_mode = "proxy"
     page.goto(origin + "/u1/#jobs")
@@ -493,16 +502,46 @@ def check_print_actions(page, origin, printer):
     expect(details.get_by_alt_text("当前模型预览")).to_be_visible()
     assert "/multiace/api/thumbnail" in printer.thumbnail_requests
 
-    page.get_by_text("跳过模型", exact=True).click()
-    skip = page.get_by_role("button", name="跳过 " + name, exact=True)
+    plot = page.get_by_role("group", name="模型俯视预览")
+    picker = page.locator(".print-object-picker")
+    expect(plot).to_be_visible()
+    picker.locator("summary").click()
+    expect(plot).to_be_hidden()
+    details.get_by_role("button", name="打开模型俯视选图").click()
+    expect(plot).to_be_visible()
+    first = plot.locator(f'[data-object="{name}"]')
+    thin = plot.locator(f'[data-object="{second}"]')
+    skipped = plot.locator('[data-object="Already_done"]')
+    skip = page.get_by_role("button", name="跳过所选模型", exact=True)
     dialog = page.get_by_role("dialog")
-    expect(page.get_by_text("当前对象", exact=True)).to_be_visible()
-    expect(page.get_by_text("已跳过", exact=True)).to_have_count(1)
-    expect(page.get_by_text("名称不支持跳过", exact=True)).to_be_visible()
-    expect(page.locator(".print-object-row").filter(has_text="Bad").get_by_role("button")).to_be_disabled()
+    expect(first).to_have_attribute("data-state", "current")
+    expect(skipped).to_have_attribute("data-state", "skipped")
+    expect(skipped).to_be_disabled()
+    expect(plot.get_by_role("button", name="模型 3 · 不可选择")).to_be_disabled()
+    expect(plot.get_by_role("button")).to_have_count(4)
+    expect(picker).not_to_contain_text(name)
+    expect(picker).to_contain_text("无法从预览中选择")
+    expect(skip).to_be_disabled()
+
+    def click_thin_marker():
+        box = thin.bounding_box()
+        thin.click(position={"x":box["width"] / 2, "y":box["height"] / 4})
+
+    first.click()
+    expect(first).to_have_attribute("aria-pressed", "true")
+    click_thin_marker()
+    expect(thin).to_have_attribute("aria-pressed", "true")
+    click_thin_marker()
+    expect(thin).to_have_attribute("aria-pressed", "false")
+    # The thin silhouette itself is also clickable away from its center marker.
+    plot.locator(".print-plate-outline").click(position={"x":7, "y":2})
+    expect(thin).to_have_attribute("aria-pressed", "true")
+    expect(picker.locator(".print-selection-count")).to_have_text("已勾选 2 个")
+    assert not printer.writes("/printer/gcode/script")
 
     skip.click()
-    expect(dialog).to_contain_text(name)
+    expect(dialog).to_contain_text("已勾选的 2 个模型")
+    expect(dialog).not_to_contain_text(name)
     dialog.get_by_role("button", name="取消", exact=True).click()
     expect(skip).to_be_enabled()
     assert not printer.writes("/printer/gcode/script")
@@ -512,16 +551,24 @@ def check_print_actions(page, origin, printer):
     printer.job = {**printer.job, "print_duration":1, "total_duration":3}
     dialog.get_by_role("button", name="确认").click()
     expect(page.locator("#notice")).to_contain_text("状态已变化")
-    expect(skip).to_be_enabled()
+    expect(first).to_have_attribute("aria-pressed", "false")
+    expect(skip).to_be_disabled()
     assert not printer.writes("/printer/gcode/script")
 
+    first.click()
+    click_thin_marker()
     skip.click()
     dialog.get_by_role("button", name="确认").click()
-    expect(page.get_by_text("等待设备确认", exact=True)).to_be_visible()
-    assert printer.writes("/printer/gcode/script") == [{"script":"EXCLUDE_OBJECT NAME=" + name}]
-    assert printer.pending_skip == name
+    expect(picker.locator(".print-selection-count")).to_contain_text("2 个等待设备确认")
+    assert printer.writes("/printer/gcode/script") == [
+        {"script":f"EXCLUDE_OBJECT NAME={name}\nEXCLUDE_OBJECT NAME={second}"}]
+    assert printer.pending_skip == [name, second]
     printer.exclude_object["excluded_objects"].append(name)
-    expect(page.get_by_text("已跳过", exact=True)).to_have_count(2)
+    expect(first).to_have_attribute("data-state", "skipped")
+    expect(thin).to_have_attribute("data-state", "pending")
+    printer.exclude_object["excluded_objects"].append(second)
+    expect(thin).to_have_attribute("data-state", "skipped")
+    expect(thin).to_be_disabled()
 
     action = lambda label: page.get_by_role("button", name=label, exact=True)
     action("暂停").click()
@@ -549,7 +596,7 @@ def check_print_actions(page, origin, printer):
     expect(details.get_by_alt_text("当前模型预览")).to_have_count(0)
     if not page.locator(".print-object-picker").evaluate("element => element.open"):
         page.get_by_text("跳过模型", exact=True).click()
-    expect(page.get_by_text("当前任务未提供可跳过的对象。")).to_be_visible()
+    expect(page.get_by_text("当前任务未提供模型的俯视定位信息。")).to_be_visible()
 
 
 def main():

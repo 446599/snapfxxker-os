@@ -1,3 +1,5 @@
+import { createPlatePreview, printObjectsOnPlate } from './print-plate.js';
+
 const printControl = '/multiace/api/print-control';
 const running = state => state === 'printing' || state === 'paused';
 const ended = state => ['complete','cancelled','error'].includes(state);
@@ -9,11 +11,6 @@ const safeName = name => typeof name === 'string' && Boolean(name) &&
 const job = status => status.print_stats || {};
 const ready = status => status.webhooks?.state === 'ready';
 
-function objects(status) {
-  const list = status.exclude_object?.objects;
-  if (!Array.isArray(list)) return [];
-  return [...new Set(list.map(item => item?.name).filter(name => typeof name === 'string' && name))];
-}
 function exclusions(status) {
   const list = status.exclude_object?.excluded_objects;
   return new Set(Array.isArray(list) ? list : []);
@@ -26,16 +23,23 @@ function sameJob(before, after) {
 
 export function createPrintActions(ctx, refresh, {showTune = true} = {}) {
   const {el} = ctx;
-  const operands = el('div', {class:'print-object-list'});
-  const pickerTitle = el('summary', {}, '跳过模型');
-  const picker = el('details', {class:'print-object-picker'}, pickerTitle, operands);
+  const plate = el('div', {class:'print-plate-mount'});
+  const absent = el('p', {class:'muted print-plate-note'});
+  const count = el('p', {class:'print-selection-count', role:'status'});
+  const apply = el('button', {type:'button', class:'primary', onclick:skipSelected}, '跳过所选模型');
+  const picker = el('details', {class:'print-object-picker'}, el('summary', {}, '跳过模型'),
+    el('div', {class:'print-plate-layout'}, plate, el('div', {class:'print-plate-guide'},
+      el('p', {}, '在俯视预览中点击模型勾选。'), count,
+      el('div', {class:'print-plate-legend'}, ...[['current','正在打印'], ['selected','已勾选'],
+        ['skipped','已跳过']].map(([state,label]) => el('span', {'data-state':state}, label))),
+      apply)), absent);
   const bar = el('div', {class:'row print-action-bar'});
   const root = el('div', {class:'print-actions'}, bar, picker);
-  const waiting = new Set();
+  const waiting = new Set(), selected = new Set();
   const hasActiveJob = status => ready(status) && running(job(status).state);
-  const canSkip = (status, target) => hasActiveJob(status) && safeName(target)
-    && objects(status).includes(target) && !exclusions(status).has(target) && !waiting.has(target);
-  let latest = {}, busy = false, lastList;
+  const canSkip = (status, target, known, excluded) => hasActiveJob(status) && safeName(target)
+    && known.some(row => row.name === target && row.center) && !excluded.has(target) && !waiting.has(target);
+  let latest = {}, busy = false, lastPlot, openedForJob = false;
 
   async function execute(allowed, command, confirmation) {
     if (busy || !allowed(latest)) return;
@@ -64,6 +68,35 @@ export function createPrintActions(ctx, refresh, {showTune = true} = {}) {
 
   const allowed = states => status => ready(status) && Boolean(job(status).filename) && states.includes(job(status).state);
   const post = (path, body) => ctx.api(path, {method:'POST', body, signal:ctx.signal});
+  function select(name) {
+    if (busy || !canSkip(latest, name, printObjectsOnPlate(latest), exclusions(latest))) return;
+    if (selected.has(name)) selected.delete(name);
+    else selected.add(name);
+    render();
+  }
+
+  function skipSelected() {
+    const targets = [...selected];
+    if (!targets.length) return;
+    const stillValid = status => {
+      const known = printObjectsOnPlate(status);
+      const excluded = exclusions(status);
+      return targets.every(name => canSkip(status, name, known, excluded));
+    };
+    const confirm = '跳过已勾选的 ' + targets.length + ' 个模型？本次打印将停止打印这些模型，已打印部分会保留。';
+    void execute(stillValid, async status => {
+      const script = targets.map(name => 'EXCLUDE_OBJECT NAME=' + name).join('\n');
+      const response = await post('/printer/gcode/script', {script});
+      if (response?.ok !== false && sameJob(status, latest) && running(job(latest).state)) {
+        for (const name of targets) {
+          waiting.add(name);
+          selected.delete(name);
+        }
+      }
+      return response;
+    }, () => confirm);
+  }
+
   const controls = [
     ['暂停', allowed(['printing']), () => post(printControl,{verb:'pause'})],
     ['继续', allowed(['paused']), () => post(printControl,{verb:'resume'}),
@@ -97,45 +130,54 @@ export function createPrintActions(ctx, refresh, {showTune = true} = {}) {
       return;
     }
 
-    const names = objects(latest);
+    const known = printObjectsOnPlate(latest);
     const excluded = exclusions(latest);
     const current = latest.exclude_object?.current_object;
-    const rows = names.map(name => ({
-      name, skipped:excluded.has(name), pending:waiting.has(name),
-      current:name === current, allowed:!busy && canSkip(latest, name)
+    const rows = known.filter(row => row.center).map(row => ({
+      ...row, skipped:excluded.has(row.name), pending:waiting.has(row.name),
+      current:row.name === current, selected:selected.has(row.name),
+      allowed:!busy && canSkip(latest, row.name, known, excluded)
     }));
-    const signature = JSON.stringify(rows);
-    if (signature === lastList) return;
-    lastList = signature;
-    operands.replaceChildren();
-    if (!rows.length) {
-      operands.append(el('p', {class:'muted'}, '当前任务未提供可跳过的对象。'));
-      return;
+    if (rows.length && !openedForJob) {
+      picker.open = true;
+      openedForJob = true;
     }
-
-    for (const row of rows) {
-      const {name, skipped, pending, current:now, allowed:canSend} = row;
-      const label = el('strong', {}, name);
-      const stateText = skipped ? '已跳过' : pending ? '等待设备确认' : now ? '当前对象'
-        : !safeName(name) ? '名称不支持跳过' : '';
-      const button = el('button', {type:'button', disabled:!canSend, 'aria-label':'跳过 ' + name,
-        onclick:() => void execute(status => canSkip(status, name), async () => {
-          const response = await post('/printer/gcode/script',{script:'EXCLUDE_OBJECT NAME=' + name});
-          waiting.add(name);
-          return response;
-        }, () => '跳过「' + name + '」？本次打印将不再打印这个模型，已打印的部分会保留。')}, '跳过');
-      operands.append(el('div', {class:'print-object-row'},
-        el('div', {class:'print-object-name'}, label,
-          ...(stateText ? [el('small', {class:'muted'}, stateText)] : [])),
-        ...(skipped || pending ? [] : [button])));
+    const missing = known.length - rows.length;
+    absent.hidden = Boolean(rows.length && !missing);
+    absent.textContent = missing ? missing + ' 个模型没有俯视定位信息，无法从预览中选择。'
+      : '当前任务未提供模型的俯视定位信息。';
+    plate.parentElement.hidden = !rows.length;
+    count.textContent = '已勾选 ' + selected.size + ' 个'
+      + (waiting.size ? ' · ' + waiting.size + ' 个等待设备确认' : '');
+    apply.disabled = busy || !selected.size || !hasActiveJob(latest);
+    const signature = JSON.stringify(rows);
+    if (signature === lastPlot) return;
+    lastPlot = signature;
+    const active = document.activeElement;
+    const focused = plate.contains(active) ? active.dataset.object : '';
+    plate.replaceChildren(...(rows.length ? [createPlatePreview(el, rows, select)] : []));
+    if (focused) {
+      [...plate.querySelectorAll('button')].find(node => node.dataset.object === focused)?.focus({preventScroll:true});
     }
   }
 
   render();
-  return {root, update(status) {
-    if (!sameJob(latest, status) || (!running(job(latest).state) && running(job(status).state))) waiting.clear();
+  return {root, openPicker() {
+    if (picker.hidden) return;
+    picker.open = true;
+    picker.scrollIntoView({block:'nearest'});
+  }, update(status) {
+    if (!sameJob(latest, status) || (!running(job(latest).state) && running(job(status).state))) {
+      selected.clear();
+      waiting.clear();
+      openedForJob = false;
+    }
     latest = status;
-    for (const name of exclusions(status)) waiting.delete(name);
+    const known = printObjectsOnPlate(status), excluded = exclusions(status);
+    for (const name of excluded) waiting.delete(name);
+    for (const name of selected) {
+      if (!canSkip(status, name, known, excluded)) selected.delete(name);
+    }
     render();
   }};
 }
