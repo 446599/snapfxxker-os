@@ -3,10 +3,12 @@ import json
 import mimetypes
 import os
 import re
+import struct
 import threading
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -27,9 +29,29 @@ PANEL_FIXTURES = {
 }
 
 
+
+def sample_image(color):
+    def chunk(kind, content):
+        return (struct.pack(">I", len(content)) + kind + content
+                + struct.pack(">I", zlib.crc32(kind + content)))
+    header = struct.pack(">IIBBBBB", 24, 16, 8, 2, 0, 0, 0)
+    pixels = (b"\x00" + color * 24) * 16
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header)
+            + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b""))
+
+
 class Printer:
     def __init__(self):
         self.calls = []
+        self.job = {"state": "standby"}
+        self.print_progress = {}
+        self.file_progress = {}
+        self.camera = None
+        self.webrtc_failure = False
+        self.screen_revision = 1
+        self.screen_tags = []
+        self.screen_frame = ("image/png", sample_image(b"\x17\x63\xa5"))
+        self.camera_frame = ("image/png", sample_image(b"\xca\x86\x37"))
         self.tasks = []
         self.selected = []
         self.setting = "off"
@@ -55,12 +77,29 @@ class Printer:
             elif "configfile" in url:
                 status = {"configfile": {"settings": {h: {"max_temp": 300} for h in HEATERS + ["heater_bed"]}}}
             else:
-                status = dict(webhooks={"state": "ready"}, print_stats={"state": "standby"},
+                status = dict(webhooks={"state": "ready"}, print_stats=self.job,
+                              display_status=self.print_progress, virtual_sdcard=self.file_progress,
                               toolhead={"extruder": "extruder", "position": [20, 30, 40, 0]},
                               **{h: {"temperature": 35 + i, "target": 0} for i, h in enumerate(HEATERS + ["heater_bed"])})
             return 200, {"result": {"status": status}}
         if path == "/multiace/api/print-control":
             return 200, {"state": "standby", "speed_factor": 100, "extrude_factor": 100, "fan": 0}
+        if path == "/server/files/metadata":
+            assert parse_qs(urlsplit(url).query)["filename"] == [self.job["filename"]]
+            return 200, {"result": {"estimated_time": 2400, "layer_count": 200}}
+        if path == "/multiace/api/webcam/info":
+            options = {"webrtc": {"signal_path": "/api/webcam/webrtc-signal"},
+                       "mjpeg": {"proxy_path": "/api/webcam/stream"}}
+            return 200, {"available": bool(self.camera), "name": "case",
+                         "snapshot_path": "/api/webcam/snapshot", **options.get(self.camera, {})}
+        if path == "/multiace/api/webcam/webrtc-signal":
+            assert method == "POST"
+            if self.webrtc_failure:
+                return 502, {"detail": "Camera disconnected"}
+            if body == {"type": "request"}:
+                return 200, {"type": "offer", "id": "fixture-peer", "sdp": "offer-fixture"}
+            assert body == {"type": "answer", "id": "fixture-peer", "sdp": "answer-fixture"}
+            return 200, {"ok": True}
         if path == "/multiace/api/materials":
             return 200, {"materials": ["PLA", "PETG"]}
         if path == "/multiace/api/material/batch/preview":
@@ -125,6 +164,19 @@ def serve(printer):
                 media, content = PANEL_FIXTURES[path]
                 self.send(200, media, content)
                 return
+            if self.command == "GET" and path == "/screen/snapshot":
+                tag = '"screen-%s"' % printer.screen_revision
+                request_tag = self.headers.get("If-None-Match")
+                printer.screen_tags.append(request_tag)
+                if request_tag == tag:
+                    self.send(304, printer.screen_frame[0], b"", etag=tag)
+                else:
+                    self.send(200, *printer.screen_frame, etag=tag)
+                return
+            if self.command == "GET" and path in ("/multiace/api/webcam/snapshot", "/multiace/api/webcam/stream"):
+                printer.calls.append(("GET", path, None))
+                self.send(200, *printer.camera_frame)
+                return
             if self.command == "GET" and path in assets:
                 asset = assets[path]
                 self.send(200, mimetypes.guess_type(asset)[0], asset.read_bytes())
@@ -136,11 +188,13 @@ def serve(printer):
 
         do_POST = do_PUT = do_GET
 
-        def send(self, status, media, data):
+        def send(self, status, media, data, etag=None):
             self.send_response(status)
             self.send_header("Content-Type", media)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
+            if etag:
+                self.send_header("ETag", etag)
             self.end_headers()
             self.wfile.write(data)
 
@@ -318,6 +372,78 @@ def check_integrated_panel(page, origin, printer):
     expect(page.get_by_role("button", name="Sign in to fixture")).to_be_visible()
 
 
+def check_print_monitor(page, origin, printer):
+    page.add_init_script("""(() => {
+        window.fixturePeers = [];
+        window.RTCPeerConnection = class extends EventTarget {
+            constructor() { super(); this.iceGatheringState = 'complete'; fixturePeers.push(this); }
+            addTransceiver(kind, options) { if (kind !== 'video' || options.direction !== 'recvonly') throw Error('Expected a receive-only video track'); }
+            async setRemoteDescription(offer) { if (offer.sdp !== 'offer-fixture') throw Error('Wrong offer'); }
+            async createAnswer() { return {type:'answer', sdp:'answer-fixture'}; }
+            async setLocalDescription(answer) {
+                this.localDescription = answer;
+                const canvas = Object.assign(document.createElement('canvas'), {width:96,height:54});
+                const context = canvas.getContext('2d');
+                const stream = canvas.captureStream(4);
+                const event = Object.assign(new Event('track'), {track:stream.getVideoTracks()[0],streams:[stream]});
+                this.stream = stream;
+                this.draw = setInterval(() => context.fillRect(0,0,96,54), 80);
+                this.dispatchEvent(event);
+            }
+            close() { this.closed = true; clearInterval(this.draw); this.stream?.getTracks().forEach(t=>t.stop()); }
+        };
+    })();""")
+    printer.job = {"state": "printing", "filename": "测试/gear & lid.gcode", "print_duration": 1020,
+                   "total_duration": 1120, "filament_used": 1234, "info": {"current_layer": 83}}
+    printer.print_progress = {"progress": 0.425, "message": "正在打印外壁"}
+    printer.file_progress = {"progress": 0.39}
+    printer.camera = "webrtc"
+    page.goto(origin + "/u1/")
+    details = page.locator(".print-details")
+    expect(details).to_contain_text("测试/gear & lid.gcode")
+    expect(details).to_contain_text("42.5%")
+    expect(details).to_contain_text("83 / 200")
+    expect(details).to_contain_text("18 分钟")
+    expect(details).to_contain_text("23 分钟")
+    expect(details).to_contain_text("1.23 m")
+    expect(details).to_contain_text("正在打印外壁")
+    expect(details.get_by_role("progressbar")).to_have_attribute("value", "42.5")
+    expect(page.get_by_text("WebRTC 实时画面")).to_be_visible()
+    assert printer.writes("/multiace/api/webcam/webrtc-signal")[-2:] == [
+        {"type": "request"}, {"type": "answer", "id": "fixture-peer", "sdp": "answer-fixture"}]
+    screen = page.get_by_alt_text("U1 实体触摸屏")
+    expect(screen).to_be_visible()
+    first_frame = screen.get_attribute("src")
+    page.wait_for_timeout(1200)
+    assert '"screen-1"' in printer.screen_tags
+    expect(screen).to_have_attribute("src", first_frame)
+    printer.screen_revision = 2
+    expect(screen).not_to_have_attribute("src", first_frame)
+    for width in (390, 1280):
+        page.set_viewport_size({"width": width, "height": 900})
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    preview(page, "desktop-print-monitor-simulated.png")
+
+    before = len(printer.screen_tags)
+    page.locator('#nav a[href="#jobs"]').click()
+    expect(page.get_by_role("heading", name="当前打印")).to_be_visible()
+    expect(page.locator(".print-details")).to_contain_text("42.5%")
+    expect(page.locator(".print-details")).to_contain_text("83 / 200")
+    assert page.evaluate("fixturePeers[0].closed === true")
+    page.wait_for_timeout(1200)
+    assert len(printer.screen_tags) <= before + 1
+
+    printer.job = {**printer.job, "state": "paused", "info": {"current_layer": 84}}
+    expect(page.locator(".print-details")).to_contain_text("已暂停")
+    expect(page.locator(".print-details")).to_contain_text("84 / 200")
+    expect(page.get_by_text("预计完成", exact=True).locator("..").locator("dd")).to_have_text("—")
+    printer.webrtc_failure = True
+    page.locator('#nav a[href="#overview"]').click()
+    expect(page.get_by_text("定时快照")).to_be_visible()
+    expect(page.get_by_alt_text("case")).to_be_visible()
+    assert not printer.writes("/screen/touch")
+
+
 def main():
     printer = Printer()
     server = serve(printer)
@@ -329,12 +455,14 @@ def main():
                 origin = f"http://127.0.0.1:{server.server_port}"
                 exercise(page, origin, printer)
                 check_integrated_panel(page, origin, printer)
+                monitor = browser.new_page(viewport={"width": 390, "height": 844})
+                check_print_monitor(monitor, origin, printer)
             finally:
                 browser.close()
     finally:
         server.shutdown()
         server.server_close()
-    print("PASS mobile console: routing, per-bay tasks, settings, conflict handling and history")
+    print("PASS unified console: operator workflows, live progress, WebRTC fallback and framebuffer refresh")
 
 
 if __name__ == "__main__":

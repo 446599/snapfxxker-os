@@ -1,8 +1,11 @@
+import { createPrintDetails, printObjects } from './print-details.js';
+import { createCameraCard, createMonitorMedia } from './monitor-media.js';
+
 // U1 operator panels. All displayed temperatures, routes and jobs are read back
 // from the printer. Browsing a tool only changes the local selection.
 const apiBase = '/multiace/api';
 const heaters = ['extruder', 'extruder1', 'extruder2', 'extruder3'];
-const machineQuery = '/printer/objects/query?webhooks=state&print_stats=filename,state,print_duration&virtual_sdcard=progress&toolhead=position,homed_axes,extruder&heater_bed=temperature,target&'
+const machineQuery = '/printer/objects/query?webhooks=state&' + printObjects + '&toolhead=position,homed_axes,extruder&heater_bed=temperature,target&'
   + heaters.map(name => name + '=temperature,target').join('&');
 const jobNames = {standby:'待机', printing:'打印中', paused:'已暂停', complete:'打印完成', cancelled:'已取消', error:'打印错误'};
 const numeric = value => typeof value === 'number' && Number.isFinite(value);
@@ -32,11 +35,6 @@ function appendRow(box, ...children) {
   box.append(row);
   return row;
 }
-function duration(seconds) {
-  if (!numeric(seconds)) return '—';
-  const minutes = Math.floor(seconds / 60);
-  return minutes >= 60 ? Math.floor(minutes / 60) + ' 小时 ' + minutes % 60 + ' 分钟' : minutes + ' 分钟';
-}
 function labelValue(box, label, value) {
   const stat = node('div', 'op-stat');
   stat.append(node('small', 'muted', label), value);
@@ -52,7 +50,7 @@ function controlPanel(ctx, overview) {
     .op-heads small,.op-stat small{display:block}.op-heads .op-route{font-size:12px;overflow-wrap:anywhere}.op-stats{display:flex;flex-wrap:wrap;gap:10px 24px}
     .op-card h3{margin:0 0 12px}.op-card p{margin:6px 0}.op-card progress{width:100%;height:8px;accent-color:#d59c00}.op-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 0}
     .op-card input[type=number]{width:7em;max-width:100%;padding:7px}.op-row label{display:flex;gap:6px;align-items:center}
-    .op-camera-img{max-width:100%;height:auto;max-height:46vh;display:block;margin-top:8px}.op-stat{min-width:64px}
+    .op-stat{min-width:64px}
     @media(max-width:460px){.op-heads button{padding:9px 6px}.op-heads{gap:4px}.op-heads .op-head-label{font-size:12px}}
   `;
   pane.append(style);
@@ -162,34 +160,22 @@ function controlPanel(ctx, overview) {
     });
   });
   headPanel.append(heads);
-  pane.append(headPanel);
   const columns = node('div','op-section');
-  pane.append(columns);
   const printCard = card('打印任务');
-  const filename = node('strong');
-  const jobText = node('p','muted');
-  const progress = node('progress');
-  progress.max = 100;
-  progress.setAttribute('aria-label','打印进度');
-  onUpdate(() => {
-    const j = job();
-    const p = machine.virtual_sdcard?.progress;
-    filename.textContent = j.filename || (j.state === 'standby' ? '等待任务' : '—');
-    progress.hidden = !numeric(p);
-    if (numeric(p)) progress.value = Math.max(0,Math.min(100,p*100));
-    const parts = [jobNames[j.state] || '状态未知'];
-    if (numeric(p) && j.filename) parts.push(Math.round(progress.value) + '%');
-    if (j.filename && numeric(j.print_duration)) parts.push('已用 ' + duration(j.print_duration));
-    jobText.textContent = parts.join(' · ');
-  });
-  printCard.append(filename, jobText, progress);
+  const printDetails = createPrintDetails(ctx);
+  printCard.append(printDetails.root);
+  onUpdate(() => printDetails.update(machine));
   const may = states => () => ready() && Boolean(printControl) && states.includes(job().state);
   appendRow(printCard,
     action('暂停', may(['printing']), () => verb('pause')),
     action('继续', may(['paused']), () => verb('resume'), '继续当前打印任务？'),
     action('取消打印', may(['printing','paused']), () => verb('cancel'), '取消当前打印任务？取消后无法继续本次打印。', 'danger'));
   appendRow(printCard, button('文件与打印预检', () => ctx.open('jobs')));
-  columns.append(printCard);
+  if (overview) pane.append(printCard, createMonitorMedia(ctx), headPanel, columns);
+  else {
+    pane.append(headPanel, columns);
+    columns.append(printCard);
+  }
 
   const temperature = card('机内温度');
   const stats = node('div','op-stats');
@@ -275,72 +261,8 @@ function controlPanel(ctx, overview) {
     columns.append(tuning);
   }
 
-  const camera = card('相机');
-  const status = node('p','muted');
-  const region = node('div');
-  let stream = null, cameraTimer = 0, cameraOpen = false, cameraGeneration = 0, snapshotUrl = null;
-  function stopCamera() {
-    cameraOpen = false;
-    cameraGeneration++;
-    clearTimeout(cameraTimer);
-    if (stream) { stream.onload = null; stream.onerror = null; stream.removeAttribute('src'); }
-    stream = null; region.replaceChildren();
-    if (snapshotUrl) { URL.revokeObjectURL(snapshotUrl); snapshotUrl = null; }
-  }
-  async function toggleCamera() {
-    if (cameraOpen) {
-      stopCamera(); status.textContent = ''; cameraToggle.textContent = '查看相机'; return;
-    }
-    cameraOpen = true;
-    const generation = ++cameraGeneration;
-    cameraToggle.textContent = '关闭画面';
-    status.textContent = '正在连接相机…';
-    try {
-      const info = await ctx.api(apiBase + '/webcam/info');
-      if (closed || generation !== cameraGeneration) return;
-      if (!info?.available) throw new Error('未发现可用的摄像头。');
-      if (!info.proxy_path && !info.snapshot_path) throw new Error('此摄像头使用专用播放器，请打开完整相机面板。');
-      stream = node('img','op-camera-img');
-      stream.alt = info.name || '打印机相机';
-      const cameraParam = '?cam=' + encodeURIComponent(info.name || '');
-      const unavailable = () => {
-        if (generation !== cameraGeneration) return;
-        stopCamera(); status.textContent = '相机画面暂不可用。'; cameraToggle.textContent = '重新连接';
-      };
-      async function snapshot() {
-        if (generation !== cameraGeneration || !stream) return;
-        try {
-          const response = await ctx.response(apiBase + '/webcam/snapshot' + cameraParam, {signal:ctx.signal});
-          const blob = await response.blob();
-          if (generation !== cameraGeneration || !stream) return;
-          if (!blob.type.startsWith('image/')) throw new Error('画面格式错误');
-          const previous = snapshotUrl;
-          snapshotUrl = URL.createObjectURL(blob);
-          stream.src = snapshotUrl;
-          if (previous) URL.revokeObjectURL(previous);
-          status.textContent = (info.name || '打印机相机') + ' · 定时快照';
-          cameraTimer = setTimeout(snapshot, 2000);
-        } catch { unavailable(); }
-      }
-      region.append(stream);
-      if (info.proxy_path) {
-        stream.onload = () => { if (generation === cameraGeneration) status.textContent = info.name || '实时画面'; };
-        stream.onerror = () => {
-          stream.onload = null; stream.onerror = unavailable;
-          if (info.snapshot_path) void snapshot(); else unavailable();
-        };
-        stream.src = apiBase + '/webcam/stream' + cameraParam;
-      } else { stream.onerror = unavailable; void snapshot(); }
-    } catch (error) {
-      if (closed || generation !== cameraGeneration) return;
-      stopCamera(); status.textContent = error.message || '相机未连接'; cameraToggle.textContent = '重新连接';
-    }
-  }
-  const cameraToggle = button('查看相机', toggleCamera);
-  appendRow(camera, cameraToggle, button('完整相机面板', () => ctx.open('printhub')));
-  camera.append(status, region);
-  columns.append(camera);
-  ctx.onCleanup(() => { closed = true; clearInterval(poll); stopCamera(); });
+  if (!overview) columns.append(createCameraCard(ctx, false));
+  ctx.onCleanup(() => { closed = true; clearInterval(poll); });
   update();
   void refresh();
   poll = setInterval(() => { if (!document.hidden) void refresh(); },4000);

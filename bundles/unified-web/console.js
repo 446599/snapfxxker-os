@@ -1,6 +1,7 @@
 import { mountMaterial } from './material.js';
 import { mountOverview, mountControl } from './control.js';
 import { mountSettings, mountAceConfig } from './settings.js';
+import { createPrintDetails, printObjects } from './print-details.js';
 
 const page = document.querySelector('#page');
 const login = document.querySelector('#login');
@@ -136,11 +137,29 @@ async function integratedPanel(ctx, key) {
 async function mountJobs(ctx) {
   const wrap = el('section',{class:'stack'});
   const queue = el('div'), history = el('div');
+  const details = createPrintDetails(ctx);
   ctx.root.replaceChildren(wrap);
-  wrap.append(el('div',{class:'links'},tile('printhub','上传 G-code 与打印预检'),tile('fluidd','文件管理')),
+  wrap.append(el('article',{class:'card stack'},el('h2',{},'当前打印'),details.root),
+    el('div',{class:'links'},tile('printhub','上传 G-code 与打印预检'),tile('fluidd','文件管理')),
     el('article',{class:'card stack'},el('h2',{},'待打印'),queue),
     el('article',{class:'card stack'},el('h2',{},'最近打印'),history),
     el('button',{type:'button',onclick:refresh},'刷新任务'));
+  let polling = false;
+  async function refreshDetails() {
+    if (polling || document.hidden) return;
+    polling = true;
+    try {
+      const data = await ctx.api('/printer/objects/query?' + printObjects, {signal:ctx.signal});
+      if (!ctx.signal.aborted) details.update(data.result?.status || {});
+    } catch {
+      if (!ctx.signal.aborted) details.update({});
+    } finally {
+      polling = false;
+    }
+  }
+  void refreshDetails();
+  const timer = setInterval(refreshDetails, 4000);
+  ctx.onCleanup(() => clearInterval(timer));
   let seq = 0, sending = false;
   async function refresh() {
     const revision = ++seq;

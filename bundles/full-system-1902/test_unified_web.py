@@ -51,7 +51,8 @@ class CompositionTests(unittest.TestCase):
                 self.assertEqual(build.digest(root / key), report[key + "_sha256"])
             for rel in saved["unified_web_files"]:
                 self.assertEqual(saved["runtime_file_sha256"][rel], build.digest(root / rel))
-            self.assertTrue((root / build.INSTALL_DIR / "index.html").is_file())
+            for name in ("index.html", "print-details.js", "monitor-media.js"):
+                self.assertIn(build.INSTALL_DIR + "/" + name, saved["unified_web_files"])
 
     def test_missing_script_rejects_partial_bundle(self):
         with tempfile.TemporaryDirectory() as temp:
